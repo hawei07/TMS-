@@ -2610,10 +2610,21 @@ function handleApi() {
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
             // 获取班级课程信息
-            $classInfo = $db->querySingle("SELECT c.course_id, co.subject AS course_name, c.lesson_hours FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $classInfo = $db->querySingle("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
             $classCourseId = intval($classInfo['course_id'] ?? 0);
             $classCourseName = $classInfo['course_name'] ?? '';
             $classLessonHours = intval($classInfo['lesson_hours'] ?? 0);
+            // 解析一级学科ID（用于计算该学员一级学科下所有订单的剩余课时）
+            $classFirstSubjectId = 0;
+            $subjectRaw = $classInfo['subject_raw'] ?? '';
+            if ($subjectRaw) {
+                $parts = explode(' > ', $subjectRaw);
+                $leaf = end($parts);
+                $sj = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leaf) . "'", true);
+                if ($sj) {
+                    $classFirstSubjectId = intval($sj['parent_id']) == 0 ? intval($sj['id']) : intval($sj['parent_id']);
+                }
+            }
             // 获取班级所有学员
             $students = [];
             $res = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
@@ -2622,6 +2633,12 @@ function handleApi() {
             $attMap = [];
             $attRes = $db->query("SELECT * FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate'");
             while ($r = $attRes->fetchArray(SQLITE3_ASSOC)) $attMap[$r['student_id']] = $r;
+            // 预取一级学科下所有课程ID（用于计算 max_deductible）
+            $flCourseIds = [];
+            if ($classFirstSubjectId > 0) {
+                $flRes = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $classFirstSubjectId OR id = $classFirstSubjectId)");
+                while ($c = $flRes->fetchArray(SQLITE3_ASSOC)) $flCourseIds[] = $c['id'];
+            }
             $rows = [];
             foreach ($students as $stu) {
                 $aid = $attMap[$stu['id']] ?? null;
@@ -2631,6 +2648,12 @@ function handleApi() {
                     $oRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS rem FROM orders WHERE student_id = {$stu['id']} AND course_id = $classCourseId", true);
                     $remaining = intval($oRow['rem'] ?? 0);
                 }
+                // 查询该学员在一级学科下所有订单的总剩余课时（步进器上限）
+                $maxDeductible = 0;
+                if ($classFirstSubjectId > 0 && count($flCourseIds) > 0) {
+                    $mdRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND course_id IN (" . implode(',', $flCourseIds) . ")", true);
+                    $maxDeductible = max(0, intval($mdRow['total'] ?? 0));
+                }
                 $rows[] = [
                     'student_id' => $stu['id'],
                     'student_no' => $stu['student_no'],
@@ -2638,6 +2661,7 @@ function handleApi() {
                     'course_name' => $classCourseName,
                     'remaining_lessons' => max(0, $remaining),
                     'lesson_hours' => $classLessonHours,
+                    'max_deductible' => $maxDeductible,
                     'status' => $aid ? $aid['status'] : '',
                     'deducted_lessons' => $aid ? intval($aid['deducted_lessons']) : 0,
                     'deducted_order_id' => $aid ? intval($aid['deducted_order_id']) : 0,
@@ -2688,55 +2712,77 @@ function handleApi() {
                         $deductedLessons = max(1, intval($classRow['lesson_hours'] ?? 0));
                     }
                     if ($status === '出勤' && $deductedLessons > 0) {
-                        // 扣课时逻辑（三级优先级）：
+                        // 扣课时逻辑（三级优先级，跨订单连续扣）：
                         // 1. 优先扣同一course_id的订单（有多个时，先报名的优先）
-                        // 2. 没有同一课程则扣同二级学科的订单（先报名的优先）
-                        // 3. 没有同二级学科则扣同一级学科的订单（先报名的优先）
-                        $orderRows = [];
+                        // 2. 继续扣同二级学科的订单（先报名的优先）
+                        // 3. 继续扣同一级学科的订单（先报名的优先）
+                        $allOrderRows = [];
 
                         // 1. 同一course_id的订单
                         $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                        while ($o = $oRes->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
+                        while ($o = $oRes->fetchArray(SQLITE3_ASSOC)) $allOrderRows[] = $o;
 
                         // 2. 同一二级学科的订单（仅当课程有二级学科归属时）
-                        if (count($orderRows) === 0 && $courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
+                        if ($courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
                             $sameSecondCourses = [];
                             $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
                             while ($c = $sr2->fetchArray(SQLITE3_ASSOC)) $sameSecondCourses[] = $c['id'];
                             if (count($sameSecondCourses) > 0) {
                                 $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes2->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
+                                while ($o = $oRes2->fetchArray(SQLITE3_ASSOC)) $allOrderRows[] = $o;
                             }
                         }
 
-                        // 3. 同一级学科的订单（兜底）
-                        if (count($orderRows) === 0 && $firstSubjectId > 0) {
+                        // 3. 同一级学科的订单
+                        if ($firstSubjectId > 0) {
                             $firstLevelCourses = [];
                             $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                             while ($c = $sr3->fetchArray(SQLITE3_ASSOC)) $firstLevelCourses[] = $c['id'];
                             if (count($firstLevelCourses) > 0) {
                                 $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes3->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
+                                while ($o = $oRes3->fetchArray(SQLITE3_ASSOC)) $allOrderRows[] = $o;
                             }
                         }
 
-                        if (count($orderRows) > 0) {
-                            $targetOrder = $orderRows[0];
-                            $deductedOrderId = intval($targetOrder['id']);
-                            $newConsumed = intval($targetOrder['consumed_lessons']) + $deductedLessons;
-                            $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $deductedOrderId");
+                        // 跨订单循环扣课时
+                        $remainingToDeduct = $deductedLessons;
+                        $deductionEntries = [];
+                        $deductedOrderId = 0;
+                        foreach ($allOrderRows as $order) {
+                            $available = intval($order['lesson_count']) - intval($order['consumed_lessons']);
+                            if ($available <= 0) continue;
+                            $toDeduct = min($remainingToDeduct, $available);
+                            if ($toDeduct <= 0) break;
+                            $newConsumed = intval($order['consumed_lessons']) + $toDeduct;
+                            $oid = intval($order['id']);
+                            $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                            $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                            if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                            $remainingToDeduct -= $toDeduct;
+                            if ($remainingToDeduct <= 0) break;
                         }
+                        $deductionJson = json_encode($deductionEntries);
+                    } else {
+                        $deductionJson = '';
                     }
-                    // 删除旧的考勤记录（如果存在）
-                    // 退还已扣课时（改状态为缺勤/请假时，归还之前扣除的课时）
-                    $oldAtt = $db->querySingle("SELECT deducted_lessons, deducted_order_id FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId", true);
-                    if ($oldAtt && intval($oldAtt['deducted_order_id']) > 0 && intval($oldAtt['deducted_lessons']) > 0) {
-                        $db->exec("UPDATE orders SET consumed_lessons = consumed_lessons - " . intval($oldAtt['deducted_lessons']) . " WHERE id = " . intval($oldAtt['deducted_order_id']));
+                    // 退还已扣课时（改状态为缺勤/请假时，按 deduction_json 逐笔归还）
+                    $oldAtt = $db->querySingle("SELECT deducted_lessons, deduction_json FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId", true);
+                    if ($oldAtt && !empty($oldAtt['deduction_json'])) {
+                        $oldEntries = json_decode($oldAtt['deduction_json'], true);
+                        if (is_array($oldEntries)) {
+                            foreach ($oldEntries as $entry) {
+                                $oid = intval($entry['order_id'] ?? 0);
+                                $amt = intval($entry['amount'] ?? 0);
+                                if ($oid > 0 && $amt > 0) {
+                                    $db->exec("UPDATE orders SET consumed_lessons = consumed_lessons - $amt WHERE id = $oid");
+                                }
+                            }
+                        }
                     }
                     // 删除旧的考勤记录
                     $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId");
                     $n = now();
-                    $stmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, deducted_order_id, created_at) VALUES (:cid, :scid, :sd, :stid, :st, :dl, :doid, :ca)");
+                    $stmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, deducted_order_id, deduction_json, created_at) VALUES (:cid, :scid, :sd, :stid, :st, :dl, :doid, :dj, :ca)");
                     $stmt->bindValue(':cid', $classId, SQLITE3_INTEGER);
                     $stmt->bindValue(':scid', $scheduleId, SQLITE3_INTEGER);
                     $stmt->bindValue(':sd', $sessionDate, SQLITE3_TEXT);
@@ -2744,6 +2790,7 @@ function handleApi() {
                     $stmt->bindValue(':st', $status, SQLITE3_TEXT);
                     $stmt->bindValue(':dl', $deductedLessons, SQLITE3_INTEGER);
                     $stmt->bindValue(':doid', $deductedOrderId, SQLITE3_INTEGER);
+                    $stmt->bindValue(':dj', $deductionJson, SQLITE3_TEXT);
                     $stmt->bindValue(':ca', $n, SQLITE3_TEXT);
                     $stmt->execute();
                     // 考勤完成后，判断是否需要移出班级

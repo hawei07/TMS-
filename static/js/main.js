@@ -4882,7 +4882,7 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
                 <td>
                     <span class="att-deduct-stepper">
                         <button class="stepper-btn" onclick="attDeductChange(this, -1)">−</button>
-                        <span class="stepper-val" data-sid="${r.student_id}" data-lesson-hours="${r.lesson_hours || 1}">${deducted}</span>
+                        <span class="stepper-val" data-sid="${r.student_id}" data-lesson-hours="${r.lesson_hours || 1}" data-max="${r.max_deductible || 0}">${deducted}</span>
                         <button class="stepper-btn" onclick="attDeductChange(this, 1)">+</button>
                     </span>
                 </td>
@@ -4917,7 +4917,9 @@ function attDeductChange(btn, delta) {
     const stepper = btn.closest('.att-deduct-stepper');
     const valSpan = stepper.querySelector('.stepper-val');
     let val = parseInt(valSpan.textContent) || 0;
+    const max = parseInt(valSpan.dataset.max) || 0;
     val = Math.max(0, val + delta * 2);
+    if (max > 0 && val > max) val = max;
     valSpan.textContent = val;
 }
 
@@ -4933,7 +4935,10 @@ function attStatusToggle(el, status) {
         stepper.classList.add('disabled');
     } else {
         stepper.classList.remove('disabled');
-        valSpan.textContent = valSpan.dataset.lessonHours || '2';
+        let lh = parseInt(valSpan.dataset.lessonHours) || 2;
+        const max = parseInt(valSpan.dataset.max) || 0;
+        if (max > 0 && lh > max) lh = max;
+        valSpan.textContent = lh;
     }
 }
 
