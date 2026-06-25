@@ -89,6 +89,7 @@ function refreshPanel(panelId) {
         case 'panel-classrooms': loadClassrooms(); break;
         case 'panel-students': loadStudents(); break;
         case 'panel-orders': loadOrders(); break;
+        case 'panel-attendance': loadAttendanceSessions(); break;
     }
 }
 
@@ -4721,7 +4722,7 @@ async function showClassAttendanceModal(classId, scheduleId, sessionDate, titleS
                     <option value="请假" ${currentStatus === '请假' ? 'selected' : ''}>请假</option>
                     <option value="缺勤" ${currentStatus === '缺勤' ? 'selected' : ''}>缺勤</option>
                 </select></td>
-                <td class="ca-deducted-display" data-sid="${r.student_id}">${currentStatus === '出勤' ? '扣1课时' : '0'}</td>
+                <td class="ca-deducted-display" data-sid="${r.student_id}" data-lesson-hours="${r.lesson_hours || 1}">${currentStatus === '出勤' ? '扣' + (r.lesson_hours || 1) + '课时' : '0'}</td>
             </tr>`;
         }).join('');
         // 绑定状态变更事件
@@ -4730,7 +4731,8 @@ async function showClassAttendanceModal(classId, scheduleId, sessionDate, titleS
                 const sidAttr = this.dataset.sid;
                 const display = document.querySelector('.ca-deducted-display[data-sid="' + sidAttr + '"]');
                 if (display) {
-                    display.textContent = this.value === '出勤' ? '扣1课时' : '0';
+                    const lh = parseInt(display.dataset.lessonHours) || 1;
+                    display.textContent = this.value === '出勤' ? '扣' + lh + '课时' : '0';
                 }
             });
         });
@@ -4761,4 +4763,208 @@ async function saveClassAttendance() {
     showToast(result.message || '考勤保存成功');
     closeModal('modal-class-attendance');
     loadClassSchedules();
+}
+
+// ==================== 考勤（按课次） ====================
+
+let attendanceSessionPage = 1;
+let currentAttendanceClassId = 0;
+let currentAttendanceScheduleId = 0;
+let currentAttendanceSessionDate = '';
+
+async function loadAttendanceSessions(page = 1) {
+    attendanceSessionPage = page;
+    const dateFromEl = document.getElementById('attendance-date-from');
+    const dateToEl = document.getElementById('attendance-date-to');
+    // 默认展示当天课次
+    if (!dateFromEl.value && !dateToEl.value) {
+        const today = new Date().toISOString().split('T')[0];
+        dateFromEl.value = today;
+        dateToEl.value = today;
+    }
+    const tbody = document.querySelector('#table-attendance-sessions tbody');
+    const pagination = document.getElementById('pagination-attendance-sessions');
+    const dateFrom = dateFromEl.value;
+    const dateTo = dateToEl.value;
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">加载中...</td></tr>';
+    try {
+        let url = API_BASE + 'list_attendance_sessions&page=' + page + '&page_size=20';
+        if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
+        if (dateTo) url += '&date_to=' + encodeURIComponent(dateTo);
+        const res = await fetch(url);
+        const data = await res.json();
+        const sessions = data.data || [];
+        const total = data.total || 0;
+        if (sessions.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无排课记录</td></tr>';
+            pagination.innerHTML = '';
+            return;
+        }
+        // 批量查询考勤状态
+        const attStatusMap = {};
+        for (const s of sessions) {
+            try {
+                const r = await fetch(API_BASE + 'get_class_attendance&class_id=' + s.class_id + '&schedule_id=' + s.schedule_id + '&session_date=' + s.session_date);
+                const d = await r.json();
+                const records = d.data || [];
+                attStatusMap[s.schedule_id + '_' + s.session_date] = records.some(rec => rec.status !== '');
+            } catch (e) { attStatusMap[s.schedule_id + '_' + s.session_date] = false; }
+        }
+        tbody.innerHTML = sessions.map(s => {
+            const key = s.schedule_id + '_' + s.session_date;
+            const attLabel = attStatusMap[key]
+                ? '<span style="color:#27ae60;font-size:12px;">已考勤</span>'
+                : '<span style="color:#e67e22;font-size:12px;">未考勤</span>';
+            const timeStr = (s.start_time && s.end_time) ? (s.start_time + '~' + s.end_time) : '-';
+            return `<tr>
+                <td>${s.session_date}</td>
+                <td>${s.day_of_week}</td>
+                <td>${esc(s.class_name)}</td>
+                <td>${esc(s.course_name)}</td>
+                <td>${timeStr}</td>
+                <td>${esc(s.teacher)}</td>
+                <td>${esc(s.classroom)}</td>
+                <td>${esc(s.campus)}</td>
+                <td>${attLabel}</td>
+                <td><button class="btn-link" onclick="showAttendanceSessionModal(${s.class_id}, ${s.schedule_id}, '${s.session_date}', '${escJs(s.class_name)}', '${escJs(s.campus)}', '${escJs(s.course_name)}', '${escJs(s.teacher)}', '${escJs(s.classroom)}', '${s.session_date}', '${s.day_of_week}', '${timeStr}')">考勤</button></td>
+            </tr>`;
+        }).join('');
+        // 分页
+        const totalPages = Math.ceil(total / 20);
+        pagination.innerHTML = totalPages > 1
+            ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadAttendanceSessions(' + (page - 1) + ')"') + '>上一页</button>'
+              + '<span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span>'
+              + '<button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadAttendanceSessions(' + (page + 1) + ')"') + '>下一页</button>'
+            : '';
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
+}
+
+function escJs(str) {
+    if (!str) return '';
+    return str.replace(/\\/g, '\\\\').replace(/'/g, "\\'").replace(/"/g, '\\"');
+}
+
+async function showAttendanceSessionModal(classId, scheduleId, sessionDate, className, campus, courseName, teacher, classroom, sessionDateDisplay, dayOfWeek, timeStr) {
+    currentAttendanceClassId = classId;
+    currentAttendanceScheduleId = scheduleId;
+    currentAttendanceSessionDate = sessionDate;
+    document.getElementById('as-subtitle').textContent = className + ' · ' + sessionDateDisplay;
+    document.getElementById('as-class-name').textContent = className;
+    document.getElementById('as-campus').textContent = campus;
+    document.getElementById('as-session-date').textContent = sessionDateDisplay;
+    document.getElementById('as-teacher').textContent = teacher;
+    document.getElementById('as-course-name').textContent = courseName;
+    document.getElementById('as-classroom').textContent = classroom;
+    document.getElementById('as-time').textContent = dayOfWeek + ' ' + timeStr;
+    const tbody = document.getElementById('as-attendance-tbody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:28px;">加载中...</td></tr>';
+    openModal('modal-attendance-session');
+    try {
+        const res = await fetch(API_BASE + 'get_class_attendance&class_id=' + classId + '&schedule_id=' + scheduleId + '&session_date=' + sessionDate);
+        const data = await res.json();
+        const rows = data.data || [];
+        document.getElementById('as-total-count').textContent = rows.length;
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:36px;">该班级暂无学员</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const currentStatus = r.status || '出勤';
+            const deducted = r.attendance_id ? (r.deducted_lessons || 0) : (r.lesson_hours || 1);
+            const remaining = r.remaining_lessons || 0;
+            return `<tr id="att-row-${r.student_id}">
+                <td><button class="btn-remove-att" onclick="removeAttendanceStudent(${r.student_id})" title="移除此学员">移除</button></td>
+                <td><span style="font-weight:500;">${esc(r.student_name)}</span></td>
+                <td><span style="color:var(--color-text-secondary);">${esc(r.course_name || courseName)}</span></td>
+                <td style="text-align:center;"><span style="font-weight:600;color:${remaining > 0 ? 'var(--color-success)' : 'var(--color-danger)'}">${remaining}</span></td>
+                <td>
+                    <span class="att-deduct-stepper">
+                        <button class="stepper-btn" onclick="attDeductChange(this, -1)">−</button>
+                        <span class="stepper-val" data-sid="${r.student_id}" data-lesson-hours="${r.lesson_hours || 1}">${deducted}</span>
+                        <button class="stepper-btn" onclick="attDeductChange(this, 1)">+</button>
+                    </span>
+                </td>
+                <td>
+                    <span class="att-status-group" data-sid="${r.student_id}">
+                        <span class="att-status-chip ${currentStatus === '出勤' ? 'active' : ''}" data-val="出勤" onclick="attStatusToggle(this, '出勤')">出勤</span>
+                        <span class="att-status-chip ${currentStatus === '缺勤' ? 'active' : ''}" data-val="缺勤" onclick="attStatusToggle(this, '缺勤')">缺勤</span>
+                    </span>
+                </td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-danger);padding:20px;">加载失败</td></tr>';
+    }
+}
+
+function removeAttendanceStudent(studentId) {
+    const row = document.getElementById('att-row-' + studentId);
+    if (row) {
+        row.style.transition = 'all 0.25s ease';
+        row.style.opacity = '0';
+        row.style.transform = 'translateX(-20px)';
+        setTimeout(() => {
+            row.remove();
+            const tbody = document.getElementById('as-attendance-tbody');
+            document.getElementById('as-total-count').textContent = tbody.querySelectorAll('tr').length;
+        }, 250);
+    }
+}
+
+function attDeductChange(btn, delta) {
+    const stepper = btn.closest('.att-deduct-stepper');
+    const valSpan = stepper.querySelector('.stepper-val');
+    let val = parseInt(valSpan.textContent) || 0;
+    val = Math.max(0, val + delta * 2);
+    valSpan.textContent = val;
+}
+
+function attStatusToggle(el, status) {
+    const group = el.closest('.att-status-group');
+    group.querySelectorAll('.att-status-chip').forEach(t => t.classList.remove('active'));
+    el.classList.add('active');
+    const row = el.closest('tr');
+    const stepper = row.querySelector('.att-deduct-stepper');
+    if (status === '缺勤') {
+        stepper.querySelector('.stepper-val').textContent = '0';
+        stepper.classList.add('disabled');
+    } else {
+        stepper.classList.remove('disabled');
+    }
+}
+
+async function saveAttendanceSession() {
+    const records = [];
+    const tbody = document.getElementById('as-attendance-tbody');
+    const rows = tbody.querySelectorAll('tr');
+    rows.forEach(row => {
+        const stepperVal = row.querySelector('.stepper-val');
+        const activeTag = row.querySelector('.att-status-chip.active');
+        if (!stepperVal || !activeTag) return;
+        const studentId = parseInt(stepperVal.dataset.sid);
+        const deducted = parseInt(stepperVal.textContent) || 0;
+        const status = activeTag.dataset.val;
+        records.push({ student_id: studentId, status: status, deducted_lessons: deducted });
+    });
+    if (records.length === 0) { showToast('无学员可考勤', 'error'); return; }
+    const result = await api('save_class_attendance', {
+        class_id: currentAttendanceClassId,
+        schedule_id: currentAttendanceScheduleId,
+        session_date: currentAttendanceSessionDate,
+        records: records
+    });
+    if (result.error) { showToast(result.error, 'error'); return; }
+    showToast(result.message || '考勤保存成功');
+    closeModal('modal-attendance-session');
+    loadAttendanceSessions(attendanceSessionPage);
+}
+
+function addTempStudent() {
+    showToast('添加临时学员功能开发中');
+}
+
+function addMakeupStudent() {
+    showToast('添加补课学员功能开发中');
 }

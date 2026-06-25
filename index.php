@@ -2610,9 +2610,10 @@ function handleApi() {
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
             // 获取班级课程信息
-            $classInfo = $db->querySingle("SELECT c.course_id, co.subject AS course_name FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $classInfo = $db->querySingle("SELECT c.course_id, co.subject AS course_name, c.lesson_hours FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
             $classCourseId = intval($classInfo['course_id'] ?? 0);
             $classCourseName = $classInfo['course_name'] ?? '';
+            $classLessonHours = intval($classInfo['lesson_hours'] ?? 0);
             // 获取班级所有学员
             $students = [];
             $res = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
@@ -2636,6 +2637,7 @@ function handleApi() {
                     'student_name' => $stu['name'],
                     'course_name' => $classCourseName,
                     'remaining_lessons' => max(0, $remaining),
+                    'lesson_hours' => $classLessonHours,
                     'status' => $aid ? $aid['status'] : '',
                     'deducted_lessons' => $aid ? intval($aid['deducted_lessons']) : 0,
                     'deducted_order_id' => $aid ? intval($aid['deducted_order_id']) : 0,
@@ -2663,7 +2665,7 @@ function handleApi() {
                     if ($studentId <= 0) continue;
                     if (!in_array($status, ['出勤', '请假', '缺勤'])) $status = '出勤';
                     // 查询该学员在此班级课程的一级学科
-                    $classRow = $db->querySingle("SELECT c.course_id, c.name AS course_name, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+                    $classRow = $db->querySingle("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
                     $courseId = intval($classRow['course_id'] ?? 0);
                     $subject = $classRow['subject'] ?? '';
                     // 获取一级学科（courses.subject 格式为 "一级学科名 > 二级学科名"）
@@ -2683,7 +2685,7 @@ function handleApi() {
                     $deductedLessons = intval($rec['deducted_lessons'] ?? 0);
                     $deductedOrderId = 0;
                     if ($status === '出勤' && $deductedLessons <= 0) {
-                        $deductedLessons = 1;
+                        $deductedLessons = max(1, intval($classRow['lesson_hours'] ?? 0));
                     }
                     if ($status === '出勤' && $deductedLessons > 0) {
                         // 扣课时逻辑（三级优先级）：
@@ -2726,6 +2728,12 @@ function handleApi() {
                         }
                     }
                     // 删除旧的考勤记录（如果存在）
+                    // 退还已扣课时（改状态为缺勤/请假时，归还之前扣除的课时）
+                    $oldAtt = $db->querySingle("SELECT deducted_lessons, deducted_order_id FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId", true);
+                    if ($oldAtt && intval($oldAtt['deducted_order_id']) > 0 && intval($oldAtt['deducted_lessons']) > 0) {
+                        $db->exec("UPDATE orders SET consumed_lessons = consumed_lessons - " . intval($oldAtt['deducted_lessons']) . " WHERE id = " . intval($oldAtt['deducted_order_id']));
+                    }
+                    // 删除旧的考勤记录
                     $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId");
                     $n = now();
                     $stmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, deducted_order_id, created_at) VALUES (:cid, :scid, :sd, :stid, :st, :dl, :doid, :ca)");
@@ -4235,38 +4243,65 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：考勤（按课次） -->
     <div class="modal-overlay" id="modal-attendance-session">
-        <div class="modal" style="max-width:750px;width:94vw;">
-            <div class="modal-header"><h3>考勤</h3><button class="modal-close" onclick="closeModal('modal-attendance-session')">&times;</button></div>
+        <div class="modal modal-attendance">
+            <div class="modal-header">
+                <div>
+                    <h3>课次考勤</h3>
+                    <div class="att-subtitle" id="as-subtitle">-</div>
+                </div>
+                <button class="modal-close" onclick="closeModal('modal-attendance-session')">&times;</button>
+            </div>
             <div class="modal-body">
-                <div class="att-lesson-info" style="background:#f7f8fa;border-radius:8px;padding:16px;margin-bottom:16px;">
-                    <div style="font-weight:bold;font-size:14px;margin-bottom:10px;">上课信息</div>
-                    <div style="display:flex;flex-wrap:wrap;gap:8px 0;">
-                        <span style="flex:0 0 50%;">班级：<strong id="as-class-name">-</strong></span>
-                        <span style="flex:0 0 50%;">校区：<strong id="as-campus">-</strong></span>
-                        <span style="flex:0 0 50%;">上课日期：<strong id="as-session-date">-</strong></span>
-                        <span style="flex:0 0 50%;">上课老师：<strong id="as-teacher">-</strong></span>
-                        <span style="flex:0 0 50%;">课程：<strong id="as-course-name">-</strong></span>
-                        <span style="flex:0 0 50%;">教室：<strong id="as-classroom">-</strong></span>
-                        <span style="flex:0 0 50%;">上课时间：<strong id="as-time">-</strong></span>
+                <div class="att-info-bar">
+                    <div class="att-info-item"><span class="att-info-icon">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 3L1 9l4 2.18v6L12 21l7-3.82v-6l2-1.09V17h2V9L12 3zm6.82 6L12 12.72 5.18 9 12 5.28 18.82 9zM17 15.99l-5 2.73-5-2.73v-3.72L12 15l5-2.73v3.72z"/></svg>
+                    </span><strong id="as-class-name">-</strong></div>
+                    <div class="att-info-item"><span class="att-info-icon">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+                    </span><span id="as-campus">-</span></div>
+                    <div class="att-info-item"><span class="att-info-icon">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-1.99.9-1.99 2L3 19c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM7 10h5v5H7z"/></svg>
+                    </span><strong id="as-session-date">-</strong></div>
+                    <div class="att-info-item"><span class="att-info-icon">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/></svg>
+                    </span><span id="as-teacher">-</span></div>
+                    <div class="att-info-item"><span class="att-info-icon">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M4 6H2v14c0 1.1.9 2 2 2h14v-2H4V6zm16-4H8c-1.1 0-2 .9-2 2v12c0 1.1.9 2 2 2h12c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H8V4h12v12zM10 9h8v2h-8zm0 3h4v2h-4zm0-6h8v2h-8z"/></svg>
+                    </span><span id="as-course-name">-</span></div>
+                    <div class="att-info-item"><span class="att-info-icon">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M12 2L4 5v6.09c0 5.05 3.41 9.76 8 10.91 4.59-1.15 8-5.86 8-10.91V5l-8-3zm0 15c-2.76 0-5-2.24-5-5s2.24-5 5-5 5 2.24 5 5-2.24 5-5 5zm-1-8v4l3 1.73.55-.95-2.55-1.48V9h-1z"/></svg>
+                    </span><span id="as-classroom">-</span></div>
+                    <div class="att-info-item"><span class="att-info-icon">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zM12 20c-4.42 0-8-3.58-8-8s3.58-8 8-8 8 3.58 8 8-3.58 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z"/></svg>
+                    </span><span id="as-time">-</span></div>
+                </div>
+
+                <div class="att-student-header">
+                    <span class="att-section-title">学员考勤</span>
+                    <div class="att-student-actions">
+                        <button class="btn btn-sm btn-outline" onclick="addTempStudent()">+ 临时学员</button>
+                        <button class="btn btn-sm btn-outline" onclick="addMakeupStudent()">+ 补课学员</button>
                     </div>
                 </div>
-                <div style="font-weight:bold;font-size:14px;margin-bottom:8px;">学员信息</div>
-                <div style="margin-bottom:12px;">
-                    <button class="btn btn-sm btn-primary" onclick="addTempStudent()" style="margin-right:8px;">添加临时学员</button>
-                    <button class="btn btn-sm btn-primary" onclick="addMakeupStudent()">添加补课学员</button>
-                </div>
-                <div class="table-wrap" style="max-height:350px;overflow-y:auto;">
-                    <table>
+
+                <div class="att-table-wrap">
+                    <table class="att-table" id="as-attendance-table">
                         <thead><tr>
-                            <th width="60">操作</th><th>学员姓名</th><th>课程</th><th width="80">剩余课时</th><th width="110">本次扣课时</th><th width="130">到课状态</th>
+                            <th width="50"></th>
+                            <th>学员</th>
+                            <th>课程</th>
+                            <th width="80">剩余课时</th>
+                            <th width="120">本次扣课时</th>
+                            <th width="120">到课状态</th>
                         </tr></thead>
                         <tbody id="as-attendance-tbody"></tbody>
                     </table>
                 </div>
             </div>
             <div class="modal-footer">
+                <span class="att-footer-hint">共 <strong id="as-total-count">0</strong> 名学员</span>
                 <button class="btn btn-outline" onclick="closeModal('modal-attendance-session')">取消</button>
-                <button class="btn btn-primary" onclick="saveAttendanceSession()">确定</button>
+                <button class="btn btn-primary" onclick="saveAttendanceSession()">保存考勤</button>
             </div>
         </div>
     </div>
@@ -4498,16 +4533,162 @@ if (intval($countBt) === 0) {
             border-color: #7C3AED;
             color: #7C3AED;
         }
-        /* 考勤扣课时步进器 */
-        .att-deduct-stepper { display:inline-flex;align-items:center;gap:0;border:1px solid #d9d9d9;border-radius:4px;overflow:hidden; }
-        .att-deduct-stepper .stepper-btn { width:26px;height:26px;border:none;background:#f5f5f5;color:#555;font-size:16px;line-height:26px;cursor:pointer;padding:0; }
-        .att-deduct-stepper .stepper-btn:hover { background:#e8e8e8; }
-        .att-deduct-stepper .stepper-val { width:36px;text-align:center;font-size:14px;line-height:26px;border-left:1px solid #d9d9d9;border-right:1px solid #d9d9d9; }
-        /* 考勤到课状态标签 */
-        .att-status-group { display:inline-flex;gap:6px; }
-        .att-status-tag { display:inline-block;padding:3px 12px;border:1px solid #d9d9d9;border-radius:4px;font-size:12px;cursor:pointer;color:#666;background:#fff;transition:all 0.2s; }
-        .att-status-tag:hover { border-color:#7C3AED;color:#7C3AED; }
-        .att-status-tag.active { background:#7C3AED;color:#fff;border-color:#7C3AED; }
+        /* ========== 考勤弹窗样式 ========== */
+        .modal-attendance { max-width: 860px; width: 94vw; }
+
+        .att-subtitle {
+            font-size: 13px; color: var(--color-text-muted);
+            margin-top: 2px;
+        }
+
+        /* 上课信息卡片 */
+        .att-info-bar {
+            display: flex; flex-wrap: wrap;
+            background: var(--color-primary-bg);
+            border: 1px solid rgba(124,58,237,0.08);
+            border-radius: var(--radius-lg);
+            padding: 14px 16px;
+            margin-bottom: 20px;
+        }
+        .att-info-item {
+            flex: 0 0 25%;
+            display: flex; align-items: center;
+            gap: 6px;
+            font-size: 13px;
+            padding: 3px 0;
+            color: var(--color-text);
+        }
+        .att-info-icon {
+            display: flex; align-items: center;
+            color: var(--color-primary);
+            flex-shrink: 0;
+        }
+
+        /* 学员表头行 */
+        .att-student-header {
+            display: flex; align-items: center; justify-content: space-between;
+            margin-bottom: 12px;
+        }
+        .att-section-title {
+            font-size: 15px; font-weight: 700;
+            color: var(--color-text);
+        }
+        .att-student-actions { display: flex; gap: 8px; }
+
+        /* 考勤表格 */
+        .att-table-wrap {
+            background: var(--color-surface);
+            border: 1px solid var(--color-border-light);
+            border-radius: var(--radius-lg);
+            overflow: hidden;
+            max-height: 380px;
+            overflow-y: auto;
+        }
+        .att-table { width: 100%; border-collapse: collapse; }
+        .att-table thead th {
+            background: #FAFAFC;
+            padding: 10px 12px;
+            font-size: 12px; font-weight: 600;
+            color: var(--color-text-muted);
+            border-bottom: 1px solid var(--color-border-light);
+            text-align: left;
+            position: sticky; top: 0; z-index: 1;
+        }
+        .att-table thead th:first-child { padding-left: 16px; }
+        .att-table tbody td {
+            padding: 10px 12px;
+            border-bottom: 1px solid var(--color-border-light);
+            font-size: 13px;
+            vertical-align: middle;
+        }
+        .att-table tbody td:first-child { padding-left: 16px; }
+        .att-table tbody tr:last-child td { border-bottom: none; }
+        .att-table tbody tr:hover { background: #FAFAFC; }
+
+        /* 移除学员按钮 */
+        .btn-remove-att {
+            background: none; border: 1px solid transparent;
+            color: var(--color-text-muted);
+            cursor: pointer;
+            padding: 4px 8px; border-radius: var(--radius-sm);
+            font-size: 12px; transition: all var(--transition);
+        }
+        .btn-remove-att:hover {
+            color: var(--color-danger);
+            border-color: #fecaca;
+            background: #fef2f2;
+        }
+
+        /* 步进器 */
+        .att-deduct-stepper {
+            display: inline-flex; align-items: center;
+            border: 1.5px solid var(--color-border);
+            border-radius: var(--radius-md);
+            overflow: hidden;
+            background: var(--color-surface);
+        }
+        .att-deduct-stepper .stepper-btn {
+            width: 30px; height: 30px;
+            border: none; background: transparent;
+            color: var(--color-text-secondary);
+            font-size: 17px; cursor: pointer;
+            transition: all var(--transition);
+            display: flex; align-items: center; justify-content: center;
+            line-height: 1;
+        }
+        .att-deduct-stepper .stepper-btn:hover {
+            background: var(--color-primary-bg);
+            color: var(--color-primary);
+        }
+        .att-deduct-stepper .stepper-val {
+            min-width: 38px; text-align: center;
+            font-size: 14px; font-weight: 700;
+            color: var(--color-primary);
+            padding: 0 2px;
+            border-left: 1.5px solid var(--color-border);
+            border-right: 1.5px solid var(--color-border);
+        }
+        .att-deduct-stepper.disabled {
+            opacity: 0.45;
+            pointer-events: none;
+        }
+        .att-deduct-stepper.disabled .stepper-val {
+            color: var(--color-text-muted);
+        }
+
+        /* 状态芯片组 */
+        .att-status-group {
+            display: inline-flex;
+            border: 1.5px solid var(--color-border);
+            border-radius: 20px; overflow: hidden;
+        }
+        .att-status-chip {
+            padding: 5px 16px;
+            font-size: 12px; font-weight: 500;
+            cursor: pointer; transition: all 0.2s;
+            color: var(--color-text-secondary);
+            background: var(--color-surface);
+            border: none;
+            outline: none;
+        }
+        .att-status-chip:first-child {
+            border-right: 1px solid var(--color-border);
+        }
+        .att-status-chip.active {
+            background: var(--color-primary);
+            color: #fff;
+            box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
+        }
+        .att-status-chip:not(.active):hover {
+            background: var(--color-primary-bg);
+            color: var(--color-primary);
+        }
+
+        /* 页脚统计 */
+        .att-footer-hint {
+            margin-right: auto;
+            font-size: 13px; color: var(--color-text-muted);
+        }
     </style>
 
     <!-- 添加学员到班级弹窗 -->
