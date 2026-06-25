@@ -1013,7 +1013,9 @@ subjects                  courses              ┌──────────
 ### 6.20 兼容性处理
 
 - 本次已完成 SQLite → MySQL 8.4.9 完整迁移（20 张表，128 条记录）
-- MySQL TEXT 列不支持默认值，建表时 `DEFAULT ''` 字段改为 `VARCHAR(500)`
+- MySQL TEXT 列不支持默认值，建表时 `DEFAULT ''` 字段改为 `VARCHAR(500)`（27 处）
+- PDO `execute()` 返回 `boolean`，不能链式调用 `->fetch()`，已修复 `->execute()->fetch()` 模式（7 处）
+- PDO `execute()` 返回值不能赋值给变量后调用 `->fetch()`，`$res = $stmt->execute(); $res->fetch()` 改为 `$stmt->execute(); $stmt->fetch()`（13 处）
 - `SHOW COLUMNS` 返回列名 `Field`（非 SQLite 的 `name`），已修正
 - SQLite `SQLITE3_INTEGER`/`TEXT` 绑定改为 `PDO::PARAM_INT`/`PARAM_STR`
 - `PRAGMA table_info` 替换为 `SHOW COLUMNS`
