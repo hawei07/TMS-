@@ -29,12 +29,12 @@ $db->exec("CREATE TABLE IF NOT EXISTS resources (
     source VARCHAR(500) DEFAULT '',
     source_detail VARCHAR(500) DEFAULT '',
     intention_level VARCHAR(500) DEFAULT '',
-    status TEXT DEFAULT '待跟进',
+    status VARCHAR(500) DEFAULT '待跟进',
     assigned_to VARCHAR(500) DEFAULT '',
-    pool_type TEXT DEFAULT '我的资源',
+    pool_type VARCHAR(500) DEFAULT '我的资源',
     created_at VARCHAR(500) DEFAULT '',
     updated_at VARCHAR(500) DEFAULT '',
-    converted TEXT DEFAULT '未转化'
+    converted VARCHAR(500) DEFAULT '未转化'
 )");$db->exec("CREATE TABLE IF NOT EXISTS appointments (
     id INT PRIMARY KEY AUTO_INCREMENT,
     resource_id INT NOT NULL DEFAULT 0,
@@ -43,7 +43,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS resources (
     phone VARCHAR(500) DEFAULT '',
     course_type VARCHAR(500) DEFAULT '',
     appointment_time VARCHAR(500) DEFAULT '',
-    status TEXT DEFAULT '已预约',
+    status VARCHAR(500) DEFAULT '已预约',
     notes VARCHAR(500) DEFAULT '',
     created_at VARCHAR(500) DEFAULT ''
 )");
@@ -52,7 +52,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS communication_records (
     resource_id INT NOT NULL DEFAULT 0,
     resource_name VARCHAR(500) DEFAULT '',
     content VARCHAR(500) DEFAULT '',
-    comm_type TEXT DEFAULT '电话',
+    comm_type VARCHAR(500) DEFAULT '电话',
     created_at VARCHAR(500) DEFAULT ''
 )");
 $db->exec("CREATE TABLE IF NOT EXISTS intention_levels (
@@ -79,7 +79,7 @@ $existingColsR = [];
 $colResR = $db->query("SHOW COLUMNS FROM resources");
 while ($colRowR = $colResR->fetch(PDO::FETCH_ASSOC)) $existingColsR[] = $colRowR['Field'];
 if (!in_array('converted', $existingColsR)) {
-    $db->exec("ALTER TABLE resources ADD COLUMN converted TEXT DEFAULT '未转化'");
+    $db->exec("ALTER TABLE resources ADD COLUMN converted VARCHAR(500) DEFAULT '未转化'");
     // 历史数据：已关联学员记录（即已报名）的资源标记为已转化
     $db->exec("UPDATE resources SET converted = '已转化' WHERE id IN (SELECT resource_id FROM students WHERE resource_id IS NOT NULL)");
 }
@@ -92,7 +92,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS employees (
     department VARCHAR(500) DEFAULT '',
     position VARCHAR(500) DEFAULT '',
     entry_date VARCHAR(500) DEFAULT '',
-    status TEXT DEFAULT '在职',
+    status VARCHAR(500) DEFAULT '在职',
     is_teacher VARCHAR(500) DEFAULT '',
     created_at VARCHAR(500) DEFAULT '',
     updated_at VARCHAR(500) DEFAULT ''
@@ -109,7 +109,7 @@ if (!in_array('is_teacher', $existingColsEmp)) {
 $db->exec("CREATE TABLE IF NOT EXISTS organizations (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(500) NOT NULL DEFAULT '',
-    type TEXT NOT NULL DEFAULT '部门',
+    type VARCHAR(500) NOT NULL DEFAULT '部门',
     parent_id INT NOT NULL DEFAULT 0,
     sort_order INT NOT NULL DEFAULT 0,
     created_at VARCHAR(500) DEFAULT ''
@@ -117,21 +117,21 @@ $db->exec("CREATE TABLE IF NOT EXISTS organizations (
 
 $db->exec("CREATE TABLE IF NOT EXISTS positions (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name VARCHAR(500) NOT NULL UNIQUE,
     sort_order INT DEFAULT 0,
     created_at VARCHAR(500) DEFAULT ''
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS subjects (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    name TEXT NOT NULL,
+    name VARCHAR(500) NOT NULL,
     parent_id INT DEFAULT 0,
     sort_order INT DEFAULT 0
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS courses (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    name TEXT NOT NULL,
+    name VARCHAR(500) NOT NULL,
     subject VARCHAR(500) DEFAULT '',
     grade VARCHAR(500) DEFAULT '',
     description VARCHAR(500) DEFAULT '',
@@ -147,7 +147,7 @@ try { $db->exec("ALTER TABLE courses ADD COLUMN campus_permission VARCHAR(500) D
 $db->exec("CREATE TABLE IF NOT EXISTS price_plans (
     id INT PRIMARY KEY AUTO_INCREMENT,
     course_id INT NOT NULL,
-    name TEXT NOT NULL,
+    name VARCHAR(500) NOT NULL,
     plan_type VARCHAR(500) DEFAULT '',
     sort_order INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -158,7 +158,7 @@ try { $db->exec("ALTER TABLE price_plans ADD COLUMN plan_type VARCHAR(500) DEFAU
 $db->exec("CREATE TABLE IF NOT EXISTS price_items (
     id INT PRIMARY KEY AUTO_INCREMENT,
     plan_id INT NOT NULL,
-    name TEXT NOT NULL,
+    name VARCHAR(500) NOT NULL,
     lesson_count INT NOT NULL,
     unit_price REAL NOT NULL,
     actual_price REAL NOT NULL,
@@ -168,10 +168,10 @@ $db->exec("CREATE TABLE IF NOT EXISTS price_items (
 $db->exec("CREATE TABLE IF NOT EXISTS students (
     id INT PRIMARY KEY AUTO_INCREMENT,
     resource_id INTEGER,
-    name TEXT NOT NULL,
-    phone TEXT NOT NULL UNIQUE,
-    source TEXT,
-    follow_status TEXT,
+    name VARCHAR(500) NOT NULL,
+    phone VARCHAR(500) NOT NULL UNIQUE,
+    source VARCHAR(500),
+    follow_status VARCHAR(500),
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )");
 
@@ -179,11 +179,11 @@ $db->exec("CREATE TABLE IF NOT EXISTS orders (
     id INT PRIMARY KEY AUTO_INCREMENT,
     student_id INT NOT NULL,
     course_id INT NOT NULL,
-    plan_name TEXT,
-    item_name TEXT,
+    plan_name VARCHAR(500),
+    item_name VARCHAR(500),
     lesson_count INTEGER,
     actual_price REAL,
-    status TEXT DEFAULT '已报名',
+    status VARCHAR(500) DEFAULT '已报名',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     paid_at VARCHAR(500) DEFAULT '',
     order_type VARCHAR(500) DEFAULT '',
@@ -236,7 +236,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS attendance_records (
     student_id INT NOT NULL,
     course_id INT NOT NULL,
     lesson_date VARCHAR(500) DEFAULT '',
-    status TEXT DEFAULT '出勤',
+    status VARCHAR(500) DEFAULT '出勤',
     notes VARCHAR(500) DEFAULT '',
     created_at VARCHAR(500) DEFAULT ''
 )");
@@ -260,10 +260,10 @@ $db->exec("CREATE TABLE IF NOT EXISTS classes (
     id INT PRIMARY KEY AUTO_INCREMENT,
     course_id INT NOT NULL DEFAULT 0,
     name VARCHAR(500) NOT NULL DEFAULT '',
-    class_type TEXT NOT NULL DEFAULT '标准班',
+    class_type VARCHAR(500) NOT NULL DEFAULT '标准班',
     max_students INT NOT NULL DEFAULT 0,
     lesson_hours INT NOT NULL DEFAULT 0,
-    can_trial TEXT NOT NULL DEFAULT '是',
+    can_trial VARCHAR(500) NOT NULL DEFAULT '是',
     campus VARCHAR(500) NOT NULL DEFAULT '',
     remark VARCHAR(500) NOT NULL DEFAULT '',
     created_at VARCHAR(500) NOT NULL DEFAULT ''
@@ -272,11 +272,11 @@ $db->exec("CREATE TABLE IF NOT EXISTS classes (
 $db->exec("CREATE TABLE IF NOT EXISTS schedules (
     id INT PRIMARY KEY AUTO_INCREMENT,
     class_id INT NOT NULL DEFAULT 0,
-    rule_type TEXT NOT NULL DEFAULT '按规则排课',
+    rule_type VARCHAR(500) NOT NULL DEFAULT '按规则排课',
     start_date VARCHAR(500) NOT NULL DEFAULT '',
     end_date VARCHAR(500) NOT NULL DEFAULT '',
     weekdays VARCHAR(500) NOT NULL DEFAULT '',
-    time_slots TEXT NOT NULL DEFAULT '{}',
+    time_slots VARCHAR(500) NOT NULL DEFAULT '{}',
     holiday_enabled INT NOT NULL DEFAULT 0,
     teacher VARCHAR(500) NOT NULL DEFAULT '',
     classroom VARCHAR(500) NOT NULL DEFAULT '',
@@ -285,7 +285,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS schedules (
 
 $db->exec("CREATE TABLE IF NOT EXISTS classrooms (
     id INT PRIMARY KEY AUTO_INCREMENT,
-    name TEXT NOT NULL UNIQUE,
+    name VARCHAR(500) NOT NULL UNIQUE,
     capacity INT DEFAULT 0,
     campus VARCHAR(500) DEFAULT '',
     remark VARCHAR(500) DEFAULT '',
@@ -306,7 +306,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
     schedule_id INT NOT NULL DEFAULT 0,
     session_date VARCHAR(500) NOT NULL DEFAULT '',
     student_id INT NOT NULL DEFAULT 0,
-    status TEXT NOT NULL DEFAULT '出勤',
+    status VARCHAR(500) NOT NULL DEFAULT '出勤',
     deducted_lessons INT DEFAULT 0,
     deducted_order_id INT DEFAULT 0,
     created_at VARCHAR(500) NOT NULL DEFAULT ''
@@ -593,7 +593,7 @@ function handleApi() {
 
             $countStmt = $db->prepare("SELECT COUNT(*) FROM resources r WHERE $whereStr");
             foreach ($params as $k => $v) $countStmt->bindValue($k, $v, $k === ':rid' ? PDO::PARAM_INT : PDO::PARAM_STR);
-            $total = $countStmt->execute()->fetch(PDO::FETCH_NUM)[0];
+            $countStmt->execute(); $total = $countStmt->fetch(PDO::FETCH_NUM)[0];
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $stmt = $db->prepare("SELECT r.*, e.department AS assigned_dept FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
@@ -601,8 +601,8 @@ function handleApi() {
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
             $rows = [];
-            $result = $stmt->execute();
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+$stmt->execute();
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_resource':
@@ -963,11 +963,11 @@ function handleApi() {
             if ($params) {
                 $stmt = $db->prepare($query);
                 foreach ($params as $i => $v) $stmt->bindValue($i+1, $v, PDO::PARAM_STR);
-                $result = $stmt->execute();
+$stmt->execute();
             } else {
                 $result = $db->query($query);
             }
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_appointment':
@@ -1010,7 +1010,7 @@ function handleApi() {
             $rid = intval($_GET['resource_id'] ?? 0);
             $result = $db->query("SELECT * FROM communication_records WHERE resource_id=$rid ORDER BY created_at DESC");
             $rows = [];
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_communication':
@@ -1039,7 +1039,7 @@ function handleApi() {
         case 'list_channels':
             $result = $db->query("SELECT * FROM channels ORDER BY created_at DESC");
             $rows = [];
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_channel':
@@ -1080,7 +1080,7 @@ function handleApi() {
         case 'list_intention_levels':
             $result = $db->query("SELECT * FROM intention_levels ORDER BY sort_order ASC, id ASC");
             $rows = [];
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_intention_level':
@@ -1134,7 +1134,7 @@ function handleApi() {
 
             $stmt = $db->prepare("SELECT r.name, r.phone, r.source, r.source_detail, r.intention_level, r.gender, r.birth_date, r.follow_status, r.assigned_to, e.department AS assigned_dept, r.created_at, r.updated_at FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $result = $stmt->execute();
+$stmt->execute();
 
             $filename = '资源导出_' . date('Ymd_His') . '.csv';
             header('Content-Type: text/csv; charset=utf-8');
@@ -1143,7 +1143,7 @@ function handleApi() {
             $output = fopen('php://output', 'w');
             fprintf($output, "\xEF\xBB\xBF");
             fputcsv($output, ['姓名', '电话', '来源渠道', '来源详情', '意向等级', '性别', '出生日期', '跟进状态', '归属人', '归属部门', '创建时间', '更新时间']);
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) {
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 fputcsv($output, [
                     $r['name'], $r['phone'], $r['source'], $r['source_detail'],
                     $r['intention_level'], $r['gender'], $r['birth_date'],
@@ -1160,7 +1160,7 @@ function handleApi() {
             if (!$category) json(['error' => 'category参数不能为空']);
             $result = $db->query("SELECT * FROM basic_types WHERE category = " . $db->quote($category) . " ORDER BY sort_order ASC, id ASC");
             $rows = [];
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_basic_type':
@@ -1232,7 +1232,7 @@ function handleApi() {
 
             $countStmt = $db->prepare("SELECT COUNT(*) FROM employees $whereStr");
             foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
-            $total = $countStmt->execute()->fetch(PDO::FETCH_NUM)[0];
+            $countStmt->execute(); $total = $countStmt->fetch(PDO::FETCH_NUM)[0];
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $stmt = $db->prepare("SELECT * FROM employees $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
@@ -1240,8 +1240,8 @@ function handleApi() {
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
             $rows = [];
-            $result = $stmt->execute();
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+$stmt->execute();
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_employee':
@@ -1330,7 +1330,7 @@ function handleApi() {
         case 'list_positions':
             $result = $db->query("SELECT * FROM positions ORDER BY sort_order ASC, id ASC");
             $rows = [];
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_position':
@@ -1522,7 +1522,7 @@ function handleApi() {
 
             $stmt = $db->prepare("SELECT name, phone, department, position, entry_date, status, is_teacher, created_at, updated_at FROM employees $whereStr ORDER BY updated_at DESC");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $result = $stmt->execute();
+$stmt->execute();
 
             $filename = '员工导出_' . date('Ymd_His') . '.csv';
             header('Content-Type: text/csv; charset=utf-8');
@@ -1530,7 +1530,7 @@ function handleApi() {
             $output = fopen('php://output', 'w');
             fprintf($output, "\xEF\xBB\xBF");
             fputcsv($output, ['姓名', '手机号', '部门', '职位', '入职日期', '状态', '是否教师', '创建时间', '更新时间']);
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) {
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 fputcsv($output, [
                     $r['name'], $r['phone'], $r['department'], $r['position'],
                     $r['entry_date'], $r['status'], $r['is_teacher'], $r['created_at'], $r['updated_at']
@@ -1555,7 +1555,7 @@ function handleApi() {
 
             $countStmt = $db->prepare("SELECT COUNT(*) FROM courses $whereStr");
             foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
-            $total = $countStmt->execute()->fetch(PDO::FETCH_NUM)[0];
+            $countStmt->execute(); $total = $countStmt->fetch(PDO::FETCH_NUM)[0];
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $stmt = $db->prepare("SELECT * FROM courses $whereStr ORDER BY id DESC LIMIT :lim OFFSET :off");
@@ -1563,8 +1563,8 @@ function handleApi() {
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
             $rows = [];
-            $result = $stmt->execute();
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+$stmt->execute();
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_course':
@@ -1617,7 +1617,7 @@ function handleApi() {
 
             $stmt = $db->prepare("SELECT * FROM courses $whereStr ORDER BY id DESC");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $result = $stmt->execute();
+$stmt->execute();
 
             $filename = '课程导出_' . date('Ymd_His') . '.csv';
             header('Content-Type: text/csv; charset=utf-8');
@@ -1629,7 +1629,7 @@ function handleApi() {
             $campusRes = $db->query("SELECT id, name FROM organizations WHERE type='校区'");
             while ($cr = $campusRes->fetch(PDO::FETCH_ASSOC)) $campusMap[$cr['id']] = $cr['name'];
             fputcsv($output, ['编号', '课程名称', '学科', '适用校区', '小课包', '低幼龄', '创建时间']);
-            while ($r = $result->fetch(PDO::FETCH_ASSOC)) {
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $campusNames = [];
                 if (!empty($r['campus_permission'])) {
                     foreach (explode(',', $r['campus_permission']) as $cid) {
@@ -1978,15 +1978,15 @@ function handleApi() {
             }
             $stmt = $db->prepare("SELECT COUNT(*) FROM students s $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
+            $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
             $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count FROM students s $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             $rows = [];
-            $res = $stmt->execute();
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+$stmt->execute();
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
@@ -2138,7 +2138,7 @@ function handleApi() {
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
             $res = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
-            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
                 $cl = intval($r['consumed_lessons'] ?? 0);
@@ -2164,7 +2164,7 @@ function handleApi() {
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
             $res = $db->query("SELECT a.*, c.name AS course_name FROM attendance_records a LEFT JOIN courses c ON a.course_id = c.id WHERE a.student_id = $sid ORDER BY a.lesson_date DESC, a.id DESC");
-            while ($r = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['data' => $rows]);
             break;
 
@@ -2232,21 +2232,21 @@ function handleApi() {
             $countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
+            $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
             $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             $rows = [];
-            $res = $stmt->execute();
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+$stmt->execute();
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             // 支付方式汇总
             $summarySql = "SELECT SUM(COALESCE(o.cash_amount,0)) AS cash_total, SUM(COALESCE(o.meituan_amount,0)) AS meituan_total FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
             $sumStmt = $db->prepare($summarySql);
             foreach ($params as $k => $v) $sumStmt->bindValue($k, $v, PDO::PARAM_STR);
-            $sumRes = $sumStmt->execute();
-            $paymentSummary = $sumRes->fetch(PDO::FETCH_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0];
+$sumStmt->execute();
+            $paymentSummary = $sumStmt->fetch(PDO::FETCH_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0];
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize, 'payment_summary' => $paymentSummary]);
             break;
 
@@ -2263,14 +2263,14 @@ function handleApi() {
             }
             $stmt = $db->prepare("SELECT COUNT(*) FROM parent_orders po $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
+            $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
             $stmt = $db->prepare("SELECT * FROM parent_orders po $where ORDER BY po.id DESC LIMIT :limit OFFSET :offset");
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $res = $stmt->execute();
+$stmt->execute();
             $rows = [];
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
@@ -2288,15 +2288,15 @@ function handleApi() {
             }
             $stmt = $db->prepare("SELECT COUNT(*) FROM classes cl $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
-            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
+            $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
             $sql = "SELECT cl.*, c.name AS course_name FROM classes cl LEFT JOIN courses c ON cl.course_id = c.id $where ORDER BY cl.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             $rows = [];
-            $res = $stmt->execute();
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+$stmt->execute();
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
@@ -2379,8 +2379,8 @@ function handleApi() {
             $stmt = $db->prepare("SELECT * FROM schedules WHERE class_id=:cid ORDER BY id DESC");
             $stmt->bindValue(':cid', $classId, PDO::PARAM_INT);
             $rows = [];
-            $res = $stmt->execute();
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) {
+$stmt->execute();
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $row['sessions'] = computeSessions($row);
                 $rows[] = $row;
             }
@@ -2468,7 +2468,7 @@ function handleApi() {
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
             $rows = [];
             $res = $db->query("SELECT * FROM classrooms $whereStr ORDER BY id DESC");
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
 
@@ -2534,7 +2534,7 @@ function handleApi() {
                 JOIN students s ON s.id = cs.student_id
                 WHERE cs.class_id = $classId
                 ORDER BY cs.id ASC");
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
 
@@ -2604,7 +2604,7 @@ function handleApi() {
                 ORDER BY s.id DESC
                 LIMIT 50";
             $res = $db->query($sql);
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
 
@@ -2634,7 +2634,7 @@ function handleApi() {
             // 获取班级所有学员
             $students = [];
             $res = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
-            while ($r = $res->fetch(PDO::FETCH_ASSOC)) $students[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $students[] = $r;
             // 获取已有考勤记录
             $attMap = [];
             $attRes = $db->query("SELECT * FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate'");
@@ -2869,7 +2869,7 @@ function handleApi() {
                 JOIN classes c ON s.class_id = c.id 
                 LEFT JOIN courses co ON c.course_id = co.id 
                 ORDER BY c.name, s.id");
-            while ($row = $res->fetch(PDO::FETCH_ASSOC)) {
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $sesList = computeSessions($row);
                 foreach ($sesList as $ses) {
                     $d = $ses['date'];

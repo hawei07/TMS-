@@ -19,10 +19,11 @@ AIGC:
 
 | 项目 | 值 |
 |------|-----|
-| PHP 路径 | `C:\php-8.4\php.exe`（PHP 8.4.22） |
-| 配置文件 | `C:\php-8.4\php.ini` |
+| PHP 路径 | Winget PHP 8.4（`php.exe` 在 PATH 中） |
+| 配置文件 | `C:\Users\吴赛\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.ini` |
 | 监听端口 | `127.0.0.1:5001` |
-| 数据库文件 | `market.db`（SQLite，项目根目录） |
+| 数据库 | **MySQL 8.4.9**（`tms_db`，127.0.0.1:3306，root/root） |
+| MySQL 安装路径 | `D:\dvptool\mysql\` |
 | 访问地址 | http://127.0.0.1:5001 |
 
 ### Git 版本管理
@@ -30,36 +31,40 @@ AIGC:
 | 项目 | 值 |
 |------|-----|
 | Git 路径 | `D:\Git\bin\git.exe`（Git 2.54.0） |
-| 主分支 | `main` |
-| 分支策略 | `feature/xxx` → `main`（功能分支开发，完成后合并） |
+| 分支策略 | `feature/xxx` → `develop` → `master`（no-ff 合并） |
+| 稳定分支 | `master` |
+| 开发分支 | `develop` |
+| 提交规范 | [Conventional Commits](https://www.conventionalcommits.org/)（feat/fix/docs/refactor/style/chore） |
 | 回退方式 | `git log` 查历史 → `git revert` / `git reset` |
 
-每次迭代流程：切 `feature/xxx` 分支 → 修改代码 → 提交 → 合并回 `main`，每个版本可追溯、可回退。
+每次迭代流程：切 `feature/xxx` 分支 → 修改代码 → 提交 → 合并回 `develop`，稳定后 `no-ff` 合并到 `master`。每个版本可追溯、可回退。
 
 ### 启动命令
 
 ```powershell
 cd "D:\market-system-php"
-C:\php-8.4\php.exe -S 127.0.0.1:5001
+php -S 127.0.0.1:5001
 ```
 
 ### 重启命令
 
 ```powershell
 Stop-Process -Name "php" -Force -ErrorAction SilentlyContinue
-Start-Process -FilePath "C:\php-8.4\php.exe" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirectory "D:\market-system-php" -WindowStyle Hidden
+Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirectory "D:\market-system-php" -WindowStyle Hidden
 ```
 
 ### 环境注意事项
 
-1. **PHP 运行环境**：必须使用 `C:\php-8.4\php.exe`。不要使用 PATH 中的 Winget PHP（位于 `C:\Users\吴赛\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\`），其 SQLite3 扩展存在加载问题，会导致 `Class "SQLite3" not found` 致命错误。
+1. **MySQL 服务**：开发前需确保 MySQL 8.4.9 已启动（`D:\dvptool\mysql\bin\mysqld.exe`），端口 3306，root 密码 `root`。
 
-2. **启动命令（后台运行）**：
+2. **PHP 扩展**：需启用 `pdo_mysql` 和 `mbstring` 扩展。已在 php.ini 中配置 `extension=pdo_mysql` 和 `extension=mbstring`。
+
+3. **数据库连接**：`index.php` 通过 PDO 连接 `mysql:host=127.0.0.1;port=3306;dbname=tms_db;charset=utf8mb4`，异常模式下自动抛出 PDOException。
+
+4. **MySQL 启动命令**：
    ```powershell
-   Start-Process "C:\php-8.4\php.exe" -ArgumentList "-S 127.0.0.1:5001", "-t", "D:\market-system-php" -WindowStyle Hidden
+   Start-Process "D:\dvptool\mysql\bin\mysqld.exe" -ArgumentList "--defaults-file=`"D:\dvptool\mysql\my.ini`"" -WindowStyle Hidden
    ```
-
-3. **PHP 扩展**：PHP 8.4 需启用 `mbstring` 扩展，已修改 `C:\php-8.4\php.ini` 开启 `extension=mbstring`。
 
 ---
 
@@ -67,7 +72,7 @@ Start-Process -FilePath "C:\php-8.4\php.exe" -ArgumentList "-S", "127.0.0.1:5001
 
 - **系统名称**：TMS管理系统
 - **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
-- **技术栈**：PHP 8.4（内嵌 HTML）+ SQLite（WAL 模式）+ Vanilla JS（约 3033 行）+ CSS3（CSS Variables 设计令牌体系，约 1305 行）
+- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 3033 行）+ CSS3（CSS Variables 设计令牌体系，约 1305 行）
 - **架构模式**：单体 PHP 单文件应用（`index.php`，约 3200+ 行），前端内嵌于同一文件，API 通过 `?action=` 路由分发，所有 API 统一返回 JSON
 
 ---
@@ -87,8 +92,8 @@ Start-Process -FilePath "C:\php-8.4\php.exe" -ArgumentList "-S", "127.0.0.1:5001
 │  │  - Excel导入│  │  - 组织树形结构               │ │
 │  └──────┬─────┘  └──────────┬──────────────────┘ │
 │         │                   │                     │
-│    SQLite               main.js / style.css       │
-│   (market.db)           (static/js/ & static/css/) │
+│    MySQL (PDO)          main.js / style.css       │
+│   (tms_db, 3306)        (static/js/ & static/css/) │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -97,7 +102,7 @@ Start-Process -FilePath "C:\php-8.4\php.exe" -ArgumentList "-S", "127.0.0.1:5001
 | 技术 | 选型理由 |
 |------|----------|
 | PHP 内嵌 HTML | 单文件部署，`php -S` 零配置启动 |
-| SQLite | 零安装依赖，WAL 模式支持并发读写，外键约束开启 |
+| MySQL 8.4 (PDO) | 关系型数据库，支持并发读写，外键约束，UTF-8 字符集 |
 | Vanilla JS | 无框架依赖，约 3033 行完成完整 SPA 交互 |
 | CSS Variables | 统一设计令牌（`--color-primary`/`--shadow-md` 等），便于主题定制 |
 | ZipArchive + XML | 纯 PHP 解析 .xlsx 文件，零第三方依赖 |
@@ -107,7 +112,7 @@ Start-Process -FilePath "C:\php-8.4\php.exe" -ArgumentList "-S", "127.0.0.1:5001
 ```
 market-system-php/
 ├── index.php              # 主程序（后端 API + 前端 HTML，约 3200+ 行）
-├── market.db              # SQLite 数据库（自动生成）
+├── .gitignore             # Git 忽略规则（php_errors.log / temp/）
 ├── static/
 │   ├── js/
 │   │   └── main.js        # 前端逻辑（约 3033 行）
@@ -149,71 +154,71 @@ market-system-php/
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| name | TEXT | '' | 客户姓名（必填） |
-| phone | TEXT | '' | 电话（唯一性校验） |
-| source | TEXT | '' | 来源渠道 |
-| source_detail | TEXT | '' | 来源详情 |
-| intention_level | TEXT | '' | 意向等级 |
-| gender | TEXT | '' | 性别（增量字段） |
-| birth_date | TEXT | '' | 出生日期（增量字段） |
-| status | TEXT | '待跟进' | 原状态字段（已保留但前端不再展示，被跟进状态替代） |
-| follow_status | TEXT | '' | **跟进状态**：未沟通/沟通中/已邀约未试听/已试听待转化/已转化—定金/已转化—全款/无效客户，共 7 个选项 |
-| assigned_to | TEXT | '' | 归属人 |
-| pool_type | TEXT | '我的资源' | 我的资源/资源公海 |
-| created_at | TEXT | '' | 创建时间 |
-| updated_at | TEXT | '' | 更新时间 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | '' | 客户姓名（必填） |
+| phone | VARCHAR(500) | '' | 电话（唯一性校验） |
+| source | VARCHAR(500) | '' | 来源渠道 |
+| source_detail | VARCHAR(500) | '' | 来源详情 |
+| intention_level | VARCHAR(500) | '' | 意向等级 |
+| gender | VARCHAR(500) | '' | 性别（增量字段） |
+| birth_date | VARCHAR(500) | '' | 出生日期（增量字段） |
+| status | VARCHAR(500) | '待跟进' | 原状态字段（已保留但前端不再展示，被跟进状态替代） |
+| follow_status | VARCHAR(500) | '' | **跟进状态**：未沟通/沟通中/已邀约未试听/已试听待转化/已转化—定金/已转化—全款/无效客户，共 7 个选项 |
+| assigned_to | VARCHAR(500) | '' | 归属人 |
+| pool_type | VARCHAR(500) | '我的资源' | 我的资源/资源公海 |
+| created_at | VARCHAR(500) | '' | 创建时间 |
+| updated_at | VARCHAR(500) | '' | 更新时间 |
 
 ### 3.3 employees（员工表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| name | TEXT | '' | 姓名（必填，唯一性校验） |
-| phone | TEXT | '' | 手机号（唯一性校验） |
-| department | TEXT | '' | 归属部门 |
-| position | TEXT | '' | 职位 |
-| entry_date | TEXT | '' | 入职日期 |
-| status | TEXT | '在职' | 在职/离职 |
-| created_at | TEXT | '' | 创建时间 |
-| updated_at | TEXT | '' | 更新时间 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | '' | 姓名（必填，唯一性校验） |
+| phone | VARCHAR(500) | '' | 手机号（唯一性校验） |
+| department | VARCHAR(500) | '' | 归属部门 |
+| position | VARCHAR(500) | '' | 职位 |
+| entry_date | VARCHAR(500) | '' | 入职日期 |
+| status | VARCHAR(500) | '在职' | 在职/离职 |
+| created_at | VARCHAR(500) | '' | 创建时间 |
+| updated_at | VARCHAR(500) | '' | 更新时间 |
 
 ### 3.4 organizations（组织表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| name | TEXT | '' | 组织名称（必填，同级同类型下唯一） |
-| type | TEXT | '部门' | 部门/校区 |
-| parent_id | INTEGER | 0 | 上级组织 ID（0 表示根节点） |
-| sort_order | INTEGER | 0 | 排序号 |
-| created_at | TEXT | '' | 创建时间 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | '' | 组织名称（必填，同级同类型下唯一） |
+| type | VARCHAR(500) | '部门' | 部门/校区 |
+| parent_id | INT | 0 | 上级组织 ID（0 表示根节点） |
+| sort_order | INT | 0 | 排序号 |
+| created_at | VARCHAR(500) | '' | 创建时间 |
 
 ### 3.5 positions（岗位表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| name | TEXT | — | 岗位名称（唯一约束） |
-| sort_order | INTEGER | 0 | 排序号 |
-| created_at | TEXT | '' | 创建时间 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | — | 岗位名称（唯一约束） |
+| sort_order | INT | 0 | 排序号 |
+| created_at | VARCHAR(500) | '' | 创建时间 |
 
 ### 3.6 channels（渠道表）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 主键 |
-| name | TEXT | 渠道名称 |
-| created_at | TEXT | 创建时间 |
+| name | VARCHAR(500) | 渠道名称 |
+| created_at | VARCHAR(500) | 创建时间 |
 
 ### 3.7 intention_levels（意向等级表）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 主键 |
-| name | TEXT | 等级名称 |
-| sort_order | INTEGER | 排序号（默认 0） |
-| created_at | TEXT | 创建时间 |
+| name | VARCHAR(500) | 等级名称 |
+| sort_order | INT | 排序号（默认 0） |
+| created_at | VARCHAR(500) | 创建时间 |
 
 默认数据：A-高意向(1) / B-中意向(2) / C-低意向(3) / D-无意向(4)
 
@@ -222,10 +227,10 @@ market-system-php/
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 主键 |
-| category | TEXT | 分类标识（course_type / comm_type） |
-| name | TEXT | 类型名称 |
-| sort_order | INTEGER | 排序号（默认 0） |
-| created_at | TEXT | 创建时间 |
+| category | VARCHAR(500) | 分类标识（course_type / comm_type） |
+| name | VARCHAR(500) | 类型名称 |
+| sort_order | INT | 排序号（默认 0） |
+| created_at | VARCHAR(500) | 创建时间 |
 
 默认数据：课程类型（试听课/正式课体验/测评课/其他），沟通方式（电话/微信/面谈/短信）
 
@@ -234,49 +239,49 @@ market-system-php/
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 主键 |
-| resource_id | INTEGER | 关联资源 ID |
-| resource_name | TEXT | 关联资源名称（冗余） |
-| student_name | TEXT | 学员姓名 |
-| phone | TEXT | 电话 |
-| course_type | TEXT | 课程类型 |
-| appointment_time | TEXT | 预约时间 |
-| status | TEXT | 已预约/已试听/已取消 |
-| notes | TEXT | 备注 |
-| created_at | TEXT | 创建时间 |
+| resource_id | INT | 关联资源 ID |
+| resource_name | VARCHAR(500) | 关联资源名称（冗余） |
+| student_name | VARCHAR(500) | 学员姓名 |
+| phone | VARCHAR(500) | 电话 |
+| course_type | VARCHAR(500) | 课程类型 |
+| appointment_time | VARCHAR(500) | 预约时间 |
+| status | VARCHAR(500) | 已预约/已试听/已取消 |
+| notes | VARCHAR(500) | 备注 |
+| created_at | VARCHAR(500) | 创建时间 |
 
 ### 3.10 communication_records（沟通记录表）
 
 | 字段 | 类型 | 说明 |
 |------|------|------|
 | id | INTEGER PK | 主键 |
-| resource_id | INTEGER | 关联资源 ID |
-| resource_name | TEXT | 关联资源名称（冗余） |
-| content | TEXT | 沟通内容 |
-| comm_type | TEXT | 沟通方式（电话/微信/面谈/短信） |
-| created_at | TEXT | 创建时间 |
+| resource_id | INT | 关联资源 ID |
+| resource_name | VARCHAR(500) | 关联资源名称（冗余） |
+| content | VARCHAR(500) | 沟通内容 |
+| comm_type | VARCHAR(500) | 沟通方式（电话/微信/面谈/短信） |
+| created_at | VARCHAR(500) | 创建时间 |
 
 ### 3.11 courses（课程表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| name | TEXT | — | 课程名称（必填） |
-| subject | TEXT | '' | 所属学科 |
-| grade | TEXT | '' | 适用年级 |
-| description | TEXT | '' | 课程描述 |
-| small_package | TEXT | '' | 小课包标记（增量字段）。空字符串或 `'否'` 表示非小课包，`'是'`/`'1'`/`'小课包'` 表示是小课包。前端通过 `isSmallPackage()` 函数判断 |
-| toddler | TEXT | '' | 低幼龄标记（增量字段） |
-| campus_permission | TEXT | '' | 校区权限控制（增量字段） |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | — | 课程名称（必填） |
+| subject | VARCHAR(500) | '' | 所属学科 |
+| grade | VARCHAR(500) | '' | 适用年级 |
+| description | VARCHAR(500) | '' | 课程描述 |
+| small_package | VARCHAR(500) | '' | 小课包标记（增量字段）。空字符串或 `'否'` 表示非小课包，`'是'`/`'1'`/`'小课包'` 表示是小课包。前端通过 `isSmallPackage()` 函数判断 |
+| toddler | VARCHAR(500) | '' | 低幼龄标记（增量字段） |
+| campus_permission | VARCHAR(500) | '' | 校区权限控制（增量字段） |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.12 subjects（学科表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| name | TEXT | — | 学科名称（必填） |
-| parent_id | INTEGER | 0 | 上级学科 ID（0 表示一级学科） |
-| sort_order | INTEGER | 0 | 排序号 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | — | 学科名称（必填） |
+| parent_id | INT | 0 | 上级学科 ID（0 表示一级学科） |
+| sort_order | INT | 0 | 排序号 |
 
 支持两级树形结构：一级学科 → 二级学科。
 
@@ -284,128 +289,128 @@ market-system-php/
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| student_no | TEXT | '' | **学号**（10 位数字，唯一，自动生成） |
-| resource_id | INTEGER | — | 关联资源 ID（可为空） |
-| name | TEXT | — | 学员姓名（必填） |
-| phone | TEXT | — | 电话（唯一约束） |
-| source | TEXT | — | 来源 |
-| follow_status | TEXT | — | 跟进状态 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| student_no | VARCHAR(500) | '' | **学号**（10 位数字，唯一，自动生成） |
+| resource_id | INT | — | 关联资源 ID（可为空） |
+| name | VARCHAR(500) | — | 学员姓名（必填） |
+| phone | VARCHAR(500) | — | 电话（唯一约束） |
+| source | VARCHAR(500) | — | 来源 |
+| follow_status | VARCHAR(500) | — | 跟进状态 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.14 classes（班级表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| course_id | INTEGER | — | 关联课程 ID（必填） |
-| name | TEXT | — | 班级名称（必填） |
-| class_type | TEXT | '' | 班级类型：标准班 / 活动班 |
-| max_students | INTEGER | 0 | 最大招生人数 |
-| lesson_hours | INTEGER | 0 | 授课课时（必为偶数） |
-| can_trial | TEXT | '0' | 是否可试听（0/1） |
-| campus | TEXT | '' | 所属校区 |
-| remark | TEXT | '' | 备注 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| course_id | INT | — | 关联课程 ID（必填） |
+| name | VARCHAR(500) | — | 班级名称（必填） |
+| class_type | VARCHAR(500) | '' | 班级类型：标准班 / 活动班 |
+| max_students | INT | 0 | 最大招生人数 |
+| lesson_hours | INT | 0 | 授课课时（必为偶数） |
+| can_trial | VARCHAR(500) | '0' | 是否可试听（0/1） |
+| campus | VARCHAR(500) | '' | 所属校区 |
+| remark | VARCHAR(500) | '' | 备注 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.15 schedules（排课表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| class_id | INTEGER | — | 关联班级 ID（必填） |
-| rule_type | TEXT | '按规则排课' | 排课方式：按规则排课 / 按日期排课 |
-| start_date | TEXT | '' | 开始日期 |
-| end_date | TEXT | '' | 结束日期 |
-| weekdays | TEXT | '' | 星期几上课，逗号分隔（如 '1,3,5' 表示周一三五） |
-| time_slots | TEXT | '' | 每天时间段，JSON 格式存储 |
-| holiday_enabled | INTEGER | 0 | 节假日是否排课（0/1） |
-| teacher | TEXT | '' | 授课老师 |
-| classroom | TEXT | '' | 上课教室（关联 classroom 名称） |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| class_id | INT | — | 关联班级 ID（必填） |
+| rule_type | VARCHAR(500) | '按规则排课' | 排课方式：按规则排课 / 按日期排课 |
+| start_date | VARCHAR(500) | '' | 开始日期 |
+| end_date | VARCHAR(500) | '' | 结束日期 |
+| weekdays | VARCHAR(500) | '' | 星期几上课，逗号分隔（如 '1,3,5' 表示周一三五） |
+| time_slots | VARCHAR(500) | '' | 每天时间段，JSON 格式存储 |
+| holiday_enabled | INT | 0 | 节假日是否排课（0/1） |
+| teacher | VARCHAR(500) | '' | 授课老师 |
+| classroom | VARCHAR(500) | '' | 上课教室（关联 classroom 名称） |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.16 classrooms（教室表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| name | TEXT | — | 教室名称（唯一，必填） |
-| capacity | INTEGER | 0 | 容纳人数 |
-| campus | TEXT | '' | 所属校区 |
-| remark | TEXT | '' | 备注 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | — | 教室名称（唯一，必填） |
+| capacity | INT | 0 | 容纳人数 |
+| campus | VARCHAR(500) | '' | 所属校区 |
+| remark | VARCHAR(500) | '' | 备注 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.17 price_plans（价格方案表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| course_id | INTEGER | — | 关联课程 ID（必填） |
-| name | TEXT | — | 方案名称（必填） |
-| plan_type | TEXT | '' | 方案类型（增量字段）：新报 / 续费 / 小课包。由课程 small_package 决定是否锁死 |
-| sort_order | INTEGER | 0 | 排序号 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| course_id | INT | — | 关联课程 ID（必填） |
+| name | VARCHAR(500) | — | 方案名称（必填） |
+| plan_type | VARCHAR(500) | '' | 方案类型（增量字段）：新报 / 续费 / 小课包。由课程 small_package 决定是否锁死 |
+| sort_order | INT | 0 | 排序号 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.18 price_items（报价单表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| plan_id | INTEGER | — | 关联价格方案 ID（必填） |
-| name | TEXT | — | 报价项名称（必填） |
-| lesson_count | INTEGER | — | 课时数（必填） |
-| unit_price | REAL | — | 单价（必填） |
-| actual_price | REAL | — | 实际价格（必填） |
-| sort_order | INTEGER | 0 | 排序号 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| plan_id | INT | — | 关联价格方案 ID（必填） |
+| name | VARCHAR(500) | — | 报价项名称（必填） |
+| lesson_count | INT | — | 课时数（必填） |
+| unit_price | DECIMAL(10,2) | — | 单价（必填） |
+| actual_price | DECIMAL(10,2) | — | 实际价格（必填） |
+| sort_order | INT | 0 | 排序号 |
 
 ### 3.19 orders（交易订单表 / 子订单）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| order_no | TEXT | '' | **订单号**（16 位数字，唯一，自动生成） |
-| parent_order_no | TEXT | '' | **父订单号**（16 位，同一录单的子订单共用） |
-| student_id | INTEGER | — | 关联学员 ID（必填） |
-| course_id | INTEGER | — | 关联课程 ID（必填） |
-| plan_name | TEXT | — | 价格方案名称 |
-| item_name | TEXT | — | 报价项名称 |
-| order_type | TEXT | '' | **订单类型**（增量字段）：新报 / 续费 / 小课包，从价格方案 plan_type 继承 |
-| lesson_count | INTEGER | — | 课时数 |
-| actual_price | REAL | — | 实际成交价格（= cash_amount + meituan_amount） |
-| cash_amount | REAL | 0 | **现金支付金额** |
-| meituan_amount | REAL | 0 | **美团支付金额** |
-| status | TEXT | '已报名' | 订单状态 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| order_no | VARCHAR(500) | '' | **订单号**（16 位数字，唯一，自动生成） |
+| parent_order_no | VARCHAR(500) | '' | **父订单号**（16 位，同一录单的子订单共用） |
+| student_id | INT | — | 关联学员 ID（必填） |
+| course_id | INT | — | 关联课程 ID（必填） |
+| plan_name | VARCHAR(500) | — | 价格方案名称 |
+| item_name | VARCHAR(500) | — | 报价项名称 |
+| order_type | VARCHAR(500) | '' | **订单类型**（增量字段）：新报 / 续费 / 小课包，从价格方案 plan_type 继承 |
+| lesson_count | INT | — | 课时数 |
+| actual_price | DECIMAL(10,2) | — | 实际成交价格（= cash_amount + meituan_amount） |
+| cash_amount | DECIMAL(10,2) | 0 | **现金支付金额** |
+| meituan_amount | DECIMAL(10,2) | 0 | **美团支付金额** |
+| status | VARCHAR(500) | '已报名' | 订单状态 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.20 attendance_records（上课记录表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| student_id | INTEGER | — | 关联学员 ID（必填） |
-| course_id | INTEGER | — | 关联课程 ID（必填） |
-| lesson_date | TEXT | — | 上课日期（必填） |
-| status | TEXT | '出勤' | 出勤状态：出勤 / 请假 / 缺勤 |
-| notes | TEXT | '' | 备注 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| student_id | INT | — | 关联学员 ID（必填） |
+| course_id | INT | — | 关联课程 ID（必填） |
+| lesson_date | VARCHAR(500) | — | 上课日期（必填） |
+| status | VARCHAR(500) | '出勤' | 出勤状态：出勤 / 请假 / 缺勤 |
+| notes | VARCHAR(500) | '' | 备注 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.21 parent_orders（父订单表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
-| id | INTEGER PK | AUTO | 主键 |
-| parent_order_no | TEXT | — | 父订单号（16 位，唯一） |
-| child_order_nos | TEXT | — | 关联的子订单号，逗号分隔（如 "xxx,yyy,zzz"） |
-| course_name | TEXT | — | 报读课程名称 |
-| total_lessons | INTEGER | 0 | 报读总课时数（所有子订单课时之和） |
-| student_name | TEXT | — | 学员姓名 |
-| phone | TEXT | — | 手机号 |
-| student_no | TEXT | — | 学号 |
-| enroll_time | TEXT | — | 报名时间 |
-| total_price | REAL | 0 | 总价格（所有子订单 actual_price 之和） |
-| cash_amount | REAL | 0 | 现金总额 |
-| meituan_amount | REAL | 0 | 美团总额 |
-| created_at | TEXT | '' | 创建时间 |
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| parent_order_no | VARCHAR(500) | — | 父订单号（16 位，唯一） |
+| child_order_nos | VARCHAR(500) | — | 关联的子订单号，逗号分隔（如 "xxx,yyy,zzz"） |
+| course_name | VARCHAR(500) | — | 报读课程名称 |
+| total_lessons | INT | 0 | 报读总课时数（所有子订单课时之和） |
+| student_name | VARCHAR(500) | — | 学员姓名 |
+| phone | VARCHAR(500) | — | 手机号 |
+| student_no | VARCHAR(500) | — | 学号 |
+| enroll_time | VARCHAR(500) | — | 报名时间 |
+| total_price | DECIMAL(10,2) | 0 | 总价格（所有子订单 actual_price 之和） |
+| cash_amount | DECIMAL(10,2) | 0 | 现金总额 |
+| meituan_amount | DECIMAL(10,2) | 0 | 美团总额 |
+| created_at | VARCHAR(500) | '' | 创建时间 |
 
 ### 3.22 表关系图
 
@@ -1007,13 +1012,14 @@ subjects                  courses              ┌──────────
 
 ### 6.20 兼容性处理
 
-- 使用 `ALTER TABLE ADD COLUMN` 增量添加 `gender` / `birth_date` / `follow_status` 字段，`@` 抑制报错以兼容已存在的旧库
-- 使用 `ALTER TABLE ADD COLUMN` 增量添加 `small_package` / `toddler` / `campus_permission` 字段
-- 使用 `ALTER TABLE ADD COLUMN` 增量添加 `plan_type` 字段（price_plans 表）
-- 使用 `ALTER TABLE ADD COLUMN` 增量添加 `order_type` 字段（orders 表）
-- 使用 `ALTER TABLE ADD COLUMN` 增量添加 `order_no` / `parent_order_no` / `cash_amount` / `meituan_amount` / `paid_amount` 字段（orders 表）
-- 使用 `ALTER TABLE ADD COLUMN` 增量添加 `student_no` 字段（students 表）
-- `employees` / `organizations` / `subjects` / `courses` / `students` / `classes` / `schedules` / `classrooms` / `attendance_records` / `parent_orders` 等表使用 `CREATE TABLE IF NOT EXISTS`
+- 本次已完成 SQLite → MySQL 8.4.9 完整迁移（20 张表，128 条记录）
+- MySQL TEXT 列不支持默认值，建表时 `DEFAULT ''` 字段改为 `VARCHAR(500)`
+- `SHOW COLUMNS` 返回列名 `Field`（非 SQLite 的 `name`），已修正
+- SQLite `SQLITE3_INTEGER`/`TEXT` 绑定改为 `PDO::PARAM_INT`/`PARAM_STR`
+- `PRAGMA table_info` 替换为 `SHOW COLUMNS`
+- `AUTOINCREMENT` 替换为 `AUTO_INCREMENT`
+- SQLite `fetchArray` → PDO `fetch`，`querySingle` → `query`+`fetchColumn`，`escapeString` → `quote`
+- SQLite 原始版本保留在 Git 历史中（master 分支），可随时回溯
 - 前端对已删除的字典值显示"（已删除）"标注并保留选项
 
 ### 6.21 订单类型体系
@@ -1056,7 +1062,7 @@ function isSmallPackage(val) {
 仅当课程 `small_package` 字段为 `'是'` / `'1'` / `'小课包'` 时判定为小课包课程；空字符串、`'否'`、`'0'` 等均视为非小课包。
 
 **涉及文件**：
-- `index.php`：price_plans 表 + plan_type、orders 表 + order_type、ALTER 迁移、save_price_plan / get_course_plans / pay_enroll / list_orders API
+- `index.php`：price_plans 表 + plan_type、orders 表 + order_type、MySQL 建表 API、save_price_plan / get_course_plans / pay_enroll / list_orders API
 - `static/js/main.js`：isSmallPackage()、showPriceModal 锁死逻辑、addPlan/editPlan/savePlan、renderPlanList/renderItemList 类型标签、selectEnrollPlan/confirmPayEnroll 传递 plan_type、renderOrderTable/loadStudentOrders 订单类型列
 - `static/css/style.css`：`.tag-new-enroll`（蓝）、`.tag-renewal`（绿）、`.tag-small-pack`（橙）
 *（内容由AI生成，仅供参考）*
