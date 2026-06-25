@@ -25,6 +25,17 @@ AIGC:
 | 数据库文件 | `market.db`（SQLite，项目根目录） |
 | 访问地址 | http://127.0.0.1:5001 |
 
+### Git 版本管理
+
+| 项目 | 值 |
+|------|-----|
+| Git 路径 | `D:\Git\bin\git.exe`（Git 2.54.0） |
+| 主分支 | `main` |
+| 分支策略 | `feature/xxx` → `main`（功能分支开发，完成后合并） |
+| 回退方式 | `git log` 查历史 → `git revert` / `git reset` |
+
+每次迭代流程：切 `feature/xxx` 分支 → 修改代码 → 提交 → 合并回 `main`，每个版本可追溯、可回退。
+
 ### 启动命令
 
 ```powershell
