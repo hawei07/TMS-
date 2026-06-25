@@ -1,0 +1,4393 @@
+﻿<?php
+error_reporting(E_ALL);
+ini_set('display_errors', 0);
+ini_set('log_errors', 1);
+ini_set('error_log', __DIR__ . '/php_errors.log');
+header('Content-Type: text/html; charset=utf-8');
+
+$db = new SQLite3(__DIR__ . '/market.db');
+$db->exec('PRAGMA journal_mode=WAL');
+$db->exec('PRAGMA foreign_keys=ON');
+$db->exec("PRAGMA encoding = 'UTF-8'");
+
+// 初始化表
+$db->exec("CREATE TABLE IF NOT EXISTS channels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    created_at TEXT DEFAULT ''
+)");
+$db->exec("CREATE TABLE IF NOT EXISTS resources (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    phone TEXT DEFAULT '',
+    source TEXT DEFAULT '',
+    source_detail TEXT DEFAULT '',
+    intention_level TEXT DEFAULT '',
+    status TEXT DEFAULT '待跟进',
+    assigned_to TEXT DEFAULT '',
+    pool_type TEXT DEFAULT '我的资源',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT '',
+    converted TEXT DEFAULT '未转化'
+)");$db->exec("CREATE TABLE IF NOT EXISTS appointments (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    resource_id INTEGER NOT NULL DEFAULT 0,
+    resource_name TEXT DEFAULT '',
+    student_name TEXT DEFAULT '',
+    phone TEXT DEFAULT '',
+    course_type TEXT DEFAULT '',
+    appointment_time TEXT DEFAULT '',
+    status TEXT DEFAULT '已预约',
+    notes TEXT DEFAULT '',
+    created_at TEXT DEFAULT ''
+)");
+$db->exec("CREATE TABLE IF NOT EXISTS communication_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    resource_id INTEGER NOT NULL DEFAULT 0,
+    resource_name TEXT DEFAULT '',
+    content TEXT DEFAULT '',
+    comm_type TEXT DEFAULT '电话',
+    created_at TEXT DEFAULT ''
+)");
+$db->exec("CREATE TABLE IF NOT EXISTS intention_levels (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT ''
+)");
+$db->exec("CREATE TABLE IF NOT EXISTS basic_types (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    category TEXT NOT NULL DEFAULT '',
+    name TEXT NOT NULL DEFAULT '',
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT ''
+)");
+
+// 兼容旧数据库：增量添加新字段
+@$db->exec("ALTER TABLE resources ADD COLUMN gender TEXT DEFAULT ''");
+@$db->exec("ALTER TABLE resources ADD COLUMN birth_date TEXT DEFAULT ''");
+@$db->exec("ALTER TABLE resources ADD COLUMN follow_status TEXT DEFAULT ''");
+
+// 兼容已有数据库：resources 表新增转化状态字段
+$existingColsR = [];
+$colResR = $db->query("PRAGMA table_info(resources)");
+while ($colRowR = $colResR->fetchArray(SQLITE3_ASSOC)) $existingColsR[] = $colRowR['name'];
+if (!in_array('converted', $existingColsR)) {
+    $db->exec("ALTER TABLE resources ADD COLUMN converted TEXT DEFAULT '未转化'");
+    // 历史数据：已关联学员记录（即已报名）的资源标记为已转化
+    $db->exec("UPDATE resources SET converted = '已转化' WHERE id IN (SELECT resource_id FROM students WHERE resource_id IS NOT NULL)");
+}
+
+
+$db->exec("CREATE TABLE IF NOT EXISTS employees (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    phone TEXT DEFAULT '',
+    department TEXT DEFAULT '',
+    position TEXT DEFAULT '',
+    entry_date TEXT DEFAULT '',
+    status TEXT DEFAULT '在职',
+    is_teacher TEXT DEFAULT '',
+    created_at TEXT DEFAULT '',
+    updated_at TEXT DEFAULT ''
+)");
+
+// 兼容已有数据库：employees 表新增 is_teacher 字段
+$existingColsEmp = [];
+$colResEmp = $db->query("PRAGMA table_info(employees)");
+while ($colRowEmp = $colResEmp->fetchArray(SQLITE3_ASSOC)) $existingColsEmp[] = $colRowEmp['name'];
+if (!in_array('is_teacher', $existingColsEmp)) {
+    $db->exec("ALTER TABLE employees ADD COLUMN is_teacher TEXT DEFAULT ''");
+}
+
+$db->exec("CREATE TABLE IF NOT EXISTS organizations (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL DEFAULT '',
+    type TEXT NOT NULL DEFAULT '部门',
+    parent_id INTEGER NOT NULL DEFAULT 0,
+    sort_order INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT DEFAULT ''
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS positions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    sort_order INTEGER DEFAULT 0,
+    created_at TEXT DEFAULT ''
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS subjects (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    parent_id INTEGER DEFAULT 0,
+    sort_order INTEGER DEFAULT 0
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS courses (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    subject TEXT DEFAULT '',
+    grade TEXT DEFAULT '',
+    description TEXT DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+
+// 兼容旧数据库：增量添加新字段
+@$db->exec("ALTER TABLE courses ADD COLUMN small_package TEXT DEFAULT ''");
+@$db->exec("ALTER TABLE courses ADD COLUMN toddler TEXT DEFAULT ''");
+@$db->exec("ALTER TABLE courses ADD COLUMN campus_permission TEXT DEFAULT ''");
+
+// 价格方案表
+$db->exec("CREATE TABLE IF NOT EXISTS price_plans (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    plan_type TEXT DEFAULT '',
+    sort_order INTEGER DEFAULT 0,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+// 兼容已有数据库：price_plans 添加 plan_type 字段
+@$db->exec("ALTER TABLE price_plans ADD COLUMN plan_type TEXT DEFAULT ''");
+// 报价单表
+$db->exec("CREATE TABLE IF NOT EXISTS price_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    plan_id INTEGER NOT NULL,
+    name TEXT NOT NULL,
+    lesson_count INTEGER NOT NULL,
+    unit_price REAL NOT NULL,
+    actual_price REAL NOT NULL,
+    sort_order INTEGER DEFAULT 0
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    resource_id INTEGER,
+    name TEXT NOT NULL,
+    phone TEXT NOT NULL UNIQUE,
+    source TEXT,
+    follow_status TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    course_id INTEGER NOT NULL,
+    plan_name TEXT,
+    item_name TEXT,
+    lesson_count INTEGER,
+    actual_price REAL,
+    status TEXT DEFAULT '已报名',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    paid_at TEXT DEFAULT '',
+    order_type TEXT DEFAULT '',
+    consumed_lessons INTEGER DEFAULT 0
+)");
+
+// 兼容已有数据库：添加支付方式字段
+$existingCols = [];
+$colRes = $db->query("PRAGMA table_info(orders)");
+while ($colRow = $colRes->fetchArray(SQLITE3_ASSOC)) $existingCols[] = $colRow['name'];
+if (!in_array('payment_method', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN payment_method TEXT DEFAULT ''");
+}
+if (!in_array('paid_amount', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN paid_amount REAL DEFAULT 0");
+}
+if (!in_array('order_no', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN order_no TEXT DEFAULT ''");
+}
+if (!in_array('cash_amount', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN cash_amount REAL DEFAULT 0");
+}
+if (!in_array('meituan_amount', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN meituan_amount REAL DEFAULT 0");
+}
+if (!in_array('parent_order_no', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN parent_order_no TEXT DEFAULT ''");
+}
+if (!in_array('paid_at', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN paid_at TEXT DEFAULT ''");
+    $db->exec("UPDATE orders SET paid_at = created_at WHERE paid_at = ''");
+}
+if (!in_array('order_type', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN order_type TEXT DEFAULT ''");
+}
+if (!in_array('consumed_lessons', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN consumed_lessons INTEGER DEFAULT 0");
+}
+
+// 兼容已有数据库：学生表添加学号字段
+$existingColsS = [];
+$colResS = $db->query("PRAGMA table_info(students)");
+while ($colRowS = $colResS->fetchArray(SQLITE3_ASSOC)) $existingColsS[] = $colRowS['name'];
+if (!in_array('student_no', $existingColsS)) {
+    $db->exec("ALTER TABLE students ADD COLUMN student_no TEXT DEFAULT ''");
+}
+
+$db->exec("CREATE TABLE IF NOT EXISTS attendance_records (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    student_id INTEGER NOT NULL,
+    course_id INTEGER NOT NULL,
+    lesson_date TEXT DEFAULT '',
+    status TEXT DEFAULT '出勤',
+    notes TEXT DEFAULT '',
+    created_at TEXT DEFAULT ''
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS parent_orders (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    parent_order_no TEXT DEFAULT '',
+    child_order_nos TEXT DEFAULT '',
+    course_name TEXT DEFAULT '',
+    total_lessons INTEGER DEFAULT 0,
+    student_name TEXT DEFAULT '',
+    phone TEXT DEFAULT '',
+    student_no TEXT DEFAULT '',
+    enroll_time TEXT DEFAULT '',
+    total_price REAL DEFAULT 0,
+    cash_amount REAL DEFAULT 0,
+    meituan_amount REAL DEFAULT 0,
+    created_at TEXT DEFAULT ''
+)");
+$db->exec("CREATE TABLE IF NOT EXISTS classes (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    course_id INTEGER NOT NULL DEFAULT 0,
+    name TEXT NOT NULL DEFAULT '',
+    class_type TEXT NOT NULL DEFAULT '标准班',
+    max_students INTEGER NOT NULL DEFAULT 0,
+    lesson_hours INTEGER NOT NULL DEFAULT 0,
+    can_trial TEXT NOT NULL DEFAULT '是',
+    campus TEXT NOT NULL DEFAULT '',
+    remark TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT ''
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS schedules (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    class_id INTEGER NOT NULL DEFAULT 0,
+    rule_type TEXT NOT NULL DEFAULT '按规则排课',
+    start_date TEXT NOT NULL DEFAULT '',
+    end_date TEXT NOT NULL DEFAULT '',
+    weekdays TEXT NOT NULL DEFAULT '',
+    time_slots TEXT NOT NULL DEFAULT '{}',
+    holiday_enabled INTEGER NOT NULL DEFAULT 0,
+    teacher TEXT NOT NULL DEFAULT '',
+    classroom TEXT NOT NULL DEFAULT '',
+    created_at TEXT NOT NULL DEFAULT ''
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS classrooms (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    capacity INTEGER DEFAULT 0,
+    campus TEXT DEFAULT '',
+    remark TEXT DEFAULT '',
+    created_at TEXT DEFAULT ''
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS class_students (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    class_id INTEGER NOT NULL,
+    student_id INTEGER NOT NULL,
+    created_at TEXT NOT NULL DEFAULT '',
+    UNIQUE(class_id, student_id)
+)");
+
+$db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    class_id INTEGER NOT NULL DEFAULT 0,
+    schedule_id INTEGER NOT NULL DEFAULT 0,
+    session_date TEXT NOT NULL DEFAULT '',
+    student_id INTEGER NOT NULL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT '出勤',
+    deducted_lessons INTEGER DEFAULT 0,
+    deducted_order_id INTEGER DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT ''
+)");
+
+
+date_default_timezone_set('Asia/Shanghai');
+
+$action = $_GET['action'] ?? '';
+if ($action) { handleApi(); exit; }
+function h($s) { return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8'); }
+function now() { return date('Y-m-d H:i:s'); }
+function generateOrderNo($db) {
+    do {
+        $ts = substr(strval(time()), -10);
+        $rand = str_pad(strval(random_int(0, 999999)), 6, '0', STR_PAD_LEFT);
+        $no = $ts . $rand;
+        $exists = $db->querySingle("SELECT COUNT(*) FROM orders WHERE order_no='$no'");
+    } while (intval($exists) > 0);
+    return $no;
+}
+function generateStudentNo($db) {
+    do {
+        $ts = substr(strval(time()), -8);
+        $rand = str_pad(strval(random_int(0, 99)), 2, '0', STR_PAD_LEFT);
+        $no = $ts . $rand;
+        $exists = $db->querySingle("SELECT COUNT(*) FROM students WHERE student_no='$no'");
+    } while (intval($exists) > 0);
+    return $no;
+}
+function json($data) { header('Content-Type: application/json; charset=utf-8'); echo json_encode($data, JSON_UNESCAPED_UNICODE); exit; }
+
+// ==================== Excel 解析工具函数（纯 PHP，ZipArchive + XML） ====================
+
+/**
+ * 解析 .xlsx 文件，返回二维数组（每行是一个索引数组）
+ */
+function parseXlsx($filePath) {
+    $zip = new ZipArchive();
+    if ($zip->open($filePath) !== true) {
+        throw new Exception('无法打开 xlsx 文件（无效的 ZIP 包）');
+    }
+
+    // 1. 读取共享字符串表
+    $sharedStrings = [];
+    $ssXml = $zip->getFromName('xl/sharedStrings.xml');
+    if ($ssXml !== false) {
+        $sx = simplexml_load_string($ssXml);
+        $ns = $sx->getNamespaces(true);
+        $ssNs = $ns[''] ?? 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+        foreach ($sx->si as $si) {
+            $t = $si->t;
+            if ($t !== null) {
+                $sharedStrings[] = (string)$t;
+            } else {
+                // 富文本：合并所有 t 元素
+                $txts = [];
+                foreach ($si->r as $r) {
+                    $tt = $r->t;
+                    if ($tt !== null) $txts[] = (string)$tt;
+                }
+                $sharedStrings[] = implode('', $txts);
+            }
+        }
+    }
+
+    // 2. 解析第一个工作表
+    $sheetXml = $zip->getFromName('xl/worksheets/sheet1.xml');
+    if ($sheetXml === false) {
+        throw new Exception('xlsx 文件中未找到工作表');
+    }
+
+    $sx = simplexml_load_string($sheetXml);
+    $ns = $sx->getNamespaces(true);
+    $mainNs = $ns[''] ?? 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
+
+    $rows = [];
+    foreach ($sx->sheetData->row as $rowEl) {
+        $rowData = [];
+        foreach ($rowEl->c as $c) {
+            $cellRef = (string)$c['r'];
+            $col = preg_replace('/\d/', '', $cellRef);
+            $colIdx = colLetterToIndex($col);
+            $type = (string)$c['t'];
+            $v = (string)$c->v;
+
+            if ($type === 's' && $v !== '') {
+                // 共享字符串引用
+                $idx = (int)$v;
+                $val = $sharedStrings[$idx] ?? '';
+            } elseif ($type === 'inlineStr') {
+                $val = (string)$c->is->t;
+            } else {
+                $val = $v;
+            }
+
+            // 确保行数组足够长
+            while (count($rowData) <= $colIdx) {
+                $rowData[] = '';
+            }
+            $rowData[$colIdx] = $val;
+        }
+        $rows[] = $rowData;
+    }
+
+    $zip->close();
+    return $rows;
+}
+
+function colLetterToIndex($col) {
+    $col = strtoupper($col);
+    $idx = 0;
+    $len = strlen($col);
+    for ($i = 0; $i < $len; $i++) {
+        $idx = $idx * 26 + (ord($col[$i]) - ord('A') + 1);
+    }
+    return $idx - 1;
+}
+
+/**
+ * 生成 xlsx 模板文件（与 generate_template.php 相同逻辑）
+ */
+function generateTemplateXlsx($filePath, $headers) {
+    if (!class_exists('ZipArchive')) {
+        return false;
+    }
+    $zip = new ZipArchive();
+    if ($zip->open($filePath, ZipArchive::CREATE | ZipArchive::OVERWRITE) !== true) {
+        return false;
+    }
+
+    $colWidths = [12, 16, 14, 20, 14, 12, 8, 14];
+    $colLetters = ['A', 'B', 'C', 'D', 'E', 'F', 'G', 'H'];
+
+    // sharedStrings.xml
+    $ssItems = '';
+    foreach ($headers as $h) {
+        $ssItems .= '<si><t>' . htmlspecialchars($h, ENT_XML1, 'UTF-8') . '</t></si>';
+    }
+    $cnt = count($headers);
+    $sharedStrings = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><sst xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" count="'.$cnt.'" uniqueCount="'.$cnt.'">'.$ssItems.'</sst>';
+    $zip->addFromString('xl/sharedStrings.xml', $sharedStrings);
+
+    // sheet1.xml
+    $colsXml = '';
+    for ($i = 0; $i < $cnt; $i++) {
+        $colsXml .= '<col min="'.($i+1).'" max="'.($i+1).'" width="'.$colWidths[$i].'" customWidth="1"/>';
+    }
+    $rowCells = '';
+    for ($i = 0; $i < $cnt; $i++) {
+        $rowCells .= '<c r="'.$colLetters[$i].'1" t="s"><v>'.$i.'</v></c>';
+    }
+    $sheetXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><cols>'.$colsXml.'</cols><sheetData><row r="1">'.$rowCells.'</row></sheetData></worksheet>';
+    $zip->addFromString('xl/worksheets/sheet1.xml', $sheetXml);
+
+    // styles.xml
+    $stylesXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main"><fonts count="2"><font><sz val="11"/><name val="Microsoft YaHei"/></font><font><b/><sz val="11"/><name val="Microsoft YaHei"/></font></fonts><fills count="2"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill></fills><borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders><cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs><cellXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"/></cellXfs></styleSheet>';
+    $zip->addFromString('xl/styles.xml', $stylesXml);
+
+    $workbookXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships"><sheets><sheet name="Sheet1" sheetId="1" r:id="rId1"/></sheets></workbook>';
+    $zip->addFromString('xl/workbook.xml', $workbookXml);
+
+    $relsXml = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet1.xml"/><Relationship Id="rId2" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings" Target="sharedStrings.xml"/><Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/></Relationships>';
+    $zip->addFromString('xl/_rels/workbook.xml.rels', $relsXml);
+
+    $contentTypes = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/sharedStrings.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/></Types>';
+    $zip->addFromString('[Content_Types].xml', $contentTypes);
+
+    $rootRels = '<?xml version="1.0" encoding="UTF-8" standalone="yes"?><Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships"><Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/></Relationships>';
+    $zip->addFromString('_rels/.rels', $rootRels);
+
+    $zip->close();
+    return true;
+}
+
+function computeSessions($schedule) {
+    $sessions = [];
+    $timeSlots = json_decode($schedule['time_slots'] ?? '{}', true) ?: [];
+    $weekdaysStr = $schedule['weekdays'] ?? '';
+    $ruleType = $schedule['rule_type'] ?? '';
+    $startDate = $schedule['start_date'] ?? '';
+    $endDate = $schedule['end_date'] ?? '';
+    
+    if (empty($startDate) || empty($endDate)) return $sessions;
+    
+    $dayOfWeekMap = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+    
+    if ($ruleType === '按规则排课') {
+        $start = new DateTime($startDate);
+        $end = new DateTime($endDate);
+        $end->modify('+1 day');
+        $interval = new DateInterval('P1D');
+        $period = new DatePeriod($start, $interval, $end);
+        $weekdaySet = array_flip(array_filter(explode(',', $weekdaysStr), 'strlen'));
+        foreach ($period as $date) {
+            $dow = $date->format('N');
+            $dowKey = ($dow == 7) ? '0' : (string)$dow;
+            if (!isset($weekdaySet[$dowKey])) continue;
+            if (isset($timeSlots[$dowKey]) && is_array($timeSlots[$dowKey])) {
+                $sessions[] = [
+                    'date' => $date->format('Y-m-d'),
+                    'dayOfWeek' => $dayOfWeekMap[$dow - 1],
+                    'start' => $timeSlots[$dowKey]['start'] ?? '',
+                    'end' => $timeSlots[$dowKey]['end'] ?? ''
+                ];
+            }
+        }
+    } else {
+        // 按日期排课: start_date 可能是逗号分隔的多个日期或单个日期范围
+        $dates = array_filter(explode(',', $startDate), 'strlen');
+        if (count($dates) > 1) {
+            // 逗号分隔的多日期
+            foreach ($dates as $dateStr) {
+                $dateStr = trim($dateStr);
+                $date = new DateTime($dateStr);
+                $dow = $date->format('N');
+                $sessions[] = [
+                    'date' => $date->format('Y-m-d'),
+                    'dayOfWeek' => $dayOfWeekMap[$dow - 1],
+                    'start' => '',
+                    'end' => ''
+                ];
+            }
+        } else {
+            // 单日期范围
+            $start = new DateTime($startDate);
+            $end = new DateTime($endDate);
+            $end->modify('+1 day');
+            $interval = new DateInterval('P1D');
+            $period = new DatePeriod($start, $interval, $end);
+            foreach ($period as $date) {
+                $dow = $date->format('N');
+                $sessions[] = [
+                    'date' => $date->format('Y-m-d'),
+                    'dayOfWeek' => $dayOfWeekMap[$dow - 1],
+                    'start' => '',
+                    'end' => ''
+                ];
+            }
+        }
+    }
+    return $sessions;
+}
+
+function handleApi() {
+    global $db;
+    $action = $_GET['action'];
+    $method = $_SERVER['REQUEST_METHOD'];
+    $input = json_decode(file_get_contents('php://input'), true) ?? [];
+    error_log('DEBUG: handleApi action=' . $action . ' method=' . $method);
+
+    switch ($action) {
+        case 'get_resources':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = $_GET['keyword'] ?? '';
+            $followStatus = $_GET['follow_status'] ?? '';
+            $poolType = $_GET['pool_type'] ?? '我的资源';
+            $assignedTo = $_GET['assigned_to'] ?? '';
+            $assignedDept = $_GET['assigned_dept'] ?? '';
+            $name = $_GET['name'] ?? '';
+            $phone = $_GET['phone'] ?? '';
+            $source = $_GET['source'] ?? '';
+            $resourceId = $_GET['resource_id'] ?? '';
+            $createdStart = $_GET['created_start'] ?? '';
+            $createdEnd = $_GET['created_end'] ?? '';
+
+            $where = ["pool_type = :pt"];
+            $params = [':pt' => $poolType];
+            if ($keyword) {
+                $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR source LIKE :kw3)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
+            }
+            if ($followStatus) { $where[] = "follow_status = :fs"; $params[':fs'] = $followStatus; }
+            if ($assignedTo) { $where[] = "assigned_to = :at"; $params[':at'] = $assignedTo; }
+            if ($assignedDept) { $where[] = "assigned_to IN (SELECT name FROM employees WHERE department = :ad)"; $params[':ad'] = $assignedDept; }
+            if ($name) { $where[] = "name LIKE :n"; $params[':n'] = "%$name%"; }
+            if ($phone) { $where[] = "phone LIKE :ph"; $params[':ph'] = "%$phone%"; }
+            if ($source) { $where[] = "source = :src"; $params[':src'] = $source; }
+            if ($resourceId) { $where[] = "r.id = :rid"; $params[':rid'] = intval($resourceId); }
+            if ($createdStart) { $where[] = "created_at >= :cs"; $params[':cs'] = $createdStart; }
+            if ($createdEnd) { $where[] = "created_at <= :ce"; $params[':ce'] = $createdEnd . ' 23:59:59'; }
+            $whereStr = implode(' AND ', $where);
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM resources r WHERE $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, $k === ':rid' ? SQLITE3_INTEGER : SQLITE3_TEXT);
+            $total = $countStmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            $total = $total ? intval($total) : 0;
+            $offset = ($page - 1) * $pageSize;
+            $stmt = $db->prepare("SELECT r.*, e.department AS assigned_dept FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, $k === ':rid' ? SQLITE3_INTEGER : SQLITE3_TEXT);
+            $stmt->bindValue(':lim', $pageSize, SQLITE3_INTEGER);
+            $stmt->bindValue(':off', $offset, SQLITE3_INTEGER);
+            $rows = [];
+            $result = $stmt->execute();
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+
+        case 'add_resource':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $phone = trim($input['phone'] ?? '');
+            // 手机号唯一性校验（空手机号不校验）
+            if ($phone !== '') {
+                $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($phone) . "'");
+                if (intval($dup) > 0) json(['error' => '手机号已存在，请勿重复录入']);
+            }
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO resources (name,phone,source,source_detail,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:sd,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
+            $stmt->bindValue(':n', $input['name']??'');
+            $stmt->bindValue(':p', $phone);
+            $stmt->bindValue(':s', $input['source']??'');
+            $stmt->bindValue(':sd', $input['source_detail']??'');
+            $stmt->bindValue(':i', $input['intention_level']??'');
+            $stmt->bindValue(':g', $input['gender']??'');
+            $stmt->bindValue(':bd', $input['birth_date']??'');
+            $stmt->bindValue(':fs', $input['follow_status']??'');
+            $stmt->bindValue(':st', $input['status']??'待跟进');
+            $stmt->bindValue(':a', $input['assigned_to']??'');
+            $stmt->bindValue(':pt', $input['pool_type']??'我的资源');
+            $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '新增成功']);
+
+        case 'update_resource':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $rid = intval($input['id'] ?? 0);
+            // 手机号唯一性校验（仅当传入且非空时校验；排除自身id）
+            if (isset($input['phone']) && trim($input['phone'] ?? '') !== '') {
+                $phone = trim($input['phone']);
+                $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($phone) . "' AND id != $rid");
+                if (intval($dup) > 0) json(['error' => '手机号已存在，请勿重复录入']);
+            }
+            // 校验归属人是否在员工名册中存在
+            if (isset($input['assigned_to']) && trim($input['assigned_to'] ?? '') !== '') {
+                $assignedTo = trim($input['assigned_to']);
+                $empCount = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($assignedTo) . "'");
+                if (intval($empCount) === 0) json(['error' => '归属人不存在于员工名册中，请从员工名册中选择']);
+            }
+            // 动态构建 UPDATE：仅更新 $input 中实际传入的字段（排除 id）
+            $allowedFields = ['name','phone','source','source_detail','intention_level','gender','birth_date','follow_status','status','assigned_to','pool_type'];
+            $sets = [];
+            $params = [];
+            foreach ($allowedFields as $f) {
+                if (array_key_exists($f, $input)) {
+                    $sets[] = "$f = :$f";
+                    $params[":$f"] = $input[$f];
+                }
+            }
+            if (empty($sets)) json(['error' => '没有要更新的字段']);
+            $sets[] = "updated_at = :u";
+            $params[':u'] = now();
+            $params[':id'] = $rid;
+            $sql = "UPDATE resources SET " . implode(', ', $sets) . " WHERE id = :id";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) {
+                $stmt->bindValue($k, $v, $k === ':id' ? SQLITE3_INTEGER : SQLITE3_TEXT);
+            }
+            $stmt->execute();
+            json(['message' => '更新成功']);
+
+        case 'delete_resource':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $rid = intval($input['id'] ?? 0);
+            $db->exec("DELETE FROM resources WHERE id=$rid");
+            $db->exec("DELETE FROM appointments WHERE resource_id=$rid");
+            $db->exec("DELETE FROM communication_records WHERE resource_id=$rid");
+            json(['message' => '删除成功']);
+
+        case 'batch_import':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+
+            // 模式判断：有文件上传走 Excel 模式，否则走 JSON 模式（兼容旧版内联导入）
+            $hasFile = isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK;
+
+            if (!$hasFile) {
+                // === JSON 模式（兼容旧版内联批量导入） ===
+                $items = $input['items'] ?? [];
+                $poolType = $input['pool_type'] ?? '我的资源';
+                $n = now(); $count = 0; $failCount = 0; $failures = [];
+                $stmt = $db->prepare("INSERT INTO resources (name,phone,source,source_detail,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:sd,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
+                foreach ($items as $idx => $item) {
+                    $rowNum = $idx + 1;
+                    if (empty(trim($item['name'] ?? '')) || empty(trim($item['phone'] ?? ''))) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => '缺少必填字段：姓名或手机号']; continue; }
+                    $phoneVal = trim($item['phone'] ?? '');
+                    // 手机号唯一性校验（空手机号不校验）
+                    if ($phoneVal !== '') {
+                        $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($phoneVal) . "'");
+                        if (intval($dup) > 0) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => "手机号 {$phoneVal} 已存在"]; continue; }
+                    }
+                    $stmt->bindValue(':n', $item['name']??'');
+                    $stmt->bindValue(':p', $phoneVal);
+                    $stmt->bindValue(':s', $item['source']??'');
+                    $stmt->bindValue(':sd', $item['source_detail']??'');
+                    $stmt->bindValue(':i', $item['intention_level']??'');
+                    $stmt->bindValue(':g', $item['gender']??'');
+                    $stmt->bindValue(':bd', $item['birth_date']??'');
+                    $stmt->bindValue(':fs', $item['follow_status']??'');
+                    $stmt->bindValue(':st', '待跟进');
+                    $stmt->bindValue(':a', $item['assigned_to']??'');
+                    $stmt->bindValue(':pt', $poolType);
+                    $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
+                    $stmt->execute();
+                    $stmt->reset();
+                    $count++;
+                }
+                json(['message' => "成功导入 {$count} 条资源" . ($failCount > 0 ? "，跳过 {$failCount} 条" : ''), 'count' => $count, 'skip_count' => $failCount, 'failures' => $failures]);
+            }
+
+            // === Excel 文件上传模式 ===
+            $file = $_FILES['file'];
+            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+
+            // 验证文件类型
+            if (!in_array($ext, ['xlsx', 'xls'])) {
+                json(['error' => '仅支持 .xlsx 或 .xls 格式的 Excel 文件', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+
+            // 验证文件大小（最大 10MB）
+            if ($file['size'] > 10 * 1024 * 1024) {
+                json(['error' => '文件大小不能超过 10MB', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+
+            // 验证 PHP zip 扩展是否可用
+            if (!class_exists('ZipArchive')) {
+                json(['error' => '服务器缺少 zip 扩展，无法处理 Excel 文件。请联系管理员启用 PHP zip 扩展。', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+
+            // 保存临时文件
+            $tmpPath = $file['tmp_name'];
+            $importPath = __DIR__ . '/temp_import_' . time() . '.' . $ext;
+            move_uploaded_file($tmpPath, $importPath);
+
+            try {
+                // 解析 Excel
+                $rows = parseXlsx($importPath);
+            } catch (Exception $e) {
+                @unlink($importPath);
+                json(['error' => '解析 Excel 文件失败: ' . $e->getMessage(), 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+
+            @unlink($importPath);
+
+            if (empty($rows)) {
+                json(['error' => 'Excel 文件为空', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+
+            // 第一行作为表头
+            $header = array_map('trim', $rows[0]);
+            // 表头映射：根据中文表头找到对应的字段索引
+            $headerMap = [
+                '姓名' => 'name',
+                '电话' => 'phone',
+                '来源' => 'source',
+                '来源详情' => 'source_detail',
+                '意向等级' => 'intention_level',
+                '归属人' => 'assigned_to',
+                '性别' => 'gender',
+                '出生日期' => 'birth_date',
+                '跟进状态' => 'follow_status',
+            ];
+
+            $colMap = []; // 列索引 => 字段名
+            foreach ($header as $idx => $colName) {
+                if (isset($headerMap[$colName])) {
+                    $colMap[$idx] = $headerMap[$colName];
+                }
+            }
+
+            // 预加载渠道和意向等级列表
+            $chNames = [];
+            $chResult = $db->query("SELECT name FROM channels");
+            while ($r = $chResult->fetchArray(SQLITE3_ASSOC)) $chNames[$r['name']] = true;
+
+            $lvNames = [];
+            $lvResult = $db->query("SELECT name FROM intention_levels");
+            while ($r = $lvResult->fetchArray(SQLITE3_ASSOC)) $lvNames[$r['name']] = true;
+
+            $poolType = $_POST['pool_type'] ?? '我的资源';
+            $n = now();
+            $successCount = 0;
+            $failures = [];
+
+            $stmt = $db->prepare("INSERT INTO resources (name,phone,source,source_detail,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:sd,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
+
+            for ($rowIdx = 1; $rowIdx < count($rows); $rowIdx++) {
+                $row = $rows[$rowIdx];
+                $item = ['name' => '', 'phone' => '', 'source' => '', 'source_detail' => '',
+                         'intention_level' => '', 'assigned_to' => '', 'gender' => '', 'birth_date' => '', 'follow_status' => ''];
+
+                foreach ($colMap as $colIdx => $field) {
+                    if (isset($row[$colIdx])) {
+                        $item[$field] = trim($row[$colIdx]);
+                    }
+                }
+
+                // 跳过空行（姓名和手机号均为必填）
+                if ($item['name'] === '' || $item['phone'] === '') {
+                    $missing = [];
+                    if ($item['name'] === '') $missing[] = '姓名';
+                    if ($item['phone'] === '') $missing[] = '手机号';
+                    $failures[] = ['row' => $rowIdx + 1, 'reason' => '缺少必填字段：' . implode('、', $missing)];
+                    continue;
+                }
+
+                // 验证渠道
+                if ($item['source'] !== '' && !isset($chNames[$item['source']])) {
+                    $failures[] = ['row' => $rowIdx + 1, 'reason' => "渠道\"{$item['source']}\"不在已配置渠道中"];
+                    continue;
+                }
+
+                // 验证意向等级
+                if ($item['intention_level'] !== '' && !isset($lvNames[$item['intention_level']])) {
+                    $failures[] = ['row' => $rowIdx + 1, 'reason' => "意向等级\"{$item['intention_level']}\"不在已配置等级中"];
+                    continue;
+                }
+
+                // 手机号唯一性校验（空手机号不校验）
+                if ($item['phone'] !== '') {
+                    $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($item['phone']) . "'");
+                    if (intval($dup) > 0) {
+                        $failures[] = ['row' => $rowIdx + 1, 'reason' => "手机号 {$item['phone']} 已存在"];
+                        continue;
+                    }
+                }
+
+                $stmt->bindValue(':n', $item['name']);
+                $stmt->bindValue(':p', $item['phone']);
+                $stmt->bindValue(':s', $item['source']);
+                $stmt->bindValue(':sd', $item['source_detail']);
+                $stmt->bindValue(':i', $item['intention_level']);
+                $stmt->bindValue(':g', $item['gender']);
+                $stmt->bindValue(':bd', $item['birth_date']);
+                $stmt->bindValue(':fs', $item['follow_status']);
+                $stmt->bindValue(':st', '待跟进');
+                $stmt->bindValue(':a', $item['assigned_to']);
+                $stmt->bindValue(':pt', $poolType);
+                $stmt->bindValue(':c', $n);
+                $stmt->bindValue(':u', $n);
+                $stmt->execute();
+                $stmt->reset();
+                $successCount++;
+            }
+
+            $failCount = count($failures);
+            $result = [
+                'message' => "导入完成：成功 {$successCount} 条" . ($failCount > 0 ? "，失败 {$failCount} 条" : ''),
+                'success_count' => $successCount,
+                'fail_count' => $failCount,
+                'failures' => $failures,
+            ];
+            json($result);
+
+        case 'download_template':
+            $templatePath = __DIR__ . '/static/导入模板.xlsx';
+            // 如果模板不存在，动态生成
+            if (!file_exists($templatePath)) {
+                $headers = ['姓名', '电话', '来源', '来源详情', '意向等级', '归属人', '性别', '出生日期', '跟进状态'];
+                if (!generateTemplateXlsx($templatePath, $headers)) {
+                    json(['error' => '生成模板失败']);
+                }
+            }
+            header('Content-Type: application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
+            header('Content-Disposition: attachment; filename="导入模板.xlsx"');
+            header('Content-Length: ' . filesize($templatePath));
+            readfile($templatePath);
+            exit;
+
+        case 'batch_assign':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $ids = $input['ids'] ?? [];
+            $assignedTo = $input['assigned_to'] ?? '';
+            // 支持多人分配：assigned_to 可以是字符串（单人）或数组（多人平均分配）
+            if (is_array($assignedTo)) {
+                $assignees = array_values(array_filter($assignedTo, function($v) { return trim($v) !== ''; }));
+                if (empty($assignees)) json(['error' => '请选择至少一个归属人']);
+                $totalIds = count($ids);
+                $totalAssignees = count($assignees);
+                // 平均分配：每人分配 base 条，余数从第一个开始每人多 1 条
+                $base = intdiv($totalIds, $totalAssignees);
+                $remainder = $totalIds % $totalAssignees;
+                $n = now();
+                $stmt = $db->prepare("UPDATE resources SET assigned_to=:a, updated_at=:u WHERE id=:id");
+                $assignIdx = 0;
+                $assignedCounts = array_fill(0, $totalAssignees, 0);
+                foreach ($ids as $i => $rid) {
+                    // 先分配当前资源给当前人
+                    $targetIdx = $assignIdx;
+                    $stmt->bindValue(':a', $assignees[$targetIdx]);
+                    $stmt->bindValue(':u', $n);
+                    $stmt->bindValue(':id', intval($rid), SQLITE3_INTEGER);
+                    $stmt->execute();
+                    $stmt->reset();
+                    // 分配后再递增计数并判断是否满额，满额则下一轮切换到下一个人
+                    $assignedCounts[$targetIdx]++;
+                    $quota = $base + ($targetIdx < $remainder ? 1 : 0);
+                    if ($assignedCounts[$targetIdx] >= $quota) {
+                        $assignIdx++;
+                    }
+                }
+                // 生成分配明细消息
+                $detailParts = [];
+                foreach ($assignees as $ai => $aname) {
+                    $detailParts[] = $aname . ' ' . ($assignedCounts[$ai] ?? 0) . ' 条';
+                }
+                json(['message' => '成功分配 ' . $totalIds . ' 条资源（' . implode('、', $detailParts) . '）']);
+            } else {
+                // 单人分配（向后兼容）
+                $n = now();
+                $stmt = $db->prepare("UPDATE resources SET assigned_to=:a, updated_at=:u WHERE id=:id");
+                foreach ($ids as $rid) {
+                    $stmt->bindValue(':a', $assignedTo);
+                    $stmt->bindValue(':u', $n);
+                    $stmt->bindValue(':id', intval($rid), SQLITE3_INTEGER);
+                    $stmt->execute();
+                    $stmt->reset();
+                }
+                json(['message' => '成功分配 ' . count($ids) . ' 条资源给 ' . $assignedTo]);
+            }
+
+        case 'batch_pool':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $ids = $input['ids'] ?? [];
+            $poolType = $input['pool_type'] ?? '资源公海';
+            $n = now();
+            $stmt = $db->prepare("UPDATE resources SET pool_type=:pt, updated_at=:u WHERE id=:id");
+            foreach ($ids as $rid) {
+                $stmt->bindValue(':pt', $poolType);
+                $stmt->bindValue(':u', $n);
+                $stmt->bindValue(':id', intval($rid), SQLITE3_INTEGER);
+                $stmt->execute();
+                $stmt->reset();
+            }
+            json(['message' => '成功更新 ' . count($ids) . ' 条']);
+
+        case 'get_appointments':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = $_GET['keyword'] ?? '';
+            $status = $_GET['status'] ?? '';
+
+            $where = []; $params = [];
+            if ($keyword) {
+                $where[] = "(student_name LIKE ? OR resource_name LIKE ? OR phone LIKE ?)";
+                $params = ["%$keyword%", "%$keyword%", "%$keyword%"];
+            }
+            if ($status) { $where[] = "status = ?"; $params[] = $status; }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $total = $db->querySingle("SELECT COUNT(*) FROM appointments $whereStr", false);
+            $total = $total ? intval($total) : 0;
+            $offset = ($page - 1) * $pageSize;
+            $query = "SELECT * FROM appointments $whereStr ORDER BY appointment_time DESC LIMIT $pageSize OFFSET $offset";
+            $rows = [];
+            if ($params) {
+                $stmt = $db->prepare($query);
+                foreach ($params as $i => $v) $stmt->bindValue($i+1, $v, SQLITE3_TEXT);
+                $result = $stmt->execute();
+            } else {
+                $result = $db->query($query);
+            }
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+
+        case 'add_appointment':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO appointments (resource_id,resource_name,student_name,phone,course_type,appointment_time,status,notes,created_at) VALUES (:ri,:rn,:sn,:p,:ct,:at,:st,:no,:c)");
+            $stmt->bindValue(':ri', intval($input['resource_id']??0), SQLITE3_INTEGER);
+            $stmt->bindValue(':rn', $input['resource_name']??'');
+            $stmt->bindValue(':sn', $input['student_name']??'');
+            $stmt->bindValue(':p', $input['phone']??'');
+            $stmt->bindValue(':ct', $input['course_type']??'');
+            $stmt->bindValue(':at', $input['appointment_time']??'');
+            $stmt->bindValue(':st', $input['status']??'已预约');
+            $stmt->bindValue(':no', $input['notes']??'');
+            $stmt->bindValue(':c', $n);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '预约成功']);
+
+        case 'update_appointment':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $aid = intval($input['id'] ?? 0);
+            $stmt = $db->prepare("UPDATE appointments SET student_name=:sn,phone=:p,course_type=:ct,appointment_time=:at,status=:st,notes=:no WHERE id=:id");
+            $stmt->bindValue(':sn', $input['student_name']??'');
+            $stmt->bindValue(':p', $input['phone']??'');
+            $stmt->bindValue(':ct', $input['course_type']??'');
+            $stmt->bindValue(':at', $input['appointment_time']??'');
+            $stmt->bindValue(':st', $input['status']??'');
+            $stmt->bindValue(':no', $input['notes']??'');
+            $stmt->bindValue(':id', $aid, SQLITE3_INTEGER);
+            $stmt->execute();
+            json(['message' => '更新成功']);
+
+        case 'delete_appointment':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $aid = intval($input['id'] ?? 0);
+            $db->exec("DELETE FROM appointments WHERE id=$aid");
+            json(['message' => '删除成功']);
+
+        case 'get_communications':
+            $rid = intval($_GET['resource_id'] ?? 0);
+            $result = $db->query("SELECT * FROM communication_records WHERE resource_id=$rid ORDER BY created_at DESC");
+            $rows = [];
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json($rows);
+
+        case 'add_communication':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $rid = intval($input['resource_id'] ?? 0);
+            $n = now();
+            $db->exec("UPDATE resources SET follow_status='{$input['new_status']}', updated_at='$n' WHERE id=$rid");
+            $stmt = $db->prepare("INSERT INTO communication_records (resource_id,resource_name,content,comm_type,created_at) VALUES (:ri,:rn,:co,:ct,:c)");
+            $stmt->bindValue(':ri', $rid, SQLITE3_INTEGER);
+            $stmt->bindValue(':rn', $input['resource_name']??'');
+            $stmt->bindValue(':co', $input['content']??'');
+            $stmt->bindValue(':ct', $input['comm_type']??'电话');
+            $stmt->bindValue(':c', $n);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '添加成功']);
+
+        case 'get_stats':
+            $my = $db->querySingle("SELECT COUNT(*) FROM resources WHERE pool_type='我的资源'") ?: 0;
+            $sea = $db->querySingle("SELECT COUNT(*) FROM resources WHERE pool_type='资源公海'") ?: 0;
+            $apt = $db->querySingle("SELECT COUNT(*) FROM appointments") ?: 0;
+            $emp = $db->querySingle("SELECT COUNT(*) FROM employees") ?: 0;
+            $courses = $db->querySingle("SELECT COUNT(*) FROM courses") ?: 0;
+            $subjects = $db->querySingle("SELECT COUNT(*) FROM subjects") ?: 0;
+            json(['my_resources' => intval($my), 'sea_resources' => intval($sea), 'appointments' => intval($apt), 'employees' => intval($emp), 'courses' => intval($courses), 'subjects' => intval($subjects)]);
+
+        case 'list_channels':
+            $result = $db->query("SELECT * FROM channels ORDER BY created_at DESC");
+            $rows = [];
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json($rows);
+
+        case 'add_channel':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '渠道名称不能为空']);
+            $existing = $db->querySingle("SELECT COUNT(*) FROM channels WHERE name = '" . $db->escapeString($name) . "'");
+            if (intval($existing) > 0) json(['error' => '渠道名称已存在']);
+            $n = now();
+            $db->exec("INSERT INTO channels (name, created_at) VALUES ('" . $db->escapeString($name) . "', '$n')");
+            json(['id' => $db->lastInsertRowID(), 'message' => '渠道添加成功']);
+
+        case 'update_channel':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $cid = intval($input['id'] ?? 0);
+            if (!$cid) json(['error' => '渠道ID无效']);
+            $newName = trim($input['name'] ?? '');
+            if (!$newName) json(['error' => '渠道名称不能为空']);
+            // 检查新名称是否与其他渠道重复（排除自身）
+            $dup = $db->querySingle("SELECT COUNT(*) FROM channels WHERE name = '" . $db->escapeString($newName) . "' AND id != $cid");
+            if (intval($dup) > 0) json(['error' => '渠道名称已存在']);
+            // 事务：先取旧名称，再更新 channels，再同步 resources
+            $oldName = $db->querySingle("SELECT name FROM channels WHERE id = $cid", false);
+            if (!$oldName) json(['error' => '渠道不存在']);
+            $db->exec("BEGIN");
+            $db->exec("UPDATE channels SET name = '" . $db->escapeString($newName) . "' WHERE id = $cid");
+            $db->exec("UPDATE resources SET source = '" . $db->escapeString($newName) . "' WHERE source = '" . $db->escapeString($oldName) . "'");
+            $updatedCount = $db->changes();
+            $db->exec("COMMIT");
+            json(['message' => '渠道修改成功', 'updated_resources' => $updatedCount]);
+
+        case 'delete_channel':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $cid = intval($input['id'] ?? 0);
+            $db->exec("DELETE FROM channels WHERE id=$cid");
+            json(['message' => '渠道删除成功']);
+
+        case 'list_intention_levels':
+            $result = $db->query("SELECT * FROM intention_levels ORDER BY sort_order ASC, id ASC");
+            $rows = [];
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json($rows);
+
+        case 'add_intention_level':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '意向等级名称不能为空']);
+            $existing = $db->querySingle("SELECT COUNT(*) FROM intention_levels WHERE name = '" . $db->escapeString($name) . "'");
+            if (intval($existing) > 0) json(['error' => '意向等级名称已存在']);
+            $sortOrder = intval($input['sort_order'] ?? 0);
+            $n = now();
+            $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('" . $db->escapeString($name) . "', $sortOrder, '$n')");
+            json(['id' => $db->lastInsertRowID(), 'message' => '意向等级添加成功']);
+
+        case 'update_intention_level':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $iid = intval($input['id'] ?? 0);
+            if (!$iid) json(['error' => '意向等级ID无效']);
+            $newName = trim($input['name'] ?? '');
+            if (!$newName) json(['error' => '意向等级名称不能为空']);
+            $sortOrder = intval($input['sort_order'] ?? 0);
+            $dup = $db->querySingle("SELECT COUNT(*) FROM intention_levels WHERE name = '" . $db->escapeString($newName) . "' AND id != $iid");
+            if (intval($dup) > 0) json(['error' => '意向等级名称已存在']);
+            $oldName = $db->querySingle("SELECT name FROM intention_levels WHERE id = $iid", false);
+            if (!$oldName) json(['error' => '意向等级不存在']);
+            $db->exec("BEGIN");
+            $db->exec("UPDATE intention_levels SET name = '" . $db->escapeString($newName) . "', sort_order = $sortOrder WHERE id = $iid");
+            $db->exec("UPDATE resources SET intention_level = '" . $db->escapeString($newName) . "' WHERE intention_level = '" . $db->escapeString($oldName) . "'");
+            $updatedCount = $db->changes();
+            $db->exec("COMMIT");
+            json(['message' => '意向等级修改成功', 'updated_resources' => $updatedCount]);
+
+        case 'delete_intention_level':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $iid = intval($input['id'] ?? 0);
+            $db->exec("DELETE FROM intention_levels WHERE id=$iid");
+            json(['message' => '意向等级删除成功']);
+
+        case 'export_resources':
+            $poolType = $_GET['pool_type'] ?? '我的资源';
+            $keyword = $_GET['keyword'] ?? '';
+            $followStatus = $_GET['follow_status'] ?? '';
+
+            $where = ["pool_type = :pt"];
+            $params = [':pt' => $poolType];
+            if ($keyword) {
+                $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR source LIKE :kw3)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
+            }
+            if ($followStatus) { $where[] = "follow_status = :fs"; $params[':fs'] = $followStatus; }
+            $whereStr = implode(' AND ', $where);
+
+            $stmt = $db->prepare("SELECT r.name, r.phone, r.source, r.source_detail, r.intention_level, r.gender, r.birth_date, r.follow_status, r.assigned_to, e.department AS assigned_dept, r.created_at, r.updated_at FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $result = $stmt->execute();
+
+            $filename = '资源导出_' . date('Ymd_His') . '.csv';
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+
+            $output = fopen('php://output', 'w');
+            fprintf($output, "\xEF\xBB\xBF");
+            fputcsv($output, ['姓名', '电话', '来源渠道', '来源详情', '意向等级', '性别', '出生日期', '跟进状态', '归属人', '归属部门', '创建时间', '更新时间']);
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) {
+                fputcsv($output, [
+                    $r['name'], $r['phone'], $r['source'], $r['source_detail'],
+                    $r['intention_level'], $r['gender'], $r['birth_date'],
+                    $r['follow_status'] ?? '',
+                    $r['assigned_to'], $r['assigned_dept'] ?? '',
+                    $r['created_at'], $r['updated_at']
+                ]);
+            }
+            fclose($output);
+            exit;
+
+        case 'list_basic_types':
+            $category = $_GET['category'] ?? '';
+            if (!$category) json(['error' => 'category参数不能为空']);
+            $result = $db->query("SELECT * FROM basic_types WHERE category = '" . $db->escapeString($category) . "' ORDER BY sort_order ASC, id ASC");
+            $rows = [];
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json($rows);
+
+        case 'add_basic_type':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $category = trim($input['category'] ?? '');
+            $name = trim($input['name'] ?? '');
+            $sortOrder = intval($input['sort_order'] ?? 0);
+            if (!$name) json(['error' => '名称不能为空']);
+            if (!$category) json(['error' => 'category不能为空']);
+            $existing = $db->querySingle("SELECT COUNT(*) FROM basic_types WHERE category = '" . $db->escapeString($category) . "' AND name = '" . $db->escapeString($name) . "'");
+            if (intval($existing) > 0) json(['error' => '该类别下已存在同名类型']);
+            $n = now();
+            $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('" . $db->escapeString($category) . "', '" . $db->escapeString($name) . "', $sortOrder, '$n')");
+            json(['id' => $db->lastInsertRowID(), 'message' => '添加成功']);
+
+        case 'update_basic_type':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $bid = intval($input['id'] ?? 0);
+            if (!$bid) json(['error' => 'ID无效']);
+            $newName = trim($input['name'] ?? '');
+            $sortOrder = $input['sort_order'] ?? null;
+            // 获取原记录
+            $old = $db->querySingle("SELECT * FROM basic_types WHERE id = $bid", true);
+            if (!$old) json(['error' => '记录不存在']);
+            $finalName = $newName !== '' ? $newName : $old['name'];
+            $finalSort = $sortOrder !== null ? intval($sortOrder) : intval($old['sort_order']);
+            // 检查重名
+            if ($newName !== '' && $newName !== $old['name']) {
+                $dup = $db->querySingle("SELECT COUNT(*) FROM basic_types WHERE category = '" . $db->escapeString($old['category']) . "' AND name = '" . $db->escapeString($newName) . "' AND id != $bid");
+                if (intval($dup) > 0) json(['error' => '该类别下已存在同名类型']);
+            }
+            $db->exec("BEGIN");
+            $db->exec("UPDATE basic_types SET name = '" . $db->escapeString($finalName) . "', sort_order = $finalSort WHERE id = $bid");
+            // 同步关联数据
+            if ($newName !== '' && $newName !== $old['name']) {
+                if ($old['category'] === 'course_type') {
+                    $db->exec("UPDATE appointments SET course_type = '" . $db->escapeString($newName) . "' WHERE course_type = '" . $db->escapeString($old['name']) . "'");
+                } elseif ($old['category'] === 'comm_type') {
+                    $db->exec("UPDATE communication_records SET comm_type = '" . $db->escapeString($newName) . "' WHERE comm_type = '" . $db->escapeString($old['name']) . "'");
+                }
+            }
+            $db->exec("COMMIT");
+            json(['message' => '更新成功']);
+
+        case 'delete_basic_type':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $bid = intval($input['id'] ?? 0);
+            $db->exec("DELETE FROM basic_types WHERE id=$bid");
+            json(['message' => '删除成功']);
+
+        // ==================== 员工管理 ====================
+        case 'get_employees':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = $_GET['keyword'] ?? '';
+            $department = $_GET['department'] ?? '';
+            $status = $_GET['status'] ?? '';
+
+            $where = [];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR department LIKE :kw3 OR position LIKE :kw4)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+                $params[':kw3'] = "%$keyword%"; $params[':kw4'] = "%$keyword%";
+            }
+            if ($department) { $where[] = "department = :dept"; $params[':dept'] = $department; }
+            if ($status) { $where[] = "status = :st"; $params[':st'] = $status; }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM employees $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, SQLITE3_TEXT);
+            $total = $countStmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            $total = $total ? intval($total) : 0;
+            $offset = ($page - 1) * $pageSize;
+            $stmt = $db->prepare("SELECT * FROM employees $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $stmt->bindValue(':lim', $pageSize, SQLITE3_INTEGER);
+            $stmt->bindValue(':off', $offset, SQLITE3_INTEGER);
+            $rows = [];
+            $result = $stmt->execute();
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+
+        case 'add_employee':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '姓名不能为空']);
+            $phone = trim($input['phone'] ?? '');
+            // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
+            $dupErrors = [];
+            $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($name) . "'");
+            if (intval($dup) > 0) $dupErrors[] = '姓名已存在，请勿重复录入';
+            if ($phone !== '') {
+                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($phone) . "'");
+                if (intval($dup) > 0) $dupErrors[] = '手机号已存在，请勿重复录入';
+            }
+            if (!empty($dupErrors)) json(['error' => implode('；', $dupErrors)]);
+            // 校验 department 是否在 organizations 中存在（可留空）
+            $dept = $input['department'] ?? '';
+            if ($dept !== '') {
+                $deptExists = $db->querySingle("SELECT COUNT(*) FROM organizations WHERE name = '" . $db->escapeString($dept) . "'");
+                if (intval($deptExists) === 0) json(['error' => '部门不存在，请从组织管理中选择']);
+            }
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO employees (name,phone,department,position,entry_date,status,is_teacher,created_at,updated_at) VALUES (:n,:p,:d,:pos,:ed,:st,:it,:c,:u)");
+            $stmt->bindValue(':n', $name);
+            $stmt->bindValue(':p', $phone);
+            $stmt->bindValue(':d', $dept);
+            $stmt->bindValue(':pos', $input['position']??'');
+            $stmt->bindValue(':ed', $input['entry_date']??'');
+            $stmt->bindValue(':st', $input['status']??'在职');
+            $stmt->bindValue(':it', $input['is_teacher']??'');
+            $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '新增成功']);
+
+        case 'update_employee':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $eid = intval($input['id'] ?? 0);
+            // 姓名和手机号唯一性校验（排除自身，同时检查，两个都重复两个都提示）
+            $dupErrors = [];
+            if (isset($input['name']) && trim($input['name'] ?? '') !== '') {
+                $name = trim($input['name']);
+                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($name) . "' AND id != $eid");
+                if (intval($dup) > 0) $dupErrors[] = '姓名已存在，请勿重复录入';
+            }
+            if (isset($input['phone']) && trim($input['phone'] ?? '') !== '') {
+                $phone = trim($input['phone']);
+                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($phone) . "' AND id != $eid");
+                if (intval($dup) > 0) $dupErrors[] = '手机号已存在，请勿重复录入';
+            }
+            if (!empty($dupErrors)) json(['error' => implode('；', $dupErrors)]);
+            // 校验 department 是否在 organizations 中存在（可留空）
+            if (isset($input['department']) && ($input['department'] ?? '') !== '') {
+                $dept = $input['department'];
+                $deptExists = $db->querySingle("SELECT COUNT(*) FROM organizations WHERE name = '" . $db->escapeString($dept) . "'");
+                if (intval($deptExists) === 0) json(['error' => '部门不存在，请从组织管理中选择']);
+            }
+            $allowedFields = ['name','phone','department','position','entry_date','status','is_teacher'];
+            $sets = [];
+            $params = [];
+            foreach ($allowedFields as $f) {
+                if (array_key_exists($f, $input)) {
+                    $sets[] = "$f = :$f";
+                    $params[":$f"] = $input[$f];
+                }
+            }
+            if (empty($sets)) json(['error' => '没有要更新的字段']);
+            $sets[] = "updated_at = :u";
+            $params[':u'] = now();
+            $params[':id'] = $eid;
+            $sql = "UPDATE employees SET " . implode(', ', $sets) . " WHERE id = :id";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) {
+                $stmt->bindValue($k, $v, $k === ':id' ? SQLITE3_INTEGER : SQLITE3_TEXT);
+            }
+            $stmt->execute();
+            json(['message' => '更新成功']);
+
+        case 'delete_employee':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $eid = intval($input['id'] ?? 0);
+            $db->exec("DELETE FROM employees WHERE id=$eid");
+            json(['message' => '删除成功']);
+
+        // ==================== 岗位管理 ====================
+        case 'list_positions':
+            $result = $db->query("SELECT * FROM positions ORDER BY sort_order ASC, id ASC");
+            $rows = [];
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json($rows);
+
+        case 'add_position':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '岗位名称不能为空']);
+            $existing = $db->querySingle("SELECT COUNT(*) FROM positions WHERE name = '" . $db->escapeString($name) . "'");
+            if (intval($existing) > 0) json(['error' => '岗位名称已存在']);
+            $sortOrder = intval($input['sort_order'] ?? 0);
+            $n = now();
+            $db->exec("INSERT INTO positions (name, sort_order, created_at) VALUES ('" . $db->escapeString($name) . "', $sortOrder, '$n')");
+            json(['id' => $db->lastInsertRowID(), 'message' => '岗位添加成功']);
+
+        case 'update_position':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $pid = intval($input['id'] ?? 0);
+            if (!$pid) json(['error' => '岗位ID无效']);
+            $newName = trim($input['name'] ?? '');
+            $sortOrder = $input['sort_order'] ?? null;
+            $old = $db->querySingle("SELECT * FROM positions WHERE id = $pid", true);
+            if (!$old) json(['error' => '岗位不存在']);
+            $finalName = $newName !== '' ? $newName : $old['name'];
+            $finalSort = $sortOrder !== null ? intval($sortOrder) : intval($old['sort_order']);
+            if ($newName !== '' && $newName !== $old['name']) {
+                $dup = $db->querySingle("SELECT COUNT(*) FROM positions WHERE name = '" . $db->escapeString($newName) . "' AND id != $pid");
+                if (intval($dup) > 0) json(['error' => '岗位名称已存在']);
+            }
+            $db->exec("BEGIN");
+            $db->exec("UPDATE positions SET name = '" . $db->escapeString($finalName) . "', sort_order = $finalSort WHERE id = $pid");
+            if ($newName !== '' && $newName !== $old['name']) {
+                $db->exec("UPDATE employees SET position = '" . $db->escapeString($newName) . "' WHERE position = '" . $db->escapeString($old['name']) . "'");
+            }
+            $db->exec("COMMIT");
+            json(['message' => '岗位更新成功']);
+
+        case 'delete_position':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $pid = intval($input['id'] ?? 0);
+            $old = $db->querySingle("SELECT name FROM positions WHERE id = $pid", false);
+            if (!$old) json(['error' => '岗位不存在']);
+            $inUse = $db->querySingle("SELECT COUNT(*) FROM employees WHERE position = '" . $db->escapeString($old) . "'");
+            if (intval($inUse) > 0) json(['error' => "该岗位下有 {$inUse} 名员工，不可删除"]);
+            $db->exec("DELETE FROM positions WHERE id=$pid");
+            json(['message' => '岗位删除成功']);
+
+        case 'batch_import_employees':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $hasFile = isset($_FILES['file']) && $_FILES['file']['error'] === UPLOAD_ERR_OK;
+
+            if (!$hasFile) {
+                // JSON 模式
+                $items = $input['items'] ?? [];
+                $n = now(); $count = 0; $failCount = 0; $failures = [];
+                $stmt = $db->prepare("INSERT INTO employees (name,phone,department,position,entry_date,status,is_teacher,created_at,updated_at) VALUES (:n,:p,:d,:pos,:ed,:st,:it,:c,:u)");
+                foreach ($items as $idx => $item) {
+                    $rowNum = $idx + 1;
+                    $ename = trim($item['name'] ?? '');
+                    if ($ename === '') { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => '缺少必填字段：姓名']; continue; }
+                    $phoneVal = trim($item['phone'] ?? '');
+                    // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
+                    $rowErrors = [];
+                    $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($ename) . "'");
+                    if (intval($dup) > 0) $rowErrors[] = "姓名 {$ename} 已存在";
+                    if ($phoneVal !== '') {
+                        $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($phoneVal) . "'");
+                        if (intval($dup) > 0) $rowErrors[] = "手机号 {$phoneVal} 已存在";
+                    }
+                    if (!empty($rowErrors)) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => implode('；', $rowErrors)]; continue; }
+                    $stmt->bindValue(':n', $ename);
+                    $stmt->bindValue(':p', $phoneVal);
+                    $stmt->bindValue(':d', $item['department']??'');
+                    $stmt->bindValue(':pos', $item['position']??'');
+                    $stmt->bindValue(':ed', $item['entry_date']??'');
+                    $stmt->bindValue(':st', $item['status']??'在职');
+                    $stmt->bindValue(':it', $item['is_teacher']??'');
+                    $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
+                    $stmt->execute();
+                    $stmt->reset();
+                    $count++;
+                }
+                json(['message' => "成功导入 {$count} 条" . ($failCount > 0 ? "，跳过 {$failCount} 条" : ''), 'count' => $count, 'skip_count' => $failCount, 'failures' => $failures]);
+            }
+
+            // Excel 模式
+            $file = $_FILES['file'];
+            $ext = strtolower(pathinfo($file['name'], PATHINFO_EXTENSION));
+            if (!in_array($ext, ['xlsx', 'xls'])) {
+                json(['error' => '仅支持 .xlsx 或 .xls 格式', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+            if ($file['size'] > 10 * 1024 * 1024) {
+                json(['error' => '文件大小不能超过 10MB', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+            if (!class_exists('ZipArchive')) {
+                json(['error' => '服务器缺少 zip 扩展，无法处理 Excel 文件', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+            $tmpPath = $file['tmp_name'];
+            $importPath = __DIR__ . '/temp_emp_import_' . time() . '.' . $ext;
+            move_uploaded_file($tmpPath, $importPath);
+            try {
+                $rows = parseXlsx($importPath);
+            } catch (Exception $e) {
+                @unlink($importPath);
+                json(['error' => '解析 Excel 文件失败: ' . $e->getMessage(), 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+            @unlink($importPath);
+            if (empty($rows)) {
+                json(['error' => 'Excel 文件为空', 'success_count' => 0, 'fail_count' => 0, 'failures' => []]);
+            }
+            $header = array_map('trim', $rows[0]);
+            $headerMap = [
+                '姓名' => 'name',
+                '手机号' => 'phone',
+                '电话' => 'phone',
+                '部门' => 'department',
+                '职位' => 'position',
+                '入职日期' => 'entry_date',
+                '状态' => 'status',
+                '是否教师' => 'is_teacher',
+            ];
+            $colMap = [];
+            foreach ($header as $idx => $colName) {
+                if (isset($headerMap[$colName])) {
+                    $colMap[$idx] = $headerMap[$colName];
+                }
+            }
+            $n = now();
+            $successCount = 0;
+            $failures = [];
+            $stmt = $db->prepare("INSERT INTO employees (name,phone,department,position,entry_date,status,is_teacher,created_at,updated_at) VALUES (:n,:p,:d,:pos,:ed,:st,:it,:c,:u)");
+            for ($rowIdx = 1; $rowIdx < count($rows); $rowIdx++) {
+                $row = $rows[$rowIdx];
+                $item = ['name' => '', 'phone' => '', 'department' => '', 'position' => '', 'entry_date' => '', 'status' => '在职', 'is_teacher' => ''];
+                foreach ($colMap as $colIdx => $field) {
+                    if (isset($row[$colIdx])) {
+                        $item[$field] = trim($row[$colIdx]);
+                    }
+                }
+                if ($item['name'] === '') {
+                    $failures[] = ['row' => $rowIdx + 1, 'reason' => '缺少必填字段：姓名'];
+                    continue;
+                }
+                // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
+                $rowErrors = [];
+                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($item['name']) . "'");
+                if (intval($dup) > 0) $rowErrors[] = "姓名 {$item['name']} 已存在";
+                if ($item['phone'] !== '') {
+                    $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($item['phone']) . "'");
+                    if (intval($dup) > 0) $rowErrors[] = "手机号 {$item['phone']} 已存在";
+                }
+                if (!empty($rowErrors)) {
+                    $failures[] = ['row' => $rowIdx + 1, 'reason' => implode('；', $rowErrors)];
+                    continue;
+                }
+                $stmt->bindValue(':n', $item['name']);
+                $stmt->bindValue(':p', $item['phone']);
+                $stmt->bindValue(':d', $item['department']);
+                $stmt->bindValue(':pos', $item['position']);
+                $stmt->bindValue(':ed', $item['entry_date']);
+                $stmt->bindValue(':st', $item['status']);
+                $stmt->bindValue(':it', $item['is_teacher']);
+                $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
+                $stmt->execute();
+                $stmt->reset();
+                $successCount++;
+            }
+            $failCount = count($failures);
+            json([
+                'message' => "导入完成：成功 {$successCount} 条" . ($failCount > 0 ? "，失败 {$failCount} 条" : ''),
+                'success_count' => $successCount,
+                'fail_count' => $failCount,
+                'failures' => $failures,
+            ]);
+
+        case 'export_employees':
+            $keyword = $_GET['keyword'] ?? '';
+            $department = $_GET['department'] ?? '';
+            $status = $_GET['status'] ?? '';
+
+            $where = [];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR department LIKE :kw3 OR position LIKE :kw4)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+                $params[':kw3'] = "%$keyword%"; $params[':kw4'] = "%$keyword%";
+            }
+            if ($department) { $where[] = "department = :dept"; $params[':dept'] = $department; }
+            if ($status) { $where[] = "status = :st"; $params[':st'] = $status; }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $stmt = $db->prepare("SELECT name, phone, department, position, entry_date, status, is_teacher, created_at, updated_at FROM employees $whereStr ORDER BY updated_at DESC");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $result = $stmt->execute();
+
+            $filename = '员工导出_' . date('Ymd_His') . '.csv';
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            $output = fopen('php://output', 'w');
+            fprintf($output, "\xEF\xBB\xBF");
+            fputcsv($output, ['姓名', '手机号', '部门', '职位', '入职日期', '状态', '是否教师', '创建时间', '更新时间']);
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) {
+                fputcsv($output, [
+                    $r['name'], $r['phone'], $r['department'], $r['position'],
+                    $r['entry_date'], $r['status'], $r['is_teacher'], $r['created_at'], $r['updated_at']
+                ]);
+            }
+            fclose($output);
+            exit;
+
+// ==================== 课程管理 API ====================
+        case 'list_courses':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = $_GET['keyword'] ?? '';
+
+            $where = [];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(name LIKE :kw1 OR subject LIKE :kw2)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+            }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM courses $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, SQLITE3_TEXT);
+            $total = $countStmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            $total = $total ? intval($total) : 0;
+            $offset = ($page - 1) * $pageSize;
+            $stmt = $db->prepare("SELECT * FROM courses $whereStr ORDER BY id DESC LIMIT :lim OFFSET :off");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $stmt->bindValue(':lim', $pageSize, SQLITE3_INTEGER);
+            $stmt->bindValue(':off', $offset, SQLITE3_INTEGER);
+            $rows = [];
+            $result = $stmt->execute();
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+
+        case 'add_course':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '课程名称不能为空']);
+            $dup = $db->querySingle("SELECT COUNT(*) FROM courses WHERE name = '" . $db->escapeString($name) . "'");
+            if (intval($dup) > 0) json(['error' => '课程名称已存在']);
+            $subject = trim($input['subject'] ?? '');
+            $small_package = trim($input['small_package'] ?? '');
+            $toddler = trim($input['toddler'] ?? '');
+            $campus_permission = trim($input['campus_permission'] ?? '');
+            $db->exec("INSERT INTO courses (name, subject, small_package, toddler, campus_permission, created_at) VALUES ('" . $db->escapeString($name) . "', '" . $db->escapeString($subject) . "', '" . $db->escapeString($small_package) . "', '" . $db->escapeString($toddler) . "', '" . $db->escapeString($campus_permission) . "', '" . now() . "')");
+            json(['id' => $db->lastInsertRowID(), 'message' => '课程添加成功']);
+
+        case 'update_course':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $cid = intval($input['id'] ?? 0);
+            if (!$cid) json(['error' => '课程ID无效']);
+            $existing = $db->querySingle("SELECT * FROM courses WHERE id=$cid", true);
+            if (!$existing) json(['error' => '课程不存在']);
+            $name = trim($input['name'] ?? '');
+            if ($name === '') $name = $existing['name'];
+            // 名称不可重复（排除自身）
+            $dup = $db->querySingle("SELECT COUNT(*) FROM courses WHERE name = '" . $db->escapeString($name) . "' AND id != $cid");
+            if (intval($dup) > 0) json(['error' => '课程名称已存在']);
+            $subject = array_key_exists('subject', $input) ? trim($input['subject']) : $existing['subject'];
+            $small_package = array_key_exists('small_package', $input) ? trim($input['small_package']) : ($existing['small_package'] ?? '');
+            $toddler = array_key_exists('toddler', $input) ? trim($input['toddler']) : ($existing['toddler'] ?? '');
+            $campus_permission = array_key_exists('campus_permission', $input) ? trim($input['campus_permission']) : ($existing['campus_permission'] ?? '');
+            $db->exec("UPDATE courses SET name='" . $db->escapeString($name) . "', subject='" . $db->escapeString($subject) . "', small_package='" . $db->escapeString($small_package) . "', toddler='" . $db->escapeString($toddler) . "', campus_permission='" . $db->escapeString($campus_permission) . "' WHERE id=$cid");
+            json(['message' => '课程更新成功']);
+
+        case 'delete_course':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $cid = intval($input['id'] ?? 0);
+            $db->exec("DELETE FROM courses WHERE id=$cid");
+            json(['message' => '课程删除成功']);
+
+        case 'export_courses':
+            $keyword = $_GET['keyword'] ?? '';
+
+            $where = [];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(name LIKE :kw1 OR subject LIKE :kw2)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+            }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $stmt = $db->prepare("SELECT * FROM courses $whereStr ORDER BY id DESC");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $result = $stmt->execute();
+
+            $filename = '课程导出_' . date('Ymd_His') . '.csv';
+            header('Content-Type: text/csv; charset=utf-8');
+            header('Content-Disposition: attachment; filename="' . $filename . '"');
+            $output = fopen('php://output', 'w');
+            fprintf($output, "\xEF\xBB\xBF");
+            // 查询校区名称映射
+            $campusMap = [];
+            $campusRes = $db->query("SELECT id, name FROM organizations WHERE type='校区'");
+            while ($cr = $campusRes->fetchArray(SQLITE3_ASSOC)) $campusMap[$cr['id']] = $cr['name'];
+            fputcsv($output, ['编号', '课程名称', '学科', '适用校区', '小课包', '低幼龄', '创建时间']);
+            while ($r = $result->fetchArray(SQLITE3_ASSOC)) {
+                $campusNames = [];
+                if (!empty($r['campus_permission'])) {
+                    foreach (explode(',', $r['campus_permission']) as $cid) {
+                        $cid = intval(trim($cid));
+                        if ($cid && isset($campusMap[$cid])) $campusNames[] = $campusMap[$cid];
+                    }
+                }
+                fputcsv($output, [
+                    $r['id'], $r['name'], $r['subject'],
+                    implode('，', $campusNames),
+                    $r['small_package'] ?? '', $r['toddler'] ?? '', $r['created_at']
+                ]);
+            }
+            fclose($output);
+            exit;
+
+// ==================== 价格管理 API ====================
+        case 'list_price_plans':
+            $courseId = intval($_GET['course_id'] ?? 0);
+            if (!$courseId) json(['error' => '缺少 course_id']);
+            $plans = [];
+            $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
+            while ($plan = $planRes->fetchArray(SQLITE3_ASSOC)) {
+                $items = [];
+                $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
+                while ($item = $itemRes->fetchArray(SQLITE3_ASSOC)) $items[] = $item;
+                $plan['items'] = $items;
+                $plans[] = $plan;
+            }
+            json(['data' => $plans]);
+
+        case 'get_course_plans':
+            $courseId = intval($_GET['course_id'] ?? 0);
+            if ($courseId <= 0) json(['error' => '缺少 course_id']);
+            $plans = [];
+            $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
+            while ($plan = $planRes->fetchArray(SQLITE3_ASSOC)) {
+                $items = [];
+                $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
+                while ($item = $itemRes->fetchArray(SQLITE3_ASSOC)) $items[] = $item;
+                $plan['items'] = $items;
+                $plans[] = $plan;
+            }
+            json(['data' => $plans]);
+
+        case 'pay_enroll':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $studentId = intval($input['student_id'] ?? 0);
+            $planId = intval($input['plan_id'] ?? 0);
+            $courseId = intval($input['course_id'] ?? 0);
+            if ($studentId <= 0) json(['error' => '学员ID无效']);
+            if ($planId <= 0) json(['error' => '方案ID无效']);
+            if ($courseId <= 0) json(['error' => '课程ID无效']);
+            $plan = $db->querySingle("SELECT * FROM price_plans WHERE id=$planId", true);
+            if (!$plan) json(['error' => '价格方案不存在']);
+            // 读取课程的小课包字段，若为非空则强制类型为小课包
+            $course = $db->querySingle("SELECT small_package FROM courses WHERE id=$courseId", true);
+            $orderType = trim($plan['plan_type'] ?? '');
+            if (in_array($course['small_package'] ?? '', ['是','1','小课包'], true)) {
+                $orderType = '小课包';
+            }
+            $items = [];
+            $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=$planId ORDER BY sort_order, id");
+            while ($item = $itemRes->fetchArray(SQLITE3_ASSOC)) $items[] = $item;
+            if (empty($items)) json(['error' => '该方案下无报价单']);
+            $paymentCash = floatval($input['payment_cash'] ?? 0);
+            $paymentMeituan = floatval($input['payment_meituan'] ?? 0);
+            $itemPrices = array_map(function($it) { return floatval($it['actual_price']); }, $items);
+            $totalPrice = array_sum($itemPrices);
+            if (abs($paymentCash + $paymentMeituan - $totalPrice) > 0.01) {
+                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan) . '）与订单总额（' . $totalPrice . '）不一致，请调整']);
+            }
+            $n = date('Y-m-d H:i:s');
+            $orderIds = [];
+            $childOrderNos = [];
+            $totalLessons = 0;
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot)");
+            $parentOrderNo = generateOrderNo($db);
+            $remainingCash = $paymentCash;
+            $remainingMeituan = $paymentMeituan;
+            foreach ($items as $i => $item) {
+                $itemPrice = floatval($item['actual_price']);
+                // 先用现金填，不够再用美团
+                $cashForThis = min($remainingCash, $itemPrice);
+                $remainingCash -= $cashForThis;
+                $mtForThis = min($remainingMeituan, $itemPrice - $cashForThis);
+                $remainingMeituan -= $mtForThis;
+                $orderNo = generateOrderNo($db);
+                $stmt->bindValue(':sid', $studentId, SQLITE3_INTEGER);
+                $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
+                $stmt->bindValue(':pn', $plan['name'], SQLITE3_TEXT);
+                $stmt->bindValue(':inm', $item['name'], SQLITE3_TEXT);
+                $stmt->bindValue(':lc', intval($item['lesson_count']), SQLITE3_INTEGER);
+                $stmt->bindValue(':ap', $itemPrice, SQLITE3_FLOAT);
+                $stmt->bindValue(':ca', $cashForThis, SQLITE3_FLOAT);
+                $stmt->bindValue(':ma', $mtForThis, SQLITE3_FLOAT);
+                $stmt->bindValue(':pa', $cashForThis + $mtForThis, SQLITE3_FLOAT);
+                $stmt->bindValue(':ono', $orderNo, SQLITE3_TEXT);
+                $stmt->bindValue(':pono', $parentOrderNo, SQLITE3_TEXT);
+                $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+                $stmt->bindValue(':pat', $n, SQLITE3_TEXT);
+                $stmt->bindValue(':ot', $orderType, SQLITE3_TEXT);
+                $stmt->execute();
+                $orderIds[] = $db->lastInsertRowID();
+                $childOrderNos[] = $orderNo;
+                $totalLessons += intval($item['lesson_count']);
+                $stmt->reset();
+            }
+            // 写入父订单汇总
+            $student = $db->querySingle("SELECT name, phone, student_no FROM students WHERE id=$studentId", true);
+            $course = $db->querySingle("SELECT name FROM courses WHERE id=$courseId", true);
+            $childNosStr = implode(',', $childOrderNos);
+            $stmtParent = $db->prepare("INSERT INTO parent_orders (parent_order_no, child_order_nos, course_name, total_lessons, student_name, phone, student_no, enroll_time, total_price, cash_amount, meituan_amount, created_at) VALUES (:pono, :cnos, :cname, :tl, :sname, :phone, :sno, :etime, :tp, :ca, :ma, :ct)");
+            $stmtParent->bindValue(':pono', $parentOrderNo, SQLITE3_TEXT);
+            $stmtParent->bindValue(':cnos', $childNosStr, SQLITE3_TEXT);
+            $stmtParent->bindValue(':cname', $course['name'] ?? '', SQLITE3_TEXT);
+            $stmtParent->bindValue(':tl', $totalLessons, SQLITE3_INTEGER);
+            $stmtParent->bindValue(':sname', $student['name'] ?? '', SQLITE3_TEXT);
+            $stmtParent->bindValue(':phone', $student['phone'] ?? '', SQLITE3_TEXT);
+            $stmtParent->bindValue(':sno', $student['student_no'] ?? '', SQLITE3_TEXT);
+            $stmtParent->bindValue(':etime', $n, SQLITE3_TEXT);
+            $stmtParent->bindValue(':tp', $totalPrice, SQLITE3_FLOAT);
+            $stmtParent->bindValue(':ca', $paymentCash, SQLITE3_FLOAT);
+            $stmtParent->bindValue(':ma', $paymentMeituan, SQLITE3_FLOAT);
+            $stmtParent->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmtParent->execute();
+            // 标记来源资源为已转化（不可逆）
+            $db->exec("UPDATE resources SET converted = '已转化' WHERE id = (SELECT resource_id FROM students WHERE id = $studentId) AND converted = '未转化'");
+            $msg = '支付成功，共生成 ' . count($orderIds) . ' 笔订单';
+            if ($paymentCash > 0 && $paymentMeituan > 0) {
+                $msg .= '（现金 ¥' . number_format($paymentCash, 2) . ' + 美团 ¥' . number_format($paymentMeituan, 2) . '）';
+            } else {
+                $msg .= '（' . ($paymentCash > 0 ? '现金' : '美团') . '）';
+            }
+            json(['message' => $msg, 'order_ids' => $orderIds, 'count' => count($orderIds)]);
+
+        case 'save_price_plan':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $courseId = intval($input['course_id'] ?? 0);
+            $planName = trim($input['plan_name'] ?? '');
+            $planType = trim($input['plan_type'] ?? '');
+            $items = $input['items'] ?? [];
+            if (!$courseId) json(['error' => '课程ID无效']);
+            if (!$planName) json(['error' => '方案名称不能为空']);
+            if (!is_array($items) || count($items) === 0) json(['error' => '至少需要一个报价单']);
+
+            $planId = intval($input['plan_id'] ?? 0);
+            if ($planId > 0) {
+                // 编辑：更新方案名称，全量替换报价单
+                $existing = $db->querySingle("SELECT * FROM price_plans WHERE id=$planId", true);
+                if (!$existing) json(['error' => '价格方案不存在']);
+                $db->exec("UPDATE price_plans SET name='" . $db->escapeString($planName) . "', plan_type='" . $db->escapeString($planType) . "' WHERE id=$planId");
+                $db->exec("DELETE FROM price_items WHERE plan_id=$planId");
+            } else {
+                // 新增
+                $db->exec("INSERT INTO price_plans (course_id, name, plan_type, created_at) VALUES ($courseId, '" . $db->escapeString($planName) . "', '" . $db->escapeString($planType) . "', '" . now() . "')");
+                $planId = $db->lastInsertRowID();
+            }
+
+            // 插入报价单
+            foreach ($items as $idx => $item) {
+                $itemName = trim($item['name'] ?? '');
+                $lessonCount = intval($item['lesson_count'] ?? 0);
+                $unitPrice = floatval($item['unit_price'] ?? 0);
+                $actualPrice = floatval($item['actual_price'] ?? $unitPrice);
+                $sortOrder = intval($item['sort_order'] ?? $idx);
+                if (!$itemName || $lessonCount <= 0) continue;
+                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, sort_order) VALUES ($planId, '" . $db->escapeString($itemName) . "', $lessonCount, $unitPrice, $actualPrice, $sortOrder)");
+            }
+            json(['id' => $planId, 'message' => $planId ? '价格方案保存成功' : '价格方案保存成功']);
+
+        case 'delete_price_plan':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $planId = intval($input['plan_id'] ?? 0);
+            if (!$planId) json(['error' => '方案ID无效']);
+            $db->exec("DELETE FROM price_items WHERE plan_id=$planId");
+            $db->exec("DELETE FROM price_plans WHERE id=$planId");
+            json(['message' => '价格方案删除成功']);
+
+// ==================== 组织管理 API ====================
+        case 'list_organizations':
+            $res = $db->query("SELECT * FROM organizations ORDER BY sort_order, id");
+            $orgs = [];
+            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $orgs[] = $r;
+            // 构建树形结构
+            $tree = [];
+            $map = [];
+            foreach ($orgs as &$org) {
+                $org['children'] = [];
+                $map[$org['id']] = &$org;
+            }
+            unset($org);
+            foreach ($map as &$org) {
+                if ($org['parent_id'] && isset($map[$org['parent_id']])) {
+                    $map[$org['parent_id']]['children'][] = &$org;
+                } else {
+                    $tree[] = &$org;
+                }
+            }
+            unset($org);
+            json(['data' => ['tree' => $tree, 'flat' => $orgs]]);
+            break;
+
+        case 'add_organization':
+            $post = json_decode(file_get_contents('php://input'), true);
+            if (empty($post['name'])) { json(['error' => '名称不能为空']); break; }
+            $type = $post['type'] ?? '部门';
+            if (!in_array($type, ['部门', '校区'])) { json(['error' => '类型无效']); break; }
+            $parentId = intval($post['parent_id'] ?? 0);
+            $sortOrder = intval($post['sort_order'] ?? 0);
+            // 校验：同一父节点下名称不重复（不限type，部门和校区可以同名共存于同一父节点下）
+            $existing = $db->querySingle("SELECT id FROM organizations WHERE name='" . $db->escapeString($post['name']) . "' AND parent_id=$parentId");
+            if ($existing) { json(['error' => '同一父节点下名称已存在']); break; }
+            $n = now();
+            $db->exec("INSERT INTO organizations (name, type, parent_id, sort_order, created_at) VALUES ('" . $db->escapeString($post['name']) . "', '" . $db->escapeString($type) . "', $parentId, $sortOrder, '$n')");
+            json(['message' => '新增成功', 'id' => $db->lastInsertRowID()]);
+            break;
+
+        case 'update_organization':
+            $post = json_decode(file_get_contents('php://input'), true);
+            $id = intval($post['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+            $existing = $db->querySingle("SELECT * FROM organizations WHERE id=$id", true);
+            if (!$existing) { json(['error' => '组织不存在']); break; }
+            $updates = [];
+            if (isset($post['name']) && $post['name'] !== '') {
+                $type = $post['type'] ?? $existing['type'];
+                $parentId = isset($post['parent_id']) ? intval($post['parent_id']) : $existing['parent_id'];
+                $dup = $db->querySingle("SELECT id FROM organizations WHERE name='" . $db->escapeString($post['name']) . "' AND parent_id=$parentId AND id!=$id");
+                if ($dup) { json(['error' => '同一父节点下名称已存在']); break; }
+                $updates[] = "name='" . $db->escapeString($post['name']) . "'";
+            }
+            if (isset($post['type']) && in_array($post['type'], ['部门', '校区'])) {
+                $updates[] = "type='" . $db->escapeString($post['type']) . "'";
+            }
+            if (isset($post['parent_id'])) {
+                $pid = intval($post['parent_id']);
+                if ($pid == $id) { json(['error' => '不能将自身设为上级']); break; }
+                $updates[] = "parent_id=$pid";
+            }
+            if (isset($post['sort_order'])) {
+                $updates[] = "sort_order=" . intval($post['sort_order']);
+            }
+            if (empty($updates)) { json(['message' => '无变更']); break; }
+            $db->exec("UPDATE organizations SET " . implode(', ', $updates) . " WHERE id=$id");
+            json(['message' => '更新成功']);
+            break;
+
+        case 'delete_organization':
+            $post = json_decode(file_get_contents('php://input'), true);
+            $id = intval($post['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+            $children = $db->querySingle("SELECT COUNT(*) FROM organizations WHERE parent_id=$id");
+            if ($children > 0) { json(['error' => '该节点下有子节点，请先删除子节点']); break; }
+            $db->exec("DELETE FROM organizations WHERE id=$id");
+            json(['message' => '删除成功']);
+            break;
+
+// ==================== 学科设置 API ====================
+        case 'list_subjects':
+            $res = $db->query("SELECT * FROM subjects ORDER BY sort_order, id");
+            $subjects = [];
+            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $subjects[] = $r;
+            // 构建树形结构
+            $tree = [];
+            $map = [];
+            foreach ($subjects as &$sub) {
+                $sub['children'] = [];
+                $map[$sub['id']] = &$sub;
+            }
+            unset($sub);
+            foreach ($map as &$sub) {
+                if ($sub['parent_id'] && isset($map[$sub['parent_id']])) {
+                    $map[$sub['parent_id']]['children'][] = &$sub;
+                } else {
+                    $tree[] = &$sub;
+                }
+            }
+            unset($sub);
+            json(['tree' => $tree, 'flat' => $subjects]);
+
+        case 'add_subject':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '学科名称不能为空']);
+            $parentId = intval($input['parent_id'] ?? 0);
+            $sortOrder = intval($input['sort_order'] ?? 0);
+            // 同一父级下 name 不可重复
+            $dup = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE name='" . $db->escapeString($name) . "' AND parent_id=$parentId");
+            if (intval($dup) > 0) json(['error' => '同一父级下学科名称已存在']);
+            $db->exec("INSERT INTO subjects (name, parent_id, sort_order) VALUES ('" . $db->escapeString($name) . "', $parentId, $sortOrder)");
+            json(['id' => $db->lastInsertRowID(), 'message' => '学科添加成功']);
+
+        case 'update_subject':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $sid = intval($input['id'] ?? 0);
+            if ($sid <= 0) json(['error' => '学科ID无效']);
+            $existing = $db->querySingle("SELECT * FROM subjects WHERE id=$sid", true);
+            if (!$existing) json(['error' => '学科不存在']);
+            $name = trim($input['name'] ?? '');
+            if ($name === '') $name = $existing['name'];
+            $parentId = isset($input['parent_id']) ? intval($input['parent_id']) : $existing['parent_id'];
+            // 同一父级下名称唯一（排除自身）
+            $dup = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE name='" . $db->escapeString($name) . "' AND parent_id=$parentId AND id!=$sid");
+            if (intval($dup) > 0) json(['error' => '同一父级下学科名称已存在']);
+            $sortOrder = isset($input['sort_order']) ? intval($input['sort_order']) : $existing['sort_order'];
+            $db->exec("UPDATE subjects SET name='" . $db->escapeString($name) . "', parent_id=$parentId, sort_order=$sortOrder WHERE id=$sid");
+            json(['message' => '学科更新成功']);
+
+        case 'delete_subject':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $sid = intval($input['id'] ?? 0);
+            if ($sid <= 0) json(['error' => '学科ID无效']);
+            $children = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid");
+            if ($children > 0) json(['error' => '该学科下有子学科，请先删除子学科']);
+            $db->exec("DELETE FROM subjects WHERE id=$sid");
+            json(['message' => '学科删除成功']);
+
+        case 'batch_delete_subjects':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $ids = $input['ids'] ?? [];
+            if (!is_array($ids) || empty($ids)) json(['error' => '请提供要删除的学科ID列表']);
+            $failed = [];
+            $deleted = 0;
+            foreach ($ids as $id) {
+                $sid = intval($id);
+                if ($sid <= 0) { $failed[] = "无效ID: $id"; continue; }
+                $children = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid");
+                if ($children > 0) { $failed[] = "学科(ID=$sid)下有子学科，跳过"; continue; }
+                $db->exec("DELETE FROM subjects WHERE id=$sid");
+                $deleted++;
+            }
+            json(['message' => "成功删除 $deleted 个学科", 'deleted' => $deleted, 'failed' => $failed]);
+
+        // ==================== 学员管理 API ====================
+        case 'list_students':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 15)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $offset = ($page - 1) * $pageSize;
+            $where = '';
+            $params = [];
+            if ($keyword) {
+                $where = "WHERE (s.name LIKE :kw OR s.phone LIKE :kw)";
+                $params[':kw'] = "%$keyword%";
+            }
+            $stmt = $db->prepare("SELECT COUNT(*) FROM students s $where");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count FROM students s $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
+            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+            $rows = [];
+            $res = $stmt->execute();
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        case 'get_student':
+            $id = intval($_GET['id'] ?? 0);
+            if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $student = $db->querySingle("SELECT * FROM students WHERE id=$id", true);
+            if (!$student) { json(['error' => '学员不存在']); break; }
+            $orders = [];
+            $oRes = $db->query("SELECT o.*, c.name AS course_name FROM orders o LEFT JOIN courses c ON o.course_id=c.id WHERE o.student_id=$id ORDER BY o.id DESC");
+            while ($o = $oRes->fetchArray(SQLITE3_ASSOC)) $orders[] = $o;
+            json(['student' => $student, 'orders' => $orders]);
+            break;
+
+        case 'add_student':
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $name = trim($input['name'] ?? '');
+            $phone = trim($input['phone'] ?? '');
+            if (!$name || !$phone) { json(['error' => '姓名和手机号不能为空']); break; }
+            $exist = $db->querySingle("SELECT COUNT(*) FROM students WHERE phone='" . $db->escapeString($phone) . "'");
+            if ($exist > 0) { json(['error' => '手机号已存在']); break; }
+            $source = trim($input['source'] ?? '');
+            $followStatus = trim($input['follow_status'] ?? '');
+            $resourceId = intval($input['resource_id'] ?? 0);
+            $rid = $resourceId > 0 ? $resourceId : 'NULL';
+            $n = now();
+            $studentNo = generateStudentNo($db);
+            $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($rid, '" . $db->escapeString($name) . "', '" . $db->escapeString($phone) . "', '" . $db->escapeString($source) . "', '" . $db->escapeString($followStatus) . "', '$studentNo', '$n')");
+            json(['message' => '新增学员成功', 'id' => $db->lastInsertRowID()]);
+            break;
+
+        case 'update_student':
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $name = trim($input['name'] ?? '');
+            $phone = trim($input['phone'] ?? '');
+            if (!$name || !$phone) { json(['error' => '姓名和手机号不能为空']); break; }
+            $exist = $db->querySingle("SELECT COUNT(*) FROM students WHERE phone='" . $db->escapeString($phone) . "' AND id!=$id");
+            if ($exist > 0) { json(['error' => '手机号已被其他学员使用']); break; }
+            $source = trim($input['source'] ?? '');
+            $followStatus = trim($input['follow_status'] ?? '');
+            $db->exec("UPDATE students SET name='" . $db->escapeString($name) . "', phone='" . $db->escapeString($phone) . "', source='" . $db->escapeString($source) . "', follow_status='" . $db->escapeString($followStatus) . "' WHERE id=$id");
+            json(['message' => '更新成功']);
+            break;
+
+        case 'delete_student':
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $db->exec("DELETE FROM orders WHERE student_id=$id");
+            $db->exec("DELETE FROM students WHERE id=$id");
+            json(['message' => '删除成功']);
+            break;
+
+        case 'enroll_course':
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $studentId = intval($input['student_id'] ?? 0);
+            $courseId = intval($input['course_id'] ?? 0);
+            if ($studentId <= 0 || $courseId <= 0) { json(['error' => '请选择学员和课程']); break; }
+            $planName = trim($input['plan_name'] ?? '');
+            $itemName = trim($input['item_name'] ?? '');
+            $lessonCount = intval($input['lesson_count'] ?? 0);
+            $actualPrice = floatval($input['actual_price'] ?? 0);
+            if (!$planName || !$itemName) { json(['error' => '请选择价格方案和报价单']); break; }
+            $n = now();
+            $orderNo = generateOrderNo($db);
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
+            $stmt->bindValue(':sid', $studentId, SQLITE3_INTEGER);
+            $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
+            $stmt->bindValue(':pn', $planName, SQLITE3_TEXT);
+            $stmt->bindValue(':inm', $itemName, SQLITE3_TEXT);
+            $stmt->bindValue(':lc', $lessonCount, SQLITE3_INTEGER);
+            $stmt->bindValue(':ap', $actualPrice, SQLITE3_FLOAT);
+            $stmt->bindValue(':ono', $orderNo, SQLITE3_TEXT);
+            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->execute();
+        case 'enroll_from_resource':
+            $input = json_decode(file_get_contents('php://input'), true) ?? [];
+            $resourceId = intval($input['resource_id'] ?? 0);
+            $courseId = intval($input['course_id'] ?? 0);
+            if ($resourceId <= 0 || $courseId <= 0) { json(['error' => '请选择资源和课程']); break; }
+            $planName = trim($input['plan_name'] ?? '');
+            $itemName = trim($input['item_name'] ?? '');
+            $lessonCount = intval($input['lesson_count'] ?? 0);
+            $actualPrice = floatval($input['actual_price'] ?? 0);
+            if (!$planName || !$itemName) { json(['error' => '请选择价格方案和报价单']); break; }
+            $res = $db->querySingle("SELECT name, phone, source, follow_status FROM resources WHERE id=$resourceId", true);
+            if (!$res) { json(['error' => '资源不存在']); break; }
+            $name = $res['name'];
+            $phone = $res['phone'];
+            if (!$phone) { json(['error' => '该资源没有手机号']); break; }
+            $existing = $db->querySingle("SELECT id FROM students WHERE phone='" . $db->escapeString($phone) . "'", true);
+            if ($existing) {
+                $studentId = $existing['id'];
+            } else {
+                $source = $db->escapeString($res['source'] ?? '');
+                $followStatus = $db->escapeString($res['follow_status'] ?? '');
+                $ename = $db->escapeString($name);
+                $ephone = $db->escapeString($phone);
+                $studentNo = generateStudentNo($db);
+                $n = now();
+                $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, '$ename', '$ephone', '$source', '$followStatus', '$studentNo', '$n')");
+                $studentId = $db->lastInsertRowID();
+            }
+            $n = now();
+            $orderNo = generateOrderNo($db);
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
+            $stmt->bindValue(':sid', $studentId, SQLITE3_INTEGER);
+            $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
+            $stmt->bindValue(':pn', $planName, SQLITE3_TEXT);
+            $stmt->bindValue(':inm', $itemName, SQLITE3_TEXT);
+            $stmt->bindValue(':lc', $lessonCount, SQLITE3_INTEGER);
+            $stmt->bindValue(':ap', $actualPrice, SQLITE3_FLOAT);
+            $stmt->bindValue(':ono', $orderNo, SQLITE3_TEXT);
+            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->execute();
+            json(['message' => '报名成功，学员ID：' . $studentId, 'id' => $db->lastInsertRowID(), 'student_id' => $studentId]);
+            break;
+
+        case 'create_student_from_resource':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $resourceId = intval($input['resource_id'] ?? 0);
+            if ($resourceId <= 0) json(['error' => '资源ID无效']);
+            $res = $db->querySingle("SELECT name, phone, source, follow_status FROM resources WHERE id=$resourceId", true);
+            if (!$res) json(['error' => '资源不存在']);
+            $name = $res['name'];
+            $phone = $res['phone'];
+            if (!$phone) json(['error' => '该资源没有手机号，无法创建学员记录']);
+            $existing = $db->querySingle("SELECT id FROM students WHERE phone='" . $db->escapeString($phone) . "'", true);
+            if ($existing) {
+                $studentId = $existing['id'];
+            } else {
+                $source = $db->escapeString($res['source'] ?? '');
+                $followStatus = $db->escapeString($res['follow_status'] ?? '');
+                $ename = $db->escapeString($name);
+                $ephone = $db->escapeString($phone);
+                $studentNo = generateStudentNo($db);
+                $n = now();
+                $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, '$ename', '$ephone', '$source', '$followStatus', '$studentNo', '$n')");
+                $studentId = $db->lastInsertRowID();
+            }
+            json(['student_id' => $studentId, 'message' => '学员记录已就绪']);
+            break;
+
+        // ==================== 学员课程 API ====================
+        case 'get_student_courses':
+            $sid = intval($_GET['student_id'] ?? 0);
+            if ($sid <= 0) { json(['error' => '参数错误']); break; }
+            $rows = [];
+            $res = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
+            while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
+                $lc = intval($r['lesson_count'] ?? 0);
+                $ap = floatval($r['actual_price'] ?? 0);
+                $cl = intval($r['consumed_lessons'] ?? 0);
+                if ($lc > 0) {
+                    $unitPrice = $ap / $lc;
+                    $r['consumed_amount'] = round($unitPrice * $cl, 2);
+                    $rl = $lc - $cl;
+                    $r['remaining_lessons'] = $rl > 0 ? $rl : 0;
+                    $r['remaining_amount'] = round($unitPrice * $r['remaining_lessons'], 2);
+                } else {
+                    $r['consumed_amount'] = 0;
+                    $r['remaining_lessons'] = 0;
+                    $r['remaining_amount'] = 0;
+                }
+                $rows[] = $r;
+            }
+            json(['data' => $rows]);
+            break;
+
+        // ==================== 上课记录 API ====================
+        case 'list_attendance':
+            $sid = intval($_GET['student_id'] ?? 0);
+            if ($sid <= 0) { json(['error' => '参数错误']); break; }
+            $rows = [];
+            $res = $db->query("SELECT a.*, c.name AS course_name FROM attendance_records a LEFT JOIN courses c ON a.course_id = c.id WHERE a.student_id = $sid ORDER BY a.lesson_date DESC, a.id DESC");
+            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            json(['data' => $rows]);
+            break;
+
+        case 'add_attendance':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $sid = intval($input['student_id'] ?? 0);
+            $cid = intval($input['course_id'] ?? 0);
+            $lessonDate = trim($input['lesson_date'] ?? '');
+            $status = trim($input['status'] ?? '出勤');
+            $notes = trim($input['notes'] ?? '');
+            if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
+            if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, lesson_date, status, notes, created_at) VALUES (:sid, :cid, :dt, :st, :nt, :ct)");
+            $stmt->bindValue(':sid', $sid, SQLITE3_INTEGER);
+            $stmt->bindValue(':cid', $cid, SQLITE3_INTEGER);
+            $stmt->bindValue(':dt', $lessonDate, SQLITE3_TEXT);
+            $stmt->bindValue(':st', $status, SQLITE3_TEXT);
+            $stmt->bindValue(':nt', $notes, SQLITE3_TEXT);
+            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '考勤记录添加成功']);
+            break;
+
+        case 'update_attendance':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $existing = $db->querySingle("SELECT * FROM attendance_records WHERE id=$id", true);
+            if (!$existing) { json(['error' => '记录不存在']); break; }
+            $fields = [];
+            if (isset($input['course_id'])) $fields[] = "course_id=" . intval($input['course_id']);
+            if (isset($input['lesson_date'])) $fields[] = "lesson_date='" . $db->escapeString(trim($input['lesson_date'])) . "'";
+            if (isset($input['status'])) {
+                $st = trim($input['status']);
+                if (!in_array($st, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
+                $fields[] = "status='" . $db->escapeString($st) . "'";
+            }
+            if (isset($input['notes'])) $fields[] = "notes='" . $db->escapeString(trim($input['notes'])) . "'";
+            if (empty($fields)) { json(['message' => '无变更']); break; }
+            $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
+            json(['message' => '考勤记录更新成功']);
+            break;
+
+        case 'delete_attendance':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $db->exec("DELETE FROM attendance_records WHERE id=$id");
+            json(['message' => '考勤记录删除成功']);
+            break;
+
+        // ==================== 交易订单 API ====================
+        case 'list_orders':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 15)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $offset = ($page - 1) * $pageSize;
+            $where = '';
+            $params = [];
+            if ($keyword) {
+                $where = "WHERE (s.name LIKE :kw OR c.name LIKE :kw)";
+                $params[':kw'] = "%$keyword%";
+            }
+            $countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
+            $stmt = $db->prepare($countSql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
+            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+            $rows = [];
+            $res = $stmt->execute();
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            // 支付方式汇总
+            $summarySql = "SELECT SUM(COALESCE(o.cash_amount,0)) AS cash_total, SUM(COALESCE(o.meituan_amount,0)) AS meituan_total FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
+            $sumStmt = $db->prepare($summarySql);
+            foreach ($params as $k => $v) $sumStmt->bindValue($k, $v, SQLITE3_TEXT);
+            $sumRes = $sumStmt->execute();
+            $paymentSummary = $sumRes->fetchArray(SQLITE3_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0];
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize, 'payment_summary' => $paymentSummary]);
+            break;
+
+        case 'list_parent_orders':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $offset = ($page - 1) * $pageSize;
+            $where = '';
+            $params = [];
+            if ($keyword) {
+                $where = "WHERE (po.student_name LIKE :kw OR po.course_name LIKE :kw OR po.parent_order_no LIKE :kw OR po.student_no LIKE :kw)";
+                $params[':kw'] = "%$keyword%";
+            }
+            $stmt = $db->prepare("SELECT COUNT(*) FROM parent_orders po $where");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            $stmt = $db->prepare("SELECT * FROM parent_orders po $where ORDER BY po.id DESC LIMIT :limit OFFSET :offset");
+            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
+            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $res = $stmt->execute();
+            $rows = [];
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+// ==================== 班级管理 API ====================
+        case 'list_classes':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 15)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $offset = ($page - 1) * $pageSize;
+            $where = '';
+            $params = [];
+            if ($keyword) {
+                $where = "WHERE cl.name LIKE :kw";
+                $params[':kw'] = "%$keyword%";
+            }
+            $stmt = $db->prepare("SELECT COUNT(*) FROM classes cl $where");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            $sql = "SELECT cl.*, c.name AS course_name FROM classes cl LEFT JOIN courses c ON cl.course_id = c.id $where ORDER BY cl.id DESC LIMIT :limit OFFSET :offset";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
+            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+            $rows = [];
+            $res = $stmt->execute();
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        case 'add_class':
+            error_log('DEBUG: add_class reached, method=' . $method);
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $courseId = intval($input['course_id'] ?? 0);
+            $name = trim($input['name'] ?? '');
+            $classType = trim($input['class_type'] ?? '标准班');
+            $maxStudents = intval($input['max_students'] ?? 0);
+            $lessonHours = intval($input['lesson_hours'] ?? 0);
+            $canTrial = trim($input['can_trial'] ?? '是');
+            $campus = trim($input['campus'] ?? '');
+            $remark = trim($input['remark'] ?? '');
+            if (!$courseId) json(['error' => '请选择关联课程']);
+            if (!$name) json(['error' => '班级名称不能为空']);
+            if (mb_strlen($name) > 20) json(['error' => '班级名称最长20字']);
+            if (!$classType) json(['error' => '请选择班级类型']);
+            if ($maxStudents <= 0) json(['error' => '招生人数必须大于0']);
+            if ($lessonHours % 2 !== 0) json(['error' => '授课课时必须为偶数']);
+            if (!$campus) json(['error' => '请选择当前校区']);
+            if (mb_strlen($remark) > 200) json(['error' => '备注最长200字']);
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO classes (course_id, name, class_type, max_students, lesson_hours, can_trial, campus, remark, created_at) VALUES (:cid, :nm, :ct, :ms, :lh, :tr, :cp, :rm, :ca)");
+            $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
+            $stmt->bindValue(':nm', $name, SQLITE3_TEXT);
+            $stmt->bindValue(':ct', $classType, SQLITE3_TEXT);
+            $stmt->bindValue(':ms', $maxStudents, SQLITE3_INTEGER);
+            $stmt->bindValue(':lh', $lessonHours, SQLITE3_INTEGER);
+            $stmt->bindValue(':tr', $canTrial, SQLITE3_TEXT);
+            $stmt->bindValue(':cp', $campus, SQLITE3_TEXT);
+            $stmt->bindValue(':rm', $remark, SQLITE3_TEXT);
+            $stmt->bindValue(':ca', $n, SQLITE3_TEXT);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '班级新增成功']);
+            break;
+
+        case 'update_class':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) json(['error' => '班级ID无效']);
+            $existing = $db->querySingle("SELECT * FROM classes WHERE id=$id", true);
+            if (!$existing) json(['error' => '班级不存在']);
+            $updates = [];
+            if (isset($input['course_id'])) { $updates[] = "course_id=" . intval($input['course_id']); }
+            if (isset($input['name'])) {
+                $nm = trim($input['name']);
+                if ($nm === '') json(['error' => '班级名称不能为空']);
+                if (mb_strlen($nm) > 20) json(['error' => '班级名称最长20字']);
+                $updates[] = "name='" . $db->escapeString($nm) . "'";
+            }
+            if (isset($input['class_type'])) { $updates[] = "class_type='" . $db->escapeString(trim($input['class_type'])) . "'"; }
+            if (isset($input['max_students'])) { $updates[] = "max_students=" . intval($input['max_students']); }
+            if (isset($input['lesson_hours'])) { $lh = intval($input['lesson_hours']); if ($lh % 2 !== 0) json(['error' => '授课课时必须为偶数']); $updates[] = "lesson_hours=" . $lh; }
+            if (isset($input['can_trial'])) { $updates[] = "can_trial='" . $db->escapeString(trim($input['can_trial'])) . "'"; }
+            if (isset($input['campus'])) { $updates[] = "campus='" . $db->escapeString(trim($input['campus'])) . "'"; }
+            if (isset($input['remark'])) {
+                $rm = trim($input['remark']);
+                if (mb_strlen($rm) > 200) json(['error' => '备注最长200字']);
+                $updates[] = "remark='" . $db->escapeString($rm) . "'";
+            }
+            if (empty($updates)) json(['message' => '无变更']);
+            $db->exec("UPDATE classes SET " . implode(', ', $updates) . " WHERE id=$id");
+            json(['message' => '班级更新成功']);
+            break;
+
+        case 'delete_class':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) json(['error' => '班级ID无效']);
+            $db->exec("DELETE FROM classes WHERE id=$id");
+            json(['message' => '班级删除成功']);
+            break;
+
+
+// ==================== 排课管理 API ====================
+        case 'list_schedules':
+            $classId = intval($_GET['class_id'] ?? 0);
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            $stmt = $db->prepare("SELECT * FROM schedules WHERE class_id=:cid ORDER BY id DESC");
+            $stmt->bindValue(':cid', $classId, SQLITE3_INTEGER);
+            $rows = [];
+            $res = $stmt->execute();
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+                $row['sessions'] = computeSessions($row);
+                $rows[] = $row;
+            }
+            json(['data' => $rows]);
+            break;
+
+        case 'get_schedule':
+            $scheduleId = intval($_GET['id'] ?? 0);
+            if ($scheduleId <= 0) json(['error' => '排课ID无效']);
+            $row = $db->querySingle("SELECT * FROM schedules WHERE id=$scheduleId", true);
+            if (!$row) json(['error' => '排课记录不存在']);
+            json(['data' => $row]);
+            break;
+
+        case 'add_schedule':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $classId = intval($input['class_id'] ?? 0);
+            $ruleType = trim($input['rule_type'] ?? '按规则排课');
+            $startDate = trim($input['start_date'] ?? '');
+            $endDate = trim($input['end_date'] ?? '');
+            $weekdays = trim($input['weekdays'] ?? '');
+            $timeSlots = trim($input['time_slots'] ?? '{}');
+            $holidayEnabled = intval($input['holiday_enabled'] ?? 0);
+            $teacher = trim($input['teacher'] ?? '');
+            $classroom = trim($input['classroom'] ?? '');
+            if ($classId <= 0) json(['error' => '请选择班级']);
+            if ($ruleType === '按规则排课') {
+                if (!$startDate) json(['error' => '请选择开课日期']);
+                if (!$endDate) json(['error' => '请选择结课日期']);
+                if (!$weekdays) json(['error' => '请选择上课周期']);
+                if (!$timeSlots || $timeSlots === '{}') json(['error' => '请设置上课时间']);
+            }
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO schedules (class_id, rule_type, start_date, end_date, weekdays, time_slots, holiday_enabled, teacher, classroom, created_at) VALUES (:cid, :rt, :sd, :ed, :wd, :ts, :he, :tch, :cr, :ca)");
+            $stmt->bindValue(':cid', $classId, SQLITE3_INTEGER);
+            $stmt->bindValue(':rt', $ruleType, SQLITE3_TEXT);
+            $stmt->bindValue(':sd', $startDate, SQLITE3_TEXT);
+            $stmt->bindValue(':ed', $endDate, SQLITE3_TEXT);
+            $stmt->bindValue(':wd', $weekdays, SQLITE3_TEXT);
+            $stmt->bindValue(':ts', $timeSlots, SQLITE3_TEXT);
+            $stmt->bindValue(':he', $holidayEnabled, SQLITE3_INTEGER);
+            $stmt->bindValue(':tch', $teacher, SQLITE3_TEXT);
+            $stmt->bindValue(':cr', $classroom, SQLITE3_TEXT);
+            $stmt->bindValue(':ca', $n, SQLITE3_TEXT);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '排课新增成功']);
+            break;
+
+        case 'update_schedule':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) json(['error' => '排课ID无效']);
+            $existing = $db->querySingle("SELECT * FROM schedules WHERE id=$id", true);
+            if (!$existing) json(['error' => '排课记录不存在']);
+            $updates = [];
+            if (isset($input['rule_type'])) { $updates[] = "rule_type='" . $db->escapeString(trim($input['rule_type'])) . "'"; }
+            if (isset($input['start_date'])) { $updates[] = "start_date='" . $db->escapeString(trim($input['start_date'])) . "'"; }
+            if (isset($input['end_date'])) { $updates[] = "end_date='" . $db->escapeString(trim($input['end_date'])) . "'"; }
+            if (isset($input['weekdays'])) { $updates[] = "weekdays='" . $db->escapeString(trim($input['weekdays'])) . "'"; }
+            if (isset($input['time_slots'])) { $updates[] = "time_slots='" . $db->escapeString(trim($input['time_slots'])) . "'"; }
+            if (isset($input['holiday_enabled'])) { $updates[] = "holiday_enabled=" . intval($input['holiday_enabled']); }
+            if (isset($input['teacher'])) { $updates[] = "teacher='" . $db->escapeString(trim($input['teacher'])) . "'"; }
+            if (isset($input['classroom'])) { $updates[] = "classroom='" . $db->escapeString(trim($input['classroom'])) . "'"; }
+            if (empty($updates)) json(['message' => '无变更']);
+            $db->exec("UPDATE schedules SET " . implode(', ', $updates) . " WHERE id=$id");
+            json(['message' => '排课更新成功']);
+            break;
+
+        case 'delete_schedule':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) json(['error' => '排课ID无效']);
+            $db->exec("DELETE FROM schedules WHERE id=$id");
+            json(['message' => '排课删除成功']);
+            break;
+
+
+// ==================== 教室管理 API ====================
+        case 'list_classrooms':
+            $keyword = $_GET['keyword'] ?? '';
+            $where = [];
+            if ($keyword) {
+                $where[] = "name LIKE '%" . $db->escapeString($keyword) . "%'";
+            }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+            $rows = [];
+            $res = $db->query("SELECT * FROM classrooms $whereStr ORDER BY id DESC");
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            json(['data' => $rows]);
+            break;
+
+        case 'add_classroom':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            if ($name === '') json(['error' => '教室名称不能为空']);
+            $existing = $db->querySingle("SELECT COUNT(*) FROM classrooms WHERE name='" . $db->escapeString($name) . "'");
+            if (intval($existing) > 0) json(['error' => '教室名称已存在']);
+            $capacity = intval($input['capacity'] ?? 0);
+            $campus = trim($input['campus'] ?? '');
+            $remark = trim($input['remark'] ?? '');
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO classrooms (name, capacity, campus, remark, created_at) VALUES (:nm, :cp, :ca, :rm, :ct)");
+            $stmt->bindValue(':nm', $name, SQLITE3_TEXT);
+            $stmt->bindValue(':cp', $capacity, SQLITE3_INTEGER);
+            $stmt->bindValue(':ca', $campus, SQLITE3_TEXT);
+            $stmt->bindValue(':rm', $remark, SQLITE3_TEXT);
+            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->execute();
+            json(['id' => $db->lastInsertRowID(), 'message' => '教室新增成功']);
+            break;
+
+        case 'update_classroom':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) json(['error' => '教室ID无效']);
+            $existing = $db->querySingle("SELECT * FROM classrooms WHERE id=$id", true);
+            if (!$existing) json(['error' => '教室不存在']);
+            $updates = [];
+            if (isset($input['name'])) {
+                $nm = trim($input['name']);
+                if ($nm === '') json(['error' => '教室名称不能为空']);
+                $dup = $db->querySingle("SELECT COUNT(*) FROM classrooms WHERE name='" . $db->escapeString($nm) . "' AND id!=$id");
+                if (intval($dup) > 0) json(['error' => '教室名称已存在']);
+                $updates[] = "name='" . $db->escapeString($nm) . "'";
+            }
+            if (isset($input['capacity'])) { $updates[] = "capacity=" . intval($input['capacity']); }
+            if (isset($input['campus'])) { $updates[] = "campus='" . $db->escapeString(trim($input['campus'])) . "'"; }
+            if (isset($input['remark'])) { $updates[] = "remark='" . $db->escapeString(trim($input['remark'])) . "'"; }
+            if (empty($updates)) json(['message' => '无变更']);
+            $db->exec("UPDATE classrooms SET " . implode(', ', $updates) . " WHERE id=$id");
+            json(['message' => '教室更新成功']);
+            break;
+
+        case 'delete_classroom':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) json(['error' => '教室ID无效']);
+            $db->exec("DELETE FROM classrooms WHERE id=$id");
+            json(['message' => '教室删除成功']);
+            break;
+
+
+// ==================== 班级学员管理 API ====================
+        case 'list_class_students':
+            $classId = intval($_GET['class_id'] ?? 0);
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            $rows = [];
+            $res = $db->query("SELECT cs.id as cs_id, cs.class_id, cs.student_id, cs.created_at as joined_at,
+                s.id, s.student_no, s.name, s.phone, s.source, s.follow_status
+                FROM class_students cs
+                JOIN students s ON s.id = cs.student_id
+                WHERE cs.class_id = $classId
+                ORDER BY cs.id ASC");
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            json(['data' => $rows]);
+            break;
+
+        case 'add_class_student':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $classId = intval($input['class_id'] ?? 0);
+            $studentId = intval($input['student_id'] ?? 0);
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            if ($studentId <= 0) json(['error' => '学员ID无效']);
+            $exists = $db->querySingle("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId");
+            if (intval($exists) > 0) json(['error' => '该学员已在此班级中']);
+            // 检查一级学科下剩余课时
+            $classRow = $db->querySingle("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $subject = $classRow['subject'] ?? '';
+            $firstSubjectId = 0;
+            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($subject) . "'", true);
+            if ($subjRow) {
+                if (intval($subjRow['parent_id']) == 0) {
+                    $firstSubjectId = intval($subjRow['id']);
+                } else {
+                    $firstSubjectId = intval($subjRow['parent_id']);
+                }
+            }
+            if ($firstSubjectId > 0) {
+                $allCourseIds = [];
+                $sr = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                while ($c = $sr->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
+                if (count($allCourseIds) > 0) {
+                    $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
+                    $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
+                    if ($totalRemaining <= 0) {
+                        json(['error' => '该学员在此学科下无剩余课时，无法分班']);
+                    }
+                }
+            }
+            $n = now();
+            $db->exec("INSERT INTO class_students (class_id, student_id, created_at) VALUES ($classId, $studentId, '$n')");
+            json(['id' => $db->lastInsertRowID(), 'message' => '学员已加入班级']);
+            break;
+
+        case 'remove_class_student':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) json(['error' => '关联ID无效']);
+            $db->exec("DELETE FROM class_students WHERE id=$id");
+            json(['message' => '学员已移出班级']);
+            break;
+
+        case 'get_available_students':
+            $classId = intval($_GET['class_id'] ?? 0);
+            $keyword = trim($_GET['keyword'] ?? '');
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            $where = [];
+            if ($keyword) {
+                $keywordEsc = $db->escapeString($keyword);
+                $where[] = "(s.name LIKE '%$keywordEsc%' OR s.phone LIKE '%$keywordEsc%' OR s.student_no LIKE '%$keywordEsc%')";
+            }
+            $whereStr = $where ? 'AND ' . implode(' AND ', $where) : '';
+            $rows = [];
+            $sql = "SELECT s.id, s.student_no, s.name, s.phone, s.source
+                FROM students s
+                WHERE s.id NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId)
+                $whereStr
+                ORDER BY s.id DESC
+                LIMIT 50";
+            $res = $db->query($sql);
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            json(['data' => $rows]);
+            break;
+
+        // ==================== 班级考勤 API ====================
+        case 'get_class_attendance':
+            $classId = intval($_GET['class_id'] ?? 0);
+            $scheduleId = intval($_GET['schedule_id'] ?? 0);
+            $sessionDate = trim($_GET['session_date'] ?? '');
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            if (!$sessionDate) json(['error' => '课次日期无效']);
+            // 获取班级所有学员
+            $students = [];
+            $res = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
+            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $students[] = $r;
+            // 获取已有考勤记录
+            $attMap = [];
+            $attRes = $db->query("SELECT * FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate'");
+            while ($r = $attRes->fetchArray(SQLITE3_ASSOC)) $attMap[$r['student_id']] = $r;
+            $rows = [];
+            foreach ($students as $stu) {
+                $aid = $attMap[$stu['id']] ?? null;
+                $rows[] = [
+                    'student_id' => $stu['id'],
+                    'student_no' => $stu['student_no'],
+                    'student_name' => $stu['name'],
+                    'status' => $aid ? $aid['status'] : '',
+                    'deducted_lessons' => $aid ? intval($aid['deducted_lessons']) : 0,
+                    'deducted_order_id' => $aid ? intval($aid['deducted_order_id']) : 0,
+                    'attendance_id' => $aid ? $aid['id'] : 0
+                ];
+            }
+            json(['data' => $rows]);
+            break;
+
+        case 'save_class_attendance':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $classId = intval($input['class_id'] ?? 0);
+            $scheduleId = intval($input['schedule_id'] ?? 0);
+            $sessionDate = trim($input['session_date'] ?? '');
+            $records = $input['records'] ?? [];
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            if ($scheduleId <= 0) json(['error' => '排课ID无效']);
+            if (!$sessionDate) json(['error' => '课次日期无效']);
+            if (!is_array($records) || count($records) === 0) json(['error' => '考勤记录为空']);
+            $db->exec('BEGIN TRANSACTION');
+            try {
+                foreach ($records as $rec) {
+                    $studentId = intval($rec['student_id'] ?? 0);
+                    $status = trim($rec['status'] ?? '出勤');
+                    if ($studentId <= 0) continue;
+                    if (!in_array($status, ['出勤', '请假', '缺勤'])) $status = '出勤';
+                    // 查询该学员在此班级课程的一级学科
+                    $classRow = $db->querySingle("SELECT c.course_id, c.name AS course_name, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+                    $courseId = intval($classRow['course_id'] ?? 0);
+                    $subject = $classRow['subject'] ?? '';
+                    // 获取一级学科
+                    $firstSubjectId = 0;
+                    $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($subject) . "'", true);
+                    if ($subjRow) {
+                        if (intval($subjRow['parent_id']) == 0) {
+                            $firstSubjectId = intval($subjRow['id']);
+                        } else {
+                            $firstSubjectId = intval($subjRow['parent_id']);
+                        }
+                    }
+                    $deductedLessons = 0;
+                    $deductedOrderId = 0;
+                    if ($status === '出勤') {
+                        $deductedLessons = 1;
+                        // 扣课时逻辑：优先扣同一course_id，再扣同学科二级，再扣同学科一级
+                        // 1. 优先扣同一course_id的订单（先报名的优先）
+                        $orderRows = [];
+                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
+                        while ($o = $oRes->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
+                        if (count($orderRows) === 0 && $firstSubjectId > 0) {
+                            // 2. 查找同学科二级的订单
+                            $secondSubjIds = [];
+                            $sr = $db->query("SELECT id FROM subjects WHERE parent_id = $firstSubjectId");
+                            while ($s = $sr->fetchArray(SQLITE3_ASSOC)) $secondSubjIds[] = $s['id'];
+                            $secondSubjIds[] = $firstSubjectId; // 包含一级学科本身
+                            $courseIds = [];
+                            if (count($secondSubjIds) > 0) {
+                                $sr2 = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE id IN (" . implode(',', $secondSubjIds) . "))");
+                                while ($c = $sr2->fetchArray(SQLITE3_ASSOC)) $courseIds[] = $c['id'];
+                            }
+                            if (count($courseIds) > 0) {
+                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $courseIds) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
+                                while ($o = $oRes2->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
+                            }
+                        }
+                        if (count($orderRows) > 0) {
+                            $targetOrder = $orderRows[0];
+                            $deductedOrderId = intval($targetOrder['id']);
+                            $newConsumed = intval($targetOrder['consumed_lessons']) + 1;
+                            $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $deductedOrderId");
+                        }
+                    }
+                    // 删除旧的考勤记录（如果存在）
+                    $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId");
+                    $n = now();
+                    $stmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, deducted_order_id, created_at) VALUES (:cid, :scid, :sd, :stid, :st, :dl, :doid, :ca)");
+                    $stmt->bindValue(':cid', $classId, SQLITE3_INTEGER);
+                    $stmt->bindValue(':scid', $scheduleId, SQLITE3_INTEGER);
+                    $stmt->bindValue(':sd', $sessionDate, SQLITE3_TEXT);
+                    $stmt->bindValue(':stid', $studentId, SQLITE3_INTEGER);
+                    $stmt->bindValue(':st', $status, SQLITE3_TEXT);
+                    $stmt->bindValue(':dl', $deductedLessons, SQLITE3_INTEGER);
+                    $stmt->bindValue(':doid', $deductedOrderId, SQLITE3_INTEGER);
+                    $stmt->bindValue(':ca', $n, SQLITE3_TEXT);
+                    $stmt->execute();
+                    // 考勤完成后，判断是否需要移出班级
+                    if ($firstSubjectId > 0) {
+                        // 获取一级学科下所有课程ID
+                        $allCourseIds = [];
+                        $sr3 = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                        while ($c = $sr3->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
+                        if (count($allCourseIds) > 0) {
+                            $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
+                            $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
+                            if ($totalRemaining <= 0) {
+                                // 移出该学员在此一级学科下所有班级的记录
+                                $db->exec("DELETE FROM class_students WHERE student_id = $studentId AND class_id IN (SELECT id FROM classes WHERE course_id IN (" . implode(',', $allCourseIds) . "))");
+                            }
+                        }
+                    }
+                }
+                $db->exec('COMMIT');
+                json(['message' => '考勤保存成功']);
+            } catch (Exception $e) {
+                $db->exec('ROLLBACK');
+                json(['error' => '考勤保存失败：' . $e->getMessage()]);
+            }
+            break;
+
+        case 'get_class_enrollable':
+            $classId = intval($_GET['class_id'] ?? 0);
+            $studentId = intval($_GET['student_id'] ?? 0);
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            if ($studentId <= 0) json(['error' => '学员ID无效']);
+            // 获取班级课程的一级学科
+            $classRow = $db->querySingle("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $subject = $classRow['subject'] ?? '';
+            $firstSubjectId = 0;
+            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($subject) . "'", true);
+            if ($subjRow) {
+                if (intval($subjRow['parent_id']) == 0) {
+                    $firstSubjectId = intval($subjRow['id']);
+                } else {
+                    $firstSubjectId = intval($subjRow['parent_id']);
+                }
+            }
+            $totalRemaining = 0;
+            if ($firstSubjectId > 0) {
+                $allCourseIds = [];
+                $sr = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                while ($c = $sr->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
+                if (count($allCourseIds) > 0) {
+                    $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
+                    $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
+                }
+            }
+            $enrollable = $totalRemaining > 0;
+            json(['enrollable' => $enrollable, 'remaining_lessons' => $totalRemaining]);
+            break;
+
+        default:
+            json(['error' => 'Unknown action']);
+    }
+}
+
+// 意向等级默认数据初始化
+$count = $db->querySingle("SELECT COUNT(*) FROM intention_levels");
+if (intval($count) === 0) {
+    $n = now();
+    $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('A-高意向', 1, '$n')");
+    $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('B-中意向', 2, '$n')");
+    $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('C-低意向', 3, '$n')");
+    $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('D-无意向', 4, '$n')");
+}
+
+// 基础类型默认数据初始化
+$countBt = $db->querySingle("SELECT COUNT(*) FROM basic_types");
+if (intval($countBt) === 0) {
+    $n = now();
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('course_type', '试听课', 1, '$n')");
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('course_type', '正式课体验', 2, '$n')");
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('course_type', '测评课', 3, '$n')");
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('course_type', '其他', 4, '$n')");
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('comm_type', '电话', 1, '$n')");
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('comm_type', '微信', 2, '$n')");
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('comm_type', '面谈', 3, '$n')");
+    $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('comm_type', '短信', 4, '$n')");
+}
+
+// ==================== 以下是 HTML 页面 ====================
+?>
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TMS管理系统</title>
+    <link rel="stylesheet" href="static/css/style.css">
+</head>
+<body>
+    <div class="app-layout">
+        <!-- 左侧树状导航 -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <div class="sidebar-logo">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
+                </div>
+                <h2>TMS管理系统</h2>
+            </div>
+            <nav class="tree-nav" id="tree-nav">
+                <ul class="tree-root">
+                    <!-- 市场管理（父节点） -->
+                    <li class="tree-node expanded">
+                        <div class="tree-parent">
+                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
+                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                            <span class="tree-label">市场管理</span>
+                        </div>
+                        <ul class="tree-children">
+                            <li class="tree-node">
+                                <div class="tree-leaf active" data-panel="panel-my-resources">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+                                    <span class="tree-label">我的资源</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-appointments">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                                    <span class="tree-label">预约试听名单</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-sea-pool">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
+                                    <span class="tree-label">资源公海</span>
+                                </div>
+                            </li>
+                            <li class="tree-node expanded">
+                                <div class="tree-parent sub-parent">
+                                    <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
+                                    <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                                    <span class="tree-label">基础设置</span>
+                                </div>
+                                <ul class="tree-children">
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-channel-settings">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/></svg></span>
+                                            <span class="tree-label">渠道设置</span>
+                                        </div>
+                                    </li>
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-intention-level-settings">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
+                                            <span class="tree-label">意向等级设置</span>
+                                        </div>
+                                    </li>
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-basic-type-settings">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
+                                            <span class="tree-label">基础类型设置</span>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+                    <!-- 员工管理（父节点） -->
+                    <li class="tree-node expanded">
+                        <div class="tree-parent">
+                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
+                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                            <span class="tree-label">教务管理</span>
+                        </div>
+                        <ul class="tree-children">
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-courses">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+                                    <span class="tree-label">课程管理</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-students">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                                    <span class="tree-label">学员管理</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-classes">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                                    <span class="tree-label">班级管理</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-orders">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
+                                    <span class="tree-label">交易订单</span>
+                                </div>
+                            </li>
+                            <li class="tree-node expanded">
+                                <div class="tree-parent sub-parent">
+                                    <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
+                                    <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
+                                    <span class="tree-label">基础设置</span>
+                                </div>
+                                <ul class="tree-children">
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-subjects">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
+                                            <span class="tree-label">学科设置</span>
+                                        </div>
+                                    </li>
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-classrooms">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></span>
+                                            <span class="tree-label">教室管理</span>
+                                        </div>
+                                    </li>
+                                </ul>
+                            </li>
+                        </ul>
+                    </li>
+
+                    <li class="tree-node expanded">
+                        <div class="tree-parent">
+                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
+                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
+                            <span class="tree-label">员工管理</span>
+                        </div>
+                        <ul class="tree-children">
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-employees">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+                                    <span class="tree-label">员工名册</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-position-settings">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/></svg></span>
+                                    <span class="tree-label">岗位管理</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-org">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span>
+                                    <span class="tree-label">组织管理</span>
+                                </div>
+                            </li>
+                        </ul>
+                    </li>
+                </ul>
+            </nav>
+            <div class="sidebar-stats">
+                <div class="sidebar-stat-item">
+                    <span class="sidebar-stat-val" id="stat-my">0</span>
+                    <span class="sidebar-stat-lbl">我的资源</span>
+                </div>
+                <div class="sidebar-stat-item">
+                    <span class="sidebar-stat-val" id="stat-sea">0</span>
+                    <span class="sidebar-stat-lbl">公海资源</span>
+                </div>
+                <div class="sidebar-stat-item">
+                    <span class="sidebar-stat-val" id="stat-apt">0</span>
+                    <span class="sidebar-stat-lbl">预约试听</span>
+                </div>
+                <div class="sidebar-stat-item">
+                    <span class="sidebar-stat-val" id="stat-emp">0</span>
+                    <span class="sidebar-stat-lbl">员工总数</span>
+                </div>
+                <div class="sidebar-stat-item">
+                    <span class="sidebar-stat-val" id="stat-courses">0</span>
+                    <span class="sidebar-stat-lbl">课程总数</span>
+                </div>
+            </div>
+        </aside>
+
+        <!-- 右侧内容区 -->
+        <main class="main-content">
+            <!-- 面板：我的资源（整合页） -->
+            <section class="content-panel active" id="panel-my-resources">
+                <div class="panel-header">
+                    <h3>我的资源</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">我的资源：<strong id="stat-my-inline">0</strong></span>
+                        <span class="stat-badge">公海资源：<strong id="stat-sea-inline">0</strong></span>
+                        <span class="stat-badge">预约试听：<strong id="stat-apt-inline">0</strong></span>
+                    </div>
+                </div>
+                <!-- 功能按钮组 -->
+                <div class="action-button-group">
+                    <button class="action-btn" onclick="showAddModal()" title="新增资源">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        </span>
+                        <span class="action-btn-label">新增资源</span>
+                    </button>
+                    <button class="action-btn" onclick="showBatchImportModal()" title="批量导入">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                        </span>
+                        <span class="action-btn-label">批量导入</span>
+                    </button>
+                    <button class="action-btn" onclick="batchAssign()" title="批量分配">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+                        </span>
+                        <span class="action-btn-label">批量分配</span>
+                    </button>
+                    <button class="action-btn" onclick="batchEdit()" title="编辑（请先勾选资源）">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25zM20.71 7.04c.39-.39.39-1.02 0-1.41l-2.34-2.34c-.39-.39-1.02-.39-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+                        </span>
+                        <span class="action-btn-label">编辑</span>
+                    </button>
+                    <button class="action-btn" onclick="showAppointmentModal()" title="预约试听">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 3h-1V1h-2v2H8V1H6v2H5c-1.11 0-2 .9-2 2v14c0 1.1.89 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm0 16H5V8h14v11zM9 10H7v2h2v-2zm4 0h-2v2h2v-2zm4 0h-2v2h2v-2z"/></svg>
+                        </span>
+                        <span class="action-btn-label">预约试听</span>
+                    </button>
+                    <button class="action-btn" onclick="openBatchCommunication()" title="添加沟通记录（请先勾选资源）">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+                        </span>
+                        <span class="action-btn-label">添加沟通记录</span>
+                    </button>
+                    <button class="action-btn action-btn-warn" onclick="batchMoveToSea()" title="移入公海">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm-1 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h7v14z"/></svg>
+                        </span>
+                        <span class="action-btn-label">移入公海</span>
+                    </button>
+                    <button class="action-btn" onclick="exportMyResources('我的资源')" title="导出当前筛选结果为 CSV">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                        </span>
+                        <span class="action-btn-label">导出资源</span>
+                    </button>
+                </div>
+                <!-- 搜索筛选工具栏 -->
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <input type="text" id="filter-name-my" class="filter-input-sm" placeholder="姓名">
+                        <input type="text" id="filter-phone-my" class="filter-input-md" placeholder="手机号">
+                        <select id="filter-source-my">
+                            <option value="">全部渠道</option>
+                        </select>
+                        <select id="filter-assigned-to-my" onchange="loadMyResources()">
+                            <option value="">全部归属人</option>
+                        </select>
+                        <select id="filter-assigned-dept-my" onchange="loadMyResources()">
+                            <option value="">全部归属部门</option>
+                        </select>
+                        <input type="date" id="filter-created-start-my" title="创建时间起">
+                        <input type="date" id="filter-created-end-my" title="创建时间止">
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <select id="filter-follow-status-my" onchange="loadMyResources()">
+                            <option value="">全部跟进状态</option>
+                            <option value="未沟通">未沟通</option>
+                            <option value="沟通中">沟通中</option>
+                            <option value="已邀约未试听">已邀约未试听</option>
+                            <option value="已试听待转化">已试听待转化</option>
+                            <option value="已转化—定金">已转化—定金</option>
+                            <option value="已转化—全款">已转化—全款</option>
+                            <option value="无效客户">无效客户</option>
+                        </select>
+                        <input type="text" id="search-my" placeholder="搜索姓名/电话/来源..." onkeyup="debounceSearch('my')">
+                        <button class="btn btn-primary btn-sm" onclick="loadMyResources()">搜索</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-my-resources">
+                        <thead><tr>
+                            <th width="40"><input type="checkbox" id="select-all-my" onchange="toggleSelectAll('my')"></th>
+                            <th>姓名</th><th>电话</th><th>来源</th><th>意向等级</th><th>归属人</th><th>归属部门</th><th>跟进状态</th><th>创建时间</th><th>性别</th><th>出生日期</th><th>更新时间</th><th>转化状态</th><th width="200">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-my"></div>
+            </section>
+
+            <!-- 面板：预约试听名单 -->
+            <section class="content-panel" id="panel-appointments">
+                <div class="panel-header">
+                    <h3>预约试听名单</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">我的资源：<strong id="stat-my-inline2">0</strong></span>
+                        <span class="stat-badge">公海资源：<strong id="stat-sea-inline2">0</strong></span>
+                        <span class="stat-badge">预约试听：<strong id="stat-apt-inline2">0</strong></span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <button class="btn btn-primary" onclick="showAppointmentModal()">+ 新增预约</button>
+                    </div>
+                    <div class="toolbar-right">
+                        <select id="filter-status-apt" onchange="loadAppointments()">
+                            <option value="">全部状态</option>
+                            <option value="已预约">已预约</option>
+                            <option value="已试听">已试听</option>
+                            <option value="已取消">已取消</option>
+                        </select>
+                        <input type="text" id="search-apt" placeholder="搜索学员/资源/电话..." onkeyup="debounceSearch('apt')">
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-appointments">
+                        <thead><tr>
+                            <th>学员姓名</th><th>关联资源</th><th>电话</th><th>课程类型</th><th>预约时间</th><th>状态</th><th>备注</th><th width="160">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-apt"></div>
+            </section>
+
+            <!-- 面板：渠道设置 -->
+            <section class="content-panel" id="panel-channel-settings">
+                <div class="panel-header">
+                    <h3>渠道设置</h3>
+                </div>
+                <div class="channel-settings-panel">
+                    <div class="channel-add-row">
+                        <input type="text" id="channel-name-input" placeholder="输入渠道名称，如：线上推广、地推、转介绍..." maxlength="50">
+                        <button class="btn btn-primary" onclick="addChannel()">添加渠道</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-channels">
+                            <thead><tr>
+                                <th>渠道名称</th>
+                                <th>创建时间</th>
+                                <th width="120">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：意向等级设置 -->
+            <section class="content-panel" id="panel-intention-level-settings">
+                <div class="panel-header">
+                    <h3>意向等级设置</h3>
+                </div>
+                <div class="channel-settings-panel">
+                    <div class="channel-add-row">
+                        <input type="text" id="intention-name-input" placeholder="输入意向等级名称，如：A-高意向、B-中意向..." maxlength="50">
+                        <input type="number" id="intention-sort-input" placeholder="排序号（可选）" min="0" style="width:140px;">
+                        <button class="btn btn-primary" onclick="addIntentionLevel()">添加等级</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-intention-levels">
+                            <thead><tr>
+                                <th>名称</th>
+                                <th width="100">排序号</th>
+                                <th>创建时间</th>
+                                <th width="120">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：基础类型设置 -->
+            <section class="content-panel" id="panel-basic-type-settings">
+                <div class="panel-header">
+                    <h3>基础类型设置</h3>
+                </div>
+                <div class="basic-type-tabs">
+                    <button class="bt-tab active" data-cat="course_type">课程类型</button>
+                    <button class="bt-tab" data-cat="comm_type">沟通方式</button>
+                </div>
+                <div class="basic-type-panel">
+                    <div class="channel-add-row">
+                        <input type="text" id="bt-name-input" placeholder="输入名称..." maxlength="50">
+                        <input type="number" id="bt-sort-input" placeholder="排序号" min="0" style="width:100px;">
+                        <button class="btn btn-primary" onclick="addBasicType()">添加</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-basic-types">
+                            <thead><tr>
+                                <th>名称</th>
+                                <th width="100">排序号</th>
+                                <th>创建时间</th>
+                                <th width="120">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：资源公海 -->
+            <section class="content-panel" id="panel-sea-pool">
+                <div class="panel-header">
+                    <h3>资源公海</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">我的资源：<strong id="stat-my-inline3">0</strong></span>
+                        <span class="stat-badge">公海资源：<strong id="stat-sea-inline3">0</strong></span>
+                        <span class="stat-badge">预约试听：<strong id="stat-apt-inline3">0</strong></span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <button class="btn btn-outline" onclick="batchPickFromSea()">领取选中</button>
+                        <button class="btn btn-outline" onclick="exportMyResources('资源公海')">导出资源</button>
+                    </div>
+                    <div class="toolbar-right">
+                        <input type="text" id="search-sea" placeholder="搜索姓名/电话/来源..." onkeyup="debounceSearch('sea')">
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-sea-pool">
+                        <thead><tr>
+                            <th width="40"><input type="checkbox" id="select-all-sea" onchange="toggleSelectAll('sea')"></th>
+                            <th>姓名</th><th>电话</th><th>来源</th><th>意向等级</th><th>性别</th><th>出生日期</th><th>入池时间</th><th width="160">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-sea"></div>
+            </section>
+
+            <!-- 面板：员工名册 -->
+            <section class="content-panel" id="panel-employees">
+                <div class="panel-header">
+                    <h3>员工名册</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">员工总数：<strong id="stat-emp-inline">0</strong></span>
+                    </div>
+                </div>
+                <div class="action-button-group">
+                    <button class="action-btn" onclick="showEmpModal()" title="新增员工">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        </span>
+                        <span class="action-btn-label">新增员工</span>
+                    </button>
+                    <button class="action-btn" onclick="showBatchImportEmpModal()" title="批量导入">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                        </span>
+                        <span class="action-btn-label">批量导入</span>
+                    </button>
+                    <button class="action-btn" onclick="exportEmployees()" title="导出 CSV">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                        </span>
+                        <span class="action-btn-label">导出</span>
+                    </button>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <input type="text" id="filter-emp-name" class="filter-input-sm" placeholder="姓名">
+                        <select id="filter-emp-dept">
+                            <option value="">全部部门</option>
+                        </select>
+                        <select id="filter-emp-status">
+                            <option value="">全部状态</option>
+                            <option value="在职">在职</option>
+                            <option value="离职">离职</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <input type="text" id="search-emp" placeholder="搜索姓名/电话..." onkeyup="debounceSearch('emp')">
+                        <button class="btn btn-primary btn-sm" onclick="loadEmployees()">搜索</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-employees">
+                        <thead><tr>
+                            <th width="40"><input type="checkbox" id="select-all-emp" onchange="toggleSelectAll('emp')"></th>
+                            <th>姓名</th><th>电话</th><th>部门</th><th>岗位</th><th>入职日期</th><th>状态</th><th>是否教师</th><th>创建时间</th><th width="180">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-emp"></div>
+            </section>
+
+            <!-- 面板：组织管理 -->
+            <section class="content-panel" id="panel-org">
+                <div class="panel-header">
+                    <h3>组织管理</h3>
+                </div>
+                <div class="org-layout">
+                    <!-- 左侧：组织树 -->
+                    <div class="org-tree-panel">
+                        <div class="org-tree-toolbar">
+                            <button class="btn btn-primary btn-sm" onclick="showOrgModal(0, '', 0)">+ 新增组织</button>
+                        </div>
+                        <div class="org-tree-wrap" id="org-tree-wrap">
+                            <div class="org-tree-loading">加载中...</div>
+                        </div>
+                    </div>
+                    <!-- 右侧：详情/操作区 -->
+                    <div class="org-detail-panel" id="org-detail-panel">
+                        <div class="org-detail-placeholder">
+                            <svg viewBox="0 0 24 24" width="48" height="48" fill="none" stroke="#ccc" stroke-width="1.5"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg>
+                            <p>请从左侧选择组织节点查看详情</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：岗位管理 -->
+            <section class="content-panel" id="panel-position-settings">
+                <div class="panel-header">
+                    <h3>岗位管理</h3>
+                </div>
+                <div class="channel-settings-panel">
+                    <div class="channel-add-row">
+                        <input type="text" id="position-name-input" placeholder="输入岗位名称，如：工程师、经理、销售..." maxlength="50">
+                        <input type="number" id="position-sort-input" placeholder="排序号（可选）" min="0" style="width:140px;">
+                        <button class="btn btn-primary" onclick="addPosition()">添加岗位</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-positions">
+                            <thead><tr>
+                                <th>名称</th>
+                                <th width="100">排序号</th>
+                                <th>创建时间</th>
+                                <th width="120">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：课程管理 -->
+            <section class="content-panel" id="panel-courses">
+                <div class="panel-header">
+                    <h3>课程管理</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">课程总数：<strong id="stat-courses-inline">0</strong></span>
+                    </div>
+                </div>
+                <div class="action-button-group">
+                    <button class="action-btn" onclick="showCourseModal()" title="新增课程">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                        </span>
+                        <span class="action-btn-label">新增课程</span>
+                    </button>
+                    <button class="action-btn" onclick="exportCourses()" title="导出 CSV">
+                        <span class="action-btn-icon">
+                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                        </span>
+                        <span class="action-btn-label">导出</span>
+                    </button>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <input type="text" id="search-course" placeholder="搜索课程名称/学科..." onkeyup="debounceSearch('course')">
+                        <button class="btn btn-primary btn-sm" onclick="loadCourses()">搜索</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-courses">
+                        <thead><tr>
+                            <th width="60">编号</th><th>课程名称</th><th>学科</th><th>适用校区</th><th>小课包</th><th>低幼龄</th><th width="180">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-course"></div>
+            </section>
+
+            <!-- 面板：学员管理 -->
+            <section class="content-panel" id="panel-students">
+                <div class="panel-header">
+                    <h3>学员管理</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">学员总数：<strong id="stat-students-inline">0</strong></span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <input type="text" id="search-student" placeholder="搜索姓名/手机号..." onkeyup="debounceSearch('student')">
+                        <button class="btn btn-primary btn-sm" onclick="loadStudents()">搜索</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-students">
+                        <thead><tr>
+                            <th width="60">编号</th><th width="70">学号</th><th>姓名</th><th>手机号</th><th>来源</th><th>跟进状态</th><th>已报课程数</th><th width="180">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-student"></div>
+            </section>
+
+            <!-- 面板：班级管理 -->
+            <section class="content-panel" id="panel-classes">
+                <div class="panel-header">
+                    <h3>班级管理</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">班级总数：<strong id="stat-classes-inline">0</strong></span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <button class="btn btn-primary" onclick="showClassForm()">+ 新增班级</button>
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <input type="text" id="search-class" placeholder="搜索班级名称..." onkeyup="debounceSearch('class')">
+                        <button class="btn btn-primary btn-sm" onclick="loadClasses(1)">搜索</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-classes">
+                        <thead><tr>
+                            <th width="60">编号</th><th>班级名称</th><th>关联课程</th><th>班级类型</th><th>招生人数</th><th>授课课时</th><th>可试听</th><th>当前校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-class"></div>
+            </section>
+
+            <!-- 面板：班级详情 -->
+            <section class="content-panel" id="panel-class-detail">
+                <div class="class-detail-breadcrumb">
+                    <a href="javascript:void(0)" onclick="switchToClasses()" class="breadcrumb-back">&larr; 返回班级列表</a>
+                    <span class="breadcrumb-sep">|</span>
+                    <span class="breadcrumb-title" id="class-detail-name">班级详情</span>
+                </div>
+                <div class="class-detail-tabs">
+                    <button class="cdt-tab active" data-tab="tab-class-students">学员列表</button>
+                    <button class="cdt-tab" data-tab="tab-class-schedules">编辑排课</button>
+                </div>
+                <div class="class-detail-tab-content">
+                    <!-- 学员列表 -->
+                    <div class="cdt-panel active" id="tab-class-students">
+                        <div class="toolbar" style="padding:12px 16px;">
+                            <div class="toolbar-left">
+                                <button class="btn btn-primary btn-sm" onclick="showAddStudentModal()">+ 添加学员</button>
+                            </div>
+                            <div class="toolbar-right" style="margin-left:auto;">
+                                <input type="text" id="search-available-student" placeholder="搜索姓名/手机号..." onkeyup="debounceSearchAvailableStudent()">
+                            </div>
+                        </div>
+                        <div class="table-wrap" style="margin:0 16px;">
+                            <table id="table-class-students">
+                                <thead><tr>
+                                    <th width="60">学号</th>
+                                    <th>姓名</th>
+                                    <th>手机号</th>
+                                    <th>来源</th>
+                                    <th width="100">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- 排课信息 -->
+                    <div class="cdt-panel" id="tab-class-schedules">
+                        <div class="toolbar" style="padding:12px 16px;">
+                            <div class="toolbar-left">
+                                <button class="btn btn-primary btn-sm" onclick="showScheduleForm(currentClassDetailId)">+ 新增排课</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap" style="margin:0 16px;">
+                            <table id="table-class-schedules">
+                                <thead><tr>
+                                    <th width="50">序号</th>
+                                    <th>日期</th>
+                                    <th>星期</th>
+                                    <th>上课时间</th>
+                                    <th>授课老师</th>
+                                    <th>上课教室</th>
+                                    <th width="70">考勤状态</th>
+                                    <th width="160">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：学员详情 -->
+            <section class="content-panel" id="panel-student-detail">
+                <div class="panel-header">
+                    <h3>学员详情</h3>
+                    <button class="btn btn-outline btn-sm" onclick="switchToStudents()" style="margin-left:auto;">返回列表</button>
+                    <button class="btn btn-primary btn-sm" id="btn-enroll-from-detail" style="margin-left:8px;" onclick="goEnroll(currentViewStudentId)">报名</button>
+                </div>
+                <!-- 学员基础信息 -->
+                <div id="student-detail-info" style="padding:16px 16px 0;"></div>
+                <!-- 标签页 -->
+                <div class="student-detail-tabs">
+                    <button class="sdt-tab active" data-tab="tab-courses">报读课程</button>
+                    <button class="sdt-tab" data-tab="tab-orders">交易订单</button>
+                    <button class="sdt-tab" data-tab="tab-attendance">上课记录</button>
+                </div>
+                <div class="student-detail-tab-content">
+                    <!-- 报读课程 -->
+                    <div class="sdt-panel active" id="tab-courses">
+                        <div id="student-courses-content" style="padding:8px 16px 16px;">
+                            <div style="text-align:center;color:#999;padding:20px;">加载中...</div>
+                        </div>
+                    </div>
+                    <!-- 交易订单 -->
+                    <div class="sdt-panel" id="tab-orders">
+                        <div id="student-orders-content" style="padding:8px 16px 16px;">
+                            <div style="text-align:center;color:#999;padding:20px;">加载中...</div>
+                        </div>
+                    </div>
+                    <!-- 上课记录 -->
+                    <div class="sdt-panel" id="tab-attendance">
+                        <div style="padding:8px 16px 16px;">
+                            <button class="btn btn-primary btn-sm" onclick="showAttendanceModal()" style="margin-bottom:12px;">+ 新增上课记录</button>
+                            <div class="table-wrap">
+                                <table class="attendance-table">
+                                    <thead><tr>
+                                        <th width="60">编号</th><th>课程</th><th>上课日期</th><th>出勤状态</th><th>备注</th><th width="160">操作</th>
+                                    </tr></thead>
+                                    <tbody id="attendance-tbody">
+                                        <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+            </section>
+
+            <!-- 面板：报名详情 -->
+            <section class="content-panel" id="panel-enroll">
+                <div class="panel-header">
+                    <h3>报名详情</h3>
+                    <button class="btn btn-outline btn-sm" id="btn-enroll-back" style="margin-left:auto;">返回</button>
+                </div>
+                <div class="enroll-student-info" id="enroll-student-info">
+                    <div class="enroll-info-item"><span id="enroll-info-label-name" class="enroll-info-label">学员姓名：</span><strong id="enroll-info-name">-</strong></div>
+                    <div class="enroll-info-item"><span id="enroll-info-label-phone" class="enroll-info-label">手机号：</span><strong id="enroll-info-phone">-</strong></div>
+                </div>
+                <div class="enroll-form" style="padding:16px;">
+                    <div class="form-group">
+                        <label>选择课程 <span class="required">*</span></label>
+                        <select id="enroll-course-select"><option value="">请选择课程</option></select>
+                    </div>
+                    <div id="enroll-plans-section" style="display:none;">
+                        <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">选择价格方案</label>
+                        <div id="enroll-plans-list"></div>
+                    </div>
+                    <div id="enroll-items-section" style="display:none;margin-top:16px;">
+                        <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">报价单明细</label>
+                        <div class="table-wrap">
+                            <table class="enroll-items-table">
+                                <thead><tr>
+                                    <th>报价项名称</th><th>课时数</th><th>单价</th><th>实际价格</th>
+                                </tr></thead>
+                                <tbody id="enroll-items-tbody"></tbody>
+                                <tfoot>
+                                    <tr class="enroll-total-row">
+                                        <td colspan="3" style="text-align:right;font-weight:600;">合计金额：</td>
+                                        <td style="font-weight:600;color:#7C3AED;" id="enroll-total-price">¥0.00</td>
+                                    </tr>
+                                </tfoot>
+                            </table>
+                        </div>
+                        <div id="enroll-payment-section" style="margin-top:16px;">
+                            <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">支付方式</label>
+                            <div class="enroll-payment-row">
+                                <div class="enroll-payment-item">
+                                    <span class="enroll-payment-label">现金</span>
+                                    <input type="number" id="enroll-payment-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()">
+                                    <span class="enroll-payment-unit">元</span>
+                                </div>
+                                <div class="enroll-payment-item">
+                                    <span class="enroll-payment-label">美团</span>
+                                    <input type="number" id="enroll-payment-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()">
+                                    <span class="enroll-payment-unit">元</span>
+                                </div>
+                            </div>
+                            <div id="enroll-payment-hint" class="enroll-payment-hint" style="display:none;"></div>
+                        </div>
+                        <div style="text-align:right;margin-top:16px;">
+                            <button class="btn btn-primary" id="btn-confirm-pay" onclick="confirmPayEnroll()">确认支付</button>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+
+            <!-- 面板：交易订单 -->
+            <section class="content-panel" id="panel-orders">
+                <div class="panel-header">
+                    <h3>交易订单</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">订单总数：<strong id="stat-orders-inline">0</strong></span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <input type="text" id="search-order" placeholder="搜索学员/课程..." onkeyup="debounceSearch('order')">
+                        <button class="btn btn-primary btn-sm" onclick="loadOrders()">搜索</button>
+                    </div>
+                </div>
+                <div class="payment-summary" id="payment-summary-order" style="display:none;"></div>
+                <div class="table-wrap">
+                    <table id="table-orders">
+                        <thead><tr>
+                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>状态</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                        <tfoot id="table-orders-foot" style="display:none;"></tfoot>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-order"></div>
+            </section>
+
+            <!-- 面板：学科设置 -->
+            <section class="content-panel" id="panel-subjects">
+                <div class="panel-header">
+                    <h3>学科设置</h3>
+                </div>
+                <div class="org-layout">
+                    <div class="org-tree-panel" style="flex:1;max-width:100%;">
+                        <div class="org-tree-toolbar">
+                            <button class="btn btn-primary btn-sm" onclick="showSubjectModal(0, 0)">+ 新增一级学科</button>
+                            <button class="btn btn-outline btn-sm" onclick="showSubjectModal(0, -1)" style="margin-left:6px;">+ 新增二级学科</button>
+                        </div>
+                        <div class="org-tree-wrap" id="subject-tree-wrap">
+                            <div class="org-tree-loading">加载中...</div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：教室管理 -->
+            <section class="content-panel" id="panel-classrooms">
+                <div class="panel-header">
+                    <h3>教室管理</h3>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <button class="btn btn-primary" onclick="showClassroomForm()">+ 新增教室</button>
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <input type="text" id="search-classroom" placeholder="搜索教室名称..." onkeyup="debounceSearch('classroom')">
+                        <button class="btn btn-primary btn-sm" onclick="loadClassrooms()">搜索</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-classrooms">
+                        <thead><tr>
+                            <th>教室名称</th><th>容纳人数</th><th>所属校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- 弹窗：新增/编辑资源 -->
+    <div class="modal-overlay" id="modal-resource">
+        <div class="modal"><div class="modal-header"><h3 id="modal-resource-title">新增资源</h3><button class="modal-close" onclick="closeModal('modal-resource')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-rid">
+            <div class="form-group"><label>姓名 <span class="required">*</span></label><input type="text" id="res-name"></div>
+            <div class="form-group"><label>电话</label><input type="text" id="res-phone"></div>
+            <div class="form-group"><label>来源渠道</label><select id="res-source"><option value="">请选择</option></select></div>
+            <div class="form-group"><label>来源详情</label><input type="text" id="res-source-detail"></div>
+            <div class="form-group"><label>意向等级</label><select id="res-intention"><option value="">请选择</option></select></div>
+            <div class="form-group"><label>性别</label><select id="res-gender"><option value="">请选择</option><option value="男">男</option><option value="女">女</option></select></div>
+            <div class="form-group"><label>出生日期</label><input type="date" id="res-birth-date"></div>
+            <div class="form-group"><label>跟进状态</label><select id="res-follow-status"><option value="">请选择</option><option value="未沟通">未沟通</option><option value="沟通中">沟通中</option><option value="已邀约未试听">已邀约未试听</option><option value="已试听待转化">已试听待转化</option><option value="已转化—定金">已转化—定金</option><option value="已转化—全款">已转化—全款</option><option value="无效客户">无效客户</option></select></div>
+            <div class="form-group"><label>归属人</label><select id="res-assigned"><option value="">请选择</option></select></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-resource')">取消</button><button class="btn btn-primary" onclick="saveResource()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑员工 -->
+    <div class="modal-overlay" id="modal-employee">
+        <div class="modal"><div class="modal-header"><h3 id="modal-employee-title">新增员工</h3><button class="modal-close" onclick="closeModal('modal-employee')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-eid">
+            <div class="form-group"><label>姓名 <span class="required">*</span></label><input type="text" id="emp-name"></div>
+            <div class="form-group"><label>手机号</label><input type="text" id="emp-phone"></div>
+            <div class="form-group"><label>部门</label><select id="emp-department"><option value="">请选择（可不填）</option></select></div>
+            <div class="form-group"><label>岗位</label><select id="emp-position"><option value="">请选择（可不填）</option></select></div>
+            <div class="form-group"><label>入职日期</label><input type="date" id="emp-entry-date"></div>
+            <div class="form-group"><label>状态</label><select id="emp-status"><option value="在职">在职</option><option value="离职">离职</option></select></div>
+            <div class="form-group"><label>是否教师</label><select id="emp-is-teacher"><option value="否">否</option><option value="是">是</option></select></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-employee')">取消</button><button class="btn btn-primary" onclick="saveEmployee()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：批量导入员工 -->
+    <div class="modal-overlay" id="modal-batch-import-emp">
+        <div class="modal modal-lg"><div class="modal-header"><h3>批量导入员工</h3><button class="modal-close" onclick="closeModal('modal-batch-import-emp')">&times;</button></div>
+        <div class="modal-body">
+            <p class="hint">请上传 Excel 文件（.xlsx / .xls），第一行为表头，从第二行开始读取数据。列顺序不限，系统会根据表头自动匹配。<strong>姓名为必填字段</strong>，缺少该字段的行将被跳过。支持的表头：姓名、手机号/电话、部门、岗位、入职日期、状态、是否教师。</p>
+            <div class="form-group">
+                <label>选择文件</label>
+                <input type="file" id="batch-import-emp-file" accept=".xlsx,.xls" style="display:block;margin-top:4px;">
+            </div>
+            <div class="form-group">
+                <button class="btn btn-outline btn-sm" onclick="downloadEmpTemplate()" style="margin-right:8px;">下载导入模板</button>
+            </div>
+            <div id="batch-import-emp-result" style="margin-top:12px;display:none;"></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-batch-import-emp')">取消</button><button class="btn btn-primary" onclick="doBatchImportEmp()">开始导入</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑课程 -->
+    <div class="modal-overlay" id="modal-course">
+        <div class="modal"><div class="modal-header"><h3 id="modal-course-title">新增课程</h3><button class="modal-close" onclick="closeModal('modal-course')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-cid">
+            <div class="form-group"><label>课程名称 <span class="required">*</span></label><input type="text" id="course-name" maxlength="100" placeholder="请输入课程名称"></div>
+            <div class="form-group"><label>学科</label><select id="course-subject"><option value="">请选择学科</option></select></div>
+            <div class="form-group"><label>适用校区</label><div id="course-campus-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #dcdfe6;border-radius:4px;padding:8px;"></div></div>
+            <div class="form-group"><label>小课包</label><select id="course-small-package"><option value="">请选择</option><option value="是">是</option><option value="否">否</option></select></div>
+            <div class="form-group"><label>低幼龄</label><select id="course-toddler"><option value="">请选择</option><option value="是">是</option><option value="否">否</option></select></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-course')">取消</button><button class="btn btn-primary" onclick="saveCourse()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：设置价格 -->
+    <div class="modal-overlay" id="modal-price">
+        <div class="modal modal-xl" style="max-width:900px;"><div class="modal-header"><h3 id="modal-price-title">设置价格</h3><button class="modal-close" onclick="closeModal('modal-price')">&times;</button></div>
+        <div class="modal-body" style="display:flex;height:420px;overflow:hidden;padding:0;">
+            <!-- 左侧：价格方案列表 -->
+            <div class="price-left">
+                <div class="price-left-header">价格方案</div>
+                <div class="price-plan-list-wrap" id="price-plan-list">
+                    <div style="padding:20px;color:#999;">加载中...</div>
+                </div>
+                <div class="price-left-footer">
+                    <button class="btn btn-primary btn-sm" onclick="addPlan()" style="width:100%;">+ 新增方案</button>
+                </div>
+            </div>
+            <!-- 右侧：报价单列表 -->
+            <div class="price-right">
+                <div class="price-right-header">报价单列表 <span id="price-plan-type-tag"></span></div>
+                <div class="price-item-table-wrap">
+                    <table class="price-item-table">
+                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>实际支付价格</th><th width="120">操作</th></tr></thead>
+                        <tbody id="price-item-table-body"></tbody>
+                    </table>
+                </div>
+                <div class="price-right-footer">
+                    <button class="btn btn-primary btn-sm" onclick="addItem()">+ 新增报价单</button>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-price')">关闭</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑价格方案名称 -->
+    <div class="modal-overlay" id="modal-price-plan">
+        <div class="modal"><div class="modal-header"><h3 id="modal-price-plan-title">新增价格方案</h3><button class="modal-close" onclick="closeModal('modal-price-plan')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-price-plan-id">
+            <div class="form-group"><label>方案名称 <span class="required">*</span></label><input type="text" id="price-plan-name-input" maxlength="50" placeholder="如：标准版、暑期特惠"></div>
+            <div class="form-group"><label>方案类型</label><select id="price-plan-type-select"><option value="">请选择</option><option value="新报">新报</option><option value="续费">续费</option><option value="小课包">小课包</option></select></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-price-plan')">取消</button><button class="btn btn-primary" onclick="savePlan()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑报价单 -->
+    <div class="modal-overlay" id="modal-price-item">
+        <div class="modal"><div class="modal-header"><h3 id="modal-price-item-title">新增报价单</h3><button class="modal-close" onclick="closeModal('modal-price-item')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-price-item-id">
+            <div class="form-group"><label>报价单名称 <span class="required">*</span></label><input type="text" id="price-item-name" maxlength="50" placeholder="如：32课时包"></div>
+            <div class="form-group"><label>课时数量 <span class="required">*</span></label><input type="number" id="price-item-lesson-count" min="1" placeholder="请输入课时数量"></div>
+            <div class="form-group"><label>课时价格 <span class="required">*</span></label><input type="number" id="price-item-unit-price" step="0.01" min="0" placeholder="请输入课时价格" oninput="onUnitPriceChange()"></div>
+            <div class="form-group"><label>实际支付价格</label><input type="number" id="price-item-actual-price" step="0.01" min="0" readonly style="background:#f5f7fa;"></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-price-item')">取消</button><button class="btn btn-primary" onclick="saveItem()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑组织 -->
+    <div class="modal-overlay" id="modal-org">
+        <div class="modal"><div class="modal-header"><h3 id="modal-org-title">新增组织</h3><button class="modal-close" onclick="closeModal('modal-org')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-oid">
+            <div class="form-group"><label>名称 <span class="required">*</span></label><input type="text" id="org-name" maxlength="50"></div>
+            <div class="form-group"><label>类型 <span class="required">*</span></label><select id="org-type"><option value="部门">部门</option><option value="校区">校区</option></select></div>
+            <div class="form-group"><label>上级组织</label><select id="org-parent"><option value="0">无（根节点）</option></select></div>
+            <div class="form-group"><label>排序号</label><input type="number" id="org-sort" value="0" min="0"></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-org')">取消</button><button class="btn btn-primary" onclick="saveOrganization()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑学科 -->
+    <div class="modal-overlay" id="modal-subject">
+        <div class="modal"><div class="modal-header"><h3 id="modal-subject-title">新增学科</h3><button class="modal-close" onclick="closeModal('modal-subject')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-sid">
+            <div class="form-group"><label>学科名称 <span class="required">*</span></label><input type="text" id="subject-name" maxlength="50" placeholder="请输入学科名称"></div>
+            <div class="form-group"><label>上级学科</label><select id="subject-parent"><option value="0">无（一级学科）</option></select></div>
+            <div class="form-group"><label>排序号</label><input type="number" id="subject-sort" value="0" min="0"></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-subject')">取消</button><button class="btn btn-primary" onclick="saveSubject()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：批量导入 -->
+    <div class="modal-overlay" id="modal-batch-import">
+        <div class="modal modal-lg"><div class="modal-header"><h3>批量导入资源</h3><button class="modal-close" onclick="closeModal('modal-batch-import')">&times;</button></div>
+        <div class="modal-body">
+            <p class="hint">请上传 Excel 文件（.xlsx / .xls），第一行为表头，从第二行开始读取数据。列顺序不限，系统会根据表头自动匹配。<strong>姓名和手机号均为必填字段</strong>，缺少任一字段的行将被跳过。</p>
+            <div class="form-group">
+                <label>选择文件</label>
+                <input type="file" id="batch-import-file" accept=".xlsx,.xls" style="display:block;margin-top:4px;">
+            </div>
+            <div class="form-group">
+                <button class="btn btn-outline btn-sm" onclick="downloadTemplate()" style="margin-right:8px;">下载导入模板</button>
+            </div>
+            <div class="form-group" style="margin-top:12px"><label>导入到</label><select id="batch-import-pool"><option value="我的资源">我的资源</option><option value="资源公海">资源公海</option></select></div>
+            <div id="batch-import-result" style="margin-top:12px;display:none;"></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-batch-import')">取消</button><button class="btn btn-primary" onclick="doBatchImport()">开始导入</button></div></div>
+    </div>
+
+    <!-- 弹窗：预约试听 -->
+    <div class="modal-overlay" id="modal-appointment">
+        <div class="modal"><div class="modal-header"><h3 id="modal-appointment-title">新增预约试听</h3><button class="modal-close" onclick="closeModal('modal-appointment')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-aid"><input type="hidden" id="apt-resource-id">
+            <div class="form-group"><label>关联资源</label><select id="apt-resource-select"><option value="">不关联（手动填写）</option></select></div>
+            <div class="form-group"><label>学员姓名 <span class="required">*</span></label><input type="text" id="apt-student-name"></div>
+            <div class="form-group"><label>电话</label><input type="text" id="apt-phone"></div>
+            <div class="form-group"><label>课程类型</label><select id="apt-course-type"><option value="">请选择</option><option value="试听课">试听课</option><option value="正式课体验">正式课体验</option><option value="测评课">测评课</option><option value="其他">其他</option></select></div>
+            <div class="form-group"><label>预约时间 <span class="required">*</span></label><input type="datetime-local" id="apt-time"></div>
+            <div class="form-group"><label>状态</label><select id="apt-status"><option value="已预约">已预约</option><option value="已试听">已试听</option><option value="已取消">已取消</option></select></div>
+            <div class="form-group"><label>备注</label><textarea id="apt-notes" rows="3"></textarea></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-appointment')">取消</button><button class="btn btn-primary" onclick="saveAppointment()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：沟通记录 -->
+    <div class="modal-overlay" id="modal-communication">
+        <div class="modal modal-lg"><div class="modal-header"><h3>沟通记录 - <span id="comm-resource-name"></span></h3><button class="modal-close" onclick="closeModal('modal-communication')">&times;</button></div>
+        <div class="modal-body">
+            <div class="comm-history" id="comm-history"></div><hr>
+            <div class="form-group"><label>新增沟通记录</label><textarea id="comm-content" rows="3" placeholder="请输入沟通内容..."></textarea></div>
+            <div class="form-group"><label>沟通方式</label><select id="comm-type"><option value="电话">电话</option><option value="微信">微信</option><option value="面谈">面谈</option><option value="短信">短信</option></select></div>
+            <div class="form-group"><label>更新跟进状态为</label><select id="comm-new-status"><option value="沟通中">沟通中</option><option value="已邀约未试听">已邀约未试听</option><option value="已试听待转化">已试听待转化</option><option value="已转化—定金">已转化—定金</option><option value="已转化—全款">已转化—全款</option><option value="无效客户">无效客户</option></select></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-communication')">关闭</button><button class="btn btn-primary" onclick="addCommunication()">提交记录</button></div></div>
+    </div>
+
+    <!-- 弹窗：批量分配 -->
+    <div class="modal-overlay" id="modal-batch-assign">
+        <div class="modal modal-xl"><div class="modal-header"><h3>批量分配</h3><button class="modal-close" onclick="closeModal('modal-batch-assign')">&times;</button></div>
+        <div class="modal-body" style="padding:0;display:flex;height:520px;overflow:hidden;">
+            <!-- 左侧：组织架构树 -->
+            <div class="ba-left">
+                <div class="ba-left-header">部门架构</div>
+                <div class="ba-tree-wrap" id="ba-tree-wrap">
+                    <div style="text-align:center;padding:24px;color:#999;">加载中...</div>
+                </div>
+            </div>
+            <!-- 右侧：员工列表 -->
+            <div class="ba-right">
+                <div class="ba-search-bar">
+                    <input type="text" id="ba-search-input" placeholder="请输入员工姓名、手机号" onkeydown="if(event.key==='Enter')searchEmployeesInAssign()">
+                    <button class="btn btn-primary btn-sm" onclick="searchEmployeesInAssign()">查询</button>
+                </div>
+                <div class="ba-list-header">
+                    <label class="ba-check-all"><input type="checkbox" id="ba-select-all" onchange="toggleSelectAllAssign()"> 全选</label>
+                    <span class="ba-selected-count" id="ba-selected-count">已选 0 人</span>
+                </div>
+                <div class="ba-list-wrap" id="ba-employee-list"></div>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline btn-cancel" onclick="closeModal('modal-batch-assign')">取消</button><button class="btn btn-primary" onclick="confirmBatchAssign()">确认</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑学员 -->
+    <div class="modal-overlay" id="modal-student">
+        <div class="modal"><div class="modal-header"><h3 id="modal-student-title">新增学员</h3><button class="modal-close" onclick="closeModal('modal-student')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-sid">
+            <div class="form-group"><label>姓名 <span class="required">*</span></label><input type="text" id="student-name" maxlength="50"></div>
+            <div class="form-group"><label>手机号 <span class="required">*</span></label><input type="text" id="student-phone" maxlength="20"></div>
+            <div class="form-group"><label>来源</label><select id="student-source"><option value="">请选择</option></select></div>
+            <div class="form-group"><label>跟进状态</label><select id="student-follow-status"><option value="">请选择</option><option value="未沟通">未沟通</option><option value="沟通中">沟通中</option><option value="已邀约未试听">已邀约未试听</option><option value="已试听待转化">已试听待转化</option><option value="已转化—定金">已转化—定金</option><option value="已转化—全款">已转化—全款</option><option value="无效客户">无效客户</option></select></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-student')">取消</button><button class="btn btn-primary" onclick="saveStudent()">保存</button></div></div>
+    </div>
+
+
+    <!-- 弹窗：资源报名课程 -->
+    <div class="modal-overlay" id="modal-resource-enroll">
+        <div class="modal"><div class="modal-header"><h3>资源报名课程</h3><button class="modal-close" onclick="closeModal('modal-resource-enroll')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="enroll-resource-id">
+            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-resource-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>价格方案 <span class="required">*</span></label><select id="enroll-resource-plan"><option value="">请先选择课程</option></select></div>
+            <div class="form-group"><label>报价单 <span class="required">*</span></label><select id="enroll-resource-item"><option value="">请先选择价格方案</option></select></div>
+            <div class="form-group" id="enroll-resource-detail" style="display:none;background:#f5f7fa;padding:12px;border-radius:4px;">
+                <div style="display:flex;justify-content:space-between;"><span>课时数量：</span><strong id="enroll-resource-lesson-count">-</strong></div>
+                <div style="display:flex;justify-content:space-between;"><span>实际支付价格：</span><strong id="enroll-resource-actual-price" style="color:#e74c3c;">-</strong></div>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-resource-enroll')">取消</button><button class="btn btn-primary" onclick="confirmResourceEnroll()">确认报名</button></div></div>
+    </div>
+    <!-- 弹窗：报名课程 -->
+    <div class="modal-overlay" id="modal-enroll">
+        <div class="modal"><div class="modal-header"><h3>报名课程</h3><button class="modal-close" onclick="closeModal('modal-enroll')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="enroll-student-id">
+            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>价格方案 <span class="required">*</span></label><select id="enroll-plan"><option value="">请先选择课程</option></select></div>
+            <div class="form-group"><label>报价单 <span class="required">*</span></label><select id="enroll-item"><option value="">请先选择价格方案</option></select></div>
+            <div class="form-group" id="enroll-detail" style="display:none;background:#f5f7fa;padding:12px;border-radius:4px;">
+                <div style="display:flex;justify-content:space-between;"><span>课时数量：</span><strong id="enroll-lesson-count">-</strong></div>
+                <div style="display:flex;justify-content:space-between;"><span>实际支付价格：</span><strong id="enroll-actual-price" style="color:#e74c3c;">-</strong></div>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-enroll')">取消</button><button class="btn btn-primary" onclick="confirmEnroll()">确认报名</button></div></div>
+    </div>
+
+    <!-- 弹窗：从资源转化 -->
+    <div class="modal-overlay" id="modal-convert-resource">
+        <div class="modal modal-xl" style="max-width:800px;"><div class="modal-header"><h3>从资源转化为学员</h3><button class="modal-close" onclick="closeModal('modal-convert-resource')">&times;</button></div>
+        <div class="modal-body">
+            <p class="hint">以下显示所有未被转化为学员的资源（手机号不在学员表中）。勾选后批量转化为学员。</p>
+            <div class="toolbar" style="padding:8px 0;">
+                <input type="text" id="convert-resource-search" placeholder="搜索姓名/电话..." onkeyup="filterConvertResources()" style="width:200px;">
+            </div>
+            <div class="table-wrap" style="max-height:360px;overflow-y:auto;">
+                <table id="table-convert-resources">
+                    <thead><tr>
+                        <th width="40"><input type="checkbox" id="select-all-convert" onchange="toggleSelectAllConvert()"></th>
+                        <th>姓名</th><th>电话</th><th>来源</th><th>跟进状态</th>
+                    </tr></thead>
+                    <tbody></tbody>
+                </table>
+            </div>
+            <div id="convert-resource-empty" style="display:none;text-align:center;color:#999;padding:40px;">没有可转化的资源</div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-convert-resource')">取消</button><button class="btn btn-primary" onclick="doConvertResources()">批量转化</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑班级 -->
+    <div class="modal-overlay" id="modal-class-form">
+        <div class="modal modal-lg" style="max-width:560px;"><div class="modal-header"><h3 id="modal-class-title">新增班级</h3><button class="modal-close" onclick="closeModal('modal-class-form')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-class-id">
+            <div class="form-group">
+                <label>班级类型 <span class="required">*</span></label>
+                <div class="radio-group">
+                    <label class="radio-label"><input type="radio" name="class_type" value="标准班" checked onchange="onClassTypeChange()"> 标准班</label>
+                    <label class="radio-label"><input type="radio" name="class_type" value="活动班" onchange="onClassTypeChange()"> 活动班</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>关联课程 <span class="required">*</span></label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <select id="class-course" style="flex:1;"><option value="">请选择关联课程</option></select>
+                    <span style="color:#999;font-size:12px;white-space:nowrap;">购买关联课程的学员可以分到本班 <span style="cursor:help;" title="购买关联课程的学员可以分到本班">ⓘ</span></span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>班级名称 <span class="required">*</span></label>
+                <div style="position:relative;">
+                    <input type="text" id="class-name" maxlength="20" placeholder="请输入班级名称" oninput="updateClassCount('class-name', 'class-name-count')" style="padding-right:50px;">
+                    <span id="class-name-count" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#999;font-size:12px;">0/20</span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>招生人数 <span class="required">*</span></label>
+                <input type="number" id="class-max-students" min="1" placeholder="请输入招生人数">
+            </div>
+            <div class="form-group">
+                <label>授课课时</label>
+                <div style="display:flex;align-items:center;gap:8px;">
+                    <input type="number" id="class-lesson-hours" min="0" placeholder="请输入授课课时" style="flex:1;">
+                    <span style="color:#999;font-size:12px;white-space:nowrap;">班级每次点名消耗的课时 <span style="cursor:help;" title="班级每次点名消耗的课时">ⓘ</span></span>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>是否可试听</label>
+                <div class="radio-group">
+                    <label class="radio-label"><input type="radio" name="can_trial" value="是" checked> 是</label>
+                    <label class="radio-label"><input type="radio" name="can_trial" value="否"> 否</label>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>当前校区 <span class="required">*</span></label>
+                <select id="class-campus"><option value="">请选择当前校区</option></select>
+            </div>
+            <div class="form-group">
+                <label>备注</label>
+                <div style="position:relative;">
+                    <textarea id="class-remark" rows="3" maxlength="200" placeholder="请输入内容" oninput="updateClassCount('class-remark', 'class-remark-count')" style="padding-bottom:20px;"></textarea>
+                    <span id="class-remark-count" style="position:absolute;right:10px;bottom:6px;color:#999;font-size:12px;">0/200</span>
+                </div>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-form')">取消</button><button class="btn btn-primary" onclick="saveClass()">确认</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑教室 -->
+    <div class="modal-overlay" id="modal-classroom-form">
+        <div class="modal"><div class="modal-header"><h3 id="modal-classroom-title">新增教室</h3><button class="modal-close" onclick="closeModal('modal-classroom-form')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-classroom-id">
+            <div class="form-group"><label>教室名称 <span class="required">*</span></label><input type="text" id="classroom-name" maxlength="50" placeholder="请输入教室名称"></div>
+            <div class="form-group"><label>容纳人数</label><input type="number" id="classroom-capacity" min="0" placeholder="请输入容纳人数"></div>
+            <div class="form-group"><label>所属校区</label><select id="classroom-campus"><option value="">请选择校区</option></select></div>
+            <div class="form-group"><label>备注</label><textarea id="classroom-remark" rows="3" placeholder="请输入备注信息"></textarea></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-classroom-form')">取消</button><button class="btn btn-primary" onclick="saveClassroom()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：排课设置 -->
+    <div class="modal-overlay" id="modal-schedule-form">
+        <div class="modal"><div class="modal-header"><h3 id="modal-schedule-title">排课设置</h3><button class="modal-close" onclick="closeModal('modal-schedule-form')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="schedule-class-id">
+            <input type="hidden" id="edit-schedule-id">
+            <div class="form-group">
+                <label>排课规则 <span class="required">*</span></label>
+                <div class="radio-group">
+                    <label class="radio-label"><input type="radio" name="schedule_rule_type" value="按规则排课" checked onchange="onScheduleRuleChange()"> 按规则排课</label>
+                    <label class="radio-label"><input type="radio" name="schedule_rule_type" value="按日期排课" onchange="onScheduleRuleChange()"> 按日期排课</label>
+                </div>
+            </div>
+            <div id="schedule-rule-section">
+                <div class="form-group">
+                    <label>上课日期 <span class="required">*</span></label>
+                    <div class="form-row">
+                        <input type="date" id="schedule-start-date">
+                        <span class="row-sep">至</span>
+                        <input type="date" id="schedule-end-date">
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>上课周期 <span class="required">*</span></label>
+                    <div class="weekday-group" id="weekday-buttons">
+                        <button type="button" class="weekday-btn" data-day="1" onclick="toggleWeekday(this)">一</button>
+                        <button type="button" class="weekday-btn" data-day="2" onclick="toggleWeekday(this)">二</button>
+                        <button type="button" class="weekday-btn" data-day="3" onclick="toggleWeekday(this)">三</button>
+                        <button type="button" class="weekday-btn" data-day="4" onclick="toggleWeekday(this)">四</button>
+                        <button type="button" class="weekday-btn" data-day="5" onclick="toggleWeekday(this)">五</button>
+                        <button type="button" class="weekday-btn" data-day="6" onclick="toggleWeekday(this)">六</button>
+                        <button type="button" class="weekday-btn" data-day="7" onclick="toggleWeekday(this)">日</button>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>具体上课时间 <span class="required">*</span></label>
+                    <div id="schedule-time-slots">
+                        <div class="schedule-time-hint">请先选择上课周期</div>
+                    </div>
+                </div>
+                <div class="form-group">
+                    <label>节假日排课 <span class="help-icon" title="开启后，节假日将自动跳过不排课">?</span></label>
+                    <label class="switch-label">
+                        <input type="checkbox" id="schedule-holiday" onchange="onHolidayToggle()">
+                        <span class="switch-slider"></span>
+                    </label>
+                </div>
+            </div>
+            <div id="schedule-date-section" style="display:none;">
+                <div class="form-group">
+                    <label>选择日期 <span class="required">*</span></label>
+                    <textarea id="schedule-custom-dates" rows="3" placeholder="请逐行输入日期，格式如 2026-06-25&#10;或使用逗号分隔：2026-06-25, 2026-06-26"></textarea>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>授课老师 <span class="required">*</span></label>
+                <div class="form-row">
+                    <select id="schedule-teacher"><option value="">搜索授课老师</option></select>
+                </div>
+            </div>
+            <div class="form-group">
+                <label>上课教室</label>
+                <select id="schedule-classroom"><option value="">请选择上课教室</option></select>
+            </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-schedule-form')">取消</button><button class="btn btn-primary" onclick="saveSchedule()">确认</button></div></div>
+    </div>
+
+    <!-- 弹窗：新增/编辑上课记录 -->
+    <div class="modal-overlay" id="modal-attendance">
+        <div class="modal"><div class="modal-header"><h3 id="modal-attendance-title">新增上课记录</h3><button class="modal-close" onclick="closeModal('modal-attendance')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="edit-att-id">
+            <div class="form-group"><label>课程 <span class="required">*</span></label><select id="att-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>上课日期 <span class="required">*</span></label><input type="date" id="att-lesson-date"></div>
+            <div class="form-group"><label>出勤状态</label><select id="att-status"><option value="出勤">出勤</option><option value="请假">请假</option><option value="缺勤">缺勤</option></select></div>
+            <div class="form-group"><label>备注</label><textarea id="att-notes" rows="3" placeholder="选填备注信息"></textarea></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-attendance')">取消</button><button class="btn btn-primary" onclick="saveAttendance()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：分班 -->
+    <div class="modal-overlay" id="modal-class-enroll">
+        <div class="modal" style="max-width:800px;width:94vw;"><div class="modal-header"><h3 id="modal-class-enroll-title">分班</h3><button class="modal-close" onclick="closeModal('modal-class-enroll')">&times;</button></div>
+        <div class="modal-body">
+            <div class="table-wrap"><table><thead><tr>
+                <th>班级名称</th><th>关联课程</th><th>班级类型</th><th>校区</th><th>是否可分入</th><th>操作</th>
+            </tr></thead><tbody id="class-enroll-tbody"></tbody></table></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-enroll')">关闭</button></div></div>
+    </div>
+
+    <!-- 弹窗：班级考勤 -->
+    <div class="modal-overlay" id="modal-class-attendance">
+        <div class="modal" style="max-width:700px;width:94vw;"><div class="modal-header"><h3 id="modal-class-attendance-title">课次考勤</h3><button class="modal-close" onclick="closeModal('modal-class-attendance')">&times;</button></div>
+        <div class="modal-body">
+            <input type="hidden" id="ca-class-id">
+            <input type="hidden" id="ca-schedule-id">
+            <input type="hidden" id="ca-session-date">
+            <div class="table-wrap"><table><thead><tr>
+                <th>学号</th><th>学员姓名</th><th>出勤状态</th><th>已扣课时</th>
+            </tr></thead><tbody id="ca-attendance-tbody"></tbody></table></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-attendance')">取消</button><button class="btn btn-primary" onclick="saveClassAttendance()">保存</button></div></div>
+    </div>
+
+    <!-- 排课弹窗专属样式优化 -->
+    <style>
+        /* 弹窗整体放大 */
+        #modal-schedule-form .modal {
+            max-width: 700px;
+            width: 92vw;
+        }
+        #modal-schedule-form .modal-header {
+            padding: 22px 30px;
+        }
+        #modal-schedule-form .modal-header h3 {
+            font-size: 22px;
+            font-weight: 700;
+        }
+        #modal-schedule-form .modal-body {
+            padding: 28px 30px;
+        }
+        #modal-schedule-form .modal-footer {
+            gap: 16px;
+            padding: 18px 30px 28px 30px;
+        }
+
+        /* 表单组间距 */
+        #modal-schedule-form .form-group {
+            margin-bottom: 20px;
+        }
+        #modal-schedule-form .form-group:last-child {
+            margin-bottom: 4px;
+        }
+
+        /* 标签样式 */
+        #modal-schedule-form .form-group > label {
+            font-size: 14px;
+            font-weight: 600;
+            color: #333;
+            margin-bottom: 8px;
+        }
+        #modal-schedule-form .required {
+            color: #e53e3e;
+            font-weight: 700;
+        }
+
+        /* 统一控件高度 */
+        #modal-schedule-form input[type="text"],
+        #modal-schedule-form input[type="date"],
+        #modal-schedule-form input[type="time"],
+        #modal-schedule-form input[type="number"],
+        #modal-schedule-form select {
+            height: 40px;
+            padding: 8px 12px;
+            border-radius: 6px;
+            font-size: 13px;
+        }
+        #modal-schedule-form textarea {
+            border-radius: 6px;
+            font-size: 13px;
+        }
+
+        /* 排课规则 radio-group */
+        #modal-schedule-form .radio-group {
+            gap: 24px;
+            padding: 4px 0;
+        }
+        #modal-schedule-form .radio-label {
+            font-size: 14px;
+            font-weight: 500;
+            color: #444;
+        }
+
+        /* 日期范围行 */
+        #modal-schedule-form .form-row {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin-bottom: 2px;
+        }
+        #modal-schedule-form .form-row > .row-sep {
+            color: #666;
+            flex-shrink: 0;
+        }
+        #modal-schedule-form .form-row > input,
+        #modal-schedule-form .form-row > select {
+            flex: 1;
+            min-width: 0;
+        }
+
+        /* 星期按钮组优化 */
+        #modal-schedule-form .weekday-group {
+            gap: 8px;
+        }
+        #modal-schedule-form .weekday-btn {
+            width: auto;
+            min-width: 40px;
+            height: 38px;
+            padding: 8px 16px;
+            border-radius: 6px;
+            border: 1px solid #d9d9d9;
+            background: #fafafa;
+            color: #555;
+            font-size: 13px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: all 0.2s;
+            margin-right: 0;
+            margin-bottom: 0;
+        }
+        #modal-schedule-form .weekday-btn:hover {
+            border-color: #7C3AED;
+            color: #7C3AED;
+            background: #f5f0ff;
+        }
+        #modal-schedule-form .weekday-btn.active {
+            background: #7C3AED;
+            color: #fff;
+            border-color: #7C3AED;
+        }
+
+        /* 具体上课时间区 */
+        #modal-schedule-form .schedule-time-hint {
+            background: #f9f9f9;
+            padding: 16px;
+            border-radius: 6px;
+            color: #999;
+            font-size: 13px;
+            text-align: center;
+        }
+        #modal-schedule-form .schedule-time-row {
+            background: #fafafa;
+            padding: 8px 12px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+        }
+        #modal-schedule-form .schedule-time-row:last-child {
+            margin-bottom: 0;
+        }
+        #modal-schedule-form .schedule-time-row span {
+            white-space: nowrap;
+            font-size: 13px;
+            color: #333;
+        }
+        #modal-schedule-form .schedule-time-row input[type="time"] {
+            padding: 6px 10px;
+            border: 1px solid #d9d9d9;
+            border-radius: 4px;
+            font-size: 13px;
+            height: 36px;
+        }
+
+        /* 节假日排课 Switch 控件 */
+        #modal-schedule-form .switch-label {
+            position: relative;
+            display: inline-block;
+            width: 44px;
+            height: 24px;
+            margin-top: 4px;
+            cursor: pointer;
+        }
+        #modal-schedule-form .switch-label input {
+            opacity: 0;
+            width: 0;
+            height: 0;
+        }
+        #modal-schedule-form .switch-slider {
+            position: absolute;
+            inset: 0;
+            background: #ccc;
+            border-radius: 24px;
+            transition: background 0.3s;
+        }
+        #modal-schedule-form .switch-slider::before {
+            content: "";
+            position: absolute;
+            height: 18px;
+            width: 18px;
+            left: 3px;
+            bottom: 3px;
+            background: #fff;
+            border-radius: 50%;
+            transition: transform 0.3s;
+        }
+        #modal-schedule-form .switch-label input:checked + .switch-slider {
+            background: #7C3AED;
+        }
+        #modal-schedule-form .switch-label input:checked + .switch-slider::before {
+            transform: translateX(20px);
+        }
+
+        /* 节假日排课 + 授课老师间距 */
+        #modal-schedule-form #schedule-rule-section > .form-group:nth-child(4) {
+            margin-bottom: 22px;
+        }
+
+        /* 帮助图标对齐 */
+        #modal-schedule-form .help-icon {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            width: 18px;
+            height: 18px;
+            border-radius: 50%;
+            border: 1px solid #bbb;
+            color: #999;
+            font-size: 12px;
+            cursor: help;
+            margin-left: 6px;
+            background: #f5f5f5;
+            font-weight: bold;
+            vertical-align: middle;
+            position: relative;
+            top: -1px;
+        }
+
+        /* 底部按钮 */
+        #modal-schedule-form .modal-footer .btn {
+            padding: 9px 24px;
+            font-size: 14px;
+            border-radius: 6px;
+        }
+        #modal-schedule-form .modal-footer .btn-outline {
+            background: #fff;
+            color: #555;
+            border-color: #d9d9d9;
+        }
+        #modal-schedule-form .modal-footer .btn-outline:hover {
+            border-color: #7C3AED;
+            color: #7C3AED;
+        }
+    </style>
+
+    <!-- 添加学员到班级弹窗 -->
+    <div class="modal-overlay" id="modal-add-student">
+        <div class="modal" style="width:520px;">
+            <div class="modal-header">
+                <h3 id="modal-add-student-title">添加学员</h3>
+                <button class="modal-close" onclick="closeModal('modal-add-student')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="margin-bottom:12px;">
+                    <input type="text" id="add-student-search" placeholder="输入姓名或手机号搜索学员..." onkeyup="searchAvailableStudents()" style="width:100%;height:38px;padding:8px 12px;border:1px solid #d9d9d9;border-radius:6px;font-size:14px;">
+                </div>
+                <div style="max-height:360px;overflow-y:auto;">
+                    <table style="width:100%;border-collapse:collapse;">
+                        <thead><tr>
+                            <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">学号</th>
+                            <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">姓名</th>
+                            <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">手机号</th>
+                            <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">来源</th>
+                            <th width="60"></th>
+                        </tr></thead>
+                        <tbody id="available-students-tbody">
+                            <tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('modal-add-student')">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <script src="static/js/main.js"></script>
+</body>
+</html>
