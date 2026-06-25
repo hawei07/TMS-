@@ -4927,11 +4927,13 @@ function attStatusToggle(el, status) {
     el.classList.add('active');
     const row = el.closest('tr');
     const stepper = row.querySelector('.att-deduct-stepper');
+    const valSpan = stepper.querySelector('.stepper-val');
     if (status === '缺勤') {
-        stepper.querySelector('.stepper-val').textContent = '0';
+        valSpan.textContent = '0';
         stepper.classList.add('disabled');
     } else {
         stepper.classList.remove('disabled');
+        valSpan.textContent = valSpan.dataset.lessonHours || '2';
     }
 }
 
