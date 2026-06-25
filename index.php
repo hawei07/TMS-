@@ -2544,7 +2544,10 @@ function handleApi() {
             $classRow = $db->querySingle("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
             $subject = $classRow['subject'] ?? '';
             $firstSubjectId = 0;
-            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($subject) . "'", true);
+            // courses.subject 存储格式为 "一级学科名 > 二级学科名"，取末段匹配
+            $subjectParts = explode(' > ', $subject);
+            $leafSubject = end($subjectParts);
+            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leafSubject) . "'", true);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -2554,7 +2557,7 @@ function handleApi() {
             }
             if ($firstSubjectId > 0) {
                 $allCourseIds = [];
-                $sr = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                 while ($c = $sr->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
                     $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
@@ -2606,6 +2609,10 @@ function handleApi() {
             $sessionDate = trim($_GET['session_date'] ?? '');
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
+            // 获取班级课程信息
+            $classInfo = $db->querySingle("SELECT c.course_id, co.subject AS course_name FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $classCourseId = intval($classInfo['course_id'] ?? 0);
+            $classCourseName = $classInfo['course_name'] ?? '';
             // 获取班级所有学员
             $students = [];
             $res = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
@@ -2617,10 +2624,18 @@ function handleApi() {
             $rows = [];
             foreach ($students as $stu) {
                 $aid = $attMap[$stu['id']] ?? null;
+                // 查询该学员在此课程的剩余课时
+                $remaining = 0;
+                if ($classCourseId > 0) {
+                    $oRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS rem FROM orders WHERE student_id = {$stu['id']} AND course_id = $classCourseId", true);
+                    $remaining = intval($oRow['rem'] ?? 0);
+                }
                 $rows[] = [
                     'student_id' => $stu['id'],
                     'student_no' => $stu['student_no'],
                     'student_name' => $stu['name'],
+                    'course_name' => $classCourseName,
+                    'remaining_lessons' => max(0, $remaining),
                     'status' => $aid ? $aid['status'] : '',
                     'deducted_lessons' => $aid ? intval($aid['deducted_lessons']) : 0,
                     'deducted_order_id' => $aid ? intval($aid['deducted_order_id']) : 0,
@@ -2651,45 +2666,62 @@ function handleApi() {
                     $classRow = $db->querySingle("SELECT c.course_id, c.name AS course_name, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
                     $courseId = intval($classRow['course_id'] ?? 0);
                     $subject = $classRow['subject'] ?? '';
-                    // 获取一级学科
+                    // 获取一级学科（courses.subject 格式为 "一级学科名 > 二级学科名"）
                     $firstSubjectId = 0;
-                    $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($subject) . "'", true);
+                    $courseSubjId = 0; // 课程所属学科ID（可能就是二级学科）
+                    $subjectParts = explode(' > ', $subject);
+                    $leafSubject = end($subjectParts);
+                    $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leafSubject) . "'", true);
                     if ($subjRow) {
+                        $courseSubjId = intval($subjRow['id']);
                         if (intval($subjRow['parent_id']) == 0) {
                             $firstSubjectId = intval($subjRow['id']);
                         } else {
                             $firstSubjectId = intval($subjRow['parent_id']);
                         }
                     }
-                    $deductedLessons = 0;
+                    $deductedLessons = intval($rec['deducted_lessons'] ?? 0);
                     $deductedOrderId = 0;
-                    if ($status === '出勤') {
+                    if ($status === '出勤' && $deductedLessons <= 0) {
                         $deductedLessons = 1;
-                        // 扣课时逻辑：优先扣同一course_id，再扣同学科二级，再扣同学科一级
-                        // 1. 优先扣同一course_id的订单（先报名的优先）
+                    }
+                    if ($status === '出勤' && $deductedLessons > 0) {
+                        // 扣课时逻辑（三级优先级）：
+                        // 1. 优先扣同一course_id的订单（有多个时，先报名的优先）
+                        // 2. 没有同一课程则扣同二级学科的订单（先报名的优先）
+                        // 3. 没有同二级学科则扣同一级学科的订单（先报名的优先）
                         $orderRows = [];
+
+                        // 1. 同一course_id的订单
                         $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
                         while ($o = $oRes->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
-                        if (count($orderRows) === 0 && $firstSubjectId > 0) {
-                            // 2. 查找同学科二级的订单
-                            $secondSubjIds = [];
-                            $sr = $db->query("SELECT id FROM subjects WHERE parent_id = $firstSubjectId");
-                            while ($s = $sr->fetchArray(SQLITE3_ASSOC)) $secondSubjIds[] = $s['id'];
-                            $secondSubjIds[] = $firstSubjectId; // 包含一级学科本身
-                            $courseIds = [];
-                            if (count($secondSubjIds) > 0) {
-                                $sr2 = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE id IN (" . implode(',', $secondSubjIds) . "))");
-                                while ($c = $sr2->fetchArray(SQLITE3_ASSOC)) $courseIds[] = $c['id'];
-                            }
-                            if (count($courseIds) > 0) {
-                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $courseIds) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
+
+                        // 2. 同一二级学科的订单（仅当课程有二级学科归属时）
+                        if (count($orderRows) === 0 && $courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
+                            $sameSecondCourses = [];
+                            $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
+                            while ($c = $sr2->fetchArray(SQLITE3_ASSOC)) $sameSecondCourses[] = $c['id'];
+                            if (count($sameSecondCourses) > 0) {
+                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
                                 while ($o = $oRes2->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
                             }
                         }
+
+                        // 3. 同一级学科的订单（兜底）
+                        if (count($orderRows) === 0 && $firstSubjectId > 0) {
+                            $firstLevelCourses = [];
+                            $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                            while ($c = $sr3->fetchArray(SQLITE3_ASSOC)) $firstLevelCourses[] = $c['id'];
+                            if (count($firstLevelCourses) > 0) {
+                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
+                                while ($o = $oRes3->fetchArray(SQLITE3_ASSOC)) $orderRows[] = $o;
+                            }
+                        }
+
                         if (count($orderRows) > 0) {
                             $targetOrder = $orderRows[0];
                             $deductedOrderId = intval($targetOrder['id']);
-                            $newConsumed = intval($targetOrder['consumed_lessons']) + 1;
+                            $newConsumed = intval($targetOrder['consumed_lessons']) + $deductedLessons;
                             $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $deductedOrderId");
                         }
                     }
@@ -2710,7 +2742,7 @@ function handleApi() {
                     if ($firstSubjectId > 0) {
                         // 获取一级学科下所有课程ID
                         $allCourseIds = [];
-                        $sr3 = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                        $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                         while ($c = $sr3->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
                         if (count($allCourseIds) > 0) {
                             $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
@@ -2739,7 +2771,10 @@ function handleApi() {
             $classRow = $db->querySingle("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
             $subject = $classRow['subject'] ?? '';
             $firstSubjectId = 0;
-            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($subject) . "'", true);
+            // courses.subject 存储格式为 "一级学科名 > 二级学科名"，需取末段匹配 subjects.name
+            $subjectParts = explode(' > ', $subject);
+            $leafSubject = end($subjectParts);
+            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leafSubject) . "'", true);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -2750,7 +2785,7 @@ function handleApi() {
             $totalRemaining = 0;
             if ($firstSubjectId > 0) {
                 $allCourseIds = [];
-                $sr = $db->query("SELECT id FROM courses WHERE subject IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                 while ($c = $sr->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
                     $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
@@ -2759,6 +2794,46 @@ function handleApi() {
             }
             $enrollable = $totalRemaining > 0;
             json(['enrollable' => $enrollable, 'remaining_lessons' => $totalRemaining]);
+            break;
+
+        // ==================== 考勤管理（按日期-全量） API ====================
+        case 'list_attendance_sessions':
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = intval($_GET['page_size'] ?? 20);
+            $sessions = [];
+            $res = $db->query("SELECT s.*, c.name AS class_name, c.campus, co.subject AS course_subject, co.name AS course_name 
+                FROM schedules s 
+                JOIN classes c ON s.class_id = c.id 
+                LEFT JOIN courses co ON c.course_id = co.id 
+                ORDER BY c.name, s.id");
+            while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+                $sesList = computeSessions($row);
+                foreach ($sesList as $ses) {
+                    $d = $ses['date'];
+                    if ($dateFrom && $d < $dateFrom) continue;
+                    if ($dateTo && $d > $dateTo) continue;
+                    $sessions[] = [
+                        'schedule_id' => intval($row['id']),
+                        'class_id' => intval($row['class_id']),
+                        'class_name' => $row['class_name'],
+                        'campus' => $row['campus'],
+                        'course_name' => $row['course_name'] ?: $row['course_subject'],
+                        'teacher' => $row['teacher'],
+                        'classroom' => $row['classroom'],
+                        'session_date' => $d,
+                        'day_of_week' => $ses['dayOfWeek'],
+                        'start_time' => $ses['start'],
+                        'end_time' => $ses['end'],
+                    ];
+                }
+            }
+            usort($sessions, function($a, $b) { return strcmp($a['session_date'], $b['session_date']); });
+            $total = count($sessions);
+            $offset = ($page - 1) * $pageSize;
+            $paged = array_slice($sessions, $offset, $pageSize);
+            json(['data' => $paged, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
         default:
@@ -2885,6 +2960,12 @@ if (intval($countBt) === 0) {
                                 <div class="tree-leaf" data-panel="panel-students">
                                     <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
                                     <span class="tree-label">学员管理</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-attendance">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
+                                    <span class="tree-label">考勤</span>
                                 </div>
                             </li>
                             <li class="tree-node">
@@ -3395,6 +3476,31 @@ if (intval($countBt) === 0) {
                     </table>
                 </div>
                 <div class="pagination" id="pagination-student"></div>
+            </section>
+
+            <!-- 面板：考勤 -->
+            <section class="content-panel" id="panel-attendance">
+                <div class="panel-header">
+                    <h3>考勤</h3>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <label style="font-size:13px;margin-right:6px;">日期范围：</label>
+                        <input type="date" id="attendance-date-from" style="width:140px;" onchange="loadAttendanceSessions()">
+                        <span style="margin:0 6px;color:#999;">至</span>
+                        <input type="date" id="attendance-date-to" style="width:140px;" onchange="loadAttendanceSessions()">
+                        <button class="btn btn-primary btn-sm" onclick="loadAttendanceSessions()">查询</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-attendance-sessions">
+                        <thead><tr>
+                            <th width="110">上课日期</th><th>星期</th><th>班级名称</th><th>课程</th><th width="100">上课时间</th><th>上课老师</th><th>教室</th><th>校区</th><th width="70">状态</th><th width="80">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-attendance-sessions"></div>
             </section>
 
             <!-- 面板：班级管理 -->
@@ -4127,6 +4233,44 @@ if (intval($countBt) === 0) {
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-attendance')">取消</button><button class="btn btn-primary" onclick="saveClassAttendance()">保存</button></div></div>
     </div>
 
+    <!-- 弹窗：考勤（按课次） -->
+    <div class="modal-overlay" id="modal-attendance-session">
+        <div class="modal" style="max-width:750px;width:94vw;">
+            <div class="modal-header"><h3>考勤</h3><button class="modal-close" onclick="closeModal('modal-attendance-session')">&times;</button></div>
+            <div class="modal-body">
+                <div class="att-lesson-info" style="background:#f7f8fa;border-radius:8px;padding:16px;margin-bottom:16px;">
+                    <div style="font-weight:bold;font-size:14px;margin-bottom:10px;">上课信息</div>
+                    <div style="display:flex;flex-wrap:wrap;gap:8px 0;">
+                        <span style="flex:0 0 50%;">班级：<strong id="as-class-name">-</strong></span>
+                        <span style="flex:0 0 50%;">校区：<strong id="as-campus">-</strong></span>
+                        <span style="flex:0 0 50%;">上课日期：<strong id="as-session-date">-</strong></span>
+                        <span style="flex:0 0 50%;">上课老师：<strong id="as-teacher">-</strong></span>
+                        <span style="flex:0 0 50%;">课程：<strong id="as-course-name">-</strong></span>
+                        <span style="flex:0 0 50%;">教室：<strong id="as-classroom">-</strong></span>
+                        <span style="flex:0 0 50%;">上课时间：<strong id="as-time">-</strong></span>
+                    </div>
+                </div>
+                <div style="font-weight:bold;font-size:14px;margin-bottom:8px;">学员信息</div>
+                <div style="margin-bottom:12px;">
+                    <button class="btn btn-sm btn-primary" onclick="addTempStudent()" style="margin-right:8px;">添加临时学员</button>
+                    <button class="btn btn-sm btn-primary" onclick="addMakeupStudent()">添加补课学员</button>
+                </div>
+                <div class="table-wrap" style="max-height:350px;overflow-y:auto;">
+                    <table>
+                        <thead><tr>
+                            <th width="60">操作</th><th>学员姓名</th><th>课程</th><th width="80">剩余课时</th><th width="110">本次扣课时</th><th width="130">到课状态</th>
+                        </tr></thead>
+                        <tbody id="as-attendance-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('modal-attendance-session')">取消</button>
+                <button class="btn btn-primary" onclick="saveAttendanceSession()">确定</button>
+            </div>
+        </div>
+    </div>
+
     <!-- 排课弹窗专属样式优化 -->
     <style>
         /* 弹窗整体放大 */
@@ -4354,6 +4498,16 @@ if (intval($countBt) === 0) {
             border-color: #7C3AED;
             color: #7C3AED;
         }
+        /* 考勤扣课时步进器 */
+        .att-deduct-stepper { display:inline-flex;align-items:center;gap:0;border:1px solid #d9d9d9;border-radius:4px;overflow:hidden; }
+        .att-deduct-stepper .stepper-btn { width:26px;height:26px;border:none;background:#f5f5f5;color:#555;font-size:16px;line-height:26px;cursor:pointer;padding:0; }
+        .att-deduct-stepper .stepper-btn:hover { background:#e8e8e8; }
+        .att-deduct-stepper .stepper-val { width:36px;text-align:center;font-size:14px;line-height:26px;border-left:1px solid #d9d9d9;border-right:1px solid #d9d9d9; }
+        /* 考勤到课状态标签 */
+        .att-status-group { display:inline-flex;gap:6px; }
+        .att-status-tag { display:inline-block;padding:3px 12px;border:1px solid #d9d9d9;border-radius:4px;font-size:12px;cursor:pointer;color:#666;background:#fff;transition:all 0.2s; }
+        .att-status-tag:hover { border-color:#7C3AED;color:#7C3AED; }
+        .att-status-tag.active { background:#7C3AED;color:#fff;border-color:#7C3AED; }
     </style>
 
     <!-- 添加学员到班级弹窗 -->
