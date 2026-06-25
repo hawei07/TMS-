@@ -5,73 +5,79 @@ ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/php_errors.log');
 header('Content-Type: text/html; charset=utf-8');
 
-$db = new SQLite3(__DIR__ . '/market.db');
-$db->exec('PRAGMA journal_mode=WAL');
-$db->exec('PRAGMA foreign_keys=ON');
-$db->exec("PRAGMA encoding = 'UTF-8'");
+try {
+    $db = new PDO('mysql:host=127.0.0.1;port=3306;dbname=tms_db;charset=utf8mb4', 'root', 'root', [
+        PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
+        PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
+        PDO::ATTR_EMULATE_PREPARES => false,
+    ]);
+    $db->exec("SET NAMES utf8mb4");
+} catch (PDOException $e) {
+    die("数据库连接失败: " . $e->getMessage());
+}
 
 // 初始化表
 $db->exec("CREATE TABLE IF NOT EXISTS channels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL DEFAULT '',
-    created_at TEXT DEFAULT ''
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(500) NOT NULL DEFAULT '',
+    created_at VARCHAR(500) DEFAULT ''
 )");
 $db->exec("CREATE TABLE IF NOT EXISTS resources (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL DEFAULT '',
-    phone TEXT DEFAULT '',
-    source TEXT DEFAULT '',
-    source_detail TEXT DEFAULT '',
-    intention_level TEXT DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(500) NOT NULL DEFAULT '',
+    phone VARCHAR(500) DEFAULT '',
+    source VARCHAR(500) DEFAULT '',
+    source_detail VARCHAR(500) DEFAULT '',
+    intention_level VARCHAR(500) DEFAULT '',
     status TEXT DEFAULT '待跟进',
-    assigned_to TEXT DEFAULT '',
+    assigned_to VARCHAR(500) DEFAULT '',
     pool_type TEXT DEFAULT '我的资源',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT '',
+    created_at VARCHAR(500) DEFAULT '',
+    updated_at VARCHAR(500) DEFAULT '',
     converted TEXT DEFAULT '未转化'
 )");$db->exec("CREATE TABLE IF NOT EXISTS appointments (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    resource_id INTEGER NOT NULL DEFAULT 0,
-    resource_name TEXT DEFAULT '',
-    student_name TEXT DEFAULT '',
-    phone TEXT DEFAULT '',
-    course_type TEXT DEFAULT '',
-    appointment_time TEXT DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    resource_id INT NOT NULL DEFAULT 0,
+    resource_name VARCHAR(500) DEFAULT '',
+    student_name VARCHAR(500) DEFAULT '',
+    phone VARCHAR(500) DEFAULT '',
+    course_type VARCHAR(500) DEFAULT '',
+    appointment_time VARCHAR(500) DEFAULT '',
     status TEXT DEFAULT '已预约',
-    notes TEXT DEFAULT '',
-    created_at TEXT DEFAULT ''
+    notes VARCHAR(500) DEFAULT '',
+    created_at VARCHAR(500) DEFAULT ''
 )");
 $db->exec("CREATE TABLE IF NOT EXISTS communication_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    resource_id INTEGER NOT NULL DEFAULT 0,
-    resource_name TEXT DEFAULT '',
-    content TEXT DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    resource_id INT NOT NULL DEFAULT 0,
+    resource_name VARCHAR(500) DEFAULT '',
+    content VARCHAR(500) DEFAULT '',
     comm_type TEXT DEFAULT '电话',
-    created_at TEXT DEFAULT ''
+    created_at VARCHAR(500) DEFAULT ''
 )");
 $db->exec("CREATE TABLE IF NOT EXISTS intention_levels (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL DEFAULT '',
-    sort_order INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT ''
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(500) NOT NULL DEFAULT '',
+    sort_order INT DEFAULT 0,
+    created_at VARCHAR(500) DEFAULT ''
 )");
 $db->exec("CREATE TABLE IF NOT EXISTS basic_types (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    category TEXT NOT NULL DEFAULT '',
-    name TEXT NOT NULL DEFAULT '',
-    sort_order INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT ''
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    category VARCHAR(500) NOT NULL DEFAULT '',
+    name VARCHAR(500) NOT NULL DEFAULT '',
+    sort_order INT DEFAULT 0,
+    created_at VARCHAR(500) DEFAULT ''
 )");
 
 // 兼容旧数据库：增量添加新字段
-@$db->exec("ALTER TABLE resources ADD COLUMN gender TEXT DEFAULT ''");
-@$db->exec("ALTER TABLE resources ADD COLUMN birth_date TEXT DEFAULT ''");
-@$db->exec("ALTER TABLE resources ADD COLUMN follow_status TEXT DEFAULT ''");
+try { $db->exec("ALTER TABLE resources ADD COLUMN gender VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE resources ADD COLUMN birth_date VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE resources ADD COLUMN follow_status VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 
 // 兼容已有数据库：resources 表新增转化状态字段
 $existingColsR = [];
-$colResR = $db->query("PRAGMA table_info(resources)");
-while ($colRowR = $colResR->fetchArray(SQLITE3_ASSOC)) $existingColsR[] = $colRowR['name'];
+$colResR = $db->query("SHOW COLUMNS FROM resources");
+while ($colRowR = $colResR->fetch(PDO::FETCH_ASSOC)) $existingColsR[] = $colRowR['Field'];
 if (!in_array('converted', $existingColsR)) {
     $db->exec("ALTER TABLE resources ADD COLUMN converted TEXT DEFAULT '未转化'");
     // 历史数据：已关联学员记录（即已报名）的资源标记为已转化
@@ -80,87 +86,87 @@ if (!in_array('converted', $existingColsR)) {
 
 
 $db->exec("CREATE TABLE IF NOT EXISTS employees (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL DEFAULT '',
-    phone TEXT DEFAULT '',
-    department TEXT DEFAULT '',
-    position TEXT DEFAULT '',
-    entry_date TEXT DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(500) NOT NULL DEFAULT '',
+    phone VARCHAR(500) DEFAULT '',
+    department VARCHAR(500) DEFAULT '',
+    position VARCHAR(500) DEFAULT '',
+    entry_date VARCHAR(500) DEFAULT '',
     status TEXT DEFAULT '在职',
-    is_teacher TEXT DEFAULT '',
-    created_at TEXT DEFAULT '',
-    updated_at TEXT DEFAULT ''
+    is_teacher VARCHAR(500) DEFAULT '',
+    created_at VARCHAR(500) DEFAULT '',
+    updated_at VARCHAR(500) DEFAULT ''
 )");
 
 // 兼容已有数据库：employees 表新增 is_teacher 字段
 $existingColsEmp = [];
-$colResEmp = $db->query("PRAGMA table_info(employees)");
-while ($colRowEmp = $colResEmp->fetchArray(SQLITE3_ASSOC)) $existingColsEmp[] = $colRowEmp['name'];
+$colResEmp = $db->query("SHOW COLUMNS FROM employees");
+while ($colRowEmp = $colResEmp->fetch(PDO::FETCH_ASSOC)) $existingColsEmp[] = $colRowEmp['Field'];
 if (!in_array('is_teacher', $existingColsEmp)) {
-    $db->exec("ALTER TABLE employees ADD COLUMN is_teacher TEXT DEFAULT ''");
+    $db->exec("ALTER TABLE employees ADD COLUMN is_teacher VARCHAR(500) DEFAULT ''");
 }
 
 $db->exec("CREATE TABLE IF NOT EXISTS organizations (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    name TEXT NOT NULL DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(500) NOT NULL DEFAULT '',
     type TEXT NOT NULL DEFAULT '部门',
-    parent_id INTEGER NOT NULL DEFAULT 0,
-    sort_order INTEGER NOT NULL DEFAULT 0,
-    created_at TEXT DEFAULT ''
+    parent_id INT NOT NULL DEFAULT 0,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at VARCHAR(500) DEFAULT ''
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS positions (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INT PRIMARY KEY AUTO_INCREMENT,
     name TEXT NOT NULL UNIQUE,
-    sort_order INTEGER DEFAULT 0,
-    created_at TEXT DEFAULT ''
+    sort_order INT DEFAULT 0,
+    created_at VARCHAR(500) DEFAULT ''
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS subjects (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INT PRIMARY KEY AUTO_INCREMENT,
     name TEXT NOT NULL,
-    parent_id INTEGER DEFAULT 0,
-    sort_order INTEGER DEFAULT 0
+    parent_id INT DEFAULT 0,
+    sort_order INT DEFAULT 0
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS courses (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INT PRIMARY KEY AUTO_INCREMENT,
     name TEXT NOT NULL,
-    subject TEXT DEFAULT '',
-    grade TEXT DEFAULT '',
-    description TEXT DEFAULT '',
+    subject VARCHAR(500) DEFAULT '',
+    grade VARCHAR(500) DEFAULT '',
+    description VARCHAR(500) DEFAULT '',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )");
 
 // 兼容旧数据库：增量添加新字段
-@$db->exec("ALTER TABLE courses ADD COLUMN small_package TEXT DEFAULT ''");
-@$db->exec("ALTER TABLE courses ADD COLUMN toddler TEXT DEFAULT ''");
-@$db->exec("ALTER TABLE courses ADD COLUMN campus_permission TEXT DEFAULT ''");
+try { $db->exec("ALTER TABLE courses ADD COLUMN small_package VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE courses ADD COLUMN toddler VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE courses ADD COLUMN campus_permission VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 
 // 价格方案表
 $db->exec("CREATE TABLE IF NOT EXISTS price_plans (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    course_id INTEGER NOT NULL,
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    course_id INT NOT NULL,
     name TEXT NOT NULL,
-    plan_type TEXT DEFAULT '',
-    sort_order INTEGER DEFAULT 0,
+    plan_type VARCHAR(500) DEFAULT '',
+    sort_order INT DEFAULT 0,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )");
 // 兼容已有数据库：price_plans 添加 plan_type 字段
-@$db->exec("ALTER TABLE price_plans ADD COLUMN plan_type TEXT DEFAULT ''");
+try { $db->exec("ALTER TABLE price_plans ADD COLUMN plan_type VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 // 报价单表
 $db->exec("CREATE TABLE IF NOT EXISTS price_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    plan_id INTEGER NOT NULL,
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    plan_id INT NOT NULL,
     name TEXT NOT NULL,
-    lesson_count INTEGER NOT NULL,
+    lesson_count INT NOT NULL,
     unit_price REAL NOT NULL,
     actual_price REAL NOT NULL,
-    sort_order INTEGER DEFAULT 0
+    sort_order INT DEFAULT 0
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS students (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INT PRIMARY KEY AUTO_INCREMENT,
     resource_id INTEGER,
     name TEXT NOT NULL,
     phone TEXT NOT NULL UNIQUE,
@@ -170,32 +176,32 @@ $db->exec("CREATE TABLE IF NOT EXISTS students (
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL,
-    course_id INTEGER NOT NULL,
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT NOT NULL,
+    course_id INT NOT NULL,
     plan_name TEXT,
     item_name TEXT,
     lesson_count INTEGER,
     actual_price REAL,
     status TEXT DEFAULT '已报名',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    paid_at TEXT DEFAULT '',
-    order_type TEXT DEFAULT '',
-    consumed_lessons INTEGER DEFAULT 0
+    paid_at VARCHAR(500) DEFAULT '',
+    order_type VARCHAR(500) DEFAULT '',
+    consumed_lessons INT DEFAULT 0
 )");
 
 // 兼容已有数据库：添加支付方式字段
 $existingCols = [];
-$colRes = $db->query("PRAGMA table_info(orders)");
-while ($colRow = $colRes->fetchArray(SQLITE3_ASSOC)) $existingCols[] = $colRow['name'];
+$colRes = $db->query("SHOW COLUMNS FROM orders");
+while ($colRow = $colRes->fetch(PDO::FETCH_ASSOC)) $existingCols[] = $colRow['Field'];
 if (!in_array('payment_method', $existingCols)) {
-    $db->exec("ALTER TABLE orders ADD COLUMN payment_method TEXT DEFAULT ''");
+    $db->exec("ALTER TABLE orders ADD COLUMN payment_method VARCHAR(500) DEFAULT ''");
 }
 if (!in_array('paid_amount', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN paid_amount REAL DEFAULT 0");
 }
 if (!in_array('order_no', $existingCols)) {
-    $db->exec("ALTER TABLE orders ADD COLUMN order_no TEXT DEFAULT ''");
+    $db->exec("ALTER TABLE orders ADD COLUMN order_no VARCHAR(500) DEFAULT ''");
 }
 if (!in_array('cash_amount', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN cash_amount REAL DEFAULT 0");
@@ -204,106 +210,106 @@ if (!in_array('meituan_amount', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN meituan_amount REAL DEFAULT 0");
 }
 if (!in_array('parent_order_no', $existingCols)) {
-    $db->exec("ALTER TABLE orders ADD COLUMN parent_order_no TEXT DEFAULT ''");
+    $db->exec("ALTER TABLE orders ADD COLUMN parent_order_no VARCHAR(500) DEFAULT ''");
 }
 if (!in_array('paid_at', $existingCols)) {
-    $db->exec("ALTER TABLE orders ADD COLUMN paid_at TEXT DEFAULT ''");
+    $db->exec("ALTER TABLE orders ADD COLUMN paid_at VARCHAR(500) DEFAULT ''");
     $db->exec("UPDATE orders SET paid_at = created_at WHERE paid_at = ''");
 }
 if (!in_array('order_type', $existingCols)) {
-    $db->exec("ALTER TABLE orders ADD COLUMN order_type TEXT DEFAULT ''");
+    $db->exec("ALTER TABLE orders ADD COLUMN order_type VARCHAR(500) DEFAULT ''");
 }
 if (!in_array('consumed_lessons', $existingCols)) {
-    $db->exec("ALTER TABLE orders ADD COLUMN consumed_lessons INTEGER DEFAULT 0");
+    $db->exec("ALTER TABLE orders ADD COLUMN consumed_lessons INT DEFAULT 0");
 }
 
 // 兼容已有数据库：学生表添加学号字段
 $existingColsS = [];
-$colResS = $db->query("PRAGMA table_info(students)");
-while ($colRowS = $colResS->fetchArray(SQLITE3_ASSOC)) $existingColsS[] = $colRowS['name'];
+$colResS = $db->query("SHOW COLUMNS FROM students");
+while ($colRowS = $colResS->fetch(PDO::FETCH_ASSOC)) $existingColsS[] = $colRowS['Field'];
 if (!in_array('student_no', $existingColsS)) {
-    $db->exec("ALTER TABLE students ADD COLUMN student_no TEXT DEFAULT ''");
+    $db->exec("ALTER TABLE students ADD COLUMN student_no VARCHAR(500) DEFAULT ''");
 }
 
 $db->exec("CREATE TABLE IF NOT EXISTS attendance_records (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    student_id INTEGER NOT NULL,
-    course_id INTEGER NOT NULL,
-    lesson_date TEXT DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT NOT NULL,
+    course_id INT NOT NULL,
+    lesson_date VARCHAR(500) DEFAULT '',
     status TEXT DEFAULT '出勤',
-    notes TEXT DEFAULT '',
-    created_at TEXT DEFAULT ''
+    notes VARCHAR(500) DEFAULT '',
+    created_at VARCHAR(500) DEFAULT ''
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS parent_orders (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    parent_order_no TEXT DEFAULT '',
-    child_order_nos TEXT DEFAULT '',
-    course_name TEXT DEFAULT '',
-    total_lessons INTEGER DEFAULT 0,
-    student_name TEXT DEFAULT '',
-    phone TEXT DEFAULT '',
-    student_no TEXT DEFAULT '',
-    enroll_time TEXT DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    parent_order_no VARCHAR(500) DEFAULT '',
+    child_order_nos VARCHAR(500) DEFAULT '',
+    course_name VARCHAR(500) DEFAULT '',
+    total_lessons INT DEFAULT 0,
+    student_name VARCHAR(500) DEFAULT '',
+    phone VARCHAR(500) DEFAULT '',
+    student_no VARCHAR(500) DEFAULT '',
+    enroll_time VARCHAR(500) DEFAULT '',
     total_price REAL DEFAULT 0,
     cash_amount REAL DEFAULT 0,
     meituan_amount REAL DEFAULT 0,
-    created_at TEXT DEFAULT ''
+    created_at VARCHAR(500) DEFAULT ''
 )");
 $db->exec("CREATE TABLE IF NOT EXISTS classes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    course_id INTEGER NOT NULL DEFAULT 0,
-    name TEXT NOT NULL DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    course_id INT NOT NULL DEFAULT 0,
+    name VARCHAR(500) NOT NULL DEFAULT '',
     class_type TEXT NOT NULL DEFAULT '标准班',
-    max_students INTEGER NOT NULL DEFAULT 0,
-    lesson_hours INTEGER NOT NULL DEFAULT 0,
+    max_students INT NOT NULL DEFAULT 0,
+    lesson_hours INT NOT NULL DEFAULT 0,
     can_trial TEXT NOT NULL DEFAULT '是',
-    campus TEXT NOT NULL DEFAULT '',
-    remark TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
+    campus VARCHAR(500) NOT NULL DEFAULT '',
+    remark VARCHAR(500) NOT NULL DEFAULT '',
+    created_at VARCHAR(500) NOT NULL DEFAULT ''
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS schedules (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    class_id INTEGER NOT NULL DEFAULT 0,
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    class_id INT NOT NULL DEFAULT 0,
     rule_type TEXT NOT NULL DEFAULT '按规则排课',
-    start_date TEXT NOT NULL DEFAULT '',
-    end_date TEXT NOT NULL DEFAULT '',
-    weekdays TEXT NOT NULL DEFAULT '',
+    start_date VARCHAR(500) NOT NULL DEFAULT '',
+    end_date VARCHAR(500) NOT NULL DEFAULT '',
+    weekdays VARCHAR(500) NOT NULL DEFAULT '',
     time_slots TEXT NOT NULL DEFAULT '{}',
-    holiday_enabled INTEGER NOT NULL DEFAULT 0,
-    teacher TEXT NOT NULL DEFAULT '',
-    classroom TEXT NOT NULL DEFAULT '',
-    created_at TEXT NOT NULL DEFAULT ''
+    holiday_enabled INT NOT NULL DEFAULT 0,
+    teacher VARCHAR(500) NOT NULL DEFAULT '',
+    classroom VARCHAR(500) NOT NULL DEFAULT '',
+    created_at VARCHAR(500) NOT NULL DEFAULT ''
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS classrooms (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id INT PRIMARY KEY AUTO_INCREMENT,
     name TEXT NOT NULL UNIQUE,
-    capacity INTEGER DEFAULT 0,
-    campus TEXT DEFAULT '',
-    remark TEXT DEFAULT '',
-    created_at TEXT DEFAULT ''
+    capacity INT DEFAULT 0,
+    campus VARCHAR(500) DEFAULT '',
+    remark VARCHAR(500) DEFAULT '',
+    created_at VARCHAR(500) DEFAULT ''
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS class_students (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    class_id INTEGER NOT NULL,
-    student_id INTEGER NOT NULL,
-    created_at TEXT NOT NULL DEFAULT '',
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    class_id INT NOT NULL,
+    student_id INT NOT NULL,
+    created_at VARCHAR(500) NOT NULL DEFAULT '',
     UNIQUE(class_id, student_id)
 )");
 
 $db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    class_id INTEGER NOT NULL DEFAULT 0,
-    schedule_id INTEGER NOT NULL DEFAULT 0,
-    session_date TEXT NOT NULL DEFAULT '',
-    student_id INTEGER NOT NULL DEFAULT 0,
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    class_id INT NOT NULL DEFAULT 0,
+    schedule_id INT NOT NULL DEFAULT 0,
+    session_date VARCHAR(500) NOT NULL DEFAULT '',
+    student_id INT NOT NULL DEFAULT 0,
     status TEXT NOT NULL DEFAULT '出勤',
-    deducted_lessons INTEGER DEFAULT 0,
-    deducted_order_id INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL DEFAULT ''
+    deducted_lessons INT DEFAULT 0,
+    deducted_order_id INT DEFAULT 0,
+    created_at VARCHAR(500) NOT NULL DEFAULT ''
 )");
 
 
@@ -318,7 +324,7 @@ function generateOrderNo($db) {
         $ts = substr(strval(time()), -10);
         $rand = str_pad(strval(random_int(0, 999999)), 6, '0', STR_PAD_LEFT);
         $no = $ts . $rand;
-        $exists = $db->querySingle("SELECT COUNT(*) FROM orders WHERE order_no='$no'");
+        $exists = $db->query("SELECT COUNT(*) FROM orders WHERE order_no='$no'")->fetchColumn();
     } while (intval($exists) > 0);
     return $no;
 }
@@ -327,7 +333,7 @@ function generateStudentNo($db) {
         $ts = substr(strval(time()), -8);
         $rand = str_pad(strval(random_int(0, 99)), 2, '0', STR_PAD_LEFT);
         $no = $ts . $rand;
-        $exists = $db->querySingle("SELECT COUNT(*) FROM students WHERE student_no='$no'");
+        $exists = $db->query("SELECT COUNT(*) FROM students WHERE student_no='$no'")->fetchColumn();
     } while (intval($exists) > 0);
     return $no;
 }
@@ -586,17 +592,17 @@ function handleApi() {
             $whereStr = implode(' AND ', $where);
 
             $countStmt = $db->prepare("SELECT COUNT(*) FROM resources r WHERE $whereStr");
-            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, $k === ':rid' ? SQLITE3_INTEGER : SQLITE3_TEXT);
-            $total = $countStmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, $k === ':rid' ? PDO::PARAM_INT : PDO::PARAM_STR);
+            $total = $countStmt->execute()->fetch(PDO::FETCH_NUM)[0];
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $stmt = $db->prepare("SELECT r.*, e.department AS assigned_dept FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, $k === ':rid' ? SQLITE3_INTEGER : SQLITE3_TEXT);
-            $stmt->bindValue(':lim', $pageSize, SQLITE3_INTEGER);
-            $stmt->bindValue(':off', $offset, SQLITE3_INTEGER);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, $k === ':rid' ? PDO::PARAM_INT : PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
             $rows = [];
             $result = $stmt->execute();
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_resource':
@@ -604,7 +610,7 @@ function handleApi() {
             $phone = trim($input['phone'] ?? '');
             // 手机号唯一性校验（空手机号不校验）
             if ($phone !== '') {
-                $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($phone) . "'");
+                $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phone)->fetchColumn() . "");
                 if (intval($dup) > 0) json(['error' => '手机号已存在，请勿重复录入']);
             }
             $n = now();
@@ -622,7 +628,7 @@ function handleApi() {
             $stmt->bindValue(':pt', $input['pool_type']??'我的资源');
             $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '新增成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '新增成功']);
 
         case 'update_resource':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -630,13 +636,13 @@ function handleApi() {
             // 手机号唯一性校验（仅当传入且非空时校验；排除自身id）
             if (isset($input['phone']) && trim($input['phone'] ?? '') !== '') {
                 $phone = trim($input['phone']);
-                $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($phone) . "' AND id != $rid");
+                $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phone)->fetchColumn() . " AND id != $rid");
                 if (intval($dup) > 0) json(['error' => '手机号已存在，请勿重复录入']);
             }
             // 校验归属人是否在员工名册中存在
             if (isset($input['assigned_to']) && trim($input['assigned_to'] ?? '') !== '') {
                 $assignedTo = trim($input['assigned_to']);
-                $empCount = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($assignedTo) . "'");
+                $empCount = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($assignedTo)->fetchColumn() . "");
                 if (intval($empCount) === 0) json(['error' => '归属人不存在于员工名册中，请从员工名册中选择']);
             }
             // 动态构建 UPDATE：仅更新 $input 中实际传入的字段（排除 id）
@@ -656,7 +662,7 @@ function handleApi() {
             $sql = "UPDATE resources SET " . implode(', ', $sets) . " WHERE id = :id";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) {
-                $stmt->bindValue($k, $v, $k === ':id' ? SQLITE3_INTEGER : SQLITE3_TEXT);
+                $stmt->bindValue($k, $v, $k === ':id' ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
             $stmt->execute();
             json(['message' => '更新成功']);
@@ -687,7 +693,7 @@ function handleApi() {
                     $phoneVal = trim($item['phone'] ?? '');
                     // 手机号唯一性校验（空手机号不校验）
                     if ($phoneVal !== '') {
-                        $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($phoneVal) . "'");
+                        $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phoneVal)->fetchColumn() . "");
                         if (intval($dup) > 0) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => "手机号 {$phoneVal} 已存在"]; continue; }
                     }
                     $stmt->bindValue(':n', $item['name']??'');
@@ -772,11 +778,11 @@ function handleApi() {
             // 预加载渠道和意向等级列表
             $chNames = [];
             $chResult = $db->query("SELECT name FROM channels");
-            while ($r = $chResult->fetchArray(SQLITE3_ASSOC)) $chNames[$r['name']] = true;
+            while ($r = $chResult->fetch(PDO::FETCH_ASSOC)) $chNames[$r['name']] = true;
 
             $lvNames = [];
             $lvResult = $db->query("SELECT name FROM intention_levels");
-            while ($r = $lvResult->fetchArray(SQLITE3_ASSOC)) $lvNames[$r['name']] = true;
+            while ($r = $lvResult->fetch(PDO::FETCH_ASSOC)) $lvNames[$r['name']] = true;
 
             $poolType = $_POST['pool_type'] ?? '我的资源';
             $n = now();
@@ -819,7 +825,7 @@ function handleApi() {
 
                 // 手机号唯一性校验（空手机号不校验）
                 if ($item['phone'] !== '') {
-                    $dup = $db->querySingle("SELECT COUNT(*) FROM resources WHERE phone = '" . $db->escapeString($item['phone']) . "'");
+                    $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($item['phone'])->fetchColumn() . "");
                     if (intval($dup) > 0) {
                         $failures[] = ['row' => $rowIdx + 1, 'reason' => "手机号 {$item['phone']} 已存在"];
                         continue;
@@ -890,7 +896,7 @@ function handleApi() {
                     $targetIdx = $assignIdx;
                     $stmt->bindValue(':a', $assignees[$targetIdx]);
                     $stmt->bindValue(':u', $n);
-                    $stmt->bindValue(':id', intval($rid), SQLITE3_INTEGER);
+                    $stmt->bindValue(':id', intval($rid), PDO::PARAM_INT);
                     $stmt->execute();
                     $stmt->reset();
                     // 分配后再递增计数并判断是否满额，满额则下一轮切换到下一个人
@@ -913,7 +919,7 @@ function handleApi() {
                 foreach ($ids as $rid) {
                     $stmt->bindValue(':a', $assignedTo);
                     $stmt->bindValue(':u', $n);
-                    $stmt->bindValue(':id', intval($rid), SQLITE3_INTEGER);
+                    $stmt->bindValue(':id', intval($rid), PDO::PARAM_INT);
                     $stmt->execute();
                     $stmt->reset();
                 }
@@ -929,7 +935,7 @@ function handleApi() {
             foreach ($ids as $rid) {
                 $stmt->bindValue(':pt', $poolType);
                 $stmt->bindValue(':u', $n);
-                $stmt->bindValue(':id', intval($rid), SQLITE3_INTEGER);
+                $stmt->bindValue(':id', intval($rid), PDO::PARAM_INT);
                 $stmt->execute();
                 $stmt->reset();
             }
@@ -949,26 +955,26 @@ function handleApi() {
             if ($status) { $where[] = "status = ?"; $params[] = $status; }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-            $total = $db->querySingle("SELECT COUNT(*) FROM appointments $whereStr", false);
+            $total = $db->query("SELECT COUNT(*) FROM appointments $whereStr")->fetchColumn();
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $query = "SELECT * FROM appointments $whereStr ORDER BY appointment_time DESC LIMIT $pageSize OFFSET $offset";
             $rows = [];
             if ($params) {
                 $stmt = $db->prepare($query);
-                foreach ($params as $i => $v) $stmt->bindValue($i+1, $v, SQLITE3_TEXT);
+                foreach ($params as $i => $v) $stmt->bindValue($i+1, $v, PDO::PARAM_STR);
                 $result = $stmt->execute();
             } else {
                 $result = $db->query($query);
             }
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_appointment':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $n = now();
             $stmt = $db->prepare("INSERT INTO appointments (resource_id,resource_name,student_name,phone,course_type,appointment_time,status,notes,created_at) VALUES (:ri,:rn,:sn,:p,:ct,:at,:st,:no,:c)");
-            $stmt->bindValue(':ri', intval($input['resource_id']??0), SQLITE3_INTEGER);
+            $stmt->bindValue(':ri', intval($input['resource_id']??0), PDO::PARAM_INT);
             $stmt->bindValue(':rn', $input['resource_name']??'');
             $stmt->bindValue(':sn', $input['student_name']??'');
             $stmt->bindValue(':p', $input['phone']??'');
@@ -978,7 +984,7 @@ function handleApi() {
             $stmt->bindValue(':no', $input['notes']??'');
             $stmt->bindValue(':c', $n);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '预约成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '预约成功']);
 
         case 'update_appointment':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -990,7 +996,7 @@ function handleApi() {
             $stmt->bindValue(':at', $input['appointment_time']??'');
             $stmt->bindValue(':st', $input['status']??'');
             $stmt->bindValue(':no', $input['notes']??'');
-            $stmt->bindValue(':id', $aid, SQLITE3_INTEGER);
+            $stmt->bindValue(':id', $aid, PDO::PARAM_INT);
             $stmt->execute();
             json(['message' => '更新成功']);
 
@@ -1004,7 +1010,7 @@ function handleApi() {
             $rid = intval($_GET['resource_id'] ?? 0);
             $result = $db->query("SELECT * FROM communication_records WHERE resource_id=$rid ORDER BY created_at DESC");
             $rows = [];
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_communication':
@@ -1013,38 +1019,38 @@ function handleApi() {
             $n = now();
             $db->exec("UPDATE resources SET follow_status='{$input['new_status']}', updated_at='$n' WHERE id=$rid");
             $stmt = $db->prepare("INSERT INTO communication_records (resource_id,resource_name,content,comm_type,created_at) VALUES (:ri,:rn,:co,:ct,:c)");
-            $stmt->bindValue(':ri', $rid, SQLITE3_INTEGER);
+            $stmt->bindValue(':ri', $rid, PDO::PARAM_INT);
             $stmt->bindValue(':rn', $input['resource_name']??'');
             $stmt->bindValue(':co', $input['content']??'');
             $stmt->bindValue(':ct', $input['comm_type']??'电话');
             $stmt->bindValue(':c', $n);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '添加成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '添加成功']);
 
         case 'get_stats':
-            $my = $db->querySingle("SELECT COUNT(*) FROM resources WHERE pool_type='我的资源'") ?: 0;
-            $sea = $db->querySingle("SELECT COUNT(*) FROM resources WHERE pool_type='资源公海'") ?: 0;
-            $apt = $db->querySingle("SELECT COUNT(*) FROM appointments") ?: 0;
-            $emp = $db->querySingle("SELECT COUNT(*) FROM employees") ?: 0;
-            $courses = $db->querySingle("SELECT COUNT(*) FROM courses") ?: 0;
-            $subjects = $db->querySingle("SELECT COUNT(*) FROM subjects") ?: 0;
+            $my = $db->query("SELECT COUNT(*) FROM resources WHERE pool_type='我的资源'")->fetchColumn() ?: 0;
+            $sea = $db->query("SELECT COUNT(*) FROM resources WHERE pool_type='资源公海'")->fetchColumn() ?: 0;
+            $apt = $db->query("SELECT COUNT(*) FROM appointments")->fetchColumn() ?: 0;
+            $emp = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn() ?: 0;
+            $courses = $db->query("SELECT COUNT(*) FROM courses")->fetchColumn() ?: 0;
+            $subjects = $db->query("SELECT COUNT(*) FROM subjects")->fetchColumn() ?: 0;
             json(['my_resources' => intval($my), 'sea_resources' => intval($sea), 'appointments' => intval($apt), 'employees' => intval($emp), 'courses' => intval($courses), 'subjects' => intval($subjects)]);
 
         case 'list_channels':
             $result = $db->query("SELECT * FROM channels ORDER BY created_at DESC");
             $rows = [];
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_channel':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '渠道名称不能为空']);
-            $existing = $db->querySingle("SELECT COUNT(*) FROM channels WHERE name = '" . $db->escapeString($name) . "'");
+            $existing = $db->query("SELECT COUNT(*) FROM channels WHERE name = " . $db->quote($name)->fetchColumn() . "");
             if (intval($existing) > 0) json(['error' => '渠道名称已存在']);
             $n = now();
-            $db->exec("INSERT INTO channels (name, created_at) VALUES ('" . $db->escapeString($name) . "', '$n')");
-            json(['id' => $db->lastInsertRowID(), 'message' => '渠道添加成功']);
+            $db->exec("INSERT INTO channels (name, created_at) VALUES (" . $db->quote($name) . ", '$n')");
+            json(['id' => $db->lastInsertId(), 'message' => '渠道添加成功']);
 
         case 'update_channel':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -1053,14 +1059,14 @@ function handleApi() {
             $newName = trim($input['name'] ?? '');
             if (!$newName) json(['error' => '渠道名称不能为空']);
             // 检查新名称是否与其他渠道重复（排除自身）
-            $dup = $db->querySingle("SELECT COUNT(*) FROM channels WHERE name = '" . $db->escapeString($newName) . "' AND id != $cid");
+            $dup = $db->query("SELECT COUNT(*) FROM channels WHERE name = " . $db->quote($newName)->fetchColumn() . " AND id != $cid");
             if (intval($dup) > 0) json(['error' => '渠道名称已存在']);
             // 事务：先取旧名称，再更新 channels，再同步 resources
-            $oldName = $db->querySingle("SELECT name FROM channels WHERE id = $cid", false);
+            $oldName = $db->query("SELECT name FROM channels WHERE id = $cid")->fetchColumn();
             if (!$oldName) json(['error' => '渠道不存在']);
             $db->exec("BEGIN");
-            $db->exec("UPDATE channels SET name = '" . $db->escapeString($newName) . "' WHERE id = $cid");
-            $db->exec("UPDATE resources SET source = '" . $db->escapeString($newName) . "' WHERE source = '" . $db->escapeString($oldName) . "'");
+            $db->exec("UPDATE channels SET name = " . $db->quote($newName) . " WHERE id = $cid");
+            $db->exec("UPDATE resources SET source = " . $db->quote($newName) . " WHERE source = " . $db->quote($oldName) . "");
             $updatedCount = $db->changes();
             $db->exec("COMMIT");
             json(['message' => '渠道修改成功', 'updated_resources' => $updatedCount]);
@@ -1074,19 +1080,19 @@ function handleApi() {
         case 'list_intention_levels':
             $result = $db->query("SELECT * FROM intention_levels ORDER BY sort_order ASC, id ASC");
             $rows = [];
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_intention_level':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '意向等级名称不能为空']);
-            $existing = $db->querySingle("SELECT COUNT(*) FROM intention_levels WHERE name = '" . $db->escapeString($name) . "'");
+            $existing = $db->query("SELECT COUNT(*) FROM intention_levels WHERE name = " . $db->quote($name)->fetchColumn() . "");
             if (intval($existing) > 0) json(['error' => '意向等级名称已存在']);
             $sortOrder = intval($input['sort_order'] ?? 0);
             $n = now();
-            $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('" . $db->escapeString($name) . "', $sortOrder, '$n')");
-            json(['id' => $db->lastInsertRowID(), 'message' => '意向等级添加成功']);
+            $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES (" . $db->quote($name) . ", $sortOrder, '$n')");
+            json(['id' => $db->lastInsertId(), 'message' => '意向等级添加成功']);
 
         case 'update_intention_level':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -1095,13 +1101,13 @@ function handleApi() {
             $newName = trim($input['name'] ?? '');
             if (!$newName) json(['error' => '意向等级名称不能为空']);
             $sortOrder = intval($input['sort_order'] ?? 0);
-            $dup = $db->querySingle("SELECT COUNT(*) FROM intention_levels WHERE name = '" . $db->escapeString($newName) . "' AND id != $iid");
+            $dup = $db->query("SELECT COUNT(*) FROM intention_levels WHERE name = " . $db->quote($newName)->fetchColumn() . " AND id != $iid");
             if (intval($dup) > 0) json(['error' => '意向等级名称已存在']);
-            $oldName = $db->querySingle("SELECT name FROM intention_levels WHERE id = $iid", false);
+            $oldName = $db->query("SELECT name FROM intention_levels WHERE id = $iid")->fetchColumn();
             if (!$oldName) json(['error' => '意向等级不存在']);
             $db->exec("BEGIN");
-            $db->exec("UPDATE intention_levels SET name = '" . $db->escapeString($newName) . "', sort_order = $sortOrder WHERE id = $iid");
-            $db->exec("UPDATE resources SET intention_level = '" . $db->escapeString($newName) . "' WHERE intention_level = '" . $db->escapeString($oldName) . "'");
+            $db->exec("UPDATE intention_levels SET name = " . $db->quote($newName) . ", sort_order = $sortOrder WHERE id = $iid");
+            $db->exec("UPDATE resources SET intention_level = " . $db->quote($newName) . " WHERE intention_level = " . $db->quote($oldName) . "");
             $updatedCount = $db->changes();
             $db->exec("COMMIT");
             json(['message' => '意向等级修改成功', 'updated_resources' => $updatedCount]);
@@ -1127,7 +1133,7 @@ function handleApi() {
             $whereStr = implode(' AND ', $where);
 
             $stmt = $db->prepare("SELECT r.name, r.phone, r.source, r.source_detail, r.intention_level, r.gender, r.birth_date, r.follow_status, r.assigned_to, e.department AS assigned_dept, r.created_at, r.updated_at FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $result = $stmt->execute();
 
             $filename = '资源导出_' . date('Ymd_His') . '.csv';
@@ -1137,7 +1143,7 @@ function handleApi() {
             $output = fopen('php://output', 'w');
             fprintf($output, "\xEF\xBB\xBF");
             fputcsv($output, ['姓名', '电话', '来源渠道', '来源详情', '意向等级', '性别', '出生日期', '跟进状态', '归属人', '归属部门', '创建时间', '更新时间']);
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) {
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) {
                 fputcsv($output, [
                     $r['name'], $r['phone'], $r['source'], $r['source_detail'],
                     $r['intention_level'], $r['gender'], $r['birth_date'],
@@ -1152,9 +1158,9 @@ function handleApi() {
         case 'list_basic_types':
             $category = $_GET['category'] ?? '';
             if (!$category) json(['error' => 'category参数不能为空']);
-            $result = $db->query("SELECT * FROM basic_types WHERE category = '" . $db->escapeString($category) . "' ORDER BY sort_order ASC, id ASC");
+            $result = $db->query("SELECT * FROM basic_types WHERE category = " . $db->quote($category) . " ORDER BY sort_order ASC, id ASC");
             $rows = [];
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_basic_type':
@@ -1164,11 +1170,11 @@ function handleApi() {
             $sortOrder = intval($input['sort_order'] ?? 0);
             if (!$name) json(['error' => '名称不能为空']);
             if (!$category) json(['error' => 'category不能为空']);
-            $existing = $db->querySingle("SELECT COUNT(*) FROM basic_types WHERE category = '" . $db->escapeString($category) . "' AND name = '" . $db->escapeString($name) . "'");
+            $existing = $db->query("SELECT COUNT(*) FROM basic_types WHERE category = " . $db->quote($category)->fetchColumn() . " AND name = " . $db->quote($name) . "");
             if (intval($existing) > 0) json(['error' => '该类别下已存在同名类型']);
             $n = now();
-            $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('" . $db->escapeString($category) . "', '" . $db->escapeString($name) . "', $sortOrder, '$n')");
-            json(['id' => $db->lastInsertRowID(), 'message' => '添加成功']);
+            $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES (" . $db->quote($category) . ", " . $db->quote($name) . ", $sortOrder, '$n')");
+            json(['id' => $db->lastInsertId(), 'message' => '添加成功']);
 
         case 'update_basic_type':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -1177,23 +1183,23 @@ function handleApi() {
             $newName = trim($input['name'] ?? '');
             $sortOrder = $input['sort_order'] ?? null;
             // 获取原记录
-            $old = $db->querySingle("SELECT * FROM basic_types WHERE id = $bid", true);
+            $old = $db->query("SELECT * FROM basic_types WHERE id = $bid")->fetch(PDO::FETCH_ASSOC);
             if (!$old) json(['error' => '记录不存在']);
             $finalName = $newName !== '' ? $newName : $old['name'];
             $finalSort = $sortOrder !== null ? intval($sortOrder) : intval($old['sort_order']);
             // 检查重名
             if ($newName !== '' && $newName !== $old['name']) {
-                $dup = $db->querySingle("SELECT COUNT(*) FROM basic_types WHERE category = '" . $db->escapeString($old['category']) . "' AND name = '" . $db->escapeString($newName) . "' AND id != $bid");
+                $dup = $db->query("SELECT COUNT(*) FROM basic_types WHERE category = " . $db->quote($old['category'])->fetchColumn() . " AND name = " . $db->quote($newName) . " AND id != $bid");
                 if (intval($dup) > 0) json(['error' => '该类别下已存在同名类型']);
             }
             $db->exec("BEGIN");
-            $db->exec("UPDATE basic_types SET name = '" . $db->escapeString($finalName) . "', sort_order = $finalSort WHERE id = $bid");
+            $db->exec("UPDATE basic_types SET name = " . $db->quote($finalName) . ", sort_order = $finalSort WHERE id = $bid");
             // 同步关联数据
             if ($newName !== '' && $newName !== $old['name']) {
                 if ($old['category'] === 'course_type') {
-                    $db->exec("UPDATE appointments SET course_type = '" . $db->escapeString($newName) . "' WHERE course_type = '" . $db->escapeString($old['name']) . "'");
+                    $db->exec("UPDATE appointments SET course_type = " . $db->quote($newName) . " WHERE course_type = " . $db->quote($old['name']) . "");
                 } elseif ($old['category'] === 'comm_type') {
-                    $db->exec("UPDATE communication_records SET comm_type = '" . $db->escapeString($newName) . "' WHERE comm_type = '" . $db->escapeString($old['name']) . "'");
+                    $db->exec("UPDATE communication_records SET comm_type = " . $db->quote($newName) . " WHERE comm_type = " . $db->quote($old['name']) . "");
                 }
             }
             $db->exec("COMMIT");
@@ -1225,17 +1231,17 @@ function handleApi() {
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
             $countStmt = $db->prepare("SELECT COUNT(*) FROM employees $whereStr");
-            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, SQLITE3_TEXT);
-            $total = $countStmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $total = $countStmt->execute()->fetch(PDO::FETCH_NUM)[0];
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $stmt = $db->prepare("SELECT * FROM employees $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $stmt->bindValue(':lim', $pageSize, SQLITE3_INTEGER);
-            $stmt->bindValue(':off', $offset, SQLITE3_INTEGER);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
             $rows = [];
             $result = $stmt->execute();
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_employee':
@@ -1245,17 +1251,17 @@ function handleApi() {
             $phone = trim($input['phone'] ?? '');
             // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
             $dupErrors = [];
-            $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($name) . "'");
+            $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($name)->fetchColumn() . "");
             if (intval($dup) > 0) $dupErrors[] = '姓名已存在，请勿重复录入';
             if ($phone !== '') {
-                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($phone) . "'");
+                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phone)->fetchColumn() . "");
                 if (intval($dup) > 0) $dupErrors[] = '手机号已存在，请勿重复录入';
             }
             if (!empty($dupErrors)) json(['error' => implode('；', $dupErrors)]);
             // 校验 department 是否在 organizations 中存在（可留空）
             $dept = $input['department'] ?? '';
             if ($dept !== '') {
-                $deptExists = $db->querySingle("SELECT COUNT(*) FROM organizations WHERE name = '" . $db->escapeString($dept) . "'");
+                $deptExists = $db->query("SELECT COUNT(*) FROM organizations WHERE name = " . $db->quote($dept)->fetchColumn() . "");
                 if (intval($deptExists) === 0) json(['error' => '部门不存在，请从组织管理中选择']);
             }
             $n = now();
@@ -1269,7 +1275,7 @@ function handleApi() {
             $stmt->bindValue(':it', $input['is_teacher']??'');
             $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '新增成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '新增成功']);
 
         case 'update_employee':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -1278,19 +1284,19 @@ function handleApi() {
             $dupErrors = [];
             if (isset($input['name']) && trim($input['name'] ?? '') !== '') {
                 $name = trim($input['name']);
-                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($name) . "' AND id != $eid");
+                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($name)->fetchColumn() . " AND id != $eid");
                 if (intval($dup) > 0) $dupErrors[] = '姓名已存在，请勿重复录入';
             }
             if (isset($input['phone']) && trim($input['phone'] ?? '') !== '') {
                 $phone = trim($input['phone']);
-                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($phone) . "' AND id != $eid");
+                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phone)->fetchColumn() . " AND id != $eid");
                 if (intval($dup) > 0) $dupErrors[] = '手机号已存在，请勿重复录入';
             }
             if (!empty($dupErrors)) json(['error' => implode('；', $dupErrors)]);
             // 校验 department 是否在 organizations 中存在（可留空）
             if (isset($input['department']) && ($input['department'] ?? '') !== '') {
                 $dept = $input['department'];
-                $deptExists = $db->querySingle("SELECT COUNT(*) FROM organizations WHERE name = '" . $db->escapeString($dept) . "'");
+                $deptExists = $db->query("SELECT COUNT(*) FROM organizations WHERE name = " . $db->quote($dept)->fetchColumn() . "");
                 if (intval($deptExists) === 0) json(['error' => '部门不存在，请从组织管理中选择']);
             }
             $allowedFields = ['name','phone','department','position','entry_date','status','is_teacher'];
@@ -1309,7 +1315,7 @@ function handleApi() {
             $sql = "UPDATE employees SET " . implode(', ', $sets) . " WHERE id = :id";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) {
-                $stmt->bindValue($k, $v, $k === ':id' ? SQLITE3_INTEGER : SQLITE3_TEXT);
+                $stmt->bindValue($k, $v, $k === ':id' ? PDO::PARAM_INT : PDO::PARAM_STR);
             }
             $stmt->execute();
             json(['message' => '更新成功']);
@@ -1324,19 +1330,19 @@ function handleApi() {
         case 'list_positions':
             $result = $db->query("SELECT * FROM positions ORDER BY sort_order ASC, id ASC");
             $rows = [];
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
 
         case 'add_position':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '岗位名称不能为空']);
-            $existing = $db->querySingle("SELECT COUNT(*) FROM positions WHERE name = '" . $db->escapeString($name) . "'");
+            $existing = $db->query("SELECT COUNT(*) FROM positions WHERE name = " . $db->quote($name)->fetchColumn() . "");
             if (intval($existing) > 0) json(['error' => '岗位名称已存在']);
             $sortOrder = intval($input['sort_order'] ?? 0);
             $n = now();
-            $db->exec("INSERT INTO positions (name, sort_order, created_at) VALUES ('" . $db->escapeString($name) . "', $sortOrder, '$n')");
-            json(['id' => $db->lastInsertRowID(), 'message' => '岗位添加成功']);
+            $db->exec("INSERT INTO positions (name, sort_order, created_at) VALUES (" . $db->quote($name) . ", $sortOrder, '$n')");
+            json(['id' => $db->lastInsertId(), 'message' => '岗位添加成功']);
 
         case 'update_position':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -1344,18 +1350,18 @@ function handleApi() {
             if (!$pid) json(['error' => '岗位ID无效']);
             $newName = trim($input['name'] ?? '');
             $sortOrder = $input['sort_order'] ?? null;
-            $old = $db->querySingle("SELECT * FROM positions WHERE id = $pid", true);
+            $old = $db->query("SELECT * FROM positions WHERE id = $pid")->fetch(PDO::FETCH_ASSOC);
             if (!$old) json(['error' => '岗位不存在']);
             $finalName = $newName !== '' ? $newName : $old['name'];
             $finalSort = $sortOrder !== null ? intval($sortOrder) : intval($old['sort_order']);
             if ($newName !== '' && $newName !== $old['name']) {
-                $dup = $db->querySingle("SELECT COUNT(*) FROM positions WHERE name = '" . $db->escapeString($newName) . "' AND id != $pid");
+                $dup = $db->query("SELECT COUNT(*) FROM positions WHERE name = " . $db->quote($newName)->fetchColumn() . " AND id != $pid");
                 if (intval($dup) > 0) json(['error' => '岗位名称已存在']);
             }
             $db->exec("BEGIN");
-            $db->exec("UPDATE positions SET name = '" . $db->escapeString($finalName) . "', sort_order = $finalSort WHERE id = $pid");
+            $db->exec("UPDATE positions SET name = " . $db->quote($finalName) . ", sort_order = $finalSort WHERE id = $pid");
             if ($newName !== '' && $newName !== $old['name']) {
-                $db->exec("UPDATE employees SET position = '" . $db->escapeString($newName) . "' WHERE position = '" . $db->escapeString($old['name']) . "'");
+                $db->exec("UPDATE employees SET position = " . $db->quote($newName) . " WHERE position = " . $db->quote($old['name']) . "");
             }
             $db->exec("COMMIT");
             json(['message' => '岗位更新成功']);
@@ -1363,9 +1369,9 @@ function handleApi() {
         case 'delete_position':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $pid = intval($input['id'] ?? 0);
-            $old = $db->querySingle("SELECT name FROM positions WHERE id = $pid", false);
+            $old = $db->query("SELECT name FROM positions WHERE id = $pid")->fetchColumn();
             if (!$old) json(['error' => '岗位不存在']);
-            $inUse = $db->querySingle("SELECT COUNT(*) FROM employees WHERE position = '" . $db->escapeString($old) . "'");
+            $inUse = $db->query("SELECT COUNT(*) FROM employees WHERE position = " . $db->quote($old)->fetchColumn() . "");
             if (intval($inUse) > 0) json(['error' => "该岗位下有 {$inUse} 名员工，不可删除"]);
             $db->exec("DELETE FROM positions WHERE id=$pid");
             json(['message' => '岗位删除成功']);
@@ -1386,10 +1392,10 @@ function handleApi() {
                     $phoneVal = trim($item['phone'] ?? '');
                     // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
                     $rowErrors = [];
-                    $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($ename) . "'");
+                    $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($ename)->fetchColumn() . "");
                     if (intval($dup) > 0) $rowErrors[] = "姓名 {$ename} 已存在";
                     if ($phoneVal !== '') {
-                        $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($phoneVal) . "'");
+                        $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phoneVal)->fetchColumn() . "");
                         if (intval($dup) > 0) $rowErrors[] = "手机号 {$phoneVal} 已存在";
                     }
                     if (!empty($rowErrors)) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => implode('；', $rowErrors)]; continue; }
@@ -1468,10 +1474,10 @@ function handleApi() {
                 }
                 // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
                 $rowErrors = [];
-                $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE name = '" . $db->escapeString($item['name']) . "'");
+                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($item['name'])->fetchColumn() . "");
                 if (intval($dup) > 0) $rowErrors[] = "姓名 {$item['name']} 已存在";
                 if ($item['phone'] !== '') {
-                    $dup = $db->querySingle("SELECT COUNT(*) FROM employees WHERE phone = '" . $db->escapeString($item['phone']) . "'");
+                    $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($item['phone'])->fetchColumn() . "");
                     if (intval($dup) > 0) $rowErrors[] = "手机号 {$item['phone']} 已存在";
                 }
                 if (!empty($rowErrors)) {
@@ -1515,7 +1521,7 @@ function handleApi() {
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
             $stmt = $db->prepare("SELECT name, phone, department, position, entry_date, status, is_teacher, created_at, updated_at FROM employees $whereStr ORDER BY updated_at DESC");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $result = $stmt->execute();
 
             $filename = '员工导出_' . date('Ymd_His') . '.csv';
@@ -1524,7 +1530,7 @@ function handleApi() {
             $output = fopen('php://output', 'w');
             fprintf($output, "\xEF\xBB\xBF");
             fputcsv($output, ['姓名', '手机号', '部门', '职位', '入职日期', '状态', '是否教师', '创建时间', '更新时间']);
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) {
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) {
                 fputcsv($output, [
                     $r['name'], $r['phone'], $r['department'], $r['position'],
                     $r['entry_date'], $r['status'], $r['is_teacher'], $r['created_at'], $r['updated_at']
@@ -1548,48 +1554,48 @@ function handleApi() {
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
             $countStmt = $db->prepare("SELECT COUNT(*) FROM courses $whereStr");
-            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, SQLITE3_TEXT);
-            $total = $countStmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $total = $countStmt->execute()->fetch(PDO::FETCH_NUM)[0];
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $stmt = $db->prepare("SELECT * FROM courses $whereStr ORDER BY id DESC LIMIT :lim OFFSET :off");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $stmt->bindValue(':lim', $pageSize, SQLITE3_INTEGER);
-            $stmt->bindValue(':off', $offset, SQLITE3_INTEGER);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
             $rows = [];
             $result = $stmt->execute();
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         case 'add_course':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '课程名称不能为空']);
-            $dup = $db->querySingle("SELECT COUNT(*) FROM courses WHERE name = '" . $db->escapeString($name) . "'");
+            $dup = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name)->fetchColumn() . "");
             if (intval($dup) > 0) json(['error' => '课程名称已存在']);
             $subject = trim($input['subject'] ?? '');
             $small_package = trim($input['small_package'] ?? '');
             $toddler = trim($input['toddler'] ?? '');
             $campus_permission = trim($input['campus_permission'] ?? '');
-            $db->exec("INSERT INTO courses (name, subject, small_package, toddler, campus_permission, created_at) VALUES ('" . $db->escapeString($name) . "', '" . $db->escapeString($subject) . "', '" . $db->escapeString($small_package) . "', '" . $db->escapeString($toddler) . "', '" . $db->escapeString($campus_permission) . "', '" . now() . "')");
-            json(['id' => $db->lastInsertRowID(), 'message' => '课程添加成功']);
+            $db->exec("INSERT INTO courses (name, subject, small_package, toddler, campus_permission, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($subject) . ", " . $db->quote($small_package) . ", " . $db->quote($toddler) . ", " . $db->quote($campus_permission) . ", '" . now() . "')");
+            json(['id' => $db->lastInsertId(), 'message' => '课程添加成功']);
 
         case 'update_course':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $cid = intval($input['id'] ?? 0);
             if (!$cid) json(['error' => '课程ID无效']);
-            $existing = $db->querySingle("SELECT * FROM courses WHERE id=$cid", true);
+            $existing = $db->query("SELECT * FROM courses WHERE id=$cid")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) json(['error' => '课程不存在']);
             $name = trim($input['name'] ?? '');
             if ($name === '') $name = $existing['name'];
             // 名称不可重复（排除自身）
-            $dup = $db->querySingle("SELECT COUNT(*) FROM courses WHERE name = '" . $db->escapeString($name) . "' AND id != $cid");
+            $dup = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name)->fetchColumn() . " AND id != $cid");
             if (intval($dup) > 0) json(['error' => '课程名称已存在']);
             $subject = array_key_exists('subject', $input) ? trim($input['subject']) : $existing['subject'];
             $small_package = array_key_exists('small_package', $input) ? trim($input['small_package']) : ($existing['small_package'] ?? '');
             $toddler = array_key_exists('toddler', $input) ? trim($input['toddler']) : ($existing['toddler'] ?? '');
             $campus_permission = array_key_exists('campus_permission', $input) ? trim($input['campus_permission']) : ($existing['campus_permission'] ?? '');
-            $db->exec("UPDATE courses SET name='" . $db->escapeString($name) . "', subject='" . $db->escapeString($subject) . "', small_package='" . $db->escapeString($small_package) . "', toddler='" . $db->escapeString($toddler) . "', campus_permission='" . $db->escapeString($campus_permission) . "' WHERE id=$cid");
+            $db->exec("UPDATE courses SET name=" . $db->quote($name) . ", subject=" . $db->quote($subject) . ", small_package=" . $db->quote($small_package) . ", toddler=" . $db->quote($toddler) . ", campus_permission=" . $db->quote($campus_permission) . " WHERE id=$cid");
             json(['message' => '课程更新成功']);
 
         case 'delete_course':
@@ -1610,7 +1616,7 @@ function handleApi() {
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
             $stmt = $db->prepare("SELECT * FROM courses $whereStr ORDER BY id DESC");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $result = $stmt->execute();
 
             $filename = '课程导出_' . date('Ymd_His') . '.csv';
@@ -1621,9 +1627,9 @@ function handleApi() {
             // 查询校区名称映射
             $campusMap = [];
             $campusRes = $db->query("SELECT id, name FROM organizations WHERE type='校区'");
-            while ($cr = $campusRes->fetchArray(SQLITE3_ASSOC)) $campusMap[$cr['id']] = $cr['name'];
+            while ($cr = $campusRes->fetch(PDO::FETCH_ASSOC)) $campusMap[$cr['id']] = $cr['name'];
             fputcsv($output, ['编号', '课程名称', '学科', '适用校区', '小课包', '低幼龄', '创建时间']);
-            while ($r = $result->fetchArray(SQLITE3_ASSOC)) {
+            while ($r = $result->fetch(PDO::FETCH_ASSOC)) {
                 $campusNames = [];
                 if (!empty($r['campus_permission'])) {
                     foreach (explode(',', $r['campus_permission']) as $cid) {
@@ -1646,10 +1652,10 @@ function handleApi() {
             if (!$courseId) json(['error' => '缺少 course_id']);
             $plans = [];
             $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
-            while ($plan = $planRes->fetchArray(SQLITE3_ASSOC)) {
+            while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
-                while ($item = $itemRes->fetchArray(SQLITE3_ASSOC)) $items[] = $item;
+                while ($item = $itemRes->fetch(PDO::FETCH_ASSOC)) $items[] = $item;
                 $plan['items'] = $items;
                 $plans[] = $plan;
             }
@@ -1660,10 +1666,10 @@ function handleApi() {
             if ($courseId <= 0) json(['error' => '缺少 course_id']);
             $plans = [];
             $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
-            while ($plan = $planRes->fetchArray(SQLITE3_ASSOC)) {
+            while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
-                while ($item = $itemRes->fetchArray(SQLITE3_ASSOC)) $items[] = $item;
+                while ($item = $itemRes->fetch(PDO::FETCH_ASSOC)) $items[] = $item;
                 $plan['items'] = $items;
                 $plans[] = $plan;
             }
@@ -1677,17 +1683,17 @@ function handleApi() {
             if ($studentId <= 0) json(['error' => '学员ID无效']);
             if ($planId <= 0) json(['error' => '方案ID无效']);
             if ($courseId <= 0) json(['error' => '课程ID无效']);
-            $plan = $db->querySingle("SELECT * FROM price_plans WHERE id=$planId", true);
+            $plan = $db->query("SELECT * FROM price_plans WHERE id=$planId")->fetch(PDO::FETCH_ASSOC);
             if (!$plan) json(['error' => '价格方案不存在']);
             // 读取课程的小课包字段，若为非空则强制类型为小课包
-            $course = $db->querySingle("SELECT small_package FROM courses WHERE id=$courseId", true);
+            $course = $db->query("SELECT small_package FROM courses WHERE id=$courseId")->fetch(PDO::FETCH_ASSOC);
             $orderType = trim($plan['plan_type'] ?? '');
             if (in_array($course['small_package'] ?? '', ['是','1','小课包'], true)) {
                 $orderType = '小课包';
             }
             $items = [];
             $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=$planId ORDER BY sort_order, id");
-            while ($item = $itemRes->fetchArray(SQLITE3_ASSOC)) $items[] = $item;
+            while ($item = $itemRes->fetch(PDO::FETCH_ASSOC)) $items[] = $item;
             if (empty($items)) json(['error' => '该方案下无报价单']);
             $paymentCash = floatval($input['payment_cash'] ?? 0);
             $paymentMeituan = floatval($input['payment_meituan'] ?? 0);
@@ -1712,43 +1718,43 @@ function handleApi() {
                 $mtForThis = min($remainingMeituan, $itemPrice - $cashForThis);
                 $remainingMeituan -= $mtForThis;
                 $orderNo = generateOrderNo($db);
-                $stmt->bindValue(':sid', $studentId, SQLITE3_INTEGER);
-                $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
-                $stmt->bindValue(':pn', $plan['name'], SQLITE3_TEXT);
-                $stmt->bindValue(':inm', $item['name'], SQLITE3_TEXT);
-                $stmt->bindValue(':lc', intval($item['lesson_count']), SQLITE3_INTEGER);
-                $stmt->bindValue(':ap', $itemPrice, SQLITE3_FLOAT);
-                $stmt->bindValue(':ca', $cashForThis, SQLITE3_FLOAT);
-                $stmt->bindValue(':ma', $mtForThis, SQLITE3_FLOAT);
-                $stmt->bindValue(':pa', $cashForThis + $mtForThis, SQLITE3_FLOAT);
-                $stmt->bindValue(':ono', $orderNo, SQLITE3_TEXT);
-                $stmt->bindValue(':pono', $parentOrderNo, SQLITE3_TEXT);
-                $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
-                $stmt->bindValue(':pat', $n, SQLITE3_TEXT);
-                $stmt->bindValue(':ot', $orderType, SQLITE3_TEXT);
+                $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
+                $stmt->bindValue(':pn', $plan['name'], PDO::PARAM_STR);
+                $stmt->bindValue(':inm', $item['name'], PDO::PARAM_STR);
+                $stmt->bindValue(':lc', intval($item['lesson_count']), PDO::PARAM_INT);
+                $stmt->bindValue(':ap', $itemPrice, PDO::PARAM_STR);
+                $stmt->bindValue(':ca', $cashForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':ma', $mtForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':pa', $cashForThis + $mtForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
+                $stmt->bindValue(':pono', $parentOrderNo, PDO::PARAM_STR);
+                $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+                $stmt->bindValue(':pat', $n, PDO::PARAM_STR);
+                $stmt->bindValue(':ot', $orderType, PDO::PARAM_STR);
                 $stmt->execute();
-                $orderIds[] = $db->lastInsertRowID();
+                $orderIds[] = $db->lastInsertId();
                 $childOrderNos[] = $orderNo;
                 $totalLessons += intval($item['lesson_count']);
                 $stmt->reset();
             }
             // 写入父订单汇总
-            $student = $db->querySingle("SELECT name, phone, student_no FROM students WHERE id=$studentId", true);
-            $course = $db->querySingle("SELECT name FROM courses WHERE id=$courseId", true);
+            $student = $db->query("SELECT name, phone, student_no FROM students WHERE id=$studentId")->fetch(PDO::FETCH_ASSOC);
+            $course = $db->query("SELECT name FROM courses WHERE id=$courseId")->fetch(PDO::FETCH_ASSOC);
             $childNosStr = implode(',', $childOrderNos);
             $stmtParent = $db->prepare("INSERT INTO parent_orders (parent_order_no, child_order_nos, course_name, total_lessons, student_name, phone, student_no, enroll_time, total_price, cash_amount, meituan_amount, created_at) VALUES (:pono, :cnos, :cname, :tl, :sname, :phone, :sno, :etime, :tp, :ca, :ma, :ct)");
-            $stmtParent->bindValue(':pono', $parentOrderNo, SQLITE3_TEXT);
-            $stmtParent->bindValue(':cnos', $childNosStr, SQLITE3_TEXT);
-            $stmtParent->bindValue(':cname', $course['name'] ?? '', SQLITE3_TEXT);
-            $stmtParent->bindValue(':tl', $totalLessons, SQLITE3_INTEGER);
-            $stmtParent->bindValue(':sname', $student['name'] ?? '', SQLITE3_TEXT);
-            $stmtParent->bindValue(':phone', $student['phone'] ?? '', SQLITE3_TEXT);
-            $stmtParent->bindValue(':sno', $student['student_no'] ?? '', SQLITE3_TEXT);
-            $stmtParent->bindValue(':etime', $n, SQLITE3_TEXT);
-            $stmtParent->bindValue(':tp', $totalPrice, SQLITE3_FLOAT);
-            $stmtParent->bindValue(':ca', $paymentCash, SQLITE3_FLOAT);
-            $stmtParent->bindValue(':ma', $paymentMeituan, SQLITE3_FLOAT);
-            $stmtParent->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmtParent->bindValue(':pono', $parentOrderNo, PDO::PARAM_STR);
+            $stmtParent->bindValue(':cnos', $childNosStr, PDO::PARAM_STR);
+            $stmtParent->bindValue(':cname', $course['name'] ?? '', PDO::PARAM_STR);
+            $stmtParent->bindValue(':tl', $totalLessons, PDO::PARAM_INT);
+            $stmtParent->bindValue(':sname', $student['name'] ?? '', PDO::PARAM_STR);
+            $stmtParent->bindValue(':phone', $student['phone'] ?? '', PDO::PARAM_STR);
+            $stmtParent->bindValue(':sno', $student['student_no'] ?? '', PDO::PARAM_STR);
+            $stmtParent->bindValue(':etime', $n, PDO::PARAM_STR);
+            $stmtParent->bindValue(':tp', $totalPrice, PDO::PARAM_STR);
+            $stmtParent->bindValue(':ca', $paymentCash, PDO::PARAM_STR);
+            $stmtParent->bindValue(':ma', $paymentMeituan, PDO::PARAM_STR);
+            $stmtParent->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmtParent->execute();
             // 标记来源资源为已转化（不可逆）
             $db->exec("UPDATE resources SET converted = '已转化' WHERE id = (SELECT resource_id FROM students WHERE id = $studentId) AND converted = '未转化'");
@@ -1773,14 +1779,14 @@ function handleApi() {
             $planId = intval($input['plan_id'] ?? 0);
             if ($planId > 0) {
                 // 编辑：更新方案名称，全量替换报价单
-                $existing = $db->querySingle("SELECT * FROM price_plans WHERE id=$planId", true);
+                $existing = $db->query("SELECT * FROM price_plans WHERE id=$planId")->fetch(PDO::FETCH_ASSOC);
                 if (!$existing) json(['error' => '价格方案不存在']);
-                $db->exec("UPDATE price_plans SET name='" . $db->escapeString($planName) . "', plan_type='" . $db->escapeString($planType) . "' WHERE id=$planId");
+                $db->exec("UPDATE price_plans SET name=" . $db->quote($planName) . ", plan_type=" . $db->quote($planType) . " WHERE id=$planId");
                 $db->exec("DELETE FROM price_items WHERE plan_id=$planId");
             } else {
                 // 新增
-                $db->exec("INSERT INTO price_plans (course_id, name, plan_type, created_at) VALUES ($courseId, '" . $db->escapeString($planName) . "', '" . $db->escapeString($planType) . "', '" . now() . "')");
-                $planId = $db->lastInsertRowID();
+                $db->exec("INSERT INTO price_plans (course_id, name, plan_type, created_at) VALUES ($courseId, " . $db->quote($planName) . ", " . $db->quote($planType) . ", '" . now() . "')");
+                $planId = $db->lastInsertId();
             }
 
             // 插入报价单
@@ -1791,7 +1797,7 @@ function handleApi() {
                 $actualPrice = floatval($item['actual_price'] ?? $unitPrice);
                 $sortOrder = intval($item['sort_order'] ?? $idx);
                 if (!$itemName || $lessonCount <= 0) continue;
-                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, sort_order) VALUES ($planId, '" . $db->escapeString($itemName) . "', $lessonCount, $unitPrice, $actualPrice, $sortOrder)");
+                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, sort_order) VALUES ($planId, " . $db->quote($itemName) . ", $lessonCount, $unitPrice, $actualPrice, $sortOrder)");
             }
             json(['id' => $planId, 'message' => $planId ? '价格方案保存成功' : '价格方案保存成功']);
 
@@ -1807,7 +1813,7 @@ function handleApi() {
         case 'list_organizations':
             $res = $db->query("SELECT * FROM organizations ORDER BY sort_order, id");
             $orgs = [];
-            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $orgs[] = $r;
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) $orgs[] = $r;
             // 构建树形结构
             $tree = [];
             $map = [];
@@ -1835,29 +1841,29 @@ function handleApi() {
             $parentId = intval($post['parent_id'] ?? 0);
             $sortOrder = intval($post['sort_order'] ?? 0);
             // 校验：同一父节点下名称不重复（不限type，部门和校区可以同名共存于同一父节点下）
-            $existing = $db->querySingle("SELECT id FROM organizations WHERE name='" . $db->escapeString($post['name']) . "' AND parent_id=$parentId");
+            $existing = $db->query("SELECT id FROM organizations WHERE name=" . $db->quote($post['name'])->fetchColumn() . " AND parent_id=$parentId");
             if ($existing) { json(['error' => '同一父节点下名称已存在']); break; }
             $n = now();
-            $db->exec("INSERT INTO organizations (name, type, parent_id, sort_order, created_at) VALUES ('" . $db->escapeString($post['name']) . "', '" . $db->escapeString($type) . "', $parentId, $sortOrder, '$n')");
-            json(['message' => '新增成功', 'id' => $db->lastInsertRowID()]);
+            $db->exec("INSERT INTO organizations (name, type, parent_id, sort_order, created_at) VALUES (" . $db->quote($post['name']) . ", " . $db->quote($type) . ", $parentId, $sortOrder, '$n')");
+            json(['message' => '新增成功', 'id' => $db->lastInsertId()]);
             break;
 
         case 'update_organization':
             $post = json_decode(file_get_contents('php://input'), true);
             $id = intval($post['id'] ?? 0);
             if ($id <= 0) { json(['error' => 'ID无效']); break; }
-            $existing = $db->querySingle("SELECT * FROM organizations WHERE id=$id", true);
+            $existing = $db->query("SELECT * FROM organizations WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) { json(['error' => '组织不存在']); break; }
             $updates = [];
             if (isset($post['name']) && $post['name'] !== '') {
                 $type = $post['type'] ?? $existing['type'];
                 $parentId = isset($post['parent_id']) ? intval($post['parent_id']) : $existing['parent_id'];
-                $dup = $db->querySingle("SELECT id FROM organizations WHERE name='" . $db->escapeString($post['name']) . "' AND parent_id=$parentId AND id!=$id");
+                $dup = $db->query("SELECT id FROM organizations WHERE name=" . $db->quote($post['name'])->fetchColumn() . " AND parent_id=$parentId AND id!=$id");
                 if ($dup) { json(['error' => '同一父节点下名称已存在']); break; }
-                $updates[] = "name='" . $db->escapeString($post['name']) . "'";
+                $updates[] = "name=" . $db->quote($post['name']) . "";
             }
             if (isset($post['type']) && in_array($post['type'], ['部门', '校区'])) {
-                $updates[] = "type='" . $db->escapeString($post['type']) . "'";
+                $updates[] = "type=" . $db->quote($post['type']) . "";
             }
             if (isset($post['parent_id'])) {
                 $pid = intval($post['parent_id']);
@@ -1876,7 +1882,7 @@ function handleApi() {
             $post = json_decode(file_get_contents('php://input'), true);
             $id = intval($post['id'] ?? 0);
             if ($id <= 0) { json(['error' => 'ID无效']); break; }
-            $children = $db->querySingle("SELECT COUNT(*) FROM organizations WHERE parent_id=$id");
+            $children = $db->query("SELECT COUNT(*) FROM organizations WHERE parent_id=$id")->fetchColumn();
             if ($children > 0) { json(['error' => '该节点下有子节点，请先删除子节点']); break; }
             $db->exec("DELETE FROM organizations WHERE id=$id");
             json(['message' => '删除成功']);
@@ -1886,7 +1892,7 @@ function handleApi() {
         case 'list_subjects':
             $res = $db->query("SELECT * FROM subjects ORDER BY sort_order, id");
             $subjects = [];
-            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $subjects[] = $r;
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) $subjects[] = $r;
             // 构建树形结构
             $tree = [];
             $map = [];
@@ -1912,32 +1918,32 @@ function handleApi() {
             $parentId = intval($input['parent_id'] ?? 0);
             $sortOrder = intval($input['sort_order'] ?? 0);
             // 同一父级下 name 不可重复
-            $dup = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE name='" . $db->escapeString($name) . "' AND parent_id=$parentId");
+            $dup = $db->query("SELECT COUNT(*) FROM subjects WHERE name=" . $db->quote($name)->fetchColumn() . " AND parent_id=$parentId");
             if (intval($dup) > 0) json(['error' => '同一父级下学科名称已存在']);
-            $db->exec("INSERT INTO subjects (name, parent_id, sort_order) VALUES ('" . $db->escapeString($name) . "', $parentId, $sortOrder)");
-            json(['id' => $db->lastInsertRowID(), 'message' => '学科添加成功']);
+            $db->exec("INSERT INTO subjects (name, parent_id, sort_order) VALUES (" . $db->quote($name) . ", $parentId, $sortOrder)");
+            json(['id' => $db->lastInsertId(), 'message' => '学科添加成功']);
 
         case 'update_subject':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $sid = intval($input['id'] ?? 0);
             if ($sid <= 0) json(['error' => '学科ID无效']);
-            $existing = $db->querySingle("SELECT * FROM subjects WHERE id=$sid", true);
+            $existing = $db->query("SELECT * FROM subjects WHERE id=$sid")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) json(['error' => '学科不存在']);
             $name = trim($input['name'] ?? '');
             if ($name === '') $name = $existing['name'];
             $parentId = isset($input['parent_id']) ? intval($input['parent_id']) : $existing['parent_id'];
             // 同一父级下名称唯一（排除自身）
-            $dup = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE name='" . $db->escapeString($name) . "' AND parent_id=$parentId AND id!=$sid");
+            $dup = $db->query("SELECT COUNT(*) FROM subjects WHERE name=" . $db->quote($name)->fetchColumn() . " AND parent_id=$parentId AND id!=$sid");
             if (intval($dup) > 0) json(['error' => '同一父级下学科名称已存在']);
             $sortOrder = isset($input['sort_order']) ? intval($input['sort_order']) : $existing['sort_order'];
-            $db->exec("UPDATE subjects SET name='" . $db->escapeString($name) . "', parent_id=$parentId, sort_order=$sortOrder WHERE id=$sid");
+            $db->exec("UPDATE subjects SET name=" . $db->quote($name) . ", parent_id=$parentId, sort_order=$sortOrder WHERE id=$sid");
             json(['message' => '学科更新成功']);
 
         case 'delete_subject':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $sid = intval($input['id'] ?? 0);
             if ($sid <= 0) json(['error' => '学科ID无效']);
-            $children = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid");
+            $children = $db->query("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid")->fetchColumn();
             if ($children > 0) json(['error' => '该学科下有子学科，请先删除子学科']);
             $db->exec("DELETE FROM subjects WHERE id=$sid");
             json(['message' => '学科删除成功']);
@@ -1951,7 +1957,7 @@ function handleApi() {
             foreach ($ids as $id) {
                 $sid = intval($id);
                 if ($sid <= 0) { $failed[] = "无效ID: $id"; continue; }
-                $children = $db->querySingle("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid");
+                $children = $db->query("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid")->fetchColumn();
                 if ($children > 0) { $failed[] = "学科(ID=$sid)下有子学科，跳过"; continue; }
                 $db->exec("DELETE FROM subjects WHERE id=$sid");
                 $deleted++;
@@ -1971,27 +1977,27 @@ function handleApi() {
                 $params[':kw'] = "%$keyword%";
             }
             $stmt = $db->prepare("SELECT COUNT(*) FROM students s $where");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
             $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count FROM students s $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
-            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             $rows = [];
             $res = $stmt->execute();
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
         case 'get_student':
             $id = intval($_GET['id'] ?? 0);
             if ($id <= 0) { json(['error' => '参数错误']); break; }
-            $student = $db->querySingle("SELECT * FROM students WHERE id=$id", true);
+            $student = $db->query("SELECT * FROM students WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$student) { json(['error' => '学员不存在']); break; }
             $orders = [];
             $oRes = $db->query("SELECT o.*, c.name AS course_name FROM orders o LEFT JOIN courses c ON o.course_id=c.id WHERE o.student_id=$id ORDER BY o.id DESC");
-            while ($o = $oRes->fetchArray(SQLITE3_ASSOC)) $orders[] = $o;
+            while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) $orders[] = $o;
             json(['student' => $student, 'orders' => $orders]);
             break;
 
@@ -2000,7 +2006,7 @@ function handleApi() {
             $name = trim($input['name'] ?? '');
             $phone = trim($input['phone'] ?? '');
             if (!$name || !$phone) { json(['error' => '姓名和手机号不能为空']); break; }
-            $exist = $db->querySingle("SELECT COUNT(*) FROM students WHERE phone='" . $db->escapeString($phone) . "'");
+            $exist = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . "");
             if ($exist > 0) { json(['error' => '手机号已存在']); break; }
             $source = trim($input['source'] ?? '');
             $followStatus = trim($input['follow_status'] ?? '');
@@ -2008,8 +2014,8 @@ function handleApi() {
             $rid = $resourceId > 0 ? $resourceId : 'NULL';
             $n = now();
             $studentNo = generateStudentNo($db);
-            $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($rid, '" . $db->escapeString($name) . "', '" . $db->escapeString($phone) . "', '" . $db->escapeString($source) . "', '" . $db->escapeString($followStatus) . "', '$studentNo', '$n')");
-            json(['message' => '新增学员成功', 'id' => $db->lastInsertRowID()]);
+            $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($rid, " . $db->quote($name) . ", " . $db->quote($phone) . ", " . $db->quote($source) . ", " . $db->quote($followStatus) . ", '$studentNo', '$n')");
+            json(['message' => '新增学员成功', 'id' => $db->lastInsertId()]);
             break;
 
         case 'update_student':
@@ -2019,11 +2025,11 @@ function handleApi() {
             $name = trim($input['name'] ?? '');
             $phone = trim($input['phone'] ?? '');
             if (!$name || !$phone) { json(['error' => '姓名和手机号不能为空']); break; }
-            $exist = $db->querySingle("SELECT COUNT(*) FROM students WHERE phone='" . $db->escapeString($phone) . "' AND id!=$id");
+            $exist = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . " AND id!=$id");
             if ($exist > 0) { json(['error' => '手机号已被其他学员使用']); break; }
             $source = trim($input['source'] ?? '');
             $followStatus = trim($input['follow_status'] ?? '');
-            $db->exec("UPDATE students SET name='" . $db->escapeString($name) . "', phone='" . $db->escapeString($phone) . "', source='" . $db->escapeString($source) . "', follow_status='" . $db->escapeString($followStatus) . "' WHERE id=$id");
+            $db->exec("UPDATE students SET name=" . $db->quote($name) . ", phone=" . $db->quote($phone) . ", source=" . $db->quote($source) . ", follow_status=" . $db->quote($followStatus) . " WHERE id=$id");
             json(['message' => '更新成功']);
             break;
 
@@ -2049,14 +2055,14 @@ function handleApi() {
             $n = now();
             $orderNo = generateOrderNo($db);
             $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
-            $stmt->bindValue(':sid', $studentId, SQLITE3_INTEGER);
-            $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
-            $stmt->bindValue(':pn', $planName, SQLITE3_TEXT);
-            $stmt->bindValue(':inm', $itemName, SQLITE3_TEXT);
-            $stmt->bindValue(':lc', $lessonCount, SQLITE3_INTEGER);
-            $stmt->bindValue(':ap', $actualPrice, SQLITE3_FLOAT);
-            $stmt->bindValue(':ono', $orderNo, SQLITE3_TEXT);
-            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+            $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
+            $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
+            $stmt->bindValue(':inm', $itemName, PDO::PARAM_STR);
+            $stmt->bindValue(':lc', $lessonCount, PDO::PARAM_INT);
+            $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
+            $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
+            $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmt->execute();
         case 'enroll_from_resource':
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -2068,60 +2074,60 @@ function handleApi() {
             $lessonCount = intval($input['lesson_count'] ?? 0);
             $actualPrice = floatval($input['actual_price'] ?? 0);
             if (!$planName || !$itemName) { json(['error' => '请选择价格方案和报价单']); break; }
-            $res = $db->querySingle("SELECT name, phone, source, follow_status FROM resources WHERE id=$resourceId", true);
+            $res = $db->query("SELECT name, phone, source, follow_status FROM resources WHERE id=$resourceId")->fetch(PDO::FETCH_ASSOC);
             if (!$res) { json(['error' => '资源不存在']); break; }
             $name = $res['name'];
             $phone = $res['phone'];
             if (!$phone) { json(['error' => '该资源没有手机号']); break; }
-            $existing = $db->querySingle("SELECT id FROM students WHERE phone='" . $db->escapeString($phone) . "'", true);
+            $existing = $db->query("SELECT id FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . "", true);
             if ($existing) {
                 $studentId = $existing['id'];
             } else {
-                $source = $db->escapeString($res['source'] ?? '');
-                $followStatus = $db->escapeString($res['follow_status'] ?? '');
-                $ename = $db->escapeString($name);
-                $ephone = $db->escapeString($phone);
+                $source = $db->quote($res['source'] ?? '');
+                $followStatus = $db->quote($res['follow_status'] ?? '');
+                $ename = $db->quote($name);
+                $ephone = $db->quote($phone);
                 $studentNo = generateStudentNo($db);
                 $n = now();
                 $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, '$ename', '$ephone', '$source', '$followStatus', '$studentNo', '$n')");
-                $studentId = $db->lastInsertRowID();
+                $studentId = $db->lastInsertId();
             }
             $n = now();
             $orderNo = generateOrderNo($db);
             $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
-            $stmt->bindValue(':sid', $studentId, SQLITE3_INTEGER);
-            $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
-            $stmt->bindValue(':pn', $planName, SQLITE3_TEXT);
-            $stmt->bindValue(':inm', $itemName, SQLITE3_TEXT);
-            $stmt->bindValue(':lc', $lessonCount, SQLITE3_INTEGER);
-            $stmt->bindValue(':ap', $actualPrice, SQLITE3_FLOAT);
-            $stmt->bindValue(':ono', $orderNo, SQLITE3_TEXT);
-            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+            $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
+            $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
+            $stmt->bindValue(':inm', $itemName, PDO::PARAM_STR);
+            $stmt->bindValue(':lc', $lessonCount, PDO::PARAM_INT);
+            $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
+            $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
+            $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmt->execute();
-            json(['message' => '报名成功，学员ID：' . $studentId, 'id' => $db->lastInsertRowID(), 'student_id' => $studentId]);
+            json(['message' => '报名成功，学员ID：' . $studentId, 'id' => $db->lastInsertId(), 'student_id' => $studentId]);
             break;
 
         case 'create_student_from_resource':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $resourceId = intval($input['resource_id'] ?? 0);
             if ($resourceId <= 0) json(['error' => '资源ID无效']);
-            $res = $db->querySingle("SELECT name, phone, source, follow_status FROM resources WHERE id=$resourceId", true);
+            $res = $db->query("SELECT name, phone, source, follow_status FROM resources WHERE id=$resourceId")->fetch(PDO::FETCH_ASSOC);
             if (!$res) json(['error' => '资源不存在']);
             $name = $res['name'];
             $phone = $res['phone'];
             if (!$phone) json(['error' => '该资源没有手机号，无法创建学员记录']);
-            $existing = $db->querySingle("SELECT id FROM students WHERE phone='" . $db->escapeString($phone) . "'", true);
+            $existing = $db->query("SELECT id FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . "", true);
             if ($existing) {
                 $studentId = $existing['id'];
             } else {
-                $source = $db->escapeString($res['source'] ?? '');
-                $followStatus = $db->escapeString($res['follow_status'] ?? '');
-                $ename = $db->escapeString($name);
-                $ephone = $db->escapeString($phone);
+                $source = $db->quote($res['source'] ?? '');
+                $followStatus = $db->quote($res['follow_status'] ?? '');
+                $ename = $db->quote($name);
+                $ephone = $db->quote($phone);
                 $studentNo = generateStudentNo($db);
                 $n = now();
                 $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, '$ename', '$ephone', '$source', '$followStatus', '$studentNo', '$n')");
-                $studentId = $db->lastInsertRowID();
+                $studentId = $db->lastInsertId();
             }
             json(['student_id' => $studentId, 'message' => '学员记录已就绪']);
             break;
@@ -2132,7 +2138,7 @@ function handleApi() {
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
             $res = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
-            while ($r = $res->fetchArray(SQLITE3_ASSOC)) {
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
                 $cl = intval($r['consumed_lessons'] ?? 0);
@@ -2158,7 +2164,7 @@ function handleApi() {
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
             $res = $db->query("SELECT a.*, c.name AS course_name FROM attendance_records a LEFT JOIN courses c ON a.course_id = c.id WHERE a.student_id = $sid ORDER BY a.lesson_date DESC, a.id DESC");
-            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $r;
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['data' => $rows]);
             break;
 
@@ -2173,31 +2179,31 @@ function handleApi() {
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
             $n = now();
             $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, lesson_date, status, notes, created_at) VALUES (:sid, :cid, :dt, :st, :nt, :ct)");
-            $stmt->bindValue(':sid', $sid, SQLITE3_INTEGER);
-            $stmt->bindValue(':cid', $cid, SQLITE3_INTEGER);
-            $stmt->bindValue(':dt', $lessonDate, SQLITE3_TEXT);
-            $stmt->bindValue(':st', $status, SQLITE3_TEXT);
-            $stmt->bindValue(':nt', $notes, SQLITE3_TEXT);
-            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
+            $stmt->bindValue(':cid', $cid, PDO::PARAM_INT);
+            $stmt->bindValue(':dt', $lessonDate, PDO::PARAM_STR);
+            $stmt->bindValue(':st', $status, PDO::PARAM_STR);
+            $stmt->bindValue(':nt', $notes, PDO::PARAM_STR);
+            $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '考勤记录添加成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '考勤记录添加成功']);
             break;
 
         case 'update_attendance':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) { json(['error' => '参数错误']); break; }
-            $existing = $db->querySingle("SELECT * FROM attendance_records WHERE id=$id", true);
+            $existing = $db->query("SELECT * FROM attendance_records WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) { json(['error' => '记录不存在']); break; }
             $fields = [];
             if (isset($input['course_id'])) $fields[] = "course_id=" . intval($input['course_id']);
-            if (isset($input['lesson_date'])) $fields[] = "lesson_date='" . $db->escapeString(trim($input['lesson_date'])) . "'";
+            if (isset($input['lesson_date'])) $fields[] = "lesson_date='" . $db->quote(trim($input['lesson_date'])) . "'";
             if (isset($input['status'])) {
                 $st = trim($input['status']);
                 if (!in_array($st, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
-                $fields[] = "status='" . $db->escapeString($st) . "'";
+                $fields[] = "status=" . $db->quote($st) . "";
             }
-            if (isset($input['notes'])) $fields[] = "notes='" . $db->escapeString(trim($input['notes'])) . "'";
+            if (isset($input['notes'])) $fields[] = "notes='" . $db->quote(trim($input['notes'])) . "'";
             if (empty($fields)) { json(['message' => '无变更']); break; }
             $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
             json(['message' => '考勤记录更新成功']);
@@ -2225,22 +2231,22 @@ function handleApi() {
             }
             $countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
             $stmt = $db->prepare($countSql);
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
             $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
-            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             $rows = [];
             $res = $stmt->execute();
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             // 支付方式汇总
             $summarySql = "SELECT SUM(COALESCE(o.cash_amount,0)) AS cash_total, SUM(COALESCE(o.meituan_amount,0)) AS meituan_total FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
             $sumStmt = $db->prepare($summarySql);
-            foreach ($params as $k => $v) $sumStmt->bindValue($k, $v, SQLITE3_TEXT);
+            foreach ($params as $k => $v) $sumStmt->bindValue($k, $v, PDO::PARAM_STR);
             $sumRes = $sumStmt->execute();
-            $paymentSummary = $sumRes->fetchArray(SQLITE3_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0];
+            $paymentSummary = $sumRes->fetch(PDO::FETCH_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0];
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize, 'payment_summary' => $paymentSummary]);
             break;
 
@@ -2256,15 +2262,15 @@ function handleApi() {
                 $params[':kw'] = "%$keyword%";
             }
             $stmt = $db->prepare("SELECT COUNT(*) FROM parent_orders po $where");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
             $stmt = $db->prepare("SELECT * FROM parent_orders po $where ORDER BY po.id DESC LIMIT :limit OFFSET :offset");
-            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
-            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
+            $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $res = $stmt->execute();
             $rows = [];
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
@@ -2281,16 +2287,16 @@ function handleApi() {
                 $params[':kw'] = "%$keyword%";
             }
             $stmt = $db->prepare("SELECT COUNT(*) FROM classes cl $where");
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $total = $stmt->execute()->fetchArray(SQLITE3_NUM)[0];
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $total = $stmt->execute()->fetch(PDO::FETCH_NUM)[0];
             $sql = "SELECT cl.*, c.name AS course_name FROM classes cl LEFT JOIN courses c ON cl.course_id = c.id $where ORDER BY cl.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, SQLITE3_TEXT);
-            $stmt->bindValue(':limit', $pageSize, SQLITE3_INTEGER);
-            $stmt->bindValue(':offset', $offset, SQLITE3_INTEGER);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             $rows = [];
             $res = $stmt->execute();
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
@@ -2315,24 +2321,24 @@ function handleApi() {
             if (mb_strlen($remark) > 200) json(['error' => '备注最长200字']);
             $n = now();
             $stmt = $db->prepare("INSERT INTO classes (course_id, name, class_type, max_students, lesson_hours, can_trial, campus, remark, created_at) VALUES (:cid, :nm, :ct, :ms, :lh, :tr, :cp, :rm, :ca)");
-            $stmt->bindValue(':cid', $courseId, SQLITE3_INTEGER);
-            $stmt->bindValue(':nm', $name, SQLITE3_TEXT);
-            $stmt->bindValue(':ct', $classType, SQLITE3_TEXT);
-            $stmt->bindValue(':ms', $maxStudents, SQLITE3_INTEGER);
-            $stmt->bindValue(':lh', $lessonHours, SQLITE3_INTEGER);
-            $stmt->bindValue(':tr', $canTrial, SQLITE3_TEXT);
-            $stmt->bindValue(':cp', $campus, SQLITE3_TEXT);
-            $stmt->bindValue(':rm', $remark, SQLITE3_TEXT);
-            $stmt->bindValue(':ca', $n, SQLITE3_TEXT);
+            $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
+            $stmt->bindValue(':nm', $name, PDO::PARAM_STR);
+            $stmt->bindValue(':ct', $classType, PDO::PARAM_STR);
+            $stmt->bindValue(':ms', $maxStudents, PDO::PARAM_INT);
+            $stmt->bindValue(':lh', $lessonHours, PDO::PARAM_INT);
+            $stmt->bindValue(':tr', $canTrial, PDO::PARAM_STR);
+            $stmt->bindValue(':cp', $campus, PDO::PARAM_STR);
+            $stmt->bindValue(':rm', $remark, PDO::PARAM_STR);
+            $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '班级新增成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '班级新增成功']);
             break;
 
         case 'update_class':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) json(['error' => '班级ID无效']);
-            $existing = $db->querySingle("SELECT * FROM classes WHERE id=$id", true);
+            $existing = $db->query("SELECT * FROM classes WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) json(['error' => '班级不存在']);
             $updates = [];
             if (isset($input['course_id'])) { $updates[] = "course_id=" . intval($input['course_id']); }
@@ -2340,17 +2346,17 @@ function handleApi() {
                 $nm = trim($input['name']);
                 if ($nm === '') json(['error' => '班级名称不能为空']);
                 if (mb_strlen($nm) > 20) json(['error' => '班级名称最长20字']);
-                $updates[] = "name='" . $db->escapeString($nm) . "'";
+                $updates[] = "name=" . $db->quote($nm) . "";
             }
-            if (isset($input['class_type'])) { $updates[] = "class_type='" . $db->escapeString(trim($input['class_type'])) . "'"; }
+            if (isset($input['class_type'])) { $updates[] = "class_type='" . $db->quote(trim($input['class_type'])) . "'"; }
             if (isset($input['max_students'])) { $updates[] = "max_students=" . intval($input['max_students']); }
             if (isset($input['lesson_hours'])) { $lh = intval($input['lesson_hours']); if ($lh % 2 !== 0) json(['error' => '授课课时必须为偶数']); $updates[] = "lesson_hours=" . $lh; }
-            if (isset($input['can_trial'])) { $updates[] = "can_trial='" . $db->escapeString(trim($input['can_trial'])) . "'"; }
-            if (isset($input['campus'])) { $updates[] = "campus='" . $db->escapeString(trim($input['campus'])) . "'"; }
+            if (isset($input['can_trial'])) { $updates[] = "can_trial='" . $db->quote(trim($input['can_trial'])) . "'"; }
+            if (isset($input['campus'])) { $updates[] = "campus='" . $db->quote(trim($input['campus'])) . "'"; }
             if (isset($input['remark'])) {
                 $rm = trim($input['remark']);
                 if (mb_strlen($rm) > 200) json(['error' => '备注最长200字']);
-                $updates[] = "remark='" . $db->escapeString($rm) . "'";
+                $updates[] = "remark=" . $db->quote($rm) . "";
             }
             if (empty($updates)) json(['message' => '无变更']);
             $db->exec("UPDATE classes SET " . implode(', ', $updates) . " WHERE id=$id");
@@ -2371,10 +2377,10 @@ function handleApi() {
             $classId = intval($_GET['class_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             $stmt = $db->prepare("SELECT * FROM schedules WHERE class_id=:cid ORDER BY id DESC");
-            $stmt->bindValue(':cid', $classId, SQLITE3_INTEGER);
+            $stmt->bindValue(':cid', $classId, PDO::PARAM_INT);
             $rows = [];
             $res = $stmt->execute();
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) {
                 $row['sessions'] = computeSessions($row);
                 $rows[] = $row;
             }
@@ -2384,7 +2390,7 @@ function handleApi() {
         case 'get_schedule':
             $scheduleId = intval($_GET['id'] ?? 0);
             if ($scheduleId <= 0) json(['error' => '排课ID无效']);
-            $row = $db->querySingle("SELECT * FROM schedules WHERE id=$scheduleId", true);
+            $row = $db->query("SELECT * FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
             if (!$row) json(['error' => '排课记录不存在']);
             json(['data' => $row]);
             break;
@@ -2409,35 +2415,35 @@ function handleApi() {
             }
             $n = now();
             $stmt = $db->prepare("INSERT INTO schedules (class_id, rule_type, start_date, end_date, weekdays, time_slots, holiday_enabled, teacher, classroom, created_at) VALUES (:cid, :rt, :sd, :ed, :wd, :ts, :he, :tch, :cr, :ca)");
-            $stmt->bindValue(':cid', $classId, SQLITE3_INTEGER);
-            $stmt->bindValue(':rt', $ruleType, SQLITE3_TEXT);
-            $stmt->bindValue(':sd', $startDate, SQLITE3_TEXT);
-            $stmt->bindValue(':ed', $endDate, SQLITE3_TEXT);
-            $stmt->bindValue(':wd', $weekdays, SQLITE3_TEXT);
-            $stmt->bindValue(':ts', $timeSlots, SQLITE3_TEXT);
-            $stmt->bindValue(':he', $holidayEnabled, SQLITE3_INTEGER);
-            $stmt->bindValue(':tch', $teacher, SQLITE3_TEXT);
-            $stmt->bindValue(':cr', $classroom, SQLITE3_TEXT);
-            $stmt->bindValue(':ca', $n, SQLITE3_TEXT);
+            $stmt->bindValue(':cid', $classId, PDO::PARAM_INT);
+            $stmt->bindValue(':rt', $ruleType, PDO::PARAM_STR);
+            $stmt->bindValue(':sd', $startDate, PDO::PARAM_STR);
+            $stmt->bindValue(':ed', $endDate, PDO::PARAM_STR);
+            $stmt->bindValue(':wd', $weekdays, PDO::PARAM_STR);
+            $stmt->bindValue(':ts', $timeSlots, PDO::PARAM_STR);
+            $stmt->bindValue(':he', $holidayEnabled, PDO::PARAM_INT);
+            $stmt->bindValue(':tch', $teacher, PDO::PARAM_STR);
+            $stmt->bindValue(':cr', $classroom, PDO::PARAM_STR);
+            $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '排课新增成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '排课新增成功']);
             break;
 
         case 'update_schedule':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) json(['error' => '排课ID无效']);
-            $existing = $db->querySingle("SELECT * FROM schedules WHERE id=$id", true);
+            $existing = $db->query("SELECT * FROM schedules WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) json(['error' => '排课记录不存在']);
             $updates = [];
-            if (isset($input['rule_type'])) { $updates[] = "rule_type='" . $db->escapeString(trim($input['rule_type'])) . "'"; }
-            if (isset($input['start_date'])) { $updates[] = "start_date='" . $db->escapeString(trim($input['start_date'])) . "'"; }
-            if (isset($input['end_date'])) { $updates[] = "end_date='" . $db->escapeString(trim($input['end_date'])) . "'"; }
-            if (isset($input['weekdays'])) { $updates[] = "weekdays='" . $db->escapeString(trim($input['weekdays'])) . "'"; }
-            if (isset($input['time_slots'])) { $updates[] = "time_slots='" . $db->escapeString(trim($input['time_slots'])) . "'"; }
+            if (isset($input['rule_type'])) { $updates[] = "rule_type='" . $db->quote(trim($input['rule_type'])) . "'"; }
+            if (isset($input['start_date'])) { $updates[] = "start_date='" . $db->quote(trim($input['start_date'])) . "'"; }
+            if (isset($input['end_date'])) { $updates[] = "end_date='" . $db->quote(trim($input['end_date'])) . "'"; }
+            if (isset($input['weekdays'])) { $updates[] = "weekdays='" . $db->quote(trim($input['weekdays'])) . "'"; }
+            if (isset($input['time_slots'])) { $updates[] = "time_slots='" . $db->quote(trim($input['time_slots'])) . "'"; }
             if (isset($input['holiday_enabled'])) { $updates[] = "holiday_enabled=" . intval($input['holiday_enabled']); }
-            if (isset($input['teacher'])) { $updates[] = "teacher='" . $db->escapeString(trim($input['teacher'])) . "'"; }
-            if (isset($input['classroom'])) { $updates[] = "classroom='" . $db->escapeString(trim($input['classroom'])) . "'"; }
+            if (isset($input['teacher'])) { $updates[] = "teacher='" . $db->quote(trim($input['teacher'])) . "'"; }
+            if (isset($input['classroom'])) { $updates[] = "classroom='" . $db->quote(trim($input['classroom'])) . "'"; }
             if (empty($updates)) json(['message' => '无变更']);
             $db->exec("UPDATE schedules SET " . implode(', ', $updates) . " WHERE id=$id");
             json(['message' => '排课更新成功']);
@@ -2457,12 +2463,12 @@ function handleApi() {
             $keyword = $_GET['keyword'] ?? '';
             $where = [];
             if ($keyword) {
-                $where[] = "name LIKE '%" . $db->escapeString($keyword) . "%'";
+                $where[] = "name LIKE '%" . $db->quote($keyword) . "%'";
             }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
             $rows = [];
             $res = $db->query("SELECT * FROM classrooms $whereStr ORDER BY id DESC");
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
 
@@ -2470,39 +2476,39 @@ function handleApi() {
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if ($name === '') json(['error' => '教室名称不能为空']);
-            $existing = $db->querySingle("SELECT COUNT(*) FROM classrooms WHERE name='" . $db->escapeString($name) . "'");
+            $existing = $db->query("SELECT COUNT(*) FROM classrooms WHERE name=" . $db->quote($name)->fetchColumn() . "");
             if (intval($existing) > 0) json(['error' => '教室名称已存在']);
             $capacity = intval($input['capacity'] ?? 0);
             $campus = trim($input['campus'] ?? '');
             $remark = trim($input['remark'] ?? '');
             $n = now();
             $stmt = $db->prepare("INSERT INTO classrooms (name, capacity, campus, remark, created_at) VALUES (:nm, :cp, :ca, :rm, :ct)");
-            $stmt->bindValue(':nm', $name, SQLITE3_TEXT);
-            $stmt->bindValue(':cp', $capacity, SQLITE3_INTEGER);
-            $stmt->bindValue(':ca', $campus, SQLITE3_TEXT);
-            $stmt->bindValue(':rm', $remark, SQLITE3_TEXT);
-            $stmt->bindValue(':ct', $n, SQLITE3_TEXT);
+            $stmt->bindValue(':nm', $name, PDO::PARAM_STR);
+            $stmt->bindValue(':cp', $capacity, PDO::PARAM_INT);
+            $stmt->bindValue(':ca', $campus, PDO::PARAM_STR);
+            $stmt->bindValue(':rm', $remark, PDO::PARAM_STR);
+            $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmt->execute();
-            json(['id' => $db->lastInsertRowID(), 'message' => '教室新增成功']);
+            json(['id' => $db->lastInsertId(), 'message' => '教室新增成功']);
             break;
 
         case 'update_classroom':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) json(['error' => '教室ID无效']);
-            $existing = $db->querySingle("SELECT * FROM classrooms WHERE id=$id", true);
+            $existing = $db->query("SELECT * FROM classrooms WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) json(['error' => '教室不存在']);
             $updates = [];
             if (isset($input['name'])) {
                 $nm = trim($input['name']);
                 if ($nm === '') json(['error' => '教室名称不能为空']);
-                $dup = $db->querySingle("SELECT COUNT(*) FROM classrooms WHERE name='" . $db->escapeString($nm) . "' AND id!=$id");
+                $dup = $db->query("SELECT COUNT(*) FROM classrooms WHERE name=" . $db->quote($nm)->fetchColumn() . " AND id!=$id");
                 if (intval($dup) > 0) json(['error' => '教室名称已存在']);
-                $updates[] = "name='" . $db->escapeString($nm) . "'";
+                $updates[] = "name=" . $db->quote($nm) . "";
             }
             if (isset($input['capacity'])) { $updates[] = "capacity=" . intval($input['capacity']); }
-            if (isset($input['campus'])) { $updates[] = "campus='" . $db->escapeString(trim($input['campus'])) . "'"; }
-            if (isset($input['remark'])) { $updates[] = "remark='" . $db->escapeString(trim($input['remark'])) . "'"; }
+            if (isset($input['campus'])) { $updates[] = "campus='" . $db->quote(trim($input['campus'])) . "'"; }
+            if (isset($input['remark'])) { $updates[] = "remark='" . $db->quote(trim($input['remark'])) . "'"; }
             if (empty($updates)) json(['message' => '无变更']);
             $db->exec("UPDATE classrooms SET " . implode(', ', $updates) . " WHERE id=$id");
             json(['message' => '教室更新成功']);
@@ -2528,7 +2534,7 @@ function handleApi() {
                 JOIN students s ON s.id = cs.student_id
                 WHERE cs.class_id = $classId
                 ORDER BY cs.id ASC");
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
 
@@ -2538,16 +2544,16 @@ function handleApi() {
             $studentId = intval($input['student_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
-            $exists = $db->querySingle("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId");
+            $exists = $db->query("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId")->fetchColumn();
             if (intval($exists) > 0) json(['error' => '该学员已在此班级中']);
             // 检查一级学科下剩余课时
-            $classRow = $db->querySingle("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $classRow = $db->query("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $subject = $classRow['subject'] ?? '';
             $firstSubjectId = 0;
             // courses.subject 存储格式为 "一级学科名 > 二级学科名"，取末段匹配
             $subjectParts = explode(' > ', $subject);
             $leafSubject = end($subjectParts);
-            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leafSubject) . "'", true);
+            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject)->fetchColumn() . "", true);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -2558,9 +2564,9 @@ function handleApi() {
             if ($firstSubjectId > 0) {
                 $allCourseIds = [];
                 $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
-                while ($c = $sr->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
+                while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
-                    $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
+                    $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                     $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
                     if ($totalRemaining <= 0) {
                         json(['error' => '该学员在此学科下无剩余课时，无法分班']);
@@ -2569,7 +2575,7 @@ function handleApi() {
             }
             $n = now();
             $db->exec("INSERT INTO class_students (class_id, student_id, created_at) VALUES ($classId, $studentId, '$n')");
-            json(['id' => $db->lastInsertRowID(), 'message' => '学员已加入班级']);
+            json(['id' => $db->lastInsertId(), 'message' => '学员已加入班级']);
             break;
 
         case 'remove_class_student':
@@ -2586,7 +2592,7 @@ function handleApi() {
             if ($classId <= 0) json(['error' => '班级ID无效']);
             $where = [];
             if ($keyword) {
-                $keywordEsc = $db->escapeString($keyword);
+                $keywordEsc = $db->quote($keyword);
                 $where[] = "(s.name LIKE '%$keywordEsc%' OR s.phone LIKE '%$keywordEsc%' OR s.student_no LIKE '%$keywordEsc%')";
             }
             $whereStr = $where ? 'AND ' . implode(' AND ', $where) : '';
@@ -2598,7 +2604,7 @@ function handleApi() {
                 ORDER BY s.id DESC
                 LIMIT 50";
             $res = $db->query($sql);
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) $rows[] = $row;
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
 
@@ -2610,7 +2616,7 @@ function handleApi() {
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
             // 获取班级课程信息
-            $classInfo = $db->querySingle("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $classInfo = $db->query("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $classCourseId = intval($classInfo['course_id'] ?? 0);
             $classCourseName = $classInfo['course_name'] ?? '';
             $classLessonHours = intval($classInfo['lesson_hours'] ?? 0);
@@ -2620,7 +2626,7 @@ function handleApi() {
             if ($subjectRaw) {
                 $parts = explode(' > ', $subjectRaw);
                 $leaf = end($parts);
-                $sj = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leaf) . "'", true);
+                $sj = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leaf)->fetchColumn() . "", true);
                 if ($sj) {
                     $classFirstSubjectId = intval($sj['parent_id']) == 0 ? intval($sj['id']) : intval($sj['parent_id']);
                 }
@@ -2628,16 +2634,16 @@ function handleApi() {
             // 获取班级所有学员
             $students = [];
             $res = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
-            while ($r = $res->fetchArray(SQLITE3_ASSOC)) $students[] = $r;
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) $students[] = $r;
             // 获取已有考勤记录
             $attMap = [];
             $attRes = $db->query("SELECT * FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate'");
-            while ($r = $attRes->fetchArray(SQLITE3_ASSOC)) $attMap[$r['student_id']] = $r;
+            while ($r = $attRes->fetch(PDO::FETCH_ASSOC)) $attMap[$r['student_id']] = $r;
             // 预取一级学科下所有课程ID（用于计算 max_deductible）
             $flCourseIds = [];
             if ($classFirstSubjectId > 0) {
                 $flRes = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $classFirstSubjectId OR id = $classFirstSubjectId)");
-                while ($c = $flRes->fetchArray(SQLITE3_ASSOC)) $flCourseIds[] = $c['id'];
+                while ($c = $flRes->fetch(PDO::FETCH_ASSOC)) $flCourseIds[] = $c['id'];
             }
             $rows = [];
             foreach ($students as $stu) {
@@ -2645,13 +2651,13 @@ function handleApi() {
                 // 查询该学员在此课程的剩余课时
                 $remaining = 0;
                 if ($classCourseId > 0) {
-                    $oRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS rem FROM orders WHERE student_id = {$stu['id']} AND course_id = $classCourseId", true);
+                    $oRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS rem FROM orders WHERE student_id = {$stu['id']} AND course_id = $classCourseId")->fetch(PDO::FETCH_ASSOC);
                     $remaining = intval($oRow['rem'] ?? 0);
                 }
                 // 查询该学员在一级学科下所有订单的总剩余课时（步进器上限）
                 $maxDeductible = 0;
                 if ($classFirstSubjectId > 0 && count($flCourseIds) > 0) {
-                    $mdRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND course_id IN (" . implode(',', $flCourseIds) . ")", true);
+                    $mdRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND course_id IN (" . implode(',', $flCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                     $maxDeductible = max(0, intval($mdRow['total'] ?? 0));
                 }
                 $rows[] = [
@@ -2689,7 +2695,7 @@ function handleApi() {
                     if ($studentId <= 0) continue;
                     if (!in_array($status, ['出勤', '请假', '缺勤'])) $status = '出勤';
                     // 查询该学员在此班级课程的一级学科
-                    $classRow = $db->querySingle("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+                    $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
                     $courseId = intval($classRow['course_id'] ?? 0);
                     $subject = $classRow['subject'] ?? '';
                     // 获取一级学科（courses.subject 格式为 "一级学科名 > 二级学科名"）
@@ -2697,7 +2703,7 @@ function handleApi() {
                     $courseSubjId = 0; // 课程所属学科ID（可能就是二级学科）
                     $subjectParts = explode(' > ', $subject);
                     $leafSubject = end($subjectParts);
-                    $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leafSubject) . "'", true);
+                    $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject)->fetchColumn() . "", true);
                     if ($subjRow) {
                         $courseSubjId = intval($subjRow['id']);
                         if (intval($subjRow['parent_id']) == 0) {
@@ -2720,16 +2726,16 @@ function handleApi() {
 
                         // 1. 同一course_id的订单
                         $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                        while ($o = $oRes->fetchArray(SQLITE3_ASSOC)) $allOrderRows[] = $o;
+                        while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
 
                         // 2. 同一二级学科的订单（仅当课程有二级学科归属时）
                         if ($courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
                             $sameSecondCourses = [];
                             $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
-                            while ($c = $sr2->fetchArray(SQLITE3_ASSOC)) $sameSecondCourses[] = $c['id'];
+                            while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
                             if (count($sameSecondCourses) > 0) {
                                 $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes2->fetchArray(SQLITE3_ASSOC)) $allOrderRows[] = $o;
+                                while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
                             }
                         }
 
@@ -2737,10 +2743,10 @@ function handleApi() {
                         if ($firstSubjectId > 0) {
                             $firstLevelCourses = [];
                             $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
-                            while ($c = $sr3->fetchArray(SQLITE3_ASSOC)) $firstLevelCourses[] = $c['id'];
+                            while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
                             if (count($firstLevelCourses) > 0) {
                                 $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes3->fetchArray(SQLITE3_ASSOC)) $allOrderRows[] = $o;
+                                while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
                             }
                         }
 
@@ -2766,7 +2772,7 @@ function handleApi() {
                         $deductionJson = '';
                     }
                     // 退还已扣课时（改状态为缺勤/请假时，按 deduction_json 逐笔归还）
-                    $oldAtt = $db->querySingle("SELECT deducted_lessons, deduction_json FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId", true);
+                    $oldAtt = $db->query("SELECT deducted_lessons, deduction_json FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId")->fetch(PDO::FETCH_ASSOC);
                     if ($oldAtt && !empty($oldAtt['deduction_json'])) {
                         $oldEntries = json_decode($oldAtt['deduction_json'], true);
                         if (is_array($oldEntries)) {
@@ -2783,24 +2789,24 @@ function handleApi() {
                     $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId");
                     $n = now();
                     $stmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, deducted_order_id, deduction_json, created_at) VALUES (:cid, :scid, :sd, :stid, :st, :dl, :doid, :dj, :ca)");
-                    $stmt->bindValue(':cid', $classId, SQLITE3_INTEGER);
-                    $stmt->bindValue(':scid', $scheduleId, SQLITE3_INTEGER);
-                    $stmt->bindValue(':sd', $sessionDate, SQLITE3_TEXT);
-                    $stmt->bindValue(':stid', $studentId, SQLITE3_INTEGER);
-                    $stmt->bindValue(':st', $status, SQLITE3_TEXT);
-                    $stmt->bindValue(':dl', $deductedLessons, SQLITE3_INTEGER);
-                    $stmt->bindValue(':doid', $deductedOrderId, SQLITE3_INTEGER);
-                    $stmt->bindValue(':dj', $deductionJson, SQLITE3_TEXT);
-                    $stmt->bindValue(':ca', $n, SQLITE3_TEXT);
+                    $stmt->bindValue(':cid', $classId, PDO::PARAM_INT);
+                    $stmt->bindValue(':scid', $scheduleId, PDO::PARAM_INT);
+                    $stmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
+                    $stmt->bindValue(':stid', $studentId, PDO::PARAM_INT);
+                    $stmt->bindValue(':st', $status, PDO::PARAM_STR);
+                    $stmt->bindValue(':dl', $deductedLessons, PDO::PARAM_INT);
+                    $stmt->bindValue(':doid', $deductedOrderId, PDO::PARAM_INT);
+                    $stmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
+                    $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
                     $stmt->execute();
                     // 考勤完成后，判断是否需要移出班级
                     if ($firstSubjectId > 0) {
                         // 获取一级学科下所有课程ID
                         $allCourseIds = [];
                         $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
-                        while ($c = $sr3->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
+                        while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                         if (count($allCourseIds) > 0) {
-                            $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
+                            $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                             $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
                             if ($totalRemaining <= 0) {
                                 // 移出该学员在此一级学科下所有班级的记录
@@ -2823,13 +2829,13 @@ function handleApi() {
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
             // 获取班级课程的一级学科
-            $classRow = $db->querySingle("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId", true);
+            $classRow = $db->query("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $subject = $classRow['subject'] ?? '';
             $firstSubjectId = 0;
             // courses.subject 存储格式为 "一级学科名 > 二级学科名"，需取末段匹配 subjects.name
             $subjectParts = explode(' > ', $subject);
             $leafSubject = end($subjectParts);
-            $subjRow = $db->querySingle("SELECT id, parent_id FROM subjects WHERE name = '" . $db->escapeString($leafSubject) . "'", true);
+            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject)->fetchColumn() . "", true);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -2841,9 +2847,9 @@ function handleApi() {
             if ($firstSubjectId > 0) {
                 $allCourseIds = [];
                 $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
-                while ($c = $sr->fetchArray(SQLITE3_ASSOC)) $allCourseIds[] = $c['id'];
+                while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
-                    $sumRow = $db->querySingle("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")", true);
+                    $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                     $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
                 }
             }
@@ -2863,7 +2869,7 @@ function handleApi() {
                 JOIN classes c ON s.class_id = c.id 
                 LEFT JOIN courses co ON c.course_id = co.id 
                 ORDER BY c.name, s.id");
-            while ($row = $res->fetchArray(SQLITE3_ASSOC)) {
+            while ($row = $res->fetch(PDO::FETCH_ASSOC)) {
                 $sesList = computeSessions($row);
                 foreach ($sesList as $ses) {
                     $d = $ses['date'];
@@ -2897,7 +2903,7 @@ function handleApi() {
 }
 
 // 意向等级默认数据初始化
-$count = $db->querySingle("SELECT COUNT(*) FROM intention_levels");
+$count = $db->query("SELECT COUNT(*) FROM intention_levels")->fetchColumn();
 if (intval($count) === 0) {
     $n = now();
     $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('A-高意向', 1, '$n')");
@@ -2907,7 +2913,7 @@ if (intval($count) === 0) {
 }
 
 // 基础类型默认数据初始化
-$countBt = $db->querySingle("SELECT COUNT(*) FROM basic_types");
+$countBt = $db->query("SELECT COUNT(*) FROM basic_types")->fetchColumn();
 if (intval($countBt) === 0) {
     $n = now();
     $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('course_type', '试听课', 1, '$n')");
