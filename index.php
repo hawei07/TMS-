@@ -2383,6 +2383,10 @@ $stmt->execute();
                 $where = "WHERE cl.name LIKE :kw";
                 $params[':kw'] = "%$keyword%";
             }
+            // has_schedule=1 仅返回已有排课记录的班级
+            if (isset($_GET['has_schedule']) && $_GET['has_schedule'] == '1') {
+                $where .= ($where ? ' AND' : 'WHERE') . ' cl.id IN (SELECT DISTINCT class_id FROM schedules)';
+            }
             $stmt = $db->prepare("SELECT COUNT(*) FROM classes cl $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];

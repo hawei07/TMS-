@@ -4791,7 +4791,7 @@ async function showClassEnrollModal(studentId) {
     openModal('modal-class-enroll');
     // 加载所有班级
     try {
-        const res = await fetch(API_BASE + 'list_classes&page=1&page_size=500');
+        const res = await fetch(API_BASE + 'list_classes&page=1&page_size=500&has_schedule=1');
         const data = await res.json();
         const classes = data.data || [];
         if (classes.length === 0) {
