@@ -4072,10 +4072,10 @@ async function confirmPayEnroll() {
             }, 'POST');
             if (result.error) { showToast(result.error, 'error'); return; }
             showToast(result.message);
-            // Return to my resources
-            activatePanel('panel-my-resources');
-            highlightLeafByPanel('panel-my-resources');
-            loadMyResources();
+            // 跳转至交易订单列表
+            activatePanel('panel-orders');
+            highlightLeafByPanel('panel-orders');
+            loadOrders();
         });
         return;
     }
@@ -4095,8 +4095,10 @@ async function confirmPayEnroll() {
         }, 'POST');
         if (result.error) { showToast(result.error, 'error'); return; }
         showToast(result.message);
-        // Return to student detail
-        viewStudent(currentEnrollStudentId);
+        // 跳转至交易订单列表
+        activatePanel('panel-orders');
+        highlightLeafByPanel('panel-orders');
+        loadOrders();
     });
 }
 
@@ -4875,7 +4877,10 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
         }
         tbody.innerHTML = rows.map(r => {
             const currentStatus = r.status || '出勤';
-            const deducted = r.attendance_id ? (r.deducted_lessons || 0) : (r.lesson_hours || 1);
+            const maxDeductible = r.max_deductible || 0;
+            let deducted = r.attendance_id ? (r.deducted_lessons || 0) : (r.lesson_hours || 1);
+            // 已扣值不得超过一级学科剩余课时上限
+            if (maxDeductible > 0 && deducted > maxDeductible) deducted = maxDeductible;
             const remaining = r.remaining_lessons || 0;
             return `<tr id="att-row-${r.student_id}">
                 <td><button class="btn-remove-att" onclick="removeAttendanceStudent(${r.student_id})" title="移除此学员">移除</button></td>
@@ -4885,7 +4890,7 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
                 <td>
                     <span class="att-deduct-stepper">
                         <button class="stepper-btn" onclick="attDeductChange(this, -1)">−</button>
-                        <span class="stepper-val" data-sid="${r.student_id}" data-lesson-hours="${r.lesson_hours || 1}" data-max="${r.max_deductible || 0}">${deducted}</span>
+                        <span class="stepper-val" data-sid="${r.student_id}" data-lesson-hours="${r.lesson_hours || 1}" data-max="${maxDeductible}">${deducted}</span>
                         <button class="stepper-btn" onclick="attDeductChange(this, 1)">+</button>
                     </span>
                 </td>
@@ -4897,6 +4902,17 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
                 </td>
             </tr>`;
         }).join('');
+        // 初始化缺勤状态的步进器（禁用并置0）
+        document.querySelectorAll('#as-attendance-tbody .att-status-chip.active[data-val="缺勤"]').forEach(chip => {
+            const row = chip.closest('tr');
+            if (!row) return;
+            const stepper = row.querySelector('.att-deduct-stepper');
+            const valSpan = stepper ? stepper.querySelector('.stepper-val') : null;
+            if (stepper && valSpan) {
+                valSpan.textContent = '0';
+                stepper.classList.add('disabled');
+            }
+        });
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-danger);padding:20px;">加载失败</td></tr>';
     }
@@ -4918,6 +4934,7 @@ function removeAttendanceStudent(studentId) {
 
 function attDeductChange(btn, delta) {
     const stepper = btn.closest('.att-deduct-stepper');
+    if (stepper.classList.contains('disabled')) return;
     const valSpan = stepper.querySelector('.stepper-val');
     let val = parseInt(valSpan.textContent) || 0;
     const max = parseInt(valSpan.dataset.max) || 0;
