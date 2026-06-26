@@ -2698,6 +2698,9 @@ $stmt->execute();
                     $mdRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND course_id IN (" . implode(',', $flCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                     $totalRemaining = max(0, intval($mdRow['total'] ?? 0));
                 }
+                // 编辑时步进器上限 = 当前剩余 + 已扣值（因保存时会先退还再重扣）
+                $maxDeductible = $totalRemaining;
+                if ($aid) $maxDeductible += intval($aid['deducted_lessons']);
                 $rows[] = [
                     'student_id' => $stu['id'],
                     'student_no' => $stu['student_no'],
@@ -2705,7 +2708,7 @@ $stmt->execute();
                     'course_name' => $classCourseName,
                     'remaining_lessons' => $totalRemaining,
                     'lesson_hours' => $classLessonHours,
-                    'max_deductible' => $totalRemaining,
+                    'max_deductible' => $maxDeductible,
                     'status' => $aid ? $aid['status'] : '',
                     'deducted_lessons' => $aid ? intval($aid['deducted_lessons']) : 0,
                     'deducted_order_id' => $aid ? intval($aid['deducted_order_id']) : 0,
@@ -2755,19 +2758,6 @@ $stmt->execute();
                     if ($status === '出勤' && $deductedLessons <= 0) {
                         $deductedLessons = max(1, intval($classRow['lesson_hours'] ?? 0));
                     }
-                    // 出勤上限校验：扣除课时数不得超过该学员一级学科剩余课时总额
-                    if ($status === '出勤' && $deductedLessons > 0 && $firstSubjectId > 0) {
-                        $allSubjCourseIds = [];
-                        $srMax = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
-                        while ($c = $srMax->fetch(PDO::FETCH_ASSOC)) $allSubjCourseIds[] = $c['id'];
-                        if (count($allSubjCourseIds) > 0) {
-                            $maxRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS max_deductible FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allSubjCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
-                            $maxDeductible = intval($maxRow['max_deductible'] ?? 0);
-                            if ($deductedLessons > $maxDeductible) {
-                                throw new Exception("学员「{$rec['student_name']}」剩余课时不足：最多可扣 $maxDeductible 课时，当前请求扣 $deductedLessons 课时");
-                            }
-                        }
-                    }
                     // 退还已扣课时（改状态为缺勤/请假时，按 deduction_json 逐笔归还）
                     // 必须在计算新扣课时之前执行，否则新扣课时计算会基于错误的 consumed_lessons 值
                     $oldAtt = $db->query("SELECT deducted_lessons, deduction_json FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId")->fetch(PDO::FETCH_ASSOC);
@@ -2780,6 +2770,19 @@ $stmt->execute();
                                 if ($oid > 0 && $amt > 0) {
                                     $db->exec("UPDATE orders SET consumed_lessons = consumed_lessons - $amt WHERE id = $oid");
                                 }
+                            }
+                        }
+                    }
+                    // 出勤上限校验：扣除课时数不得超过一级学科剩余课时（退还后重新计算）
+                    if ($status === '出勤' && $deductedLessons > 0 && $firstSubjectId > 0) {
+                        $allSubjCourseIds = [];
+                        $srMax = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                        while ($c = $srMax->fetch(PDO::FETCH_ASSOC)) $allSubjCourseIds[] = $c['id'];
+                        if (count($allSubjCourseIds) > 0) {
+                            $maxRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS max_deductible FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allSubjCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                            $maxDeductible = intval($maxRow['max_deductible'] ?? 0);
+                            if ($deductedLessons > $maxDeductible) {
+                                throw new Exception("学员「{$rec['student_name']}」剩余课时不足：最多可扣 $maxDeductible 课时，当前请求扣 $deductedLessons 课时");
                             }
                         }
                     }
