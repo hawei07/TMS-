@@ -3697,13 +3697,13 @@ async function loadAttendance(sid) {
             if (r.status === '缺勤') statusClass = 'status-缺勤';
             else if (r.status === '请假') statusClass = 'status-请假';
             return `<tr>
-                <td>${esc(r.class_name)}</td>
                 <td>${esc(r.course_name)}</td>
+                <td>${esc(r.class_name)}</td>
                 <td>${esc(r.subject_level1)}</td>
                 <td>${esc(r.subject_level2)}</td>
                 <td>${esc(r.teacher)}</td>
-                <td>${esc(r.class_time)}</td>
                 <td>${r.lesson_date}</td>
+                <td>${esc(r.class_time)}</td>
                 <td>${r.attended_at ? r.attended_at.slice(0, 19) : ''}</td>
                 <td><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
                 <td>${r.deducted_lessons || 0}</td>

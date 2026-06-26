@@ -3845,7 +3845,7 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table class="attendance-table">
                                     <thead><tr>
-                                        <th>班级</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课时间</th><th>上课日期</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
+                                        <th>课程</th><th>班级</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
                                         <tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
