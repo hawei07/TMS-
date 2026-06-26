@@ -89,7 +89,7 @@ function refreshPanel(panelId) {
         case 'panel-classrooms': loadClassrooms(); break;
         case 'panel-students': loadStudents(); break;
         case 'panel-orders': loadOrders(); break;
-        case 'panel-attendance': loadAttendanceSessions(); break;
+        case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
     }
 }
 
@@ -3874,6 +3874,7 @@ let currentEnrollPlanType = '';
 let currentEnrollPlans = [];
 let currentEnrollMode = 'student'; // 'student' | 'resource'
 let currentEnrollResourceId = null;
+let currentEnrollCampusId = null;
 
 async function goEnroll(studentId) {
     currentEnrollStudentId = studentId;
@@ -3883,10 +3884,9 @@ async function goEnroll(studentId) {
     currentEnrollPlans = [];
     currentEnrollMode = 'student';
     currentEnrollResourceId = null;
+    currentEnrollCampusId = null;
 
     // Reset labels for student mode
-    document.getElementById('enroll-info-label-name').textContent = '学员姓名：';
-    document.getElementById('enroll-info-label-phone').textContent = '手机号：';
     document.getElementById('btn-enroll-back').textContent = '返回学员详情';
 
     // Load student info
@@ -3898,21 +3898,13 @@ async function goEnroll(studentId) {
         document.getElementById('enroll-info-phone').textContent = data.student.phone || '-';
     } catch (e) { showToast('加载学员信息失败', 'error'); return; }
 
-    // Load course list
+    // Reset course dropdown
     const courseSel = document.getElementById('enroll-course-select');
-    courseSel.innerHTML = '<option value="">请选择课程</option>';
-    try {
-        const res2 = await fetch(API_BASE + 'list_courses&page=1&page_size=200');
-        const data2 = await res2.json();
-        if (data2.data) {
-            data2.data.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = c.name;
-                courseSel.appendChild(opt);
-            });
-        }
-    } catch (e) { /* ignore */ }
+    courseSel.innerHTML = '<option value="">请先选择校区</option>';
+    courseSel.disabled = true;
+
+    // Load campus list
+    await loadCampusOptions('enroll-campus-select');
 
     // Hide plan/items sections
     document.getElementById('enroll-plans-section').style.display = 'none';
@@ -3930,6 +3922,7 @@ async function goEnrollFromResource(resourceId) {
     currentEnrollPlanId = null;
     currentEnrollPlanType = '';
     currentEnrollPlans = [];
+    currentEnrollCampusId = null;
 
     // Load resource info and display
     try {
@@ -3937,27 +3930,17 @@ async function goEnrollFromResource(resourceId) {
         const data = await res.json();
         if (!data.data || data.data.length === 0) { showToast('未找到该资源', 'error'); return; }
         const resource = data.data[0];
-        document.getElementById('enroll-info-label-name').textContent = '资源姓名：';
-        document.getElementById('enroll-info-label-phone').textContent = '手机号：';
         document.getElementById('enroll-info-name').textContent = resource.name || '-';
         document.getElementById('enroll-info-phone').textContent = resource.phone || '-';
     } catch (e) { showToast('加载资源信息失败', 'error'); return; }
 
-    // Load course list
+    // Reset course dropdown
     const courseSel = document.getElementById('enroll-course-select');
-    courseSel.innerHTML = '<option value="">请选择课程</option>';
-    try {
-        const res2 = await fetch(API_BASE + 'list_courses&page=1&page_size=200');
-        const data2 = await res2.json();
-        if (data2.data) {
-            data2.data.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = c.name;
-                courseSel.appendChild(opt);
-            });
-        }
-    } catch (e) { /* ignore */ }
+    courseSel.innerHTML = '<option value="">请先选择校区</option>';
+    courseSel.disabled = true;
+
+    // Load campus list
+    await loadCampusOptions('enroll-campus-select');
 
     // Update back button text
     document.getElementById('btn-enroll-back').textContent = '返回我的资源';
@@ -3970,8 +3953,28 @@ async function goEnrollFromResource(resourceId) {
     highlightLeafByPanel('panel-enroll');
 }
 
-// Course select change → load plans
+// Campus select change → filter courses
 document.addEventListener('DOMContentLoaded', function() {
+    const campusSel = document.getElementById('enroll-campus-select');
+    if (campusSel) {
+        campusSel.addEventListener('change', async function() {
+            const campusId = this.value;
+            currentEnrollCampusId = campusId ? parseInt(campusId) : null;
+            currentEnrollCourseId = null;
+            currentEnrollPlanId = null;
+            document.getElementById('enroll-plans-section').style.display = 'none';
+            document.getElementById('enroll-items-section').style.display = 'none';
+            const courseSel = document.getElementById('enroll-course-select');
+            if (!campusId) {
+                courseSel.innerHTML = '<option value="">请先选择校区</option>';
+                courseSel.disabled = true;
+                return;
+            }
+            await loadCourseOptionsByCampus('enroll-course-select', campusId);
+            courseSel.disabled = false;
+        });
+    }
+
     const courseSel = document.getElementById('enroll-course-select');
     if (courseSel) {
         courseSel.addEventListener('change', async function() {
@@ -4050,9 +4053,9 @@ function selectEnrollPlan(planId) {
         total += parseFloat(item.actual_price) || 0;
         return `<tr>
             <td>${esc(item.name)}</td>
-            <td>${item.lesson_count || 0}</td>
-            <td>¥${unitPrice.toFixed(2)}</td>
-            <td>¥${Number(item.actual_price).toFixed(2)}</td>
+            <td class="col-num">${item.lesson_count || 0}</td>
+            <td class="col-num">¥${unitPrice.toFixed(2)}</td>
+            <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
         </tr>`;
     }).join('');
     document.getElementById('enroll-total-price').textContent = '¥' + total.toFixed(2);
@@ -4155,35 +4158,89 @@ async function confirmPayEnroll() {
     });
 }
 
+// ==================== 校区/课程 通用加载 ====================
+async function loadCampusOptions(selectId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">请选择校区</option>';
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const campuses = [];
+        if (data.data && data.data.flat) {
+            data.data.flat.forEach(org => {
+                if (org.type === '校区') campuses.push(org);
+            });
+        }
+        campuses.sort((a, b) => (a.sort_order || 0) - (b.sort_order || 0) || a.id - b.id);
+        campuses.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.id;
+            opt.textContent = c.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* ignore */ }
+}
+
+async function loadCourseOptionsByCampus(selectId, campusId) {
+    const sel = document.getElementById(selectId);
+    if (!sel) return;
+    sel.innerHTML = '<option value="">加载中...</option>';
+    try {
+        const res = await fetch(API_BASE + 'list_courses&page=1&page_size=200&campus_id=' + campusId);
+        const data = await res.json();
+        sel.innerHTML = '<option value="">请选择课程</option>';
+        if (data.data && data.data.length > 0) {
+            data.data.forEach(c => {
+                const opt = document.createElement('option');
+                opt.value = c.id;
+                opt.textContent = c.name;
+                sel.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        sel.innerHTML = '<option value="">加载失败</option>';
+    }
+}
+
 // ==================== 报名课程（旧弹窗保留） ====================
 async function showEnrollModal(sid) {
     document.getElementById('enroll-student-id').value = sid;
+    document.getElementById('enroll-campus').value = '';
     document.getElementById('enroll-course').value = '';
     document.getElementById('enroll-plan').innerHTML = '<option value="">请先选择课程</option>';
     document.getElementById('enroll-item').innerHTML = '<option value="">请先选择价格方案</option>';
     document.getElementById('enroll-detail').style.display = 'none';
     document.getElementById('enroll-lesson-count').textContent = '-';
     document.getElementById('enroll-actual-price').textContent = '-';
-    // 加载课程列表
+    // 加载校区列表
+    await loadCampusOptions('enroll-campus');
+    // 重置课程下拉
     const courseSel = document.getElementById('enroll-course');
-    courseSel.innerHTML = '<option value="">请选择课程</option>';
-    try {
-        const res = await fetch(API_BASE + 'list_courses&page=1&page_size=200');
-        const data = await res.json();
-        if (data.data) {
-            data.data.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = c.name;
-                courseSel.appendChild(opt);
-            });
-        }
-    } catch (e) { /* ignore */ }
+    courseSel.innerHTML = '<option value="">请先选择校区</option>';
+    courseSel.disabled = true;
     openModal('modal-enroll');
 }
 
 // 全局存储当前课程的价格方案数据
 let enrollPricePlans = [];
+
+// 校区选择 → 过滤课程
+document.getElementById('enroll-campus').addEventListener('change', async function() {
+    const campusId = this.value;
+    const courseSel = document.getElementById('enroll-course');
+    document.getElementById('enroll-plan').innerHTML = '<option value="">请先选择课程</option>';
+    document.getElementById('enroll-item').innerHTML = '<option value="">请先选择价格方案</option>';
+    document.getElementById('enroll-detail').style.display = 'none';
+    enrollPricePlans = [];
+    if (!campusId) {
+        courseSel.innerHTML = '<option value="">请先选择校区</option>';
+        courseSel.disabled = true;
+        return;
+    }
+    await loadCourseOptionsByCampus('enroll-course', campusId);
+    courseSel.disabled = false;
+});
 
 document.getElementById('enroll-course').addEventListener('change', async function() {
     const courseId = this.value;
@@ -4286,29 +4343,38 @@ let enrollResourcePricePlans = [];
 
 async function showResourceEnrollModal(rid) {
     document.getElementById('enroll-resource-id').value = rid;
+    document.getElementById('enroll-resource-campus').value = '';
     document.getElementById('enroll-resource-course').value = '';
     document.getElementById('enroll-resource-plan').innerHTML = '<option value="">请先选择课程</option>';
     document.getElementById('enroll-resource-item').innerHTML = '<option value="">请先选择价格方案</option>';
     document.getElementById('enroll-resource-detail').style.display = 'none';
     document.getElementById('enroll-resource-lesson-count').textContent = '-';
     document.getElementById('enroll-resource-actual-price').textContent = '-';
-    // 加载课程列表
+    // 加载校区列表
+    await loadCampusOptions('enroll-resource-campus');
+    // 重置课程下拉
     const courseSel = document.getElementById('enroll-resource-course');
-    courseSel.innerHTML = '<option value="">请选择课程</option>';
-    try {
-        const res = await fetch(API_BASE + 'list_courses&page=1&page_size=200');
-        const data = await res.json();
-        if (data.data) {
-            data.data.forEach(c => {
-                const opt = document.createElement('option');
-                opt.value = c.id;
-                opt.textContent = c.name;
-                courseSel.appendChild(opt);
-            });
-        }
-    } catch (e) { /* ignore */ }
+    courseSel.innerHTML = '<option value="">请先选择校区</option>';
+    courseSel.disabled = true;
     openModal('modal-resource-enroll');
 }
+
+// 校区选择 → 过滤课程
+document.getElementById('enroll-resource-campus').addEventListener('change', async function() {
+    const campusId = this.value;
+    const courseSel = document.getElementById('enroll-resource-course');
+    document.getElementById('enroll-resource-plan').innerHTML = '<option value="">请先选择课程</option>';
+    document.getElementById('enroll-resource-item').innerHTML = '<option value="">请先选择价格方案</option>';
+    document.getElementById('enroll-resource-detail').style.display = 'none';
+    enrollResourcePricePlans = [];
+    if (!campusId) {
+        courseSel.innerHTML = '<option value="">请先选择校区</option>';
+        courseSel.disabled = true;
+        return;
+    }
+    await loadCourseOptionsByCampus('enroll-resource-course', campusId);
+    courseSel.disabled = false;
+});
 
 document.getElementById('enroll-resource-course').addEventListener('change', async function() {
     const courseId = this.value;
@@ -4517,7 +4583,20 @@ document.addEventListener('click', function(e) {
     if (e.target.classList.contains('cdt-tab')) {
         switchClassDetailTab(e.target.dataset.tab);
     }
+    if (e.target.classList.contains('att-tab')) {
+        switchAttendanceTab(e.target.dataset.tab);
+    }
 });
+
+function switchAttendanceTab(tabId) {
+    document.querySelectorAll('.att-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
+    document.querySelectorAll('.att-panel').forEach(p => p.classList.toggle('active', p.id === tabId));
+    if (tabId === 'tab-attendance-operations') {
+        loadAttendanceSessions();
+    } else if (tabId === 'tab-student-consumption') {
+        loadStudentConsumption();
+    }
+}
 
 // ==================== 班级详情 - 学员列表 ====================
 async function loadClassStudents() {
@@ -4895,6 +4974,59 @@ async function loadAttendanceSessions(page = 1) {
             : '';
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
+}
+
+// ==================== 考勤 - 学员课耗 ====================
+async function loadStudentConsumption(page = 1) {
+    const tbody = document.getElementById('consumption-tbody');
+    const pagination = document.getElementById('pagination-student-consumption');
+    const dateFrom = document.getElementById('consumption-date-from').value;
+    const dateTo = document.getElementById('consumption-date-to').value;
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    try {
+        let url = API_BASE + 'list_all_attendance&page=' + page + '&page_size=20';
+        if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
+        if (dateTo) url += '&date_to=' + encodeURIComponent(dateTo);
+        const res = await fetch(url);
+        const data = await res.json();
+        const rows = data.data || [];
+        const total = data.total || 0;
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#999;padding:30px;">暂无考勤记录</td></tr>';
+            pagination.innerHTML = '';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            let statusClass = 'status-出勤';
+            if (r.status === '缺勤') statusClass = 'status-缺勤';
+            else if (r.status === '请假') statusClass = 'status-请假';
+            return `<tr>
+                <td>${esc(r.student_no)}</td>
+                <td>${esc(r.student_name)}</td>
+                <td>${esc(r.phone)}</td>
+                <td>${esc(r.course_name)}</td>
+                <td>${esc(r.class_name)}</td>
+                <td>${esc(r.subject_level1)}</td>
+                <td>${esc(r.subject_level2)}</td>
+                <td>${esc(r.teacher)}</td>
+                <td>${r.lesson_date}</td>
+                <td>${esc(r.class_time)}</td>
+                <td>${r.attended_at ? r.attended_at.slice(0, 19) : ''}</td>
+                <td><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
+                <td>${r.deducted_lessons || 0}</td>
+                <td>¥${(parseFloat(r.consumed_amount) || 0).toFixed(2)}</td>
+                <td>${esc(r.campus)}</td>
+            </tr>`;
+        }).join('');
+        const totalPages = Math.ceil(total / 20);
+        pagination.innerHTML = totalPages > 1
+            ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadStudentConsumption(' + (page - 1) + ')"') + '>上一页</button>'
+              + '<span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span>'
+              + '<button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadStudentConsumption(' + (page + 1) + ')"') + '>下一页</button>'
+            : '';
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 

@@ -1574,12 +1574,17 @@ $stmt->execute();
             $page = max(1, intval($_GET['page'] ?? 1));
             $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
             $keyword = $_GET['keyword'] ?? '';
+            $campusId = intval($_GET['campus_id'] ?? 0);
 
             $where = [];
             $params = [];
             if ($keyword) {
                 $where[] = "(name LIKE :kw1 OR subject LIKE :kw2)";
                 $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+            }
+            if ($campusId > 0) {
+                $where[] = "(campus_permission = '' OR campus_permission IS NULL OR FIND_IN_SET(:cid, campus_permission))";
+                $params[':cid'] = $campusId;
             }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -3052,6 +3057,24 @@ $stmt->execute();
             json(['data' => $paged, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
+        case 'list_all_attendance':
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = intval($_GET['page_size'] ?? 20);
+            $where = [];
+            if ($dateFrom) $where[] = "a.lesson_date >= '$dateFrom'";
+            if ($dateTo) $where[] = "a.lesson_date <= '$dateTo'";
+            $whereSql = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
+            $sql = "SELECT a.*, c.name AS course_name, s.name AS student_name, s.student_no, s.phone, cl.campus FROM attendance_records a LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN students s ON a.student_id = s.id LEFT JOIN classes cl ON a.class_id = cl.id $whereSql ORDER BY a.lesson_date DESC, a.id DESC";
+            $stmt = $db->query($sql);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $total = count($rows);
+            $offset = ($page - 1) * $pageSize;
+            $paged = array_slice($rows, $offset, $pageSize);
+            json(['data' => $paged, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
         default:
             json(['error' => 'Unknown action']);
     }
@@ -3701,24 +3724,56 @@ if (intval($countBt) === 0) {
                 <div class="panel-header">
                     <h3>考勤</h3>
                 </div>
-                <div class="toolbar">
-                    <div class="toolbar-left">
-                        <label style="font-size:13px;margin-right:6px;">日期范围：</label>
-                        <input type="date" id="attendance-date-from" style="width:140px;" onchange="loadAttendanceSessions()">
-                        <span style="margin:0 6px;color:#999;">至</span>
-                        <input type="date" id="attendance-date-to" style="width:140px;" onchange="loadAttendanceSessions()">
-                        <button class="btn btn-primary btn-sm" onclick="loadAttendanceSessions()">查询</button>
+                <div class="attendance-tabs">
+                    <button class="att-tab active" data-tab="tab-attendance-operations">操作考勤</button>
+                    <button class="att-tab" data-tab="tab-student-consumption">学员课耗</button>
+                </div>
+                <div class="attendance-tab-content">
+                    <!-- 操作考勤页签 -->
+                    <div class="att-panel active" id="tab-attendance-operations">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <label style="font-size:13px;margin-right:6px;">日期范围：</label>
+                                <input type="date" id="attendance-date-from" style="width:140px;" onchange="loadAttendanceSessions()">
+                                <span style="margin:0 6px;color:#999;">至</span>
+                                <input type="date" id="attendance-date-to" style="width:140px;" onchange="loadAttendanceSessions()">
+                                <button class="btn btn-primary btn-sm" onclick="loadAttendanceSessions()">查询</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="table-attendance-sessions">
+                                <thead><tr>
+                                    <th width="110">上课日期</th><th>星期</th><th>班级名称</th><th>课程</th><th width="100">上课时间</th><th>上课老师</th><th>教室</th><th>校区</th><th width="70">状态</th><th width="80">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-attendance-sessions"></div>
+                    </div>
+                    <!-- 学员课耗页签 -->
+                    <div class="att-panel" id="tab-student-consumption">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <label style="font-size:13px;margin-right:6px;">日期范围：</label>
+                                <input type="date" id="consumption-date-from" style="width:140px;" onchange="loadStudentConsumption()">
+                                <span style="margin:0 6px;color:#999;">至</span>
+                                <input type="date" id="consumption-date-to" style="width:140px;" onchange="loadStudentConsumption()">
+                                <button class="btn btn-primary btn-sm" onclick="loadStudentConsumption()">查询</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="table-student-consumption">
+                                <thead><tr>
+                                    <th>学号</th><th>学员姓名</th><th>手机号</th><th>课程</th><th>班级</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th><th>校区</th>
+                                </tr></thead>
+                                <tbody id="consumption-tbody">
+                                    <tr><td colspan="15" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-student-consumption"></div>
                     </div>
                 </div>
-                <div class="table-wrap">
-                    <table id="table-attendance-sessions">
-                        <thead><tr>
-                            <th width="110">上课日期</th><th>星期</th><th>班级名称</th><th>课程</th><th width="100">上课时间</th><th>上课老师</th><th>教室</th><th>校区</th><th width="70">状态</th><th width="80">操作</th>
-                        </tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-                <div class="pagination" id="pagination-attendance-sessions"></div>
             </section>
 
             <!-- 面板：班级管理 -->
@@ -3862,55 +3917,91 @@ if (intval($countBt) === 0) {
             <section class="content-panel" id="panel-enroll">
                 <div class="panel-header">
                     <h3>报名详情</h3>
-                    <button class="btn btn-outline btn-sm" id="btn-enroll-back" style="margin-left:auto;">返回</button>
+                    <button class="btn btn-outline" id="btn-enroll-back">返回</button>
                 </div>
+
+                <!-- 学员信息卡片 -->
                 <div class="enroll-student-info" id="enroll-student-info">
-                    <div class="enroll-info-item"><span id="enroll-info-label-name" class="enroll-info-label">学员姓名：</span><strong id="enroll-info-name">-</strong></div>
-                    <div class="enroll-info-item"><span id="enroll-info-label-phone" class="enroll-info-label">手机号：</span><strong id="enroll-info-phone">-</strong></div>
-                </div>
-                <div class="enroll-form" style="padding:16px;">
-                    <div class="form-group">
-                        <label>选择课程 <span class="required">*</span></label>
-                        <select id="enroll-course-select"><option value="">请选择课程</option></select>
+                    <div class="enroll-student-avatar">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
                     </div>
-                    <div id="enroll-plans-section" style="display:none;">
-                        <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">选择价格方案</label>
+                    <div class="enroll-student-details">
+                        <div class="enroll-student-name" id="enroll-info-name">-</div>
+                        <div class="enroll-student-phone" id="enroll-info-phone">-</div>
+                    </div>
+                </div>
+
+                <!-- 表单区域 -->
+                <div class="enroll-form">
+                    <!-- 校区/课程 -->
+                    <div class="enroll-form-row">
+                        <div class="form-group enroll-form-half">
+                            <label>校区 <span class="required">*</span></label>
+                            <select id="enroll-campus-select"><option value="">请选择校区</option></select>
+                        </div>
+                        <div class="form-group enroll-form-half">
+                            <label>课程 <span class="required">*</span></label>
+                            <select id="enroll-course-select" disabled><option value="">请先选择校区</option></select>
+                        </div>
+                    </div>
+
+                    <!-- 价格方案 -->
+                    <div class="enroll-section" id="enroll-plans-section" style="display:none;">
+                        <div class="enroll-section-title">选择价格方案</div>
                         <div id="enroll-plans-list"></div>
                     </div>
-                    <div id="enroll-items-section" style="display:none;margin-top:16px;">
-                        <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">报价单明细</label>
-                        <div class="table-wrap">
+
+                    <!-- 报价明细 -->
+                    <div class="enroll-section" id="enroll-items-section" style="display:none;">
+                        <div class="enroll-section-title">报价明细</div>
+                        <div class="enroll-table-wrap">
                             <table class="enroll-items-table">
                                 <thead><tr>
-                                    <th>报价项名称</th><th>课时数</th><th>单价</th><th>实际价格</th>
+                                    <th>报价项名称</th>
+                                    <th class="col-num">课时数</th>
+                                    <th class="col-num">单价</th>
+                                    <th class="col-num">实际价格</th>
                                 </tr></thead>
                                 <tbody id="enroll-items-tbody"></tbody>
-                                <tfoot>
-                                    <tr class="enroll-total-row">
-                                        <td colspan="3" style="text-align:right;font-weight:600;">合计金额：</td>
-                                        <td style="font-weight:600;color:#7C3AED;" id="enroll-total-price">¥0.00</td>
-                                    </tr>
-                                </tfoot>
                             </table>
                         </div>
-                        <div id="enroll-payment-section" style="margin-top:16px;">
-                            <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">支付方式</label>
+                        <div class="enroll-total-bar">
+                            <span class="enroll-total-label">合计金额</span>
+                            <span class="enroll-total-amount" id="enroll-total-price">¥0.00</span>
+                        </div>
+
+                        <!-- 支付方式 -->
+                        <div class="enroll-section" id="enroll-payment-section">
+                            <div class="enroll-section-title">支付方式</div>
                             <div class="enroll-payment-row">
-                                <div class="enroll-payment-item">
-                                    <span class="enroll-payment-label">现金</span>
-                                    <input type="number" id="enroll-payment-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()">
-                                    <span class="enroll-payment-unit">元</span>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">现金</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-item">
-                                    <span class="enroll-payment-label">美团</span>
-                                    <input type="number" id="enroll-payment-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()">
-                                    <span class="enroll-payment-unit">元</span>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon enroll-payment-icon-meituan">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">美团</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
                             </div>
                             <div id="enroll-payment-hint" class="enroll-payment-hint" style="display:none;"></div>
                         </div>
-                        <div style="text-align:right;margin-top:16px;">
-                            <button class="btn btn-primary" id="btn-confirm-pay" onclick="confirmPayEnroll()">确认支付</button>
+
+                        <!-- 操作栏 -->
+                        <div class="enroll-action-bar">
+                            <button class="btn btn-primary btn-lg" id="btn-confirm-pay" onclick="confirmPayEnroll()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                确认支付
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -4225,7 +4316,8 @@ if (intval($countBt) === 0) {
         <div class="modal"><div class="modal-header"><h3>资源报名课程</h3><button class="modal-close" onclick="closeModal('modal-resource-enroll')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="enroll-resource-id">
-            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-resource-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>选择校区 <span class="required">*</span></label><select id="enroll-resource-campus"><option value="">请选择校区</option></select></div>
+            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-resource-course" disabled><option value="">请先选择校区</option></select></div>
             <div class="form-group"><label>价格方案 <span class="required">*</span></label><select id="enroll-resource-plan"><option value="">请先选择课程</option></select></div>
             <div class="form-group"><label>报价单 <span class="required">*</span></label><select id="enroll-resource-item"><option value="">请先选择价格方案</option></select></div>
             <div class="form-group" id="enroll-resource-detail" style="display:none;background:#f5f7fa;padding:12px;border-radius:4px;">
@@ -4240,7 +4332,8 @@ if (intval($countBt) === 0) {
         <div class="modal"><div class="modal-header"><h3>报名课程</h3><button class="modal-close" onclick="closeModal('modal-enroll')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="enroll-student-id">
-            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>选择校区 <span class="required">*</span></label><select id="enroll-campus"><option value="">请选择校区</option></select></div>
+            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-course" disabled><option value="">请先选择校区</option></select></div>
             <div class="form-group"><label>价格方案 <span class="required">*</span></label><select id="enroll-plan"><option value="">请先选择课程</option></select></div>
             <div class="form-group"><label>报价单 <span class="required">*</span></label><select id="enroll-item"><option value="">请先选择价格方案</option></select></div>
             <div class="form-group" id="enroll-detail" style="display:none;background:#f5f7fa;padding:12px;border-radius:4px;">
