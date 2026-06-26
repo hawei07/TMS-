@@ -2987,12 +2987,13 @@ $stmt->execute();
                     }
                     $db->exec("DELETE FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
                     if ($status === '出勤' && $deductedLessons > 0) {
-                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :ca)");
+                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :cp, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :ca)");
                         $arStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                         $arStmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
                         $arStmt->bindValue(':clid', $classId, PDO::PARAM_INT);
                         $arStmt->bindValue(':scid', $scheduleId, PDO::PARAM_INT);
                         $arStmt->bindValue(':cn', $className, PDO::PARAM_STR);
+                        $arStmt->bindValue(':cp', $classCampus, PDO::PARAM_STR);
                         $arStmt->bindValue(':t', $teacher, PDO::PARAM_STR);
                         $arStmt->bindValue(':sl1', $subjL1, PDO::PARAM_STR);
                         $arStmt->bindValue(':sl2', $subjL2, PDO::PARAM_STR);
