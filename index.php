@@ -2959,9 +2959,20 @@ $stmt->execute();
                     $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
                     $stmt->execute();
                     // 同步写入学员考勤明细记录（attendance_records）
-                    $className = $classRow['course_name'] ?? '';
-                    $subjL1 = $subjectParts[0] ?? '';
-                    $subjL2 = $subjectParts[1] ?? '';
+                    // 课程信息优先使用实际扣除的订单对应课程，而非班级课程
+                    $className = $classRow['course_name'] ?? ''; // c.name 即班级名称（别名误导）
+                    $attCourseId = $courseId;
+                    $attSubjL1 = $subjectParts[0] ?? '';
+                    $attSubjL2 = $subjectParts[1] ?? '';
+                    if ($deductedOrderId > 0) {
+                        $deductedOrderCourse = $db->query("SELECT co.id, co.subject FROM orders o LEFT JOIN courses co ON o.course_id = co.id WHERE o.id = $deductedOrderId")->fetch(PDO::FETCH_ASSOC);
+                        if ($deductedOrderCourse) {
+                            $attCourseId = intval($deductedOrderCourse['id']);
+                            $attSubjParts = explode(' > ', $deductedOrderCourse['subject'] ?? '');
+                            $attSubjL1 = $attSubjParts[0] ?? '';
+                            $attSubjL2 = $attSubjParts[1] ?? '';
+                        }
+                    }
                     $schedRow = $db->query("SELECT teacher, time_slots FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
                     $teacher = $schedRow['teacher'] ?? '';
                     // 根据上课日期的星期几，从排课的 time_slots JSON 中取对应时间段
@@ -2989,14 +3000,14 @@ $stmt->execute();
                     if ($status === '出勤' && $deductedLessons > 0) {
                         $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :cp, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :ca)");
                         $arStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
-                        $arStmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':cid', $attCourseId, PDO::PARAM_INT);
                         $arStmt->bindValue(':clid', $classId, PDO::PARAM_INT);
                         $arStmt->bindValue(':scid', $scheduleId, PDO::PARAM_INT);
                         $arStmt->bindValue(':cn', $className, PDO::PARAM_STR);
                         $arStmt->bindValue(':cp', $classCampus, PDO::PARAM_STR);
                         $arStmt->bindValue(':t', $teacher, PDO::PARAM_STR);
-                        $arStmt->bindValue(':sl1', $subjL1, PDO::PARAM_STR);
-                        $arStmt->bindValue(':sl2', $subjL2, PDO::PARAM_STR);
+                        $arStmt->bindValue(':sl1', $attSubjL1, PDO::PARAM_STR);
+                        $arStmt->bindValue(':sl2', $attSubjL2, PDO::PARAM_STR);
                         $arStmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
                         $arStmt->bindValue(':ld', $sessionDate, PDO::PARAM_STR);
                         $arStmt->bindValue(':aa', $n, PDO::PARAM_STR);
