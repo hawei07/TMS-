@@ -3027,9 +3027,10 @@ $stmt->execute();
             $studentId = intval($_GET['student_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
-            // 获取班级课程的一级学科
-            $classRow = $db->query("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            // 获取班级课程的一级学科及校区
+            $classRow = $db->query("SELECT c.course_id, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $subject = $classRow['subject'] ?? '';
+            $classCampus = $classRow['campus'] ?? '';
             $firstSubjectId = 0;
             // courses.subject 存储格式为 "一级学科名 > 二级学科名"，需取末段匹配 subjects.name
             $subjectParts = explode(' > ', $subject);
@@ -3048,7 +3049,8 @@ $stmt->execute();
                 $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                 while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
-                    $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                    $quotedCampus = $db->quote($classCampus);
+                    $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND campus = $quotedCampus AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                     $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
                 }
             }
