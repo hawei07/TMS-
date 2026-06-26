@@ -2220,22 +2220,24 @@ $stmt->execute();
             $teacher = trim($input['teacher'] ?? '');
             $subjectLevel1 = trim($input['subject_level1'] ?? '');
             $subjectLevel2 = trim($input['subject_level2'] ?? '');
+            $classTime = trim($input['class_time'] ?? '');
             $consumedAmount = floatval($input['consumed_amount'] ?? 0);
             if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
             $n = now();
-            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, subject_level1, subject_level2, lesson_date, attended_at, status, class_name, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :sl1, :sl2, :dt, :aa, :st, :cn, :t, :ca2, :ct)");
+            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :t, :ca2, :ct2)");
             $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $cid, PDO::PARAM_INT);
             $stmt->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
             $stmt->bindValue(':sl2', $subjectLevel2, PDO::PARAM_STR);
+            $stmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
             $stmt->bindValue(':dt', $lessonDate, PDO::PARAM_STR);
             $stmt->bindValue(':aa', $n, PDO::PARAM_STR);
             $stmt->bindValue(':st', $status, PDO::PARAM_STR);
             $stmt->bindValue(':cn', $className, PDO::PARAM_STR);
             $stmt->bindValue(':t', $teacher, PDO::PARAM_STR);
             $stmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
-            $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmt->bindValue(':ct2', $n, PDO::PARAM_STR);
             $stmt->execute();
             json(['id' => $db->lastInsertId(), 'message' => '考勤记录添加成功']);
             break;
@@ -2258,6 +2260,7 @@ $stmt->execute();
             if (isset($input['teacher'])) $fields[] = "teacher='" . $db->quote(trim($input['teacher'])) . "'";
             if (isset($input['subject_level1'])) $fields[] = "subject_level1='" . $db->quote(trim($input['subject_level1'])) . "'";
             if (isset($input['subject_level2'])) $fields[] = "subject_level2='" . $db->quote(trim($input['subject_level2'])) . "'";
+            if (isset($input['class_time'])) $fields[] = "class_time='" . $db->quote(trim($input['class_time'])) . "'";
             if (isset($input['consumed_amount'])) $fields[] = "consumed_amount=" . round(floatval($input['consumed_amount']), 2);
             if (empty($fields)) { json(['message' => '无变更']); break; }
             $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
@@ -2908,8 +2911,19 @@ $stmt->execute();
                     $className = $classRow['course_name'] ?? '';
                     $subjL1 = $subjectParts[0] ?? '';
                     $subjL2 = $subjectParts[1] ?? '';
-                    $schedRow = $db->query("SELECT teacher FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
+                    $schedRow = $db->query("SELECT teacher, time_slots FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
                     $teacher = $schedRow['teacher'] ?? '';
+                    // 根据上课日期的星期几，从排课的 time_slots JSON 中取对应时间段
+                    $classTime = '';
+                    $timeSlots = json_decode($schedRow['time_slots'] ?? '{}', true) ?: [];
+                    $dow = date('N', strtotime($sessionDate));
+                    $dowKey = ($dow == 7) ? '0' : (string)$dow;
+                    $slot = $timeSlots[$dowKey] ?? [];
+                    if (!empty($slot['start']) && !empty($slot['end'])) {
+                        $classTime = $slot['start'] . '-' . $slot['end'];
+                    } elseif (!empty($slot['start'])) {
+                        $classTime = $slot['start'];
+                    }
                     $consumedAmount = 0;
                     if (!empty($deductionEntries)) {
                         foreach ($deductionEntries as $de) {
@@ -2922,7 +2936,7 @@ $stmt->execute();
                     }
                     $db->exec("DELETE FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
                     if ($status === '出勤' && $deductedLessons > 0) {
-                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, teacher, subject_level1, subject_level2, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :t, :sl1, :sl2, :ld, :aa, :st, :dl, :ca2, :ca)");
+                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :ca)");
                         $arStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                         $arStmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
                         $arStmt->bindValue(':clid', $classId, PDO::PARAM_INT);
@@ -2931,6 +2945,7 @@ $stmt->execute();
                         $arStmt->bindValue(':t', $teacher, PDO::PARAM_STR);
                         $arStmt->bindValue(':sl1', $subjL1, PDO::PARAM_STR);
                         $arStmt->bindValue(':sl2', $subjL2, PDO::PARAM_STR);
+                        $arStmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
                         $arStmt->bindValue(':ld', $sessionDate, PDO::PARAM_STR);
                         $arStmt->bindValue(':aa', $n, PDO::PARAM_STR);
                         $arStmt->bindValue(':st', $status, PDO::PARAM_STR);
@@ -3830,10 +3845,10 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table class="attendance-table">
                                     <thead><tr>
-                                        <th>班级</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
+                                        <th>班级</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课时间</th><th>上课日期</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
-                                        <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -4410,6 +4425,7 @@ if (intval($countBt) === 0) {
             <div class="form-group"><label>授课教师</label><input type="text" id="att-teacher" placeholder="选填"></div>
             <div class="form-group"><label>一级学科</label><input type="text" id="att-subject1" readonly placeholder="选择课程后自动填充"></div>
             <div class="form-group"><label>二级学科</label><input type="text" id="att-subject2" readonly placeholder="选择课程后自动填充"></div>
+            <div class="form-group"><label>上课时间</label><input type="text" id="att-class-time" placeholder="如 09:00-10:30"></div>
             <div class="form-group"><label>课耗金额（元）</label><input type="number" id="att-amount" step="0.01" min="0" placeholder="0.00"></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-attendance')">取消</button><button class="btn btn-primary" onclick="saveAttendance()">保存</button></div></div>

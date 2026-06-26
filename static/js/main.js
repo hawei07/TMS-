@@ -3683,13 +3683,13 @@ let currentEditAttId = null;
 
 async function loadAttendance(sid) {
     const tbody = document.getElementById('attendance-tbody');
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + 'list_attendance&student_id=' + sid);
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
@@ -3702,6 +3702,7 @@ async function loadAttendance(sid) {
                 <td>${esc(r.subject_level1)}</td>
                 <td>${esc(r.subject_level2)}</td>
                 <td>${esc(r.teacher)}</td>
+                <td>${esc(r.class_time)}</td>
                 <td>${r.lesson_date}</td>
                 <td>${r.attended_at ? r.attended_at.slice(0, 19) : ''}</td>
                 <td><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
@@ -3710,7 +3711,7 @@ async function loadAttendance(sid) {
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
@@ -3721,6 +3722,7 @@ async function showAttendanceModal() {
     document.getElementById('att-status').value = '出勤';
     document.getElementById('att-teacher').value = '';
     document.getElementById('att-amount').value = '';
+    document.getElementById('att-class-time').value = '';
     currentEditAttId = null;
     await loadAttendanceCourseSelect();
     await loadAttendanceClassSelect();
@@ -3783,6 +3785,7 @@ async function editAttendance(id) {
         document.getElementById('att-amount').value = record.consumed_amount || '';
         document.getElementById('att-subject1').value = record.subject_level1 || '';
         document.getElementById('att-subject2').value = record.subject_level2 || '';
+        document.getElementById('att-class-time').value = record.class_time || '';
         currentEditAttId = id;
         await loadAttendanceCourseSelect(record.course_id);
         await loadAttendanceClassSelect(record.class_name);
@@ -3809,6 +3812,7 @@ async function saveAttendance() {
     const teacher = document.getElementById('att-teacher').value.trim();
     const subjectLevel1 = document.getElementById('att-subject1').value.trim();
     const subjectLevel2 = document.getElementById('att-subject2').value.trim();
+    const classTime = document.getElementById('att-class-time').value.trim();
     const consumedAmount = parseFloat(document.getElementById('att-amount').value) || 0;
     if (!courseId) return showToast('请选择课程', 'error');
     if (!lessonDate) return showToast('请选择上课日期', 'error');
@@ -3824,6 +3828,7 @@ async function saveAttendance() {
             teacher: teacher,
             subject_level1: subjectLevel1,
             subject_level2: subjectLevel2,
+            class_time: classTime,
             consumed_amount: consumedAmount
         });
     } else {
@@ -3836,6 +3841,7 @@ async function saveAttendance() {
             teacher: teacher,
             subject_level1: subjectLevel1,
             subject_level2: subjectLevel2,
+            class_time: classTime,
             consumed_amount: consumedAmount
         });
     }
