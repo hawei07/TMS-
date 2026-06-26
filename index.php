@@ -2040,7 +2040,7 @@ $stmt->execute();
             $stmt = $db->prepare("SELECT COUNT(*) FROM students s $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count, cg.class_names FROM students s LEFT JOIN (SELECT cs.student_id, GROUP_CONCAT(c.name SEPARATOR ', ') AS class_names FROM class_students cs JOIN classes c ON c.id = cs.class_id GROUP BY cs.student_id) cg ON cg.student_id = s.id $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count, (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id AND o.campus IS NOT NULL AND o.campus != '') AS campus, cg.class_names FROM students s LEFT JOIN (SELECT cs.student_id, GROUP_CONCAT(c.name SEPARATOR ', ') AS class_names FROM class_students cs JOIN classes c ON c.id = cs.class_id GROUP BY cs.student_id) cg ON cg.student_id = s.id $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -3771,7 +3771,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-students">
                         <thead><tr>
-                            <th width="60">编号</th><th width="70">学号</th><th>姓名</th><th>手机号</th><th>来源</th><th>跟进状态</th><th>已报课程数</th><th>所在班级</th><th width="180">操作</th>
+                            <th width="60">编号</th><th width="70">学号</th><th>姓名</th><th>手机号</th><th>校区</th><th>已报课程数</th><th>所在班级</th><th width="180">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
