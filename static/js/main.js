@@ -3598,7 +3598,7 @@ async function loadStudentCourses(sid) {
             <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${sid})">分班</button>
         </div>
         <div class="table-wrap"><table><thead><tr>
-            <th>课程名称</th><th>学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>状态</th><th>报名时间</th>
+            <th>课程名称</th><th>学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
         </tr></thead><tbody>
         ${rows.map(r => `<tr>
             <td>${esc(r.name)}</td>
@@ -3611,7 +3611,6 @@ async function loadStudentCourses(sid) {
             <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
             <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
             <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
-            <td><span class="status-tag">${esc(r.status)}</span></td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
         </tr>`).join('')}
         </tbody></table></div>`;
@@ -3645,7 +3644,7 @@ async function loadStudentOrders(sid) {
         }
         container.innerHTML = `<span style="font-size:14px;color:#888;">共 ${rows.length} 笔订单</span>
         <div class="table-wrap" style="margin-top:8px;"><table><thead><tr>
-            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>状态</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
+            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
         </tr></thead><tbody>
         ${rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
@@ -3668,7 +3667,6 @@ async function loadStudentOrders(sid) {
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
             <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
-            <td><span class="status-tag status-已预约">${esc(r.status)}</span></td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td>${orderTypeHtml}</td>
@@ -3685,13 +3683,13 @@ let currentEditAttId = null;
 
 async function loadAttendance(sid) {
     const tbody = document.getElementById('attendance-tbody');
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + 'list_attendance&student_id=' + sid);
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
@@ -3700,10 +3698,14 @@ async function loadAttendance(sid) {
             else if (r.status === '请假') statusClass = 'status-请假';
             return `<tr>
                 <td>${r.id}</td>
+                <td>${esc(r.class_name)}</td>
                 <td>${esc(r.course_name)}</td>
+                <td>${esc(r.teacher)}</td>
                 <td>${r.lesson_date}</td>
+                <td>${r.attended_at ? r.attended_at.slice(0, 19) : ''}</td>
                 <td><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
-                <td>${esc(r.notes)}</td>
+                <td>${r.deducted_lessons || 0}</td>
+                <td>¥${(parseFloat(r.consumed_amount) || 0).toFixed(2)}</td>
                 <td>
                     <div class="action-btns">
                         <button class="btn-link" onclick="editAttendance(${r.id})">编辑</button>
@@ -3713,7 +3715,7 @@ async function loadAttendance(sid) {
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
@@ -3722,10 +3724,11 @@ async function showAttendanceModal() {
     document.getElementById('edit-att-id').value = '';
     document.getElementById('att-lesson-date').value = '';
     document.getElementById('att-status').value = '出勤';
-    document.getElementById('att-notes').value = '';
+    document.getElementById('att-teacher').value = '';
+    document.getElementById('att-amount').value = '';
     currentEditAttId = null;
-    // 加载该学员报读的课程
     await loadAttendanceCourseSelect();
+    await loadAttendanceClassSelect();
     openModal('modal-attendance');
 }
 
@@ -3750,6 +3753,23 @@ async function loadAttendanceCourseSelect(selectedCourseId) {
     } catch (e) { /* ignore */ }
 }
 
+async function loadAttendanceClassSelect(selectedClassName) {
+    const sel = document.getElementById('att-class');
+    sel.innerHTML = '<option value="">请选择班级（选填）</option>';
+    try {
+        const res = await fetch(API_BASE + 'list_classes');
+        const data = await res.json();
+        const classes = data.data || [];
+        classes.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name + (c.campus ? ' - ' + c.campus : '');
+            sel.appendChild(opt);
+        });
+        if (selectedClassName) sel.value = selectedClassName;
+    } catch (e) { /* ignore */ }
+}
+
 async function editAttendance(id) {
     // 先获取当前列表中的数据
     try {
@@ -3761,9 +3781,11 @@ async function editAttendance(id) {
         document.getElementById('edit-att-id').value = record.id;
         document.getElementById('att-lesson-date').value = record.lesson_date || '';
         document.getElementById('att-status').value = record.status || '出勤';
-        document.getElementById('att-notes').value = record.notes || '';
+        document.getElementById('att-teacher').value = record.teacher || '';
+        document.getElementById('att-amount').value = record.consumed_amount || '';
         currentEditAttId = id;
         await loadAttendanceCourseSelect(record.course_id);
+        await loadAttendanceClassSelect(record.class_name);
         openModal('modal-attendance');
     } catch (e) {
         showToast('加载失败', 'error');
@@ -3775,7 +3797,9 @@ async function saveAttendance() {
     const courseId = parseInt(document.getElementById('att-course').value) || 0;
     const lessonDate = document.getElementById('att-lesson-date').value;
     const status = document.getElementById('att-status').value;
-    const notes = document.getElementById('att-notes').value.trim();
+    const className = document.getElementById('att-class').value;
+    const teacher = document.getElementById('att-teacher').value.trim();
+    const consumedAmount = parseFloat(document.getElementById('att-amount').value) || 0;
     if (!courseId) return showToast('请选择课程', 'error');
     if (!lessonDate) return showToast('请选择上课日期', 'error');
 
@@ -3786,7 +3810,9 @@ async function saveAttendance() {
             course_id: courseId,
             lesson_date: lessonDate,
             status: status,
-            notes: notes
+            class_name: className,
+            teacher: teacher,
+            consumed_amount: consumedAmount
         });
     } else {
         result = await api('add_attendance', {
@@ -3794,7 +3820,9 @@ async function saveAttendance() {
             course_id: courseId,
             lesson_date: lessonDate,
             status: status,
-            notes: notes
+            class_name: className,
+            teacher: teacher,
+            consumed_amount: consumedAmount
         });
     }
     if (result.error) { showToast(result.error, 'error'); return; }
@@ -4370,7 +4398,7 @@ function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="17" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
@@ -4399,17 +4427,16 @@ function renderOrderTable(rows) {
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
             <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
-            <td><span class="status-tag status-已预约">${esc(r.status)}</span></td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td>${orderTypeHtml}</td>
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
-        <td colspan="12" style="text-align:right;font-weight:bold;">合计</td>
+        <td colspan="11" style="text-align:right;font-weight:bold;">合计</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
-        <td colspan="3"></td>
+        <td colspan="2"></td>
     </tr>`;
     tfoot.style.display = '';
 }
