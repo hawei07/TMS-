@@ -2716,10 +2716,11 @@ $stmt->execute();
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
             // 获取班级课程信息
-            $classInfo = $db->query("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $classInfo = $db->query("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $classCourseId = intval($classInfo['course_id'] ?? 0);
             $classCourseName = $classInfo['course_name'] ?? '';
             $classLessonHours = intval($classInfo['lesson_hours'] ?? 0);
+            $classCampus = $classInfo['campus'] ?? '';
             // 解析一级学科ID（用于计算该学员一级学科下所有订单的剩余课时）
             $classFirstSubjectId = 0;
             $subjectRaw = $classInfo['subject_raw'] ?? '';
@@ -2758,10 +2759,11 @@ $stmt->execute();
             $rows = [];
             foreach ($students as $stu) {
                 $aid = $attMap[$stu['id']] ?? null;
-                // 查询该学员在一级学科下所有订单的总剩余课时（用于展示和步进器上限）
+                // 查询该学员在一级学科下、同校区的订单总剩余课时（用于展示和步进器上限）
                 $totalRemaining = 0;
                 if ($classFirstSubjectId > 0 && count($flCourseIds) > 0) {
-                    $mdRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND course_id IN (" . implode(',', $flCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                    $quotedCampus = $db->quote($classCampus);
+                    $mdRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND campus = $quotedCampus AND course_id IN (" . implode(',', $flCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                     $totalRemaining = max(0, intval($mdRow['total'] ?? 0));
                 }
                 // 编辑时步进器上限 = 当前剩余 + 已扣值（因保存时会先退还再重扣）
@@ -2802,9 +2804,10 @@ $stmt->execute();
                     if ($studentId <= 0) continue;
                     if (!in_array($status, ['出勤', '请假', '缺勤'])) $status = '出勤';
                     // 查询该学员在此班级课程的一级学科
-                    $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+                    $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
                     $courseId = intval($classRow['course_id'] ?? 0);
                     $subject = $classRow['subject'] ?? '';
+                    $classCampus = $classRow['campus'] ?? '';
                     // 获取一级学科（courses.subject 格式为 "一级学科名 > 二级学科名"）
                     $firstSubjectId = 0;
                     $courseSubjId = 0; // 课程所属学科ID（可能就是二级学科）
@@ -2845,7 +2848,8 @@ $stmt->execute();
                         $srMax = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                         while ($c = $srMax->fetch(PDO::FETCH_ASSOC)) $allSubjCourseIds[] = $c['id'];
                         if (count($allSubjCourseIds) > 0) {
-                            $maxRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS max_deductible FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allSubjCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                            $quotedCampus = $db->quote($classCampus);
+                            $maxRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS max_deductible FROM orders WHERE student_id = $studentId AND campus = $quotedCampus AND course_id IN (" . implode(',', $allSubjCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                             $maxDeductible = intval($maxRow['max_deductible'] ?? 0);
                             if ($deductedLessons > $maxDeductible) {
                                 throw new Exception("学员「{$rec['student_name']}」剩余课时不足：最多可扣 $maxDeductible 课时，当前请求扣 $deductedLessons 课时");
@@ -2853,7 +2857,7 @@ $stmt->execute();
                         }
                     }
                     if ($status === '出勤' && $deductedLessons > 0) {
-                        // 扣课时逻辑（三级优先级，跨订单连续扣）：
+                        // 扣课时逻辑（三级优先级，跨订单连续扣，限定同校区）：
                         // 1. 优先扣同一course_id的订单（有多个时，先报名的优先）
                         // 2. 继续扣同二级学科的订单（先报名的优先）
                         // 3. 继续扣同一级学科的订单（先报名的优先）
@@ -2864,9 +2868,10 @@ $stmt->execute();
                         $deductionEntries = [];
                         $deductedOrderId = 0;
                         $processedOrderIds = [];
+                        $quotedCampus = $db->quote($classCampus);
 
-                        // 优先级1：同一course_id的订单
-                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
+                        // 优先级1：同一course_id的订单（同校区）
+                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons AND campus = $quotedCampus ORDER BY created_at ASC, id ASC");
                         while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) {
                             if ($remainingToDeduct <= 0) break;
                             $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
@@ -2888,7 +2893,7 @@ $stmt->execute();
                             while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
                             if (count($sameSecondCourses) > 0) {
                                 $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
-                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons $excludeClause ORDER BY created_at ASC, id ASC");
+                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons $excludeClause AND campus = $quotedCampus ORDER BY created_at ASC, id ASC");
                                 while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) {
                                     if ($remainingToDeduct <= 0) break;
                                     $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
@@ -2912,7 +2917,7 @@ $stmt->execute();
                             while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
                             if (count($firstLevelCourses) > 0) {
                                 $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
-                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons $excludeClause ORDER BY created_at ASC, id ASC");
+                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons $excludeClause AND campus = $quotedCampus ORDER BY created_at ASC, id ASC");
                                 while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) {
                                     if ($remainingToDeduct <= 0) break;
                                     $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
