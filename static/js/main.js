@@ -3598,10 +3598,11 @@ async function loadStudentCourses(sid) {
             <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${sid})">分班</button>
         </div>
         <div class="table-wrap"><table><thead><tr>
-            <th>课程名称</th><th>学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
+            <th>课程名称</th><th>校区</th><th>学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
         </tr></thead><tbody>
         ${rows.map(r => `<tr>
             <td>${esc(r.name)}</td>
+            <td>${esc(r.campus || '-')}</td>
             <td>${esc(r.subject)}</td>
             <td>${esc(r.plan_name)}</td>
             <td>${esc(r.item_name)}</td>
@@ -3644,7 +3645,7 @@ async function loadStudentOrders(sid) {
         }
         container.innerHTML = `<span style="font-size:14px;color:#888;">共 ${rows.length} 笔订单</span>
         <div class="table-wrap" style="margin-top:8px;"><table><thead><tr>
-            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
+            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
         </tr></thead><tbody>
         ${rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
@@ -3660,6 +3661,7 @@ async function loadStudentOrders(sid) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td>${r.id}</td>
             <td>${esc(r.student_name)}</td>
+            <td>${esc(r.campus || '-')}</td>
             <td>${esc(r.course_name)}</td>
             <td>${esc(r.plan_name)}</td>
             <td>${esc(r.item_name)}</td>
@@ -4124,7 +4126,8 @@ async function confirmPayEnroll() {
                 plan_id: currentEnrollPlanId,
                 plan_type: currentEnrollPlanType,
                 payment_cash: paymentCash,
-                payment_meituan: paymentMeituan
+                payment_meituan: paymentMeituan,
+                campus_id: currentEnrollCampusId || 0
             }, 'POST');
             if (result.error) { showToast(result.error, 'error'); return; }
             showToast(result.message);
@@ -4147,7 +4150,8 @@ async function confirmPayEnroll() {
             plan_id: currentEnrollPlanId,
             plan_type: currentEnrollPlanType,
             payment_cash: paymentCash,
-            payment_meituan: paymentMeituan
+            payment_meituan: paymentMeituan,
+            campus_id: currentEnrollCampusId || 0
         }, 'POST');
         if (result.error) { showToast(result.error, 'error'); return; }
         showToast(result.message);
@@ -4315,6 +4319,7 @@ async function confirmEnroll() {
     const studentId = document.getElementById('enroll-student-id').value;
     const courseId = document.getElementById('enroll-course').value;
     const itemVal = document.getElementById('enroll-item').value;
+    const campusId = parseInt(document.getElementById('enroll-campus').value) || 0;
     if (!studentId || !courseId) return showToast('请先选择课程', 'error');
     if (!itemVal) return showToast('请选择报价单', 'error');
     let item;
@@ -4325,7 +4330,8 @@ async function confirmEnroll() {
         plan_name: item.plan_name,
         item_name: item.name,
         lesson_count: item.lesson_count,
-        actual_price: item.actual_price
+        actual_price: item.actual_price,
+        campus_id: campusId
     };
     const result = await api('enroll_course', data);
     if (result.error) { showToast(result.error, 'error'); return; }
@@ -4449,6 +4455,7 @@ async function confirmResourceEnroll() {
     const resourceId = document.getElementById('enroll-resource-id').value;
     const courseId = document.getElementById('enroll-resource-course').value;
     const itemVal = document.getElementById('enroll-resource-item').value;
+    const campusId = parseInt(document.getElementById('enroll-resource-campus').value) || 0;
     if (!resourceId || !courseId) return showToast('请先选择课程', 'error');
     if (!itemVal) return showToast('请选择报价单', 'error');
     let item;
@@ -4459,7 +4466,8 @@ async function confirmResourceEnroll() {
         plan_name: item.plan_name,
         item_name: item.name,
         lesson_count: item.lesson_count,
-        actual_price: item.actual_price
+        actual_price: item.actual_price,
+        campus_id: campusId
     };
     const result = await api('enroll_from_resource', data);
     if (result.error) { showToast(result.error, 'error'); return; }
@@ -4484,7 +4492,7 @@ function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
@@ -4506,6 +4514,7 @@ function renderOrderTable(rows) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td>${r.id}</td>
             <td>${esc(r.student_name)}</td>
+            <td>${esc(r.campus || '-')}</td>
             <td>${esc(r.course_name)}</td>
             <td>${esc(r.plan_name)}</td>
             <td>${esc(r.item_name)}</td>
@@ -4519,7 +4528,7 @@ function renderOrderTable(rows) {
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
-        <td colspan="11" style="text-align:right;font-weight:bold;">合计</td>
+        <td colspan="12" style="text-align:right;font-weight:bold;">合计</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
         <td colspan="2"></td>

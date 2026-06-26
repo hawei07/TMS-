@@ -222,6 +222,9 @@ if (!in_array('order_type', $existingCols)) {
 if (!in_array('consumed_lessons', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN consumed_lessons INT DEFAULT 0");
 }
+if (!in_array('campus', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN campus VARCHAR(500) DEFAULT ''");
+}
 
 // 兼容已有数据库：学生表添加学号字段
 $existingColsS = [];
@@ -256,6 +259,13 @@ $db->exec("CREATE TABLE IF NOT EXISTS parent_orders (
     meituan_amount REAL DEFAULT 0,
     created_at VARCHAR(500) DEFAULT ''
 )");
+// 兼容已有数据库：parent_orders 新增 campus 字段
+$existingColsPO = [];
+$colResPO = $db->query("SHOW COLUMNS FROM parent_orders");
+while ($colRowPO = $colResPO->fetch(PDO::FETCH_ASSOC)) $existingColsPO[] = $colRowPO['Field'];
+if (!in_array('campus', $existingColsPO)) {
+    $db->exec("ALTER TABLE parent_orders ADD COLUMN campus VARCHAR(500) DEFAULT ''");
+}
 $db->exec("CREATE TABLE IF NOT EXISTS classes (
     id INT PRIMARY KEY AUTO_INCREMENT,
     course_id INT NOT NULL DEFAULT 0,
@@ -1734,6 +1744,12 @@ $stmt->execute();
             if (empty($items)) json(['error' => '该方案下无报价单']);
             $paymentCash = floatval($input['payment_cash'] ?? 0);
             $paymentMeituan = floatval($input['payment_meituan'] ?? 0);
+            $campusId = intval($input['campus_id'] ?? 0);
+            $campusName = '';
+            if ($campusId > 0) {
+                $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
+                $campusName = $campusRow['name'] ?? '';
+            }
             $itemPrices = array_map(function($it) { return floatval($it['actual_price']); }, $items);
             $totalPrice = array_sum($itemPrices);
             if (abs($paymentCash + $paymentMeituan - $totalPrice) > 0.01) {
@@ -1743,7 +1759,7 @@ $stmt->execute();
             $orderIds = [];
             $childOrderNos = [];
             $totalLessons = 0;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot, :campus)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
@@ -1769,6 +1785,7 @@ $stmt->execute();
                 $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
                 $stmt->bindValue(':pat', $n, PDO::PARAM_STR);
                 $stmt->bindValue(':ot', $orderType, PDO::PARAM_STR);
+                $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
                 $stmt->execute();
                 $orderIds[] = $db->lastInsertId();
                 $childOrderNos[] = $orderNo;
@@ -1778,7 +1795,7 @@ $stmt->execute();
             $student = $db->query("SELECT name, phone, student_no FROM students WHERE id=$studentId")->fetch(PDO::FETCH_ASSOC);
             $course = $db->query("SELECT name FROM courses WHERE id=$courseId")->fetch(PDO::FETCH_ASSOC);
             $childNosStr = implode(',', $childOrderNos);
-            $stmtParent = $db->prepare("INSERT INTO parent_orders (parent_order_no, child_order_nos, course_name, total_lessons, student_name, phone, student_no, enroll_time, total_price, cash_amount, meituan_amount, created_at) VALUES (:pono, :cnos, :cname, :tl, :sname, :phone, :sno, :etime, :tp, :ca, :ma, :ct)");
+            $stmtParent = $db->prepare("INSERT INTO parent_orders (parent_order_no, child_order_nos, course_name, total_lessons, student_name, phone, student_no, enroll_time, total_price, cash_amount, meituan_amount, created_at, campus) VALUES (:pono, :cnos, :cname, :tl, :sname, :phone, :sno, :etime, :tp, :ca, :ma, :ct, :campus)");
             $stmtParent->bindValue(':pono', $parentOrderNo, PDO::PARAM_STR);
             $stmtParent->bindValue(':cnos', $childNosStr, PDO::PARAM_STR);
             $stmtParent->bindValue(':cname', $course['name'] ?? '', PDO::PARAM_STR);
@@ -1791,6 +1808,7 @@ $stmt->execute();
             $stmtParent->bindValue(':ca', $paymentCash, PDO::PARAM_STR);
             $stmtParent->bindValue(':ma', $paymentMeituan, PDO::PARAM_STR);
             $stmtParent->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmtParent->bindValue(':campus', $campusName, PDO::PARAM_STR);
             $stmtParent->execute();
             // 标记来源资源为已转化（不可逆）
             $db->exec("UPDATE resources SET converted = '已转化' WHERE id = (SELECT resource_id FROM students WHERE id = $studentId) AND converted = '未转化'");
@@ -2097,9 +2115,15 @@ $stmt->execute();
             $lessonCount = intval($input['lesson_count'] ?? 0);
             $actualPrice = floatval($input['actual_price'] ?? 0);
             if (!$planName || !$itemName) { json(['error' => '请选择价格方案和报价单']); break; }
+            $campusId = intval($input['campus_id'] ?? 0);
+            $campusName = '';
+            if ($campusId > 0) {
+                $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
+                $campusName = $campusRow['name'] ?? '';
+            }
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus)");
             $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
             $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2108,7 +2132,10 @@ $stmt->execute();
             $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
             $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
             $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
             $stmt->execute();
+            json(['message' => '报名成功', 'order_id' => $db->lastInsertId(), 'order_no' => $orderNo]);
+            break;
         case 'enroll_from_resource':
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
             $resourceId = intval($input['resource_id'] ?? 0);
@@ -2138,9 +2165,15 @@ $stmt->execute();
                 $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, $ename, $ephone, $source, $followStatus, '$studentNo', '$n')");
                 $studentId = $db->lastInsertId();
             }
+            $campusId = intval($input['campus_id'] ?? 0);
+            $campusName = '';
+            if ($campusId > 0) {
+                $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
+                $campusName = $campusRow['name'] ?? '';
+            }
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus)");
             $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
             $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2149,6 +2182,7 @@ $stmt->execute();
             $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
             $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
             $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
             $stmt->execute();
             json(['message' => '报名成功，学员ID：' . $studentId, 'id' => $db->lastInsertId(), 'student_id' => $studentId]);
             break;
@@ -2184,7 +2218,7 @@ $stmt->execute();
             $sid = intval($_GET['student_id'] ?? 0);
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons, o.campus FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
@@ -2296,7 +2330,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, o.campus, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -4026,7 +4060,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-orders">
                         <thead><tr>
-                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
+                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
                         </tr></thead>
                         <tbody></tbody>
                         <tfoot id="table-orders-foot" style="display:none;"></tfoot>
