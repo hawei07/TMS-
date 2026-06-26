@@ -319,6 +319,7 @@ $action = $_GET['action'] ?? '';
 if ($action) { handleApi(); exit; }
 function h($s) { return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8'); }
 function now() { return date('Y-m-d H:i:s'); }
+function utf8_strlen($s) { return preg_match_all('/./us', $s ?? ''); }
 function generateOrderNo($db) {
     do {
         $ts = substr(strval(time()), -10);
@@ -2354,12 +2355,12 @@ $stmt->execute();
             $remark = trim($input['remark'] ?? '');
             if (!$courseId) json(['error' => '请选择关联课程']);
             if (!$name) json(['error' => '班级名称不能为空']);
-            if (mb_strlen($name) > 20) json(['error' => '班级名称最长20字']);
+            if (utf8_strlen($name) > 20) json(['error' => '班级名称最长20字']);
             if (!$classType) json(['error' => '请选择班级类型']);
             if ($maxStudents <= 0) json(['error' => '招生人数必须大于0']);
             if ($lessonHours % 2 !== 0) json(['error' => '授课课时必须为偶数']);
             if (!$campus) json(['error' => '请选择当前校区']);
-            if (mb_strlen($remark) > 200) json(['error' => '备注最长200字']);
+            if (utf8_strlen($remark) > 200) json(['error' => '备注最长200字']);
             $n = now();
             $stmt = $db->prepare("INSERT INTO classes (course_id, name, class_type, max_students, lesson_hours, can_trial, campus, remark, created_at) VALUES (:cid, :nm, :ct, :ms, :lh, :tr, :cp, :rm, :ca)");
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
@@ -2386,7 +2387,7 @@ $stmt->execute();
             if (isset($input['name'])) {
                 $nm = trim($input['name']);
                 if ($nm === '') json(['error' => '班级名称不能为空']);
-                if (mb_strlen($nm) > 20) json(['error' => '班级名称最长20字']);
+                if (utf8_strlen($nm) > 20) json(['error' => '班级名称最长20字']);
                 $updates[] = "name=" . $db->quote($nm) . "";
             }
             if (isset($input['class_type'])) { $updates[] = "class_type='" . $db->quote(trim($input['class_type'])) . "'"; }
@@ -2396,7 +2397,7 @@ $stmt->execute();
             if (isset($input['campus'])) { $updates[] = "campus='" . $db->quote(trim($input['campus'])) . "'"; }
             if (isset($input['remark'])) {
                 $rm = trim($input['remark']);
-                if (mb_strlen($rm) > 200) json(['error' => '备注最长200字']);
+                if (utf8_strlen($rm) > 200) json(['error' => '备注最长200字']);
                 $updates[] = "remark=" . $db->quote($rm) . "";
             }
             if (empty($updates)) json(['message' => '无变更']);

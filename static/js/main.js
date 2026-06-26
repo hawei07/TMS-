@@ -3032,11 +3032,16 @@ async function saveClass() {
     
     const data = { course_id: courseId, name, class_type: classType, max_students: maxStudents, lesson_hours: lessonHours, can_trial: canTrial, campus, remark };
     let result;
-    if (id) {
-        data.id = parseInt(id);
-        result = await api('update_class', data);
-    } else {
-        result = await api('add_class', data);
+    try {
+        if (id) {
+            data.id = parseInt(id);
+            result = await api('update_class', data);
+        } else {
+            result = await api('add_class', data);
+        }
+    } catch (e) {
+        showToast('网络请求失败：' + e.message, 'error');
+        return;
     }
     if (result.error) { showToast(result.error, 'error'); return; }
     showToast(result.message);
