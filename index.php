@@ -3824,7 +3824,7 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-student-consumption">
                                 <thead><tr>
-                                    <th>学号</th><th>学员姓名</th><th>手机号</th><th>课程</th><th>班级</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th><th>校区</th>
+                                    <th>校区</th><th>学号</th><th>学员姓名</th><th>手机号</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
                                 </tr></thead>
                                 <tbody id="consumption-tbody">
                                     <tr><td colspan="15" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
@@ -3960,7 +3960,7 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table class="attendance-table">
                                     <thead><tr>
-                                        <th>课程</th><th>班级</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
+                                        <th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
                                         <tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
