@@ -2216,16 +2216,25 @@ $stmt->execute();
             $cid = intval($input['course_id'] ?? 0);
             $lessonDate = trim($input['lesson_date'] ?? '');
             $status = trim($input['status'] ?? '出勤');
-            $notes = trim($input['notes'] ?? '');
+            $className = trim($input['class_name'] ?? '');
+            $teacher = trim($input['teacher'] ?? '');
+            $subjectLevel1 = trim($input['subject_level1'] ?? '');
+            $subjectLevel2 = trim($input['subject_level2'] ?? '');
+            $consumedAmount = floatval($input['consumed_amount'] ?? 0);
             if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
             $n = now();
-            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, lesson_date, status, notes, created_at) VALUES (:sid, :cid, :dt, :st, :nt, :ct)");
+            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, subject_level1, subject_level2, lesson_date, attended_at, status, class_name, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :sl1, :sl2, :dt, :aa, :st, :cn, :t, :ca2, :ct)");
             $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $cid, PDO::PARAM_INT);
+            $stmt->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
+            $stmt->bindValue(':sl2', $subjectLevel2, PDO::PARAM_STR);
             $stmt->bindValue(':dt', $lessonDate, PDO::PARAM_STR);
+            $stmt->bindValue(':aa', $n, PDO::PARAM_STR);
             $stmt->bindValue(':st', $status, PDO::PARAM_STR);
-            $stmt->bindValue(':nt', $notes, PDO::PARAM_STR);
+            $stmt->bindValue(':cn', $className, PDO::PARAM_STR);
+            $stmt->bindValue(':t', $teacher, PDO::PARAM_STR);
+            $stmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
             $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmt->execute();
             json(['id' => $db->lastInsertId(), 'message' => '考勤记录添加成功']);
@@ -2245,7 +2254,11 @@ $stmt->execute();
                 if (!in_array($st, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
                 $fields[] = "status=" . $db->quote($st) . "";
             }
-            if (isset($input['notes'])) $fields[] = "notes='" . $db->quote(trim($input['notes'])) . "'";
+            if (isset($input['class_name'])) $fields[] = "class_name='" . $db->quote(trim($input['class_name'])) . "'";
+            if (isset($input['teacher'])) $fields[] = "teacher='" . $db->quote(trim($input['teacher'])) . "'";
+            if (isset($input['subject_level1'])) $fields[] = "subject_level1='" . $db->quote(trim($input['subject_level1'])) . "'";
+            if (isset($input['subject_level2'])) $fields[] = "subject_level2='" . $db->quote(trim($input['subject_level2'])) . "'";
+            if (isset($input['consumed_amount'])) $fields[] = "consumed_amount=" . round(floatval($input['consumed_amount']), 2);
             if (empty($fields)) { json(['message' => '无变更']); break; }
             $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
             json(['message' => '考勤记录更新成功']);
@@ -2350,7 +2363,7 @@ $stmt->execute();
             $classType = trim($input['class_type'] ?? '标准班');
             $maxStudents = intval($input['max_students'] ?? 0);
             $lessonHours = intval($input['lesson_hours'] ?? 0);
-            $canTrial = trim($input['can_trial'] ?? '是');
+            $canTrial = (trim($input['can_trial'] ?? '是') === '否') ? 0 : 1;
             $campus = trim($input['campus'] ?? '');
             $remark = trim($input['remark'] ?? '');
             if (!$courseId) json(['error' => '请选择关联课程']);
@@ -2368,7 +2381,7 @@ $stmt->execute();
             $stmt->bindValue(':ct', $classType, PDO::PARAM_STR);
             $stmt->bindValue(':ms', $maxStudents, PDO::PARAM_INT);
             $stmt->bindValue(':lh', $lessonHours, PDO::PARAM_INT);
-            $stmt->bindValue(':tr', $canTrial, PDO::PARAM_STR);
+            $stmt->bindValue(':tr', $canTrial, PDO::PARAM_INT);
             $stmt->bindValue(':cp', $campus, PDO::PARAM_STR);
             $stmt->bindValue(':rm', $remark, PDO::PARAM_STR);
             $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
@@ -2393,7 +2406,7 @@ $stmt->execute();
             if (isset($input['class_type'])) { $updates[] = "class_type='" . $db->quote(trim($input['class_type'])) . "'"; }
             if (isset($input['max_students'])) { $updates[] = "max_students=" . intval($input['max_students']); }
             if (isset($input['lesson_hours'])) { $lh = intval($input['lesson_hours']); if ($lh % 2 !== 0) json(['error' => '授课课时必须为偶数']); $updates[] = "lesson_hours=" . $lh; }
-            if (isset($input['can_trial'])) { $updates[] = "can_trial='" . $db->quote(trim($input['can_trial'])) . "'"; }
+            if (isset($input['can_trial'])) { $updates[] = "can_trial=" . ((trim($input['can_trial']) === '否') ? 0 : 1); }
             if (isset($input['campus'])) { $updates[] = "campus='" . $db->quote(trim($input['campus'])) . "'"; }
             if (isset($input['remark'])) {
                 $rm = trim($input['remark']);
@@ -2676,14 +2689,24 @@ $stmt->execute();
                     $classFirstSubjectId = intval($sj['parent_id']) == 0 ? intval($sj['id']) : intval($sj['parent_id']);
                 }
             }
-            // 获取班级所有学员
+            // 获取班级所有学员（含出班但已有考勤记录的学员）
             $students = [];
+            $studentIdsInClass = [];
             $stmt = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
-            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $students[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = true; }
             // 获取已有考勤记录
             $attMap = [];
             $attRes = $db->query("SELECT * FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate'");
             while ($r = $attRes->fetch(PDO::FETCH_ASSOC)) $attMap[$r['student_id']] = $r;
+            // 补充：已有考勤记录但已出班的学员（课时消耗完被移出class_students）
+            $extraStudentIds = [];
+            foreach ($attMap as $sid => $rec) {
+                if (!isset($studentIdsInClass[$sid])) $extraStudentIds[] = $sid;
+            }
+            if (count($extraStudentIds) > 0) {
+                $extraRes = $db->query("SELECT id, student_no, name FROM students WHERE id IN (" . implode(',', $extraStudentIds) . ")");
+                while ($r = $extraRes->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = false; }
+            }
             // 预取一级学科下所有课程ID（用于计算 max_deductible）
             $flCourseIds = [];
             if ($classFirstSubjectId > 0) {
@@ -2794,60 +2817,74 @@ $stmt->execute();
                         // 3. 继续扣同一级学科的订单（先报名的优先）
                         $allOrderRows = [];
 
-                        // 1. 同一course_id的订单
-                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                        while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
-
-                        // 2. 同一二级学科的订单（仅当课程有二级学科归属时）
-                        if ($courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
-                            $sameSecondCourses = [];
-                            $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
-                            while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
-                            if (count($sameSecondCourses) > 0) {
-                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
-                            }
-                        }
-
-                        // 3. 同一级学科的订单
-                        if ($firstSubjectId > 0) {
-                            $firstLevelCourses = [];
-                            $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
-                            while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
-                            if (count($firstLevelCourses) > 0) {
-                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
-                            }
-                        }
-
-                        // 统一按报名时间排序（合并后需去重）
-                        $seen = [];
-                        $allOrderRows = array_filter($allOrderRows, function($o) use (&$seen) {
-                            $key = $o['id'];
-                            if (isset($seen[$key])) return false;
-                            $seen[$key] = true;
-                            return true;
-                        });
-                        usort($allOrderRows, function($a, $b) {
-                            return strcmp($a['created_at'], $b['created_at']) ?: $a['id'] - $b['id'];
-                        });
-
-                        // 跨订单循环扣课时
+                        // 扣课时按优先级逐级扣减（每级内部先报名优先）
                         $remainingToDeduct = $deductedLessons;
                         $deductionEntries = [];
                         $deductedOrderId = 0;
-                        foreach ($allOrderRows as $order) {
-                            $available = intval($order['lesson_count']) - intval($order['consumed_lessons']);
+                        $processedOrderIds = [];
+
+                        // 优先级1：同一course_id的订单
+                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
+                        while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) {
+                            if ($remainingToDeduct <= 0) break;
+                            $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
                             if ($available <= 0) continue;
                             $toDeduct = min($remainingToDeduct, $available);
-                            if ($toDeduct <= 0) break;
-                            $newConsumed = intval($order['consumed_lessons']) + $toDeduct;
-                            $oid = intval($order['id']);
+                            $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                            $oid = intval($o['id']);
                             $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
                             $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
                             if ($deductedOrderId === 0) $deductedOrderId = $oid;
                             $remainingToDeduct -= $toDeduct;
-                            if ($remainingToDeduct <= 0) break;
+                            $processedOrderIds[] = $oid;
+                        }
+
+                        // 优先级2：同一二级学科的订单（先报名优先，排除已处理订单）
+                        if ($remainingToDeduct > 0 && $courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
+                            $sameSecondCourses = [];
+                            $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
+                            while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
+                            if (count($sameSecondCourses) > 0) {
+                                $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
+                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons $excludeClause ORDER BY created_at ASC, id ASC");
+                                while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) {
+                                    if ($remainingToDeduct <= 0) break;
+                                    $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                                    if ($available <= 0) continue;
+                                    $toDeduct = min($remainingToDeduct, $available);
+                                    $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                    $oid = intval($o['id']);
+                                    $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                                    $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                    if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                                    $remainingToDeduct -= $toDeduct;
+                                    $processedOrderIds[] = $oid;
+                                }
+                            }
+                        }
+
+                        // 优先级3：同一级学科的订单（先报名优先，排除已处理订单）
+                        if ($remainingToDeduct > 0 && $firstSubjectId > 0) {
+                            $firstLevelCourses = [];
+                            $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                            while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
+                            if (count($firstLevelCourses) > 0) {
+                                $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
+                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons $excludeClause ORDER BY created_at ASC, id ASC");
+                                while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) {
+                                    if ($remainingToDeduct <= 0) break;
+                                    $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                                    if ($available <= 0) continue;
+                                    $toDeduct = min($remainingToDeduct, $available);
+                                    $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                    $oid = intval($o['id']);
+                                    $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                                    $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                    if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                                    $remainingToDeduct -= $toDeduct;
+                                    $processedOrderIds[] = $oid;
+                                }
+                            }
                         }
                         $deductionJson = json_encode($deductionEntries);
                     } else {
@@ -2867,6 +2904,41 @@ $stmt->execute();
                     $stmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
                     $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
                     $stmt->execute();
+                    // 同步写入学员考勤明细记录（attendance_records）
+                    $className = $classRow['course_name'] ?? '';
+                    $subjL1 = $subjectParts[0] ?? '';
+                    $subjL2 = $subjectParts[1] ?? '';
+                    $schedRow = $db->query("SELECT teacher FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
+                    $teacher = $schedRow['teacher'] ?? '';
+                    $consumedAmount = 0;
+                    if (!empty($deductionEntries)) {
+                        foreach ($deductionEntries as $de) {
+                            $orderRow = $db->query("SELECT actual_price, lesson_count FROM orders WHERE id={$de['order_id']}")->fetch(PDO::FETCH_ASSOC);
+                            if ($orderRow && $orderRow['lesson_count'] > 0) {
+                                $unitPrice = floatval($orderRow['actual_price']) / intval($orderRow['lesson_count']);
+                                $consumedAmount += $unitPrice * floatval($de['amount']);
+                            }
+                        }
+                    }
+                    $db->exec("DELETE FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
+                    if ($status === '出勤' && $deductedLessons > 0) {
+                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, teacher, subject_level1, subject_level2, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :t, :sl1, :sl2, :ld, :aa, :st, :dl, :ca2, :ca)");
+                        $arStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':clid', $classId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':scid', $scheduleId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':cn', $className, PDO::PARAM_STR);
+                        $arStmt->bindValue(':t', $teacher, PDO::PARAM_STR);
+                        $arStmt->bindValue(':sl1', $subjL1, PDO::PARAM_STR);
+                        $arStmt->bindValue(':sl2', $subjL2, PDO::PARAM_STR);
+                        $arStmt->bindValue(':ld', $sessionDate, PDO::PARAM_STR);
+                        $arStmt->bindValue(':aa', $n, PDO::PARAM_STR);
+                        $arStmt->bindValue(':st', $status, PDO::PARAM_STR);
+                        $arStmt->bindValue(':dl', $deductedLessons, PDO::PARAM_INT);
+                        $arStmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
+                        $arStmt->bindValue(':ca', $n, PDO::PARAM_STR);
+                        $arStmt->execute();
+                    }
                     // 考勤完成后，判断是否需要移出班级
                     if ($firstSubjectId > 0) {
                         // 获取一级学科下所有课程ID
@@ -3758,10 +3830,10 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table class="attendance-table">
                                     <thead><tr>
-                                        <th width="60">编号</th><th>课程</th><th>上课日期</th><th>出勤状态</th><th>备注</th><th width="160">操作</th>
+                                        <th>班级</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
-                                        <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -3848,7 +3920,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-orders">
                         <thead><tr>
-                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>状态</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
+                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
                         </tr></thead>
                         <tbody></tbody>
                         <tfoot id="table-orders-foot" style="display:none;"></tfoot>
@@ -4331,10 +4403,14 @@ if (intval($countBt) === 0) {
         <div class="modal"><div class="modal-header"><h3 id="modal-attendance-title">新增上课记录</h3><button class="modal-close" onclick="closeModal('modal-attendance')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="edit-att-id">
-            <div class="form-group"><label>课程 <span class="required">*</span></label><select id="att-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>课程 <span class="required">*</span></label><select id="att-course" onchange="onCourseChangeInAttendance()"><option value="">请选择课程</option></select></div>
             <div class="form-group"><label>上课日期 <span class="required">*</span></label><input type="date" id="att-lesson-date"></div>
             <div class="form-group"><label>出勤状态</label><select id="att-status"><option value="出勤">出勤</option><option value="请假">请假</option><option value="缺勤">缺勤</option></select></div>
-            <div class="form-group"><label>备注</label><textarea id="att-notes" rows="3" placeholder="选填备注信息"></textarea></div>
+            <div class="form-group"><label>班级</label><select id="att-class"><option value="">请选择班级（选填）</option></select></div>
+            <div class="form-group"><label>授课教师</label><input type="text" id="att-teacher" placeholder="选填"></div>
+            <div class="form-group"><label>一级学科</label><input type="text" id="att-subject1" readonly placeholder="选择课程后自动填充"></div>
+            <div class="form-group"><label>二级学科</label><input type="text" id="att-subject2" readonly placeholder="选择课程后自动填充"></div>
+            <div class="form-group"><label>课耗金额（元）</label><input type="number" id="att-amount" step="0.01" min="0" placeholder="0.00"></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-attendance')">取消</button><button class="btn btn-primary" onclick="saveAttendance()">保存</button></div></div>
     </div>

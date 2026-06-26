@@ -3697,21 +3697,16 @@ async function loadAttendance(sid) {
             if (r.status === '缺勤') statusClass = 'status-缺勤';
             else if (r.status === '请假') statusClass = 'status-请假';
             return `<tr>
-                <td>${r.id}</td>
                 <td>${esc(r.class_name)}</td>
                 <td>${esc(r.course_name)}</td>
+                <td>${esc(r.subject_level1)}</td>
+                <td>${esc(r.subject_level2)}</td>
                 <td>${esc(r.teacher)}</td>
                 <td>${r.lesson_date}</td>
                 <td>${r.attended_at ? r.attended_at.slice(0, 19) : ''}</td>
                 <td><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
                 <td>${r.deducted_lessons || 0}</td>
                 <td>¥${(parseFloat(r.consumed_amount) || 0).toFixed(2)}</td>
-                <td>
-                    <div class="action-btns">
-                        <button class="btn-link" onclick="editAttendance(${r.id})">编辑</button>
-                        <button class="btn-link-danger" onclick="deleteAttendance(${r.id})">删除</button>
-                    </div>
-                </td>
             </tr>`;
         }).join('');
     } catch (e) {
@@ -3735,6 +3730,7 @@ async function showAttendanceModal() {
 async function loadAttendanceCourseSelect(selectedCourseId) {
     const sel = document.getElementById('att-course');
     sel.innerHTML = '<option value="">请选择课程</option>';
+    window._courseSubjects = {};
     try {
         const res = await fetch(API_BASE + 'get_student_courses&student_id=' + currentViewStudentId);
         const data = await res.json();
@@ -3747,9 +3743,11 @@ async function loadAttendanceCourseSelect(selectedCourseId) {
                 opt.value = c.id;
                 opt.textContent = c.name + (c.subject ? ' (' + c.subject + ')' : '');
                 sel.appendChild(opt);
+                window._courseSubjects[c.id] = c.subject || '';
             }
         });
         if (selectedCourseId) sel.value = selectedCourseId;
+        onCourseChangeInAttendance();
     } catch (e) { /* ignore */ }
 }
 
@@ -3783,6 +3781,8 @@ async function editAttendance(id) {
         document.getElementById('att-status').value = record.status || '出勤';
         document.getElementById('att-teacher').value = record.teacher || '';
         document.getElementById('att-amount').value = record.consumed_amount || '';
+        document.getElementById('att-subject1').value = record.subject_level1 || '';
+        document.getElementById('att-subject2').value = record.subject_level2 || '';
         currentEditAttId = id;
         await loadAttendanceCourseSelect(record.course_id);
         await loadAttendanceClassSelect(record.class_name);
@@ -3792,6 +3792,14 @@ async function editAttendance(id) {
     }
 }
 
+function onCourseChangeInAttendance() {
+    const courseId = parseInt(document.getElementById('att-course').value) || 0;
+    const subj = (window._courseSubjects && window._courseSubjects[courseId]) || '';
+    const parts = subj.split(' > ');
+    document.getElementById('att-subject1').value = parts[0] || '';
+    document.getElementById('att-subject2').value = parts[1] || '';
+}
+
 async function saveAttendance() {
     const sid = currentViewStudentId;
     const courseId = parseInt(document.getElementById('att-course').value) || 0;
@@ -3799,6 +3807,8 @@ async function saveAttendance() {
     const status = document.getElementById('att-status').value;
     const className = document.getElementById('att-class').value;
     const teacher = document.getElementById('att-teacher').value.trim();
+    const subjectLevel1 = document.getElementById('att-subject1').value.trim();
+    const subjectLevel2 = document.getElementById('att-subject2').value.trim();
     const consumedAmount = parseFloat(document.getElementById('att-amount').value) || 0;
     if (!courseId) return showToast('请选择课程', 'error');
     if (!lessonDate) return showToast('请选择上课日期', 'error');
@@ -3812,6 +3822,8 @@ async function saveAttendance() {
             status: status,
             class_name: className,
             teacher: teacher,
+            subject_level1: subjectLevel1,
+            subject_level2: subjectLevel2,
             consumed_amount: consumedAmount
         });
     } else {
@@ -3822,6 +3834,8 @@ async function saveAttendance() {
             status: status,
             class_name: className,
             teacher: teacher,
+            subject_level1: subjectLevel1,
+            subject_level2: subjectLevel2,
             consumed_amount: consumedAmount
         });
     }
@@ -4874,7 +4888,7 @@ async function loadAttendanceSessions(page = 1) {
               + '<button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadAttendanceSessions(' + (page + 1) + ')"') + '>下一页</button>'
             : '';
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
