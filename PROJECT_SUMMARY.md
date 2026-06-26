@@ -388,10 +388,19 @@ market-system-php/
 |------|------|--------|------|
 | id | INT PK | AUTO_INCREMENT | 主键 |
 | student_id | INT | — | 关联学员 ID（必填） |
-| course_id | INT | — | 关联课程 ID（必填） |
+| course_id | INT | — | 关联课程 ID（必填）。考勤写入时优先取扣课时订单对应的课程，未扣课时则取班级所属课程 |
+| campus | VARCHAR(100) | NULL | 所属校区 |
+| class_name | VARCHAR(500) | — | 班级名称 |
+| subject_level1 | VARCHAR(500) | '' | 一级学科。考勤写入时优先取扣课时订单对应课程的学科 |
+| subject_level2 | VARCHAR(500) | '' | 二级学科。同上 |
+| teacher | VARCHAR(500) | '' | 授课教师 |
 | lesson_date | VARCHAR(500) | — | 上课日期（必填） |
+| class_time | VARCHAR(500) | '' | 上课时间 |
 | status | VARCHAR(500) | '出勤' | 出勤状态：出勤 / 请假 / 缺勤 |
 | notes | VARCHAR(500) | '' | 备注 |
+| deducted_order_id | INT | 0 | 关联的扣课时订单 ID |
+| deducted_lessons | INT | 0 | 本次扣除课时数 |
+| consumed_amount | DECIMAL(10,2) | 0 | 本次课耗金额 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.21 parent_orders（父订单表）
@@ -957,9 +966,9 @@ subjects                  courses              ┌──────────
 |--------|------|----------|
 | 报读课程 | 该学员已报读的课程列表 | `get_student_courses`（基于 orders 表） |
 | 交易订单 | 该学员的交易订单列表（15 列，与 panel-orders 一致） | `list_orders`（按 student_id 筛选） |
-| 上课记录 | 该学员的出勤记录，支持新增/编辑/删除 | `attendance_records` 表 + 对应 CRUD API |
+| 上课记录 | 该学员的出勤记录，支持新增/编辑/删除。列顺序：校区 → 课程 → 一级学科 → 二级学科 → 班级 → 授课教师 → 上课日期 → 上课时间 → 考勤时间 → 出勤状态 → 消耗课时 → 课耗金额。出勤状态三色标签：出勤（绿）/ 请假（橙）/ 缺勤（红） | `attendance_records` 表 + 对应 CRUD API |
 
-标签切换纯 JS 实现，不刷新页面。出勤状态三色标签：出勤（绿）/ 请假（橙）/ 缺勤（红）。
+标签切换纯 JS 实现，不刷新页面。
 
 ### 6.12 编号生成规则
 
@@ -1067,4 +1076,21 @@ function isSmallPackage(val) {
 - `index.php`：price_plans 表 + plan_type、orders 表 + order_type、MySQL 建表 API、save_price_plan / get_course_plans / pay_enroll / list_orders API
 - `static/js/main.js`：isSmallPackage()、showPriceModal 锁死逻辑、addPlan/editPlan/savePlan、renderPlanList/renderItemList 类型标签、selectEnrollPlan/confirmPayEnroll 传递 plan_type、renderOrderTable/loadStudentOrders 订单类型列
 - `static/css/style.css`：`.tag-new-enroll`（蓝）、`.tag-renewal`（绿）、`.tag-small-pack`（橙）
+
+### 6.22 学员课耗与上课记录扩展
+
+**学员课耗面板**（panel-students → 学员课耗标签页）：展示全量考勤消费记录，列顺序：校区 → 学号 → 学员姓名 → 手机号 → 课程 → 一级学科 → 二级学科 → 班级 → 授课教师 → 上课日期 → 上课时间 → 考勤时间 → 出勤状态 → 消耗课时 → 课耗金额。支持日期范围筛选，底部分页。
+
+**上课记录列顺序**（学员详情 → 上课记录标签页）：校区 → 课程 → 一级学科 → 二级学科 → 班级 → 授课教师 → 上课日期 → 上课时间 → 考勤时间 → 出勤状态 → 消耗课时 → 课耗金额。校区列置于最前方便按校区分组查看。
+
+**考勤写入逻辑**（`save_class_attendance`）：
+- 上课记录中的课程/一级学科/二级学科取自扣课时订单对应的课程信息，而非班级所属课程
+- 若本次未扣课时（`$deductedOrderId = 0`），则回退使用班级所属课程的学科信息
+- 校区字段从班级表查询后写入 attendance_records.campus
+- 班级名称（class_name）始终保持班级原名不变
+
+**涉及文件**：
+- `index.php`：attendance_records 表 campus/class_name/subject_level1/subject_level2/teacher/class_time/deducted_order_id/deducted_lessons/consumed_amount 字段、`save_class_attendance` / `add_attendance` / `update_attendance` / `list_attendance` / `list_all_attendance` API
+- `static/js/main.js`：`loadAttendance` / `loadStudentConsumption` / `saveAttendance` / `editAttendance` / `showAttendanceModal` / `loadAttendanceClassSelect` / `onClassChangeInAttendance`
+
 *（内容由AI生成，仅供参考）*
