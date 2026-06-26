@@ -2256,6 +2256,7 @@ $stmt->execute();
             $lessonDate = trim($input['lesson_date'] ?? '');
             $status = trim($input['status'] ?? '出勤');
             $className = trim($input['class_name'] ?? '');
+            $campus = trim($input['campus'] ?? '');
             $teacher = trim($input['teacher'] ?? '');
             $subjectLevel1 = trim($input['subject_level1'] ?? '');
             $subjectLevel2 = trim($input['subject_level2'] ?? '');
@@ -2264,7 +2265,7 @@ $stmt->execute();
             if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
             $n = now();
-            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :t, :ca2, :ct2)");
+            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, campus, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :cp, :t, :ca2, :ct2)");
             $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $cid, PDO::PARAM_INT);
             $stmt->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
@@ -2274,6 +2275,7 @@ $stmt->execute();
             $stmt->bindValue(':aa', $n, PDO::PARAM_STR);
             $stmt->bindValue(':st', $status, PDO::PARAM_STR);
             $stmt->bindValue(':cn', $className, PDO::PARAM_STR);
+            $stmt->bindValue(':cp', $campus, PDO::PARAM_STR);
             $stmt->bindValue(':t', $teacher, PDO::PARAM_STR);
             $stmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
             $stmt->bindValue(':ct2', $n, PDO::PARAM_STR);
@@ -2296,6 +2298,7 @@ $stmt->execute();
                 $fields[] = "status=" . $db->quote($st) . "";
             }
             if (isset($input['class_name'])) $fields[] = "class_name='" . $db->quote(trim($input['class_name'])) . "'";
+            if (isset($input['campus'])) $fields[] = "campus='" . $db->quote(trim($input['campus'])) . "'";
             if (isset($input['teacher'])) $fields[] = "teacher='" . $db->quote(trim($input['teacher'])) . "'";
             if (isset($input['subject_level1'])) $fields[] = "subject_level1='" . $db->quote(trim($input['subject_level1'])) . "'";
             if (isset($input['subject_level2'])) $fields[] = "subject_level2='" . $db->quote(trim($input['subject_level2'])) . "'";
@@ -3945,10 +3948,10 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table class="attendance-table">
                                     <thead><tr>
-                                        <th>课程</th><th>班级</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
+                                        <th>课程</th><th>班级</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
-                                        <tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -4499,11 +4502,7 @@ if (intval($countBt) === 0) {
             <div id="schedule-rule-section">
                 <div class="form-group">
                     <label>上课日期 <span class="required">*</span></label>
-                    <div class="form-row">
-                        <input type="date" id="schedule-start-date">
-                        <span class="row-sep">至</span>
-                        <input type="date" id="schedule-end-date">
-                    </div>
+                    <input type="text" id="schedule-date-range" placeholder="选择起止日期" readonly>
                 </div>
                 <div class="form-group">
                     <label>上课周期 <span class="required">*</span></label>
@@ -4534,7 +4533,8 @@ if (intval($countBt) === 0) {
             <div id="schedule-date-section" style="display:none;">
                 <div class="form-group">
                     <label>选择日期 <span class="required">*</span></label>
-                    <textarea id="schedule-custom-dates" rows="3" placeholder="请逐行输入日期，格式如 2026-06-25&#10;或使用逗号分隔：2026-06-25, 2026-06-26"></textarea>
+                    <input type="text" id="schedule-custom-dates" placeholder="点击选择多个日期" readonly>
+                    <div id="schedule-custom-dates-tags" class="date-tags"></div>
                 </div>
             </div>
             <div class="form-group">
@@ -4559,7 +4559,8 @@ if (intval($countBt) === 0) {
             <div class="form-group"><label>课程 <span class="required">*</span></label><select id="att-course" onchange="onCourseChangeInAttendance()"><option value="">请选择课程</option></select></div>
             <div class="form-group"><label>上课日期 <span class="required">*</span></label><input type="date" id="att-lesson-date"></div>
             <div class="form-group"><label>出勤状态</label><select id="att-status"><option value="出勤">出勤</option><option value="请假">请假</option><option value="缺勤">缺勤</option></select></div>
-            <div class="form-group"><label>班级</label><select id="att-class"><option value="">请选择班级（选填）</option></select></div>
+            <div class="form-group"><label>班级</label><select id="att-class" onchange="onClassChangeInAttendance()"><option value="">请选择班级（选填）</option></select></div>
+            <div class="form-group"><label>校区</label><input type="text" id="att-campus" placeholder="选填，选择班级后自动填充"></div>
             <div class="form-group"><label>授课教师</label><input type="text" id="att-teacher" placeholder="选填"></div>
             <div class="form-group"><label>一级学科</label><input type="text" id="att-subject1" readonly placeholder="选择课程后自动填充"></div>
             <div class="form-group"><label>二级学科</label><input type="text" id="att-subject2" readonly placeholder="选择课程后自动填充"></div>
@@ -5076,6 +5077,9 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
     <script src="static/js/main.js"></script>
 </body>
 </html>

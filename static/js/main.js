@@ -3081,6 +3081,88 @@ function onScheduleRuleChange() {
     document.getElementById('schedule-date-section').style.display = ruleType === '按日期排课' ? '' : 'none';
 }
 
+// ==================== Flatpickr 日期选择器 ====================
+
+let fpRange = null;
+let fpMulti = null;
+
+function formatDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+}
+
+function initScheduleDatePickers() {
+    // 销毁旧实例，避免重复绑定
+    if (fpRange) { fpRange.destroy(); fpRange = null; }
+    if (fpMulti) { fpMulti.destroy(); fpMulti = null; }
+
+    // 日期范围选择器
+    fpRange = flatpickr('#schedule-date-range', {
+        mode: 'range',
+        locale: 'zh',
+        dateFormat: 'Y-m-d',
+        allowInput: false,
+        disableMobile: true,
+        defaultDate: [],
+        onChange: function(dates) {
+            if (dates.length === 2) {
+                document.getElementById('schedule-date-range').value =
+                    formatDate(dates[0]) + ' 至 ' + formatDate(dates[1]);
+            } else if (dates.length === 0) {
+                document.getElementById('schedule-date-range').value = '';
+            }
+        }
+    });
+
+    // 多日期选择器
+    fpMulti = flatpickr('#schedule-custom-dates', {
+        mode: 'multiple',
+        locale: 'zh',
+        dateFormat: 'Y-m-d',
+        allowInput: false,
+        disableMobile: true,
+        defaultDate: [],
+        onChange: function(dates) {
+            renderCustomDateTags(dates);
+            if (dates.length > 0) {
+                document.getElementById('schedule-custom-dates').placeholder =
+                    '已选择 ' + dates.length + ' 个日期';
+            } else {
+                document.getElementById('schedule-custom-dates').placeholder = '点击选择多个日期';
+            }
+        }
+    });
+}
+
+function renderCustomDateTags(dates) {
+    const container = document.getElementById('schedule-custom-dates-tags');
+    if (!container) return;
+    if (dates.length === 0) { container.innerHTML = ''; return; }
+    container.innerHTML = dates.map((d, i) =>
+        '<span class="date-tag">' + formatDate(d) +
+        '<span class="date-tag-remove" data-idx="' + i + '">&times;</span></span>'
+    ).join('');
+
+    // 点击 × 移除该日期
+    container.querySelectorAll('.date-tag-remove').forEach(el => {
+        el.addEventListener('click', function(e) {
+            e.stopPropagation();
+            const idx = parseInt(this.dataset.idx);
+            const updated = fpMulti.selectedDates.filter((_, i) => i !== idx);
+            fpMulti.setDate(updated);
+            renderCustomDateTags(updated);
+            if (updated.length > 0) {
+                document.getElementById('schedule-custom-dates').placeholder =
+                    '已选择 ' + updated.length + ' 个日期';
+            } else {
+                document.getElementById('schedule-custom-dates').placeholder = '点击选择多个日期';
+            }
+        });
+    });
+}
+
 function toggleWeekday(btn) {
     btn.classList.toggle('active');
     updateScheduleTimeSlots();
@@ -3161,8 +3243,7 @@ async function showScheduleForm(classId, scheduleId) {
 
     // Reset form
     document.querySelector('input[name="schedule_rule_type"][value="按规则排课"]').checked = true;
-    document.getElementById('schedule-start-date').value = '';
-    document.getElementById('schedule-end-date').value = '';
+    document.getElementById('schedule-date-range').value = '';
     document.getElementById('schedule-holiday').checked = false;
     document.getElementById('schedule-custom-dates').value = '';
     document.getElementById('schedule-rule-section').style.display = '';
@@ -3202,6 +3283,9 @@ async function showScheduleForm(classId, scheduleId) {
         }
     } catch (e) { /* ignore */ }
 
+    // Initialize flatpickr BEFORE loading editing data
+    initScheduleDatePickers();
+
     // If editing, load existing
     if (scheduleId) {
         try {
@@ -3211,8 +3295,9 @@ async function showScheduleForm(classId, scheduleId) {
             if (sch) {
                 document.querySelector('input[name="schedule_rule_type"][value="' + esc(sch.rule_type) + '"]').checked = true;
                 onScheduleRuleChange();
-                document.getElementById('schedule-start-date').value = sch.start_date || '';
-                document.getElementById('schedule-end-date').value = sch.end_date || '';
+                if (sch.rule_type === '按规则排课' && sch.start_date && sch.end_date) {
+                    fpRange.setDate([sch.start_date, sch.end_date], true);
+                }
                 document.getElementById('schedule-holiday').checked = sch.holiday_enabled == 1;
                 if (sch.weekdays) {
                     const days = sch.weekdays.split(',').map(d => parseInt(d.trim()));
@@ -3228,7 +3313,10 @@ async function showScheduleForm(classId, scheduleId) {
                 document.getElementById('schedule-teacher').value = sch.teacher || '';
                 document.getElementById('schedule-classroom').value = sch.classroom || '';
                 if (sch.rule_type === '按日期排课') {
-                    document.getElementById('schedule-custom-dates').value = sch.start_date || '';
+                    const dateList = sch.start_date ? sch.start_date.split(/[,，\s\n]+/).filter(d => d) : [];
+                    if (dateList.length > 0) {
+                        fpMulti.setDate(dateList, true);
+                    }
                 }
             }
         } catch (e) { /* ignore */ }
@@ -3251,8 +3339,8 @@ async function saveSchedule() {
     };
 
     if (ruleType === '按规则排课') {
-        const startDate = document.getElementById('schedule-start-date').value;
-        const endDate = document.getElementById('schedule-end-date').value;
+        const startDate = fpRange.selectedDates.length > 0 ? formatDate(fpRange.selectedDates[0]) : '';
+        const endDate = fpRange.selectedDates.length > 1 ? formatDate(fpRange.selectedDates[1]) : '';
         const selectedWeekdays = getSelectedWeekdays();
         const timeSlots = getScheduleTimeSlots();
         const holidayEnabled = document.getElementById('schedule-holiday').checked ? 1 : 0;
@@ -3269,8 +3357,10 @@ async function saveSchedule() {
         data.time_slots = JSON.stringify(timeSlots);
         data.holiday_enabled = holidayEnabled;
     } else {
-        const customDates = document.getElementById('schedule-custom-dates').value.trim();
-        if (!customDates) return showToast('请输入上课日期', 'error');
+        const customDates = fpMulti.selectedDates.length > 0
+            ? fpMulti.selectedDates.map(d => formatDate(d)).join(',')
+            : '';
+        if (!customDates) return showToast('请选择上课日期', 'error');
         data.start_date = customDates;
         data.end_date = customDates;
         data.weekdays = '';
@@ -3685,13 +3775,13 @@ let currentEditAttId = null;
 
 async function loadAttendance(sid) {
     const tbody = document.getElementById('attendance-tbody');
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + 'list_attendance&student_id=' + sid);
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
@@ -3701,6 +3791,7 @@ async function loadAttendance(sid) {
             return `<tr>
                 <td>${esc(r.course_name)}</td>
                 <td>${esc(r.class_name)}</td>
+                <td>${esc(r.campus)}</td>
                 <td>${esc(r.subject_level1)}</td>
                 <td>${esc(r.subject_level2)}</td>
                 <td>${esc(r.teacher)}</td>
@@ -3713,7 +3804,7 @@ async function loadAttendance(sid) {
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
@@ -3725,6 +3816,7 @@ async function showAttendanceModal() {
     document.getElementById('att-teacher').value = '';
     document.getElementById('att-amount').value = '';
     document.getElementById('att-class-time').value = '';
+    document.getElementById('att-campus').value = '';
     currentEditAttId = null;
     await loadAttendanceCourseSelect();
     await loadAttendanceClassSelect();
@@ -3758,6 +3850,7 @@ async function loadAttendanceCourseSelect(selectedCourseId) {
 async function loadAttendanceClassSelect(selectedClassName) {
     const sel = document.getElementById('att-class');
     sel.innerHTML = '<option value="">请选择班级（选填）</option>';
+    window._classCampuses = {};
     try {
         const res = await fetch(API_BASE + 'list_classes');
         const data = await res.json();
@@ -3767,6 +3860,7 @@ async function loadAttendanceClassSelect(selectedClassName) {
             opt.value = c.name;
             opt.textContent = c.name + (c.campus ? ' - ' + c.campus : '');
             sel.appendChild(opt);
+            window._classCampuses[c.name] = c.campus || '';
         });
         if (selectedClassName) sel.value = selectedClassName;
     } catch (e) { /* ignore */ }
@@ -3788,6 +3882,7 @@ async function editAttendance(id) {
         document.getElementById('att-subject1').value = record.subject_level1 || '';
         document.getElementById('att-subject2').value = record.subject_level2 || '';
         document.getElementById('att-class-time').value = record.class_time || '';
+        document.getElementById('att-campus').value = record.campus || '';
         currentEditAttId = id;
         await loadAttendanceCourseSelect(record.course_id);
         await loadAttendanceClassSelect(record.class_name);
@@ -3805,6 +3900,12 @@ function onCourseChangeInAttendance() {
     document.getElementById('att-subject2').value = parts[1] || '';
 }
 
+function onClassChangeInAttendance() {
+    const className = document.getElementById('att-class').value;
+    const campusMap = window._classCampuses || {};
+    document.getElementById('att-campus').value = campusMap[className] || '';
+}
+
 async function saveAttendance() {
     const sid = currentViewStudentId;
     const courseId = parseInt(document.getElementById('att-course').value) || 0;
@@ -3815,6 +3916,7 @@ async function saveAttendance() {
     const subjectLevel1 = document.getElementById('att-subject1').value.trim();
     const subjectLevel2 = document.getElementById('att-subject2').value.trim();
     const classTime = document.getElementById('att-class-time').value.trim();
+    const campus = document.getElementById('att-campus').value.trim();
     const consumedAmount = parseFloat(document.getElementById('att-amount').value) || 0;
     if (!courseId) return showToast('请选择课程', 'error');
     if (!lessonDate) return showToast('请选择上课日期', 'error');
@@ -3827,6 +3929,7 @@ async function saveAttendance() {
             lesson_date: lessonDate,
             status: status,
             class_name: className,
+            campus: campus,
             teacher: teacher,
             subject_level1: subjectLevel1,
             subject_level2: subjectLevel2,
@@ -3840,6 +3943,7 @@ async function saveAttendance() {
             lesson_date: lessonDate,
             status: status,
             class_name: className,
+            campus: campus,
             teacher: teacher,
             subject_level1: subjectLevel1,
             subject_level2: subjectLevel2,
@@ -4992,7 +5096,7 @@ async function loadStudentConsumption(page = 1) {
     const pagination = document.getElementById('pagination-student-consumption');
     const dateFrom = document.getElementById('consumption-date-from').value;
     const dateTo = document.getElementById('consumption-date-to').value;
-    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         let url = API_BASE + 'list_all_attendance&page=' + page + '&page_size=20';
         if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
@@ -5035,7 +5139,7 @@ async function loadStudentConsumption(page = 1) {
               + '<button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadStudentConsumption(' + (page + 1) + ')"') + '>下一页</button>'
             : '';
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
