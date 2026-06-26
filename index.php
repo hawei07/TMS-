@@ -222,6 +222,9 @@ if (!in_array('order_type', $existingCols)) {
 if (!in_array('consumed_lessons', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN consumed_lessons INT DEFAULT 0");
 }
+if (!in_array('campus', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN campus VARCHAR(500) DEFAULT ''");
+}
 
 // 兼容已有数据库：学生表添加学号字段
 $existingColsS = [];
@@ -256,6 +259,13 @@ $db->exec("CREATE TABLE IF NOT EXISTS parent_orders (
     meituan_amount REAL DEFAULT 0,
     created_at VARCHAR(500) DEFAULT ''
 )");
+// 兼容已有数据库：parent_orders 新增 campus 字段
+$existingColsPO = [];
+$colResPO = $db->query("SHOW COLUMNS FROM parent_orders");
+while ($colRowPO = $colResPO->fetch(PDO::FETCH_ASSOC)) $existingColsPO[] = $colRowPO['Field'];
+if (!in_array('campus', $existingColsPO)) {
+    $db->exec("ALTER TABLE parent_orders ADD COLUMN campus VARCHAR(500) DEFAULT ''");
+}
 $db->exec("CREATE TABLE IF NOT EXISTS classes (
     id INT PRIMARY KEY AUTO_INCREMENT,
     course_id INT NOT NULL DEFAULT 0,
@@ -319,12 +329,14 @@ $action = $_GET['action'] ?? '';
 if ($action) { handleApi(); exit; }
 function h($s) { return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8'); }
 function now() { return date('Y-m-d H:i:s'); }
+function utf8_strlen($s) { return preg_match_all('/./us', $s ?? ''); }
 function generateOrderNo($db) {
     do {
         $ts = substr(strval(time()), -10);
         $rand = str_pad(strval(random_int(0, 999999)), 6, '0', STR_PAD_LEFT);
         $no = $ts . $rand;
-        $exists = $db->query("SELECT COUNT(*) FROM orders WHERE order_no='$no'")->fetchColumn();
+        $stmt = $db->query("SELECT COUNT(*) FROM orders WHERE order_no='$no'");
+        $exists = $stmt->fetchColumn();
     } while (intval($exists) > 0);
     return $no;
 }
@@ -333,7 +345,8 @@ function generateStudentNo($db) {
         $ts = substr(strval(time()), -8);
         $rand = str_pad(strval(random_int(0, 99)), 2, '0', STR_PAD_LEFT);
         $no = $ts . $rand;
-        $exists = $db->query("SELECT COUNT(*) FROM students WHERE student_no='$no'")->fetchColumn();
+        $stmt = $db->query("SELECT COUNT(*) FROM students WHERE student_no='$no'");
+        $exists = $stmt->fetchColumn();
     } while (intval($exists) > 0);
     return $no;
 }
@@ -610,7 +623,8 @@ $stmt->execute();
             $phone = trim($input['phone'] ?? '');
             // 手机号唯一性校验（空手机号不校验）
             if ($phone !== '') {
-                $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phone)->fetchColumn() . "");
+                $stmt = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phone) . "");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) json(['error' => '手机号已存在，请勿重复录入']);
             }
             $n = now();
@@ -636,13 +650,15 @@ $stmt->execute();
             // 手机号唯一性校验（仅当传入且非空时校验；排除自身id）
             if (isset($input['phone']) && trim($input['phone'] ?? '') !== '') {
                 $phone = trim($input['phone']);
-                $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phone)->fetchColumn() . " AND id != $rid");
+                $stmt = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phone) . " AND id != $rid");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) json(['error' => '手机号已存在，请勿重复录入']);
             }
             // 校验归属人是否在员工名册中存在
             if (isset($input['assigned_to']) && trim($input['assigned_to'] ?? '') !== '') {
                 $assignedTo = trim($input['assigned_to']);
-                $empCount = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($assignedTo)->fetchColumn() . "");
+                $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($assignedTo) . "");
+                $empCount = $stmt->fetchColumn();
                 if (intval($empCount) === 0) json(['error' => '归属人不存在于员工名册中，请从员工名册中选择']);
             }
             // 动态构建 UPDATE：仅更新 $input 中实际传入的字段（排除 id）
@@ -693,7 +709,8 @@ $stmt->execute();
                     $phoneVal = trim($item['phone'] ?? '');
                     // 手机号唯一性校验（空手机号不校验）
                     if ($phoneVal !== '') {
-                        $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phoneVal)->fetchColumn() . "");
+                        $stmt = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phoneVal) . "");
+                        $dup = $stmt->fetchColumn();
                         if (intval($dup) > 0) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => "手机号 {$phoneVal} 已存在"]; continue; }
                     }
                     $stmt->bindValue(':n', $item['name']??'');
@@ -709,7 +726,6 @@ $stmt->execute();
                     $stmt->bindValue(':pt', $poolType);
                     $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
                     $stmt->execute();
-                    $stmt->reset();
                     $count++;
                 }
                 json(['message' => "成功导入 {$count} 条资源" . ($failCount > 0 ? "，跳过 {$failCount} 条" : ''), 'count' => $count, 'skip_count' => $failCount, 'failures' => $failures]);
@@ -825,7 +841,8 @@ $stmt->execute();
 
                 // 手机号唯一性校验（空手机号不校验）
                 if ($item['phone'] !== '') {
-                    $dup = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($item['phone'])->fetchColumn() . "");
+                    $stmt = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($item['phone']) . "");
+                    $dup = $stmt->fetchColumn();
                     if (intval($dup) > 0) {
                         $failures[] = ['row' => $rowIdx + 1, 'reason' => "手机号 {$item['phone']} 已存在"];
                         continue;
@@ -846,7 +863,6 @@ $stmt->execute();
                 $stmt->bindValue(':c', $n);
                 $stmt->bindValue(':u', $n);
                 $stmt->execute();
-                $stmt->reset();
                 $successCount++;
             }
 
@@ -898,7 +914,6 @@ $stmt->execute();
                     $stmt->bindValue(':u', $n);
                     $stmt->bindValue(':id', intval($rid), PDO::PARAM_INT);
                     $stmt->execute();
-                    $stmt->reset();
                     // 分配后再递增计数并判断是否满额，满额则下一轮切换到下一个人
                     $assignedCounts[$targetIdx]++;
                     $quota = $base + ($targetIdx < $remainder ? 1 : 0);
@@ -921,7 +936,6 @@ $stmt->execute();
                     $stmt->bindValue(':u', $n);
                     $stmt->bindValue(':id', intval($rid), PDO::PARAM_INT);
                     $stmt->execute();
-                    $stmt->reset();
                 }
                 json(['message' => '成功分配 ' . count($ids) . ' 条资源给 ' . $assignedTo]);
             }
@@ -937,7 +951,6 @@ $stmt->execute();
                 $stmt->bindValue(':u', $n);
                 $stmt->bindValue(':id', intval($rid), PDO::PARAM_INT);
                 $stmt->execute();
-                $stmt->reset();
             }
             json(['message' => '成功更新 ' . count($ids) . ' 条']);
 
@@ -955,7 +968,8 @@ $stmt->execute();
             if ($status) { $where[] = "status = ?"; $params[] = $status; }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-            $total = $db->query("SELECT COUNT(*) FROM appointments $whereStr")->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM appointments $whereStr");
+            $total = $stmt->fetchColumn();
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
             $query = "SELECT * FROM appointments $whereStr ORDER BY appointment_time DESC LIMIT $pageSize OFFSET $offset";
@@ -1008,7 +1022,7 @@ $stmt->execute();
 
         case 'get_communications':
             $rid = intval($_GET['resource_id'] ?? 0);
-            $result = $db->query("SELECT * FROM communication_records WHERE resource_id=$rid ORDER BY created_at DESC");
+            $stmt = $db->query("SELECT * FROM communication_records WHERE resource_id=$rid ORDER BY created_at DESC");
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
@@ -1028,16 +1042,22 @@ $stmt->execute();
             json(['id' => $db->lastInsertId(), 'message' => '添加成功']);
 
         case 'get_stats':
-            $my = $db->query("SELECT COUNT(*) FROM resources WHERE pool_type='我的资源'")->fetchColumn() ?: 0;
-            $sea = $db->query("SELECT COUNT(*) FROM resources WHERE pool_type='资源公海'")->fetchColumn() ?: 0;
-            $apt = $db->query("SELECT COUNT(*) FROM appointments")->fetchColumn() ?: 0;
-            $emp = $db->query("SELECT COUNT(*) FROM employees")->fetchColumn() ?: 0;
-            $courses = $db->query("SELECT COUNT(*) FROM courses")->fetchColumn() ?: 0;
-            $subjects = $db->query("SELECT COUNT(*) FROM subjects")->fetchColumn() ?: 0;
+            $stmt = $db->query("SELECT COUNT(*) FROM resources WHERE pool_type='我的资源'") ?: 0;
+            $my = $stmt->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM resources WHERE pool_type='资源公海'") ?: 0;
+            $sea = $stmt->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM appointments") ?: 0;
+            $apt = $stmt->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM employees") ?: 0;
+            $emp = $stmt->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM courses") ?: 0;
+            $courses = $stmt->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM subjects") ?: 0;
+            $subjects = $stmt->fetchColumn();
             json(['my_resources' => intval($my), 'sea_resources' => intval($sea), 'appointments' => intval($apt), 'employees' => intval($emp), 'courses' => intval($courses), 'subjects' => intval($subjects)]);
 
         case 'list_channels':
-            $result = $db->query("SELECT * FROM channels ORDER BY created_at DESC");
+            $stmt = $db->query("SELECT * FROM channels ORDER BY created_at DESC");
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
@@ -1046,7 +1066,8 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '渠道名称不能为空']);
-            $existing = $db->query("SELECT COUNT(*) FROM channels WHERE name = " . $db->quote($name)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM channels WHERE name = " . $db->quote($name) . "");
+            $existing = $stmt->fetchColumn();
             if (intval($existing) > 0) json(['error' => '渠道名称已存在']);
             $n = now();
             $db->exec("INSERT INTO channels (name, created_at) VALUES (" . $db->quote($name) . ", '$n')");
@@ -1059,10 +1080,12 @@ $stmt->execute();
             $newName = trim($input['name'] ?? '');
             if (!$newName) json(['error' => '渠道名称不能为空']);
             // 检查新名称是否与其他渠道重复（排除自身）
-            $dup = $db->query("SELECT COUNT(*) FROM channels WHERE name = " . $db->quote($newName)->fetchColumn() . " AND id != $cid");
+            $stmt = $db->query("SELECT COUNT(*) FROM channels WHERE name = " . $db->quote($newName) . " AND id != $cid");
+            $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '渠道名称已存在']);
             // 事务：先取旧名称，再更新 channels，再同步 resources
-            $oldName = $db->query("SELECT name FROM channels WHERE id = $cid")->fetchColumn();
+            $stmt = $db->query("SELECT name FROM channels WHERE id = $cid");
+            $oldName = $stmt->fetchColumn();
             if (!$oldName) json(['error' => '渠道不存在']);
             $db->exec("BEGIN");
             $db->exec("UPDATE channels SET name = " . $db->quote($newName) . " WHERE id = $cid");
@@ -1078,7 +1101,7 @@ $stmt->execute();
             json(['message' => '渠道删除成功']);
 
         case 'list_intention_levels':
-            $result = $db->query("SELECT * FROM intention_levels ORDER BY sort_order ASC, id ASC");
+            $stmt = $db->query("SELECT * FROM intention_levels ORDER BY sort_order ASC, id ASC");
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
@@ -1087,7 +1110,8 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '意向等级名称不能为空']);
-            $existing = $db->query("SELECT COUNT(*) FROM intention_levels WHERE name = " . $db->quote($name)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM intention_levels WHERE name = " . $db->quote($name) . "");
+            $existing = $stmt->fetchColumn();
             if (intval($existing) > 0) json(['error' => '意向等级名称已存在']);
             $sortOrder = intval($input['sort_order'] ?? 0);
             $n = now();
@@ -1101,9 +1125,11 @@ $stmt->execute();
             $newName = trim($input['name'] ?? '');
             if (!$newName) json(['error' => '意向等级名称不能为空']);
             $sortOrder = intval($input['sort_order'] ?? 0);
-            $dup = $db->query("SELECT COUNT(*) FROM intention_levels WHERE name = " . $db->quote($newName)->fetchColumn() . " AND id != $iid");
+            $stmt = $db->query("SELECT COUNT(*) FROM intention_levels WHERE name = " . $db->quote($newName) . " AND id != $iid");
+            $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '意向等级名称已存在']);
-            $oldName = $db->query("SELECT name FROM intention_levels WHERE id = $iid")->fetchColumn();
+            $stmt = $db->query("SELECT name FROM intention_levels WHERE id = $iid");
+            $oldName = $stmt->fetchColumn();
             if (!$oldName) json(['error' => '意向等级不存在']);
             $db->exec("BEGIN");
             $db->exec("UPDATE intention_levels SET name = " . $db->quote($newName) . ", sort_order = $sortOrder WHERE id = $iid");
@@ -1158,7 +1184,7 @@ $stmt->execute();
         case 'list_basic_types':
             $category = $_GET['category'] ?? '';
             if (!$category) json(['error' => 'category参数不能为空']);
-            $result = $db->query("SELECT * FROM basic_types WHERE category = " . $db->quote($category) . " ORDER BY sort_order ASC, id ASC");
+            $stmt = $db->query("SELECT * FROM basic_types WHERE category = " . $db->quote($category) . " ORDER BY sort_order ASC, id ASC");
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
@@ -1170,7 +1196,8 @@ $stmt->execute();
             $sortOrder = intval($input['sort_order'] ?? 0);
             if (!$name) json(['error' => '名称不能为空']);
             if (!$category) json(['error' => 'category不能为空']);
-            $existing = $db->query("SELECT COUNT(*) FROM basic_types WHERE category = " . $db->quote($category)->fetchColumn() . " AND name = " . $db->quote($name) . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM basic_types WHERE category = " . $db->quote($category) . " AND name = " . $db->quote($name) . "");
+            $existing = $stmt->fetchColumn();
             if (intval($existing) > 0) json(['error' => '该类别下已存在同名类型']);
             $n = now();
             $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES (" . $db->quote($category) . ", " . $db->quote($name) . ", $sortOrder, '$n')");
@@ -1189,7 +1216,8 @@ $stmt->execute();
             $finalSort = $sortOrder !== null ? intval($sortOrder) : intval($old['sort_order']);
             // 检查重名
             if ($newName !== '' && $newName !== $old['name']) {
-                $dup = $db->query("SELECT COUNT(*) FROM basic_types WHERE category = " . $db->quote($old['category'])->fetchColumn() . " AND name = " . $db->quote($newName) . " AND id != $bid");
+                $stmt = $db->query("SELECT COUNT(*) FROM basic_types WHERE category = " . $db->quote($old['category']) . " AND name = " . $db->quote($newName) . " AND id != $bid");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) json(['error' => '该类别下已存在同名类型']);
             }
             $db->exec("BEGIN");
@@ -1251,17 +1279,20 @@ $stmt->execute();
             $phone = trim($input['phone'] ?? '');
             // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
             $dupErrors = [];
-            $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($name)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($name) . "");
+            $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) $dupErrors[] = '姓名已存在，请勿重复录入';
             if ($phone !== '') {
-                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phone)->fetchColumn() . "");
+                $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phone) . "");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) $dupErrors[] = '手机号已存在，请勿重复录入';
             }
             if (!empty($dupErrors)) json(['error' => implode('；', $dupErrors)]);
             // 校验 department 是否在 organizations 中存在（可留空）
             $dept = $input['department'] ?? '';
             if ($dept !== '') {
-                $deptExists = $db->query("SELECT COUNT(*) FROM organizations WHERE name = " . $db->quote($dept)->fetchColumn() . "");
+                $stmt = $db->query("SELECT COUNT(*) FROM organizations WHERE name = " . $db->quote($dept) . "");
+                $deptExists = $stmt->fetchColumn();
                 if (intval($deptExists) === 0) json(['error' => '部门不存在，请从组织管理中选择']);
             }
             $n = now();
@@ -1284,19 +1315,22 @@ $stmt->execute();
             $dupErrors = [];
             if (isset($input['name']) && trim($input['name'] ?? '') !== '') {
                 $name = trim($input['name']);
-                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($name)->fetchColumn() . " AND id != $eid");
+                $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($name) . " AND id != $eid");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) $dupErrors[] = '姓名已存在，请勿重复录入';
             }
             if (isset($input['phone']) && trim($input['phone'] ?? '') !== '') {
                 $phone = trim($input['phone']);
-                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phone)->fetchColumn() . " AND id != $eid");
+                $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phone) . " AND id != $eid");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) $dupErrors[] = '手机号已存在，请勿重复录入';
             }
             if (!empty($dupErrors)) json(['error' => implode('；', $dupErrors)]);
             // 校验 department 是否在 organizations 中存在（可留空）
             if (isset($input['department']) && ($input['department'] ?? '') !== '') {
                 $dept = $input['department'];
-                $deptExists = $db->query("SELECT COUNT(*) FROM organizations WHERE name = " . $db->quote($dept)->fetchColumn() . "");
+                $stmt = $db->query("SELECT COUNT(*) FROM organizations WHERE name = " . $db->quote($dept) . "");
+                $deptExists = $stmt->fetchColumn();
                 if (intval($deptExists) === 0) json(['error' => '部门不存在，请从组织管理中选择']);
             }
             $allowedFields = ['name','phone','department','position','entry_date','status','is_teacher'];
@@ -1328,7 +1362,7 @@ $stmt->execute();
 
         // ==================== 岗位管理 ====================
         case 'list_positions':
-            $result = $db->query("SELECT * FROM positions ORDER BY sort_order ASC, id ASC");
+            $stmt = $db->query("SELECT * FROM positions ORDER BY sort_order ASC, id ASC");
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json($rows);
@@ -1337,7 +1371,8 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '岗位名称不能为空']);
-            $existing = $db->query("SELECT COUNT(*) FROM positions WHERE name = " . $db->quote($name)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM positions WHERE name = " . $db->quote($name) . "");
+            $existing = $stmt->fetchColumn();
             if (intval($existing) > 0) json(['error' => '岗位名称已存在']);
             $sortOrder = intval($input['sort_order'] ?? 0);
             $n = now();
@@ -1355,7 +1390,8 @@ $stmt->execute();
             $finalName = $newName !== '' ? $newName : $old['name'];
             $finalSort = $sortOrder !== null ? intval($sortOrder) : intval($old['sort_order']);
             if ($newName !== '' && $newName !== $old['name']) {
-                $dup = $db->query("SELECT COUNT(*) FROM positions WHERE name = " . $db->quote($newName)->fetchColumn() . " AND id != $pid");
+                $stmt = $db->query("SELECT COUNT(*) FROM positions WHERE name = " . $db->quote($newName) . " AND id != $pid");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) json(['error' => '岗位名称已存在']);
             }
             $db->exec("BEGIN");
@@ -1369,9 +1405,11 @@ $stmt->execute();
         case 'delete_position':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $pid = intval($input['id'] ?? 0);
-            $old = $db->query("SELECT name FROM positions WHERE id = $pid")->fetchColumn();
+            $stmt = $db->query("SELECT name FROM positions WHERE id = $pid");
+            $old = $stmt->fetchColumn();
             if (!$old) json(['error' => '岗位不存在']);
-            $inUse = $db->query("SELECT COUNT(*) FROM employees WHERE position = " . $db->quote($old)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE position = " . $db->quote($old) . "");
+            $inUse = $stmt->fetchColumn();
             if (intval($inUse) > 0) json(['error' => "该岗位下有 {$inUse} 名员工，不可删除"]);
             $db->exec("DELETE FROM positions WHERE id=$pid");
             json(['message' => '岗位删除成功']);
@@ -1392,10 +1430,12 @@ $stmt->execute();
                     $phoneVal = trim($item['phone'] ?? '');
                     // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
                     $rowErrors = [];
-                    $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($ename)->fetchColumn() . "");
+                    $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($ename) . "");
+                    $dup = $stmt->fetchColumn();
                     if (intval($dup) > 0) $rowErrors[] = "姓名 {$ename} 已存在";
                     if ($phoneVal !== '') {
-                        $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phoneVal)->fetchColumn() . "");
+                        $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($phoneVal) . "");
+                        $dup = $stmt->fetchColumn();
                         if (intval($dup) > 0) $rowErrors[] = "手机号 {$phoneVal} 已存在";
                     }
                     if (!empty($rowErrors)) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => implode('；', $rowErrors)]; continue; }
@@ -1408,7 +1448,6 @@ $stmt->execute();
                     $stmt->bindValue(':it', $item['is_teacher']??'');
                     $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
                     $stmt->execute();
-                    $stmt->reset();
                     $count++;
                 }
                 json(['message' => "成功导入 {$count} 条" . ($failCount > 0 ? "，跳过 {$failCount} 条" : ''), 'count' => $count, 'skip_count' => $failCount, 'failures' => $failures]);
@@ -1474,10 +1513,12 @@ $stmt->execute();
                 }
                 // 姓名和手机号唯一性校验（同时检查，两个都重复两个都提示）
                 $rowErrors = [];
-                $dup = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($item['name'])->fetchColumn() . "");
+                $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE name = " . $db->quote($item['name']) . "");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) $rowErrors[] = "姓名 {$item['name']} 已存在";
                 if ($item['phone'] !== '') {
-                    $dup = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($item['phone'])->fetchColumn() . "");
+                    $stmt = $db->query("SELECT COUNT(*) FROM employees WHERE phone = " . $db->quote($item['phone']) . "");
+                    $dup = $stmt->fetchColumn();
                     if (intval($dup) > 0) $rowErrors[] = "手机号 {$item['phone']} 已存在";
                 }
                 if (!empty($rowErrors)) {
@@ -1493,7 +1534,6 @@ $stmt->execute();
                 $stmt->bindValue(':it', $item['is_teacher']);
                 $stmt->bindValue(':c', $n); $stmt->bindValue(':u', $n);
                 $stmt->execute();
-                $stmt->reset();
                 $successCount++;
             }
             $failCount = count($failures);
@@ -1544,12 +1584,17 @@ $stmt->execute();
             $page = max(1, intval($_GET['page'] ?? 1));
             $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
             $keyword = $_GET['keyword'] ?? '';
+            $campusId = intval($_GET['campus_id'] ?? 0);
 
             $where = [];
             $params = [];
             if ($keyword) {
                 $where[] = "(name LIKE :kw1 OR subject LIKE :kw2)";
                 $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+            }
+            if ($campusId > 0) {
+                $where[] = "(campus_permission = '' OR campus_permission IS NULL OR FIND_IN_SET(:cid, campus_permission))";
+                $params[':cid'] = $campusId;
             }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -1571,7 +1616,8 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if (!$name) json(['error' => '课程名称不能为空']);
-            $dup = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name) . "");
+            $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '课程名称已存在']);
             $subject = trim($input['subject'] ?? '');
             $small_package = trim($input['small_package'] ?? '');
@@ -1589,7 +1635,8 @@ $stmt->execute();
             $name = trim($input['name'] ?? '');
             if ($name === '') $name = $existing['name'];
             // 名称不可重复（排除自身）
-            $dup = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name)->fetchColumn() . " AND id != $cid");
+            $stmt = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name) . " AND id != $cid");
+            $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '课程名称已存在']);
             $subject = array_key_exists('subject', $input) ? trim($input['subject']) : $existing['subject'];
             $small_package = array_key_exists('small_package', $input) ? trim($input['small_package']) : ($existing['small_package'] ?? '');
@@ -1697,6 +1744,12 @@ $stmt->execute();
             if (empty($items)) json(['error' => '该方案下无报价单']);
             $paymentCash = floatval($input['payment_cash'] ?? 0);
             $paymentMeituan = floatval($input['payment_meituan'] ?? 0);
+            $campusId = intval($input['campus_id'] ?? 0);
+            $campusName = '';
+            if ($campusId > 0) {
+                $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
+                $campusName = $campusRow['name'] ?? '';
+            }
             $itemPrices = array_map(function($it) { return floatval($it['actual_price']); }, $items);
             $totalPrice = array_sum($itemPrices);
             if (abs($paymentCash + $paymentMeituan - $totalPrice) > 0.01) {
@@ -1706,7 +1759,7 @@ $stmt->execute();
             $orderIds = [];
             $childOrderNos = [];
             $totalLessons = 0;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot, :campus)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
@@ -1732,17 +1785,17 @@ $stmt->execute();
                 $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
                 $stmt->bindValue(':pat', $n, PDO::PARAM_STR);
                 $stmt->bindValue(':ot', $orderType, PDO::PARAM_STR);
+                $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
                 $stmt->execute();
                 $orderIds[] = $db->lastInsertId();
                 $childOrderNos[] = $orderNo;
                 $totalLessons += intval($item['lesson_count']);
-                $stmt->reset();
             }
             // 写入父订单汇总
             $student = $db->query("SELECT name, phone, student_no FROM students WHERE id=$studentId")->fetch(PDO::FETCH_ASSOC);
             $course = $db->query("SELECT name FROM courses WHERE id=$courseId")->fetch(PDO::FETCH_ASSOC);
             $childNosStr = implode(',', $childOrderNos);
-            $stmtParent = $db->prepare("INSERT INTO parent_orders (parent_order_no, child_order_nos, course_name, total_lessons, student_name, phone, student_no, enroll_time, total_price, cash_amount, meituan_amount, created_at) VALUES (:pono, :cnos, :cname, :tl, :sname, :phone, :sno, :etime, :tp, :ca, :ma, :ct)");
+            $stmtParent = $db->prepare("INSERT INTO parent_orders (parent_order_no, child_order_nos, course_name, total_lessons, student_name, phone, student_no, enroll_time, total_price, cash_amount, meituan_amount, created_at, campus) VALUES (:pono, :cnos, :cname, :tl, :sname, :phone, :sno, :etime, :tp, :ca, :ma, :ct, :campus)");
             $stmtParent->bindValue(':pono', $parentOrderNo, PDO::PARAM_STR);
             $stmtParent->bindValue(':cnos', $childNosStr, PDO::PARAM_STR);
             $stmtParent->bindValue(':cname', $course['name'] ?? '', PDO::PARAM_STR);
@@ -1755,6 +1808,7 @@ $stmt->execute();
             $stmtParent->bindValue(':ca', $paymentCash, PDO::PARAM_STR);
             $stmtParent->bindValue(':ma', $paymentMeituan, PDO::PARAM_STR);
             $stmtParent->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmtParent->bindValue(':campus', $campusName, PDO::PARAM_STR);
             $stmtParent->execute();
             // 标记来源资源为已转化（不可逆）
             $db->exec("UPDATE resources SET converted = '已转化' WHERE id = (SELECT resource_id FROM students WHERE id = $studentId) AND converted = '未转化'");
@@ -1841,7 +1895,8 @@ $stmt->execute();
             $parentId = intval($post['parent_id'] ?? 0);
             $sortOrder = intval($post['sort_order'] ?? 0);
             // 校验：同一父节点下名称不重复（不限type，部门和校区可以同名共存于同一父节点下）
-            $existing = $db->query("SELECT id FROM organizations WHERE name=" . $db->quote($post['name'])->fetchColumn() . " AND parent_id=$parentId");
+            $stmt = $db->query("SELECT id FROM organizations WHERE name=" . $db->quote($post['name']) . " AND parent_id=$parentId");
+            $existing = $stmt->fetchColumn();
             if ($existing) { json(['error' => '同一父节点下名称已存在']); break; }
             $n = now();
             $db->exec("INSERT INTO organizations (name, type, parent_id, sort_order, created_at) VALUES (" . $db->quote($post['name']) . ", " . $db->quote($type) . ", $parentId, $sortOrder, '$n')");
@@ -1858,7 +1913,8 @@ $stmt->execute();
             if (isset($post['name']) && $post['name'] !== '') {
                 $type = $post['type'] ?? $existing['type'];
                 $parentId = isset($post['parent_id']) ? intval($post['parent_id']) : $existing['parent_id'];
-                $dup = $db->query("SELECT id FROM organizations WHERE name=" . $db->quote($post['name'])->fetchColumn() . " AND parent_id=$parentId AND id!=$id");
+                $stmt = $db->query("SELECT id FROM organizations WHERE name=" . $db->quote($post['name']) . " AND parent_id=$parentId AND id!=$id");
+                $dup = $stmt->fetchColumn();
                 if ($dup) { json(['error' => '同一父节点下名称已存在']); break; }
                 $updates[] = "name=" . $db->quote($post['name']) . "";
             }
@@ -1882,7 +1938,8 @@ $stmt->execute();
             $post = json_decode(file_get_contents('php://input'), true);
             $id = intval($post['id'] ?? 0);
             if ($id <= 0) { json(['error' => 'ID无效']); break; }
-            $children = $db->query("SELECT COUNT(*) FROM organizations WHERE parent_id=$id")->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM organizations WHERE parent_id=$id");
+            $children = $stmt->fetchColumn();
             if ($children > 0) { json(['error' => '该节点下有子节点，请先删除子节点']); break; }
             $db->exec("DELETE FROM organizations WHERE id=$id");
             json(['message' => '删除成功']);
@@ -1918,7 +1975,8 @@ $stmt->execute();
             $parentId = intval($input['parent_id'] ?? 0);
             $sortOrder = intval($input['sort_order'] ?? 0);
             // 同一父级下 name 不可重复
-            $dup = $db->query("SELECT COUNT(*) FROM subjects WHERE name=" . $db->quote($name)->fetchColumn() . " AND parent_id=$parentId");
+            $stmt = $db->query("SELECT COUNT(*) FROM subjects WHERE name=" . $db->quote($name) . " AND parent_id=$parentId");
+            $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '同一父级下学科名称已存在']);
             $db->exec("INSERT INTO subjects (name, parent_id, sort_order) VALUES (" . $db->quote($name) . ", $parentId, $sortOrder)");
             json(['id' => $db->lastInsertId(), 'message' => '学科添加成功']);
@@ -1933,7 +1991,8 @@ $stmt->execute();
             if ($name === '') $name = $existing['name'];
             $parentId = isset($input['parent_id']) ? intval($input['parent_id']) : $existing['parent_id'];
             // 同一父级下名称唯一（排除自身）
-            $dup = $db->query("SELECT COUNT(*) FROM subjects WHERE name=" . $db->quote($name)->fetchColumn() . " AND parent_id=$parentId AND id!=$sid");
+            $stmt = $db->query("SELECT COUNT(*) FROM subjects WHERE name=" . $db->quote($name) . " AND parent_id=$parentId AND id!=$sid");
+            $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '同一父级下学科名称已存在']);
             $sortOrder = isset($input['sort_order']) ? intval($input['sort_order']) : $existing['sort_order'];
             $db->exec("UPDATE subjects SET name=" . $db->quote($name) . ", parent_id=$parentId, sort_order=$sortOrder WHERE id=$sid");
@@ -1943,7 +2002,8 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $sid = intval($input['id'] ?? 0);
             if ($sid <= 0) json(['error' => '学科ID无效']);
-            $children = $db->query("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid")->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid");
+            $children = $stmt->fetchColumn();
             if ($children > 0) json(['error' => '该学科下有子学科，请先删除子学科']);
             $db->exec("DELETE FROM subjects WHERE id=$sid");
             json(['message' => '学科删除成功']);
@@ -1957,7 +2017,8 @@ $stmt->execute();
             foreach ($ids as $id) {
                 $sid = intval($id);
                 if ($sid <= 0) { $failed[] = "无效ID: $id"; continue; }
-                $children = $db->query("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid")->fetchColumn();
+                $stmt = $db->query("SELECT COUNT(*) FROM subjects WHERE parent_id=$sid");
+                $children = $stmt->fetchColumn();
                 if ($children > 0) { $failed[] = "学科(ID=$sid)下有子学科，跳过"; continue; }
                 $db->exec("DELETE FROM subjects WHERE id=$sid");
                 $deleted++;
@@ -1979,7 +2040,7 @@ $stmt->execute();
             $stmt = $db->prepare("SELECT COUNT(*) FROM students s $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count FROM students s $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count, cg.class_names FROM students s LEFT JOIN (SELECT cs.student_id, GROUP_CONCAT(c.name SEPARATOR ', ') AS class_names FROM class_students cs JOIN classes c ON c.id = cs.class_id GROUP BY cs.student_id) cg ON cg.student_id = s.id $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -2006,7 +2067,8 @@ $stmt->execute();
             $name = trim($input['name'] ?? '');
             $phone = trim($input['phone'] ?? '');
             if (!$name || !$phone) { json(['error' => '姓名和手机号不能为空']); break; }
-            $exist = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone) . "");
+            $exist = $stmt->fetchColumn();
             if ($exist > 0) { json(['error' => '手机号已存在']); break; }
             $source = trim($input['source'] ?? '');
             $followStatus = trim($input['follow_status'] ?? '');
@@ -2025,7 +2087,8 @@ $stmt->execute();
             $name = trim($input['name'] ?? '');
             $phone = trim($input['phone'] ?? '');
             if (!$name || !$phone) { json(['error' => '姓名和手机号不能为空']); break; }
-            $exist = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . " AND id!=$id");
+            $stmt = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone) . " AND id!=$id");
+            $exist = $stmt->fetchColumn();
             if ($exist > 0) { json(['error' => '手机号已被其他学员使用']); break; }
             $source = trim($input['source'] ?? '');
             $followStatus = trim($input['follow_status'] ?? '');
@@ -2052,9 +2115,15 @@ $stmt->execute();
             $lessonCount = intval($input['lesson_count'] ?? 0);
             $actualPrice = floatval($input['actual_price'] ?? 0);
             if (!$planName || !$itemName) { json(['error' => '请选择价格方案和报价单']); break; }
+            $campusId = intval($input['campus_id'] ?? 0);
+            $campusName = '';
+            if ($campusId > 0) {
+                $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
+                $campusName = $campusRow['name'] ?? '';
+            }
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus)");
             $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
             $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2063,7 +2132,10 @@ $stmt->execute();
             $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
             $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
             $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
             $stmt->execute();
+            json(['message' => '报名成功', 'order_id' => $db->lastInsertId(), 'order_no' => $orderNo]);
+            break;
         case 'enroll_from_resource':
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
             $resourceId = intval($input['resource_id'] ?? 0);
@@ -2079,9 +2151,10 @@ $stmt->execute();
             $name = $res['name'];
             $phone = $res['phone'];
             if (!$phone) { json(['error' => '该资源没有手机号']); break; }
-            $existing = $db->query("SELECT id FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . "", true);
+            $stmt = $db->query("SELECT id FROM students WHERE phone=" . $db->quote($phone) . "", true);
+            $existing = $stmt->fetchColumn();
             if ($existing) {
-                $studentId = $existing['id'];
+                $studentId = $existing;
             } else {
                 $source = $db->quote($res['source'] ?? '');
                 $followStatus = $db->quote($res['follow_status'] ?? '');
@@ -2089,12 +2162,18 @@ $stmt->execute();
                 $ephone = $db->quote($phone);
                 $studentNo = generateStudentNo($db);
                 $n = now();
-                $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, '$ename', '$ephone', '$source', '$followStatus', '$studentNo', '$n')");
+                $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, $ename, $ephone, $source, $followStatus, '$studentNo', '$n')");
                 $studentId = $db->lastInsertId();
+            }
+            $campusId = intval($input['campus_id'] ?? 0);
+            $campusName = '';
+            if ($campusId > 0) {
+                $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
+                $campusName = $campusRow['name'] ?? '';
             }
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus)");
             $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
             $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2103,6 +2182,7 @@ $stmt->execute();
             $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
             $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
             $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
             $stmt->execute();
             json(['message' => '报名成功，学员ID：' . $studentId, 'id' => $db->lastInsertId(), 'student_id' => $studentId]);
             break;
@@ -2116,9 +2196,10 @@ $stmt->execute();
             $name = $res['name'];
             $phone = $res['phone'];
             if (!$phone) json(['error' => '该资源没有手机号，无法创建学员记录']);
-            $existing = $db->query("SELECT id FROM students WHERE phone=" . $db->quote($phone)->fetchColumn() . "", true);
+            $stmt = $db->query("SELECT id FROM students WHERE phone=" . $db->quote($phone) . "", true);
+            $existing = $stmt->fetchColumn();
             if ($existing) {
-                $studentId = $existing['id'];
+                $studentId = $existing;
             } else {
                 $source = $db->quote($res['source'] ?? '');
                 $followStatus = $db->quote($res['follow_status'] ?? '');
@@ -2126,7 +2207,7 @@ $stmt->execute();
                 $ephone = $db->quote($phone);
                 $studentNo = generateStudentNo($db);
                 $n = now();
-                $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, '$ename', '$ephone', '$source', '$followStatus', '$studentNo', '$n')");
+                $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($resourceId, $ename, $ephone, $source, $followStatus, '$studentNo', '$n')");
                 $studentId = $db->lastInsertId();
             }
             json(['student_id' => $studentId, 'message' => '学员记录已就绪']);
@@ -2137,7 +2218,7 @@ $stmt->execute();
             $sid = intval($_GET['student_id'] ?? 0);
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
-            $res = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons, o.campus FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
@@ -2163,7 +2244,7 @@ $stmt->execute();
             $sid = intval($_GET['student_id'] ?? 0);
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
-            $res = $db->query("SELECT a.*, c.name AS course_name FROM attendance_records a LEFT JOIN courses c ON a.course_id = c.id WHERE a.student_id = $sid ORDER BY a.lesson_date DESC, a.id DESC");
+            $stmt = $db->query("SELECT a.*, c.name AS course_name FROM attendance_records a LEFT JOIN courses c ON a.course_id = c.id WHERE a.student_id = $sid ORDER BY a.lesson_date DESC, a.id DESC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['data' => $rows]);
             break;
@@ -2174,17 +2255,30 @@ $stmt->execute();
             $cid = intval($input['course_id'] ?? 0);
             $lessonDate = trim($input['lesson_date'] ?? '');
             $status = trim($input['status'] ?? '出勤');
-            $notes = trim($input['notes'] ?? '');
+            $className = trim($input['class_name'] ?? '');
+            $campus = trim($input['campus'] ?? '');
+            $teacher = trim($input['teacher'] ?? '');
+            $subjectLevel1 = trim($input['subject_level1'] ?? '');
+            $subjectLevel2 = trim($input['subject_level2'] ?? '');
+            $classTime = trim($input['class_time'] ?? '');
+            $consumedAmount = floatval($input['consumed_amount'] ?? 0);
             if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
             $n = now();
-            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, lesson_date, status, notes, created_at) VALUES (:sid, :cid, :dt, :st, :nt, :ct)");
+            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, campus, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :cp, :t, :ca2, :ct2)");
             $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $cid, PDO::PARAM_INT);
+            $stmt->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
+            $stmt->bindValue(':sl2', $subjectLevel2, PDO::PARAM_STR);
+            $stmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
             $stmt->bindValue(':dt', $lessonDate, PDO::PARAM_STR);
+            $stmt->bindValue(':aa', $n, PDO::PARAM_STR);
             $stmt->bindValue(':st', $status, PDO::PARAM_STR);
-            $stmt->bindValue(':nt', $notes, PDO::PARAM_STR);
-            $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+            $stmt->bindValue(':cn', $className, PDO::PARAM_STR);
+            $stmt->bindValue(':cp', $campus, PDO::PARAM_STR);
+            $stmt->bindValue(':t', $teacher, PDO::PARAM_STR);
+            $stmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
+            $stmt->bindValue(':ct2', $n, PDO::PARAM_STR);
             $stmt->execute();
             json(['id' => $db->lastInsertId(), 'message' => '考勤记录添加成功']);
             break;
@@ -2203,7 +2297,13 @@ $stmt->execute();
                 if (!in_array($st, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
                 $fields[] = "status=" . $db->quote($st) . "";
             }
-            if (isset($input['notes'])) $fields[] = "notes='" . $db->quote(trim($input['notes'])) . "'";
+            if (isset($input['class_name'])) $fields[] = "class_name='" . $db->quote(trim($input['class_name'])) . "'";
+            if (isset($input['campus'])) $fields[] = "campus='" . $db->quote(trim($input['campus'])) . "'";
+            if (isset($input['teacher'])) $fields[] = "teacher='" . $db->quote(trim($input['teacher'])) . "'";
+            if (isset($input['subject_level1'])) $fields[] = "subject_level1='" . $db->quote(trim($input['subject_level1'])) . "'";
+            if (isset($input['subject_level2'])) $fields[] = "subject_level2='" . $db->quote(trim($input['subject_level2'])) . "'";
+            if (isset($input['class_time'])) $fields[] = "class_time='" . $db->quote(trim($input['class_time'])) . "'";
+            if (isset($input['consumed_amount'])) $fields[] = "consumed_amount=" . round(floatval($input['consumed_amount']), 2);
             if (empty($fields)) { json(['message' => '无变更']); break; }
             $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
             json(['message' => '考勤记录更新成功']);
@@ -2233,7 +2333,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, o.campus, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -2286,10 +2386,14 @@ $stmt->execute();
                 $where = "WHERE cl.name LIKE :kw";
                 $params[':kw'] = "%$keyword%";
             }
+            // has_schedule=1 仅返回已有排课记录的班级
+            if (isset($_GET['has_schedule']) && $_GET['has_schedule'] == '1') {
+                $where .= ($where ? ' AND' : 'WHERE') . ' cl.id IN (SELECT DISTINCT class_id FROM schedules)';
+            }
             $stmt = $db->prepare("SELECT COUNT(*) FROM classes cl $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT cl.*, c.name AS course_name FROM classes cl LEFT JOIN courses c ON cl.course_id = c.id $where ORDER BY cl.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT cl.*, c.name AS course_name, SUBSTRING_INDEX(c.subject, ' > ', 1) AS parent_subject, SUBSTRING_INDEX(c.subject, ' > ', -1) AS child_subject FROM classes cl LEFT JOIN courses c ON cl.course_id = c.id $where ORDER BY cl.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -2308,17 +2412,17 @@ $stmt->execute();
             $classType = trim($input['class_type'] ?? '标准班');
             $maxStudents = intval($input['max_students'] ?? 0);
             $lessonHours = intval($input['lesson_hours'] ?? 0);
-            $canTrial = trim($input['can_trial'] ?? '是');
+            $canTrial = (trim($input['can_trial'] ?? '是') === '否') ? 0 : 1;
             $campus = trim($input['campus'] ?? '');
             $remark = trim($input['remark'] ?? '');
             if (!$courseId) json(['error' => '请选择关联课程']);
             if (!$name) json(['error' => '班级名称不能为空']);
-            if (mb_strlen($name) > 20) json(['error' => '班级名称最长20字']);
+            if (utf8_strlen($name) > 20) json(['error' => '班级名称最长20字']);
             if (!$classType) json(['error' => '请选择班级类型']);
             if ($maxStudents <= 0) json(['error' => '招生人数必须大于0']);
             if ($lessonHours % 2 !== 0) json(['error' => '授课课时必须为偶数']);
             if (!$campus) json(['error' => '请选择当前校区']);
-            if (mb_strlen($remark) > 200) json(['error' => '备注最长200字']);
+            if (utf8_strlen($remark) > 200) json(['error' => '备注最长200字']);
             $n = now();
             $stmt = $db->prepare("INSERT INTO classes (course_id, name, class_type, max_students, lesson_hours, can_trial, campus, remark, created_at) VALUES (:cid, :nm, :ct, :ms, :lh, :tr, :cp, :rm, :ca)");
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
@@ -2326,7 +2430,7 @@ $stmt->execute();
             $stmt->bindValue(':ct', $classType, PDO::PARAM_STR);
             $stmt->bindValue(':ms', $maxStudents, PDO::PARAM_INT);
             $stmt->bindValue(':lh', $lessonHours, PDO::PARAM_INT);
-            $stmt->bindValue(':tr', $canTrial, PDO::PARAM_STR);
+            $stmt->bindValue(':tr', $canTrial, PDO::PARAM_INT);
             $stmt->bindValue(':cp', $campus, PDO::PARAM_STR);
             $stmt->bindValue(':rm', $remark, PDO::PARAM_STR);
             $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
@@ -2345,17 +2449,17 @@ $stmt->execute();
             if (isset($input['name'])) {
                 $nm = trim($input['name']);
                 if ($nm === '') json(['error' => '班级名称不能为空']);
-                if (mb_strlen($nm) > 20) json(['error' => '班级名称最长20字']);
+                if (utf8_strlen($nm) > 20) json(['error' => '班级名称最长20字']);
                 $updates[] = "name=" . $db->quote($nm) . "";
             }
             if (isset($input['class_type'])) { $updates[] = "class_type='" . $db->quote(trim($input['class_type'])) . "'"; }
             if (isset($input['max_students'])) { $updates[] = "max_students=" . intval($input['max_students']); }
             if (isset($input['lesson_hours'])) { $lh = intval($input['lesson_hours']); if ($lh % 2 !== 0) json(['error' => '授课课时必须为偶数']); $updates[] = "lesson_hours=" . $lh; }
-            if (isset($input['can_trial'])) { $updates[] = "can_trial='" . $db->quote(trim($input['can_trial'])) . "'"; }
+            if (isset($input['can_trial'])) { $updates[] = "can_trial=" . ((trim($input['can_trial']) === '否') ? 0 : 1); }
             if (isset($input['campus'])) { $updates[] = "campus='" . $db->quote(trim($input['campus'])) . "'"; }
             if (isset($input['remark'])) {
                 $rm = trim($input['remark']);
-                if (mb_strlen($rm) > 200) json(['error' => '备注最长200字']);
+                if (utf8_strlen($rm) > 200) json(['error' => '备注最长200字']);
                 $updates[] = "remark=" . $db->quote($rm) . "";
             }
             if (empty($updates)) json(['message' => '无变更']);
@@ -2467,7 +2571,7 @@ $stmt->execute();
             }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
             $rows = [];
-            $res = $db->query("SELECT * FROM classrooms $whereStr ORDER BY id DESC");
+            $stmt = $db->query("SELECT * FROM classrooms $whereStr ORDER BY id DESC");
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
@@ -2476,7 +2580,8 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             if ($name === '') json(['error' => '教室名称不能为空']);
-            $existing = $db->query("SELECT COUNT(*) FROM classrooms WHERE name=" . $db->quote($name)->fetchColumn() . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM classrooms WHERE name=" . $db->quote($name) . "");
+            $existing = $stmt->fetchColumn();
             if (intval($existing) > 0) json(['error' => '教室名称已存在']);
             $capacity = intval($input['capacity'] ?? 0);
             $campus = trim($input['campus'] ?? '');
@@ -2502,7 +2607,8 @@ $stmt->execute();
             if (isset($input['name'])) {
                 $nm = trim($input['name']);
                 if ($nm === '') json(['error' => '教室名称不能为空']);
-                $dup = $db->query("SELECT COUNT(*) FROM classrooms WHERE name=" . $db->quote($nm)->fetchColumn() . " AND id!=$id");
+                $stmt = $db->query("SELECT COUNT(*) FROM classrooms WHERE name=" . $db->quote($nm) . " AND id!=$id");
+                $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) json(['error' => '教室名称已存在']);
                 $updates[] = "name=" . $db->quote($nm) . "";
             }
@@ -2528,7 +2634,7 @@ $stmt->execute();
             $classId = intval($_GET['class_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             $rows = [];
-            $res = $db->query("SELECT cs.id as cs_id, cs.class_id, cs.student_id, cs.created_at as joined_at,
+            $stmt = $db->query("SELECT cs.id as cs_id, cs.class_id, cs.student_id, cs.created_at as joined_at,
                 s.id, s.student_no, s.name, s.phone, s.source, s.follow_status
                 FROM class_students cs
                 JOIN students s ON s.id = cs.student_id
@@ -2544,7 +2650,8 @@ $stmt->execute();
             $studentId = intval($input['student_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
-            $exists = $db->query("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId")->fetchColumn();
+            $stmt = $db->query("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId");
+            $exists = $stmt->fetchColumn();
             if (intval($exists) > 0) json(['error' => '该学员已在此班级中']);
             // 检查一级学科下剩余课时
             $classRow = $db->query("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
@@ -2553,7 +2660,7 @@ $stmt->execute();
             // courses.subject 存储格式为 "一级学科名 > 二级学科名"，取末段匹配
             $subjectParts = explode(' > ', $subject);
             $leafSubject = end($subjectParts);
-            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject)->fetchColumn() . "", true);
+            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -2603,7 +2710,7 @@ $stmt->execute();
                 $whereStr
                 ORDER BY s.id DESC
                 LIMIT 50";
-            $res = $db->query($sql);
+            $stmt = $db->query($sql);
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
             break;
@@ -2616,29 +2723,40 @@ $stmt->execute();
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
             // 获取班级课程信息
-            $classInfo = $db->query("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $classInfo = $db->query("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $classCourseId = intval($classInfo['course_id'] ?? 0);
             $classCourseName = $classInfo['course_name'] ?? '';
             $classLessonHours = intval($classInfo['lesson_hours'] ?? 0);
+            $classCampus = $classInfo['campus'] ?? '';
             // 解析一级学科ID（用于计算该学员一级学科下所有订单的剩余课时）
             $classFirstSubjectId = 0;
             $subjectRaw = $classInfo['subject_raw'] ?? '';
             if ($subjectRaw) {
                 $parts = explode(' > ', $subjectRaw);
                 $leaf = end($parts);
-                $sj = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leaf)->fetchColumn() . "", true);
+                $sj = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leaf))->fetch(PDO::FETCH_ASSOC);
                 if ($sj) {
                     $classFirstSubjectId = intval($sj['parent_id']) == 0 ? intval($sj['id']) : intval($sj['parent_id']);
                 }
             }
-            // 获取班级所有学员
+            // 获取班级所有学员（含出班但已有考勤记录的学员）
             $students = [];
-            $res = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
-            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $students[] = $r;
+            $studentIdsInClass = [];
+            $stmt = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = true; }
             // 获取已有考勤记录
             $attMap = [];
             $attRes = $db->query("SELECT * FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate'");
             while ($r = $attRes->fetch(PDO::FETCH_ASSOC)) $attMap[$r['student_id']] = $r;
+            // 补充：已有考勤记录但已出班的学员（课时消耗完被移出class_students）
+            $extraStudentIds = [];
+            foreach ($attMap as $sid => $rec) {
+                if (!isset($studentIdsInClass[$sid])) $extraStudentIds[] = $sid;
+            }
+            if (count($extraStudentIds) > 0) {
+                $extraRes = $db->query("SELECT id, student_no, name FROM students WHERE id IN (" . implode(',', $extraStudentIds) . ")");
+                while ($r = $extraRes->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = false; }
+            }
             // 预取一级学科下所有课程ID（用于计算 max_deductible）
             $flCourseIds = [];
             if ($classFirstSubjectId > 0) {
@@ -2648,24 +2766,22 @@ $stmt->execute();
             $rows = [];
             foreach ($students as $stu) {
                 $aid = $attMap[$stu['id']] ?? null;
-                // 查询该学员在此课程的剩余课时
-                $remaining = 0;
-                if ($classCourseId > 0) {
-                    $oRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS rem FROM orders WHERE student_id = {$stu['id']} AND course_id = $classCourseId")->fetch(PDO::FETCH_ASSOC);
-                    $remaining = intval($oRow['rem'] ?? 0);
-                }
-                // 查询该学员在一级学科下所有订单的总剩余课时（步进器上限）
-                $maxDeductible = 0;
+                // 查询该学员在一级学科下、同校区的订单总剩余课时（用于展示和步进器上限）
+                $totalRemaining = 0;
                 if ($classFirstSubjectId > 0 && count($flCourseIds) > 0) {
-                    $mdRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND course_id IN (" . implode(',', $flCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
-                    $maxDeductible = max(0, intval($mdRow['total'] ?? 0));
+                    $quotedCampus = $db->quote($classCampus);
+                    $mdRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND campus = $quotedCampus AND course_id IN (" . implode(',', $flCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                    $totalRemaining = max(0, intval($mdRow['total'] ?? 0));
                 }
+                // 编辑时步进器上限 = 当前剩余 + 已扣值（因保存时会先退还再重扣）
+                $maxDeductible = $totalRemaining;
+                if ($aid) $maxDeductible += intval($aid['deducted_lessons']);
                 $rows[] = [
                     'student_id' => $stu['id'],
                     'student_no' => $stu['student_no'],
                     'student_name' => $stu['name'],
                     'course_name' => $classCourseName,
-                    'remaining_lessons' => max(0, $remaining),
+                    'remaining_lessons' => $totalRemaining,
                     'lesson_hours' => $classLessonHours,
                     'max_deductible' => $maxDeductible,
                     'status' => $aid ? $aid['status'] : '',
@@ -2687,7 +2803,7 @@ $stmt->execute();
             if ($scheduleId <= 0) json(['error' => '排课ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
             if (!is_array($records) || count($records) === 0) json(['error' => '考勤记录为空']);
-            $db->exec('BEGIN TRANSACTION');
+            $db->exec('START TRANSACTION');
             try {
                 foreach ($records as $rec) {
                     $studentId = intval($rec['student_id'] ?? 0);
@@ -2695,15 +2811,16 @@ $stmt->execute();
                     if ($studentId <= 0) continue;
                     if (!in_array($status, ['出勤', '请假', '缺勤'])) $status = '出勤';
                     // 查询该学员在此班级课程的一级学科
-                    $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+                    $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
                     $courseId = intval($classRow['course_id'] ?? 0);
                     $subject = $classRow['subject'] ?? '';
+                    $classCampus = $classRow['campus'] ?? '';
                     // 获取一级学科（courses.subject 格式为 "一级学科名 > 二级学科名"）
                     $firstSubjectId = 0;
                     $courseSubjId = 0; // 课程所属学科ID（可能就是二级学科）
                     $subjectParts = explode(' > ', $subject);
                     $leafSubject = end($subjectParts);
-                    $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject)->fetchColumn() . "", true);
+                    $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
                     if ($subjRow) {
                         $courseSubjId = intval($subjRow['id']);
                         if (intval($subjRow['parent_id']) == 0) {
@@ -2717,61 +2834,8 @@ $stmt->execute();
                     if ($status === '出勤' && $deductedLessons <= 0) {
                         $deductedLessons = max(1, intval($classRow['lesson_hours'] ?? 0));
                     }
-                    if ($status === '出勤' && $deductedLessons > 0) {
-                        // 扣课时逻辑（三级优先级，跨订单连续扣）：
-                        // 1. 优先扣同一course_id的订单（有多个时，先报名的优先）
-                        // 2. 继续扣同二级学科的订单（先报名的优先）
-                        // 3. 继续扣同一级学科的订单（先报名的优先）
-                        $allOrderRows = [];
-
-                        // 1. 同一course_id的订单
-                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                        while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
-
-                        // 2. 同一二级学科的订单（仅当课程有二级学科归属时）
-                        if ($courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
-                            $sameSecondCourses = [];
-                            $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
-                            while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
-                            if (count($sameSecondCourses) > 0) {
-                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
-                            }
-                        }
-
-                        // 3. 同一级学科的订单
-                        if ($firstSubjectId > 0) {
-                            $firstLevelCourses = [];
-                            $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
-                            while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
-                            if (count($firstLevelCourses) > 0) {
-                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons ORDER BY created_at ASC, id ASC");
-                                while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) $allOrderRows[] = $o;
-                            }
-                        }
-
-                        // 跨订单循环扣课时
-                        $remainingToDeduct = $deductedLessons;
-                        $deductionEntries = [];
-                        $deductedOrderId = 0;
-                        foreach ($allOrderRows as $order) {
-                            $available = intval($order['lesson_count']) - intval($order['consumed_lessons']);
-                            if ($available <= 0) continue;
-                            $toDeduct = min($remainingToDeduct, $available);
-                            if ($toDeduct <= 0) break;
-                            $newConsumed = intval($order['consumed_lessons']) + $toDeduct;
-                            $oid = intval($order['id']);
-                            $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
-                            $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
-                            if ($deductedOrderId === 0) $deductedOrderId = $oid;
-                            $remainingToDeduct -= $toDeduct;
-                            if ($remainingToDeduct <= 0) break;
-                        }
-                        $deductionJson = json_encode($deductionEntries);
-                    } else {
-                        $deductionJson = '';
-                    }
                     // 退还已扣课时（改状态为缺勤/请假时，按 deduction_json 逐笔归还）
+                    // 必须在计算新扣课时之前执行，否则新扣课时计算会基于错误的 consumed_lessons 值
                     $oldAtt = $db->query("SELECT deducted_lessons, deduction_json FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId")->fetch(PDO::FETCH_ASSOC);
                     if ($oldAtt && !empty($oldAtt['deduction_json'])) {
                         $oldEntries = json_decode($oldAtt['deduction_json'], true);
@@ -2784,6 +2848,101 @@ $stmt->execute();
                                 }
                             }
                         }
+                    }
+                    // 出勤上限校验：扣除课时数不得超过一级学科剩余课时（退还后重新计算）
+                    if ($status === '出勤' && $deductedLessons > 0 && $firstSubjectId > 0) {
+                        $allSubjCourseIds = [];
+                        $srMax = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                        while ($c = $srMax->fetch(PDO::FETCH_ASSOC)) $allSubjCourseIds[] = $c['id'];
+                        if (count($allSubjCourseIds) > 0) {
+                            $quotedCampus = $db->quote($classCampus);
+                            $maxRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS max_deductible FROM orders WHERE student_id = $studentId AND campus = $quotedCampus AND course_id IN (" . implode(',', $allSubjCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                            $maxDeductible = intval($maxRow['max_deductible'] ?? 0);
+                            if ($deductedLessons > $maxDeductible) {
+                                throw new Exception("学员「{$rec['student_name']}」剩余课时不足：最多可扣 $maxDeductible 课时，当前请求扣 $deductedLessons 课时");
+                            }
+                        }
+                    }
+                    if ($status === '出勤' && $deductedLessons > 0) {
+                        // 扣课时逻辑（三级优先级，跨订单连续扣，限定同校区）：
+                        // 1. 优先扣同一course_id的订单（有多个时，先报名的优先）
+                        // 2. 继续扣同二级学科的订单（先报名的优先）
+                        // 3. 继续扣同一级学科的订单（先报名的优先）
+                        $allOrderRows = [];
+
+                        // 扣课时按优先级逐级扣减（每级内部先报名优先）
+                        $remainingToDeduct = $deductedLessons;
+                        $deductionEntries = [];
+                        $deductedOrderId = 0;
+                        $processedOrderIds = [];
+                        $quotedCampus = $db->quote($classCampus);
+
+                        // 优先级1：同一course_id的订单（同校区）
+                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons AND campus = $quotedCampus ORDER BY created_at ASC, id ASC");
+                        while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) {
+                            if ($remainingToDeduct <= 0) break;
+                            $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                            if ($available <= 0) continue;
+                            $toDeduct = min($remainingToDeduct, $available);
+                            $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                            $oid = intval($o['id']);
+                            $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                            $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                            if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                            $remainingToDeduct -= $toDeduct;
+                            $processedOrderIds[] = $oid;
+                        }
+
+                        // 优先级2：同一二级学科的订单（先报名优先，排除已处理订单）
+                        if ($remainingToDeduct > 0 && $courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
+                            $sameSecondCourses = [];
+                            $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
+                            while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
+                            if (count($sameSecondCourses) > 0) {
+                                $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
+                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons $excludeClause AND campus = $quotedCampus ORDER BY created_at ASC, id ASC");
+                                while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) {
+                                    if ($remainingToDeduct <= 0) break;
+                                    $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                                    if ($available <= 0) continue;
+                                    $toDeduct = min($remainingToDeduct, $available);
+                                    $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                    $oid = intval($o['id']);
+                                    $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                                    $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                    if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                                    $remainingToDeduct -= $toDeduct;
+                                    $processedOrderIds[] = $oid;
+                                }
+                            }
+                        }
+
+                        // 优先级3：同一级学科的订单（先报名优先，排除已处理订单）
+                        if ($remainingToDeduct > 0 && $firstSubjectId > 0) {
+                            $firstLevelCourses = [];
+                            $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                            while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
+                            if (count($firstLevelCourses) > 0) {
+                                $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
+                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons $excludeClause AND campus = $quotedCampus ORDER BY created_at ASC, id ASC");
+                                while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) {
+                                    if ($remainingToDeduct <= 0) break;
+                                    $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                                    if ($available <= 0) continue;
+                                    $toDeduct = min($remainingToDeduct, $available);
+                                    $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                    $oid = intval($o['id']);
+                                    $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                                    $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                    if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                                    $remainingToDeduct -= $toDeduct;
+                                    $processedOrderIds[] = $oid;
+                                }
+                            }
+                        }
+                        $deductionJson = json_encode($deductionEntries);
+                    } else {
+                        $deductionJson = '';
                     }
                     // 删除旧的考勤记录
                     $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId");
@@ -2799,6 +2958,65 @@ $stmt->execute();
                     $stmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
                     $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
                     $stmt->execute();
+                    // 同步写入学员考勤明细记录（attendance_records）
+                    // 课程信息优先使用实际扣除的订单对应课程，而非班级课程
+                    $className = $classRow['course_name'] ?? ''; // c.name 即班级名称（别名误导）
+                    $attCourseId = $courseId;
+                    $attSubjL1 = $subjectParts[0] ?? '';
+                    $attSubjL2 = $subjectParts[1] ?? '';
+                    if ($deductedOrderId > 0) {
+                        $deductedOrderCourse = $db->query("SELECT co.id, co.subject FROM orders o LEFT JOIN courses co ON o.course_id = co.id WHERE o.id = $deductedOrderId")->fetch(PDO::FETCH_ASSOC);
+                        if ($deductedOrderCourse) {
+                            $attCourseId = intval($deductedOrderCourse['id']);
+                            $attSubjParts = explode(' > ', $deductedOrderCourse['subject'] ?? '');
+                            $attSubjL1 = $attSubjParts[0] ?? '';
+                            $attSubjL2 = $attSubjParts[1] ?? '';
+                        }
+                    }
+                    $schedRow = $db->query("SELECT teacher, time_slots FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
+                    $teacher = $schedRow['teacher'] ?? '';
+                    // 根据上课日期的星期几，从排课的 time_slots JSON 中取对应时间段
+                    $classTime = '';
+                    $timeSlots = json_decode($schedRow['time_slots'] ?? '{}', true) ?: [];
+                    $dow = date('N', strtotime($sessionDate));
+                    $dowKey = ($dow == 7) ? '0' : (string)$dow;
+                    $slot = $timeSlots[$dowKey] ?? [];
+                    if (!empty($slot['start']) && !empty($slot['end'])) {
+                        $classTime = $slot['start'] . '-' . $slot['end'];
+                    } elseif (!empty($slot['start'])) {
+                        $classTime = $slot['start'];
+                    }
+                    $consumedAmount = 0;
+                    if (!empty($deductionEntries)) {
+                        foreach ($deductionEntries as $de) {
+                            $orderRow = $db->query("SELECT actual_price, lesson_count FROM orders WHERE id={$de['order_id']}")->fetch(PDO::FETCH_ASSOC);
+                            if ($orderRow && $orderRow['lesson_count'] > 0) {
+                                $unitPrice = floatval($orderRow['actual_price']) / intval($orderRow['lesson_count']);
+                                $consumedAmount += $unitPrice * floatval($de['amount']);
+                            }
+                        }
+                    }
+                    $db->exec("DELETE FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
+                    if ($status === '出勤' && $deductedLessons > 0) {
+                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :cp, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :ca)");
+                        $arStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':cid', $attCourseId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':clid', $classId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':scid', $scheduleId, PDO::PARAM_INT);
+                        $arStmt->bindValue(':cn', $className, PDO::PARAM_STR);
+                        $arStmt->bindValue(':cp', $classCampus, PDO::PARAM_STR);
+                        $arStmt->bindValue(':t', $teacher, PDO::PARAM_STR);
+                        $arStmt->bindValue(':sl1', $attSubjL1, PDO::PARAM_STR);
+                        $arStmt->bindValue(':sl2', $attSubjL2, PDO::PARAM_STR);
+                        $arStmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
+                        $arStmt->bindValue(':ld', $sessionDate, PDO::PARAM_STR);
+                        $arStmt->bindValue(':aa', $n, PDO::PARAM_STR);
+                        $arStmt->bindValue(':st', $status, PDO::PARAM_STR);
+                        $arStmt->bindValue(':dl', $deductedLessons, PDO::PARAM_INT);
+                        $arStmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
+                        $arStmt->bindValue(':ca', $n, PDO::PARAM_STR);
+                        $arStmt->execute();
+                    }
                     // 考勤完成后，判断是否需要移出班级
                     if ($firstSubjectId > 0) {
                         // 获取一级学科下所有课程ID
@@ -2828,14 +3046,15 @@ $stmt->execute();
             $studentId = intval($_GET['student_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
-            // 获取班级课程的一级学科
-            $classRow = $db->query("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            // 获取班级课程的一级学科及校区
+            $classRow = $db->query("SELECT c.course_id, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $subject = $classRow['subject'] ?? '';
+            $classCampus = $classRow['campus'] ?? '';
             $firstSubjectId = 0;
             // courses.subject 存储格式为 "一级学科名 > 二级学科名"，需取末段匹配 subjects.name
             $subjectParts = explode(' > ', $subject);
             $leafSubject = end($subjectParts);
-            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject)->fetchColumn() . "", true);
+            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -2849,7 +3068,8 @@ $stmt->execute();
                 $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                 while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
-                    $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                    $quotedCampus = $db->quote($classCampus);
+                    $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND campus = $quotedCampus AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                     $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
                 }
             }
@@ -2864,7 +3084,7 @@ $stmt->execute();
             $page = max(1, intval($_GET['page'] ?? 1));
             $pageSize = intval($_GET['page_size'] ?? 20);
             $sessions = [];
-            $res = $db->query("SELECT s.*, c.name AS class_name, c.campus, co.subject AS course_subject, co.name AS course_name 
+            $stmt = $db->query("SELECT s.*, c.name AS class_name, c.campus, co.subject AS course_subject, co.name AS course_name 
                 FROM schedules s 
                 JOIN classes c ON s.class_id = c.id 
                 LEFT JOIN courses co ON c.course_id = co.id 
@@ -2897,13 +3117,32 @@ $stmt->execute();
             json(['data' => $paged, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
+        case 'list_all_attendance':
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = intval($_GET['page_size'] ?? 20);
+            $where = [];
+            if ($dateFrom) $where[] = "a.lesson_date >= '$dateFrom'";
+            if ($dateTo) $where[] = "a.lesson_date <= '$dateTo'";
+            $whereSql = count($where) > 0 ? 'WHERE ' . implode(' AND ', $where) : '';
+            $sql = "SELECT a.*, c.name AS course_name, s.name AS student_name, s.student_no, s.phone, cl.campus FROM attendance_records a LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN students s ON a.student_id = s.id LEFT JOIN classes cl ON a.class_id = cl.id $whereSql ORDER BY a.lesson_date DESC, a.id DESC";
+            $stmt = $db->query($sql);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $total = count($rows);
+            $offset = ($page - 1) * $pageSize;
+            $paged = array_slice($rows, $offset, $pageSize);
+            json(['data' => $paged, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
         default:
             json(['error' => 'Unknown action']);
     }
 }
 
 // 意向等级默认数据初始化
-$count = $db->query("SELECT COUNT(*) FROM intention_levels")->fetchColumn();
+$stmt = $db->query("SELECT COUNT(*) FROM intention_levels");
+$count = $stmt->fetchColumn();
 if (intval($count) === 0) {
     $n = now();
     $db->exec("INSERT INTO intention_levels (name, sort_order, created_at) VALUES ('A-高意向', 1, '$n')");
@@ -2913,7 +3152,8 @@ if (intval($count) === 0) {
 }
 
 // 基础类型默认数据初始化
-$countBt = $db->query("SELECT COUNT(*) FROM basic_types")->fetchColumn();
+$stmt = $db->query("SELECT COUNT(*) FROM basic_types");
+$countBt = $stmt->fetchColumn();
 if (intval($countBt) === 0) {
     $n = now();
     $db->exec("INSERT INTO basic_types (category, name, sort_order, created_at) VALUES ('course_type', '试听课', 1, '$n')");
@@ -3531,7 +3771,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-students">
                         <thead><tr>
-                            <th width="60">编号</th><th width="70">学号</th><th>姓名</th><th>手机号</th><th>来源</th><th>跟进状态</th><th>已报课程数</th><th width="180">操作</th>
+                            <th width="60">编号</th><th width="70">学号</th><th>姓名</th><th>手机号</th><th>来源</th><th>跟进状态</th><th>已报课程数</th><th>所在班级</th><th width="180">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -3544,24 +3784,56 @@ if (intval($countBt) === 0) {
                 <div class="panel-header">
                     <h3>考勤</h3>
                 </div>
-                <div class="toolbar">
-                    <div class="toolbar-left">
-                        <label style="font-size:13px;margin-right:6px;">日期范围：</label>
-                        <input type="date" id="attendance-date-from" style="width:140px;" onchange="loadAttendanceSessions()">
-                        <span style="margin:0 6px;color:#999;">至</span>
-                        <input type="date" id="attendance-date-to" style="width:140px;" onchange="loadAttendanceSessions()">
-                        <button class="btn btn-primary btn-sm" onclick="loadAttendanceSessions()">查询</button>
+                <div class="attendance-tabs">
+                    <button class="att-tab active" data-tab="tab-attendance-operations">操作考勤</button>
+                    <button class="att-tab" data-tab="tab-student-consumption">学员课耗</button>
+                </div>
+                <div class="attendance-tab-content">
+                    <!-- 操作考勤页签 -->
+                    <div class="att-panel active" id="tab-attendance-operations">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <label style="font-size:13px;margin-right:6px;">日期范围：</label>
+                                <input type="date" id="attendance-date-from" style="width:140px;" onchange="loadAttendanceSessions()">
+                                <span style="margin:0 6px;color:#999;">至</span>
+                                <input type="date" id="attendance-date-to" style="width:140px;" onchange="loadAttendanceSessions()">
+                                <button class="btn btn-primary btn-sm" onclick="loadAttendanceSessions()">查询</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="table-attendance-sessions">
+                                <thead><tr>
+                                    <th width="110">上课日期</th><th>星期</th><th>班级名称</th><th>课程</th><th width="100">上课时间</th><th>上课老师</th><th>教室</th><th>校区</th><th width="70">状态</th><th width="80">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-attendance-sessions"></div>
+                    </div>
+                    <!-- 学员课耗页签 -->
+                    <div class="att-panel" id="tab-student-consumption">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <label style="font-size:13px;margin-right:6px;">日期范围：</label>
+                                <input type="date" id="consumption-date-from" style="width:140px;" onchange="loadStudentConsumption()">
+                                <span style="margin:0 6px;color:#999;">至</span>
+                                <input type="date" id="consumption-date-to" style="width:140px;" onchange="loadStudentConsumption()">
+                                <button class="btn btn-primary btn-sm" onclick="loadStudentConsumption()">查询</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="table-student-consumption">
+                                <thead><tr>
+                                    <th>校区</th><th>学号</th><th>学员姓名</th><th>手机号</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
+                                </tr></thead>
+                                <tbody id="consumption-tbody">
+                                    <tr><td colspan="15" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-student-consumption"></div>
                     </div>
                 </div>
-                <div class="table-wrap">
-                    <table id="table-attendance-sessions">
-                        <thead><tr>
-                            <th width="110">上课日期</th><th>星期</th><th>班级名称</th><th>课程</th><th width="100">上课时间</th><th>上课老师</th><th>教室</th><th>校区</th><th width="70">状态</th><th width="80">操作</th>
-                        </tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-                <div class="pagination" id="pagination-attendance-sessions"></div>
             </section>
 
             <!-- 面板：班级管理 -->
@@ -3584,7 +3856,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-classes">
                         <thead><tr>
-                            <th width="60">编号</th><th>班级名称</th><th>关联课程</th><th>班级类型</th><th>招生人数</th><th>授课课时</th><th>可试听</th><th>当前校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
+                            <th width="60">编号</th><th>班级名称</th><th>关联课程</th><th>一级学科</th><th>二级学科</th><th>班级类型</th><th>招生人数</th><th>授课课时</th><th>可试听</th><th>当前校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -3688,10 +3960,10 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table class="attendance-table">
                                     <thead><tr>
-                                        <th width="60">编号</th><th>课程</th><th>上课日期</th><th>出勤状态</th><th>备注</th><th width="160">操作</th>
+                                        <th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
-                                        <tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -3705,55 +3977,91 @@ if (intval($countBt) === 0) {
             <section class="content-panel" id="panel-enroll">
                 <div class="panel-header">
                     <h3>报名详情</h3>
-                    <button class="btn btn-outline btn-sm" id="btn-enroll-back" style="margin-left:auto;">返回</button>
+                    <button class="btn btn-outline" id="btn-enroll-back">返回</button>
                 </div>
+
+                <!-- 学员信息卡片 -->
                 <div class="enroll-student-info" id="enroll-student-info">
-                    <div class="enroll-info-item"><span id="enroll-info-label-name" class="enroll-info-label">学员姓名：</span><strong id="enroll-info-name">-</strong></div>
-                    <div class="enroll-info-item"><span id="enroll-info-label-phone" class="enroll-info-label">手机号：</span><strong id="enroll-info-phone">-</strong></div>
-                </div>
-                <div class="enroll-form" style="padding:16px;">
-                    <div class="form-group">
-                        <label>选择课程 <span class="required">*</span></label>
-                        <select id="enroll-course-select"><option value="">请选择课程</option></select>
+                    <div class="enroll-student-avatar">
+                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
                     </div>
-                    <div id="enroll-plans-section" style="display:none;">
-                        <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">选择价格方案</label>
+                    <div class="enroll-student-details">
+                        <div class="enroll-student-name" id="enroll-info-name">-</div>
+                        <div class="enroll-student-phone" id="enroll-info-phone">-</div>
+                    </div>
+                </div>
+
+                <!-- 表单区域 -->
+                <div class="enroll-form">
+                    <!-- 校区/课程 -->
+                    <div class="enroll-form-row">
+                        <div class="form-group enroll-form-half">
+                            <label>校区 <span class="required">*</span></label>
+                            <select id="enroll-campus-select"><option value="">请选择校区</option></select>
+                        </div>
+                        <div class="form-group enroll-form-half">
+                            <label>课程 <span class="required">*</span></label>
+                            <select id="enroll-course-select" disabled><option value="">请先选择校区</option></select>
+                        </div>
+                    </div>
+
+                    <!-- 价格方案 -->
+                    <div class="enroll-section" id="enroll-plans-section" style="display:none;">
+                        <div class="enroll-section-title">选择价格方案</div>
                         <div id="enroll-plans-list"></div>
                     </div>
-                    <div id="enroll-items-section" style="display:none;margin-top:16px;">
-                        <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">报价单明细</label>
-                        <div class="table-wrap">
+
+                    <!-- 报价明细 -->
+                    <div class="enroll-section" id="enroll-items-section" style="display:none;">
+                        <div class="enroll-section-title">报价明细</div>
+                        <div class="enroll-table-wrap">
                             <table class="enroll-items-table">
                                 <thead><tr>
-                                    <th>报价项名称</th><th>课时数</th><th>单价</th><th>实际价格</th>
+                                    <th>报价项名称</th>
+                                    <th class="col-num">课时数</th>
+                                    <th class="col-num">单价</th>
+                                    <th class="col-num">实际价格</th>
                                 </tr></thead>
                                 <tbody id="enroll-items-tbody"></tbody>
-                                <tfoot>
-                                    <tr class="enroll-total-row">
-                                        <td colspan="3" style="text-align:right;font-weight:600;">合计金额：</td>
-                                        <td style="font-weight:600;color:#7C3AED;" id="enroll-total-price">¥0.00</td>
-                                    </tr>
-                                </tfoot>
                             </table>
                         </div>
-                        <div id="enroll-payment-section" style="margin-top:16px;">
-                            <label style="font-size:14px;font-weight:600;margin-bottom:8px;display:block;">支付方式</label>
+                        <div class="enroll-total-bar">
+                            <span class="enroll-total-label">合计金额</span>
+                            <span class="enroll-total-amount" id="enroll-total-price">¥0.00</span>
+                        </div>
+
+                        <!-- 支付方式 -->
+                        <div class="enroll-section" id="enroll-payment-section">
+                            <div class="enroll-section-title">支付方式</div>
                             <div class="enroll-payment-row">
-                                <div class="enroll-payment-item">
-                                    <span class="enroll-payment-label">现金</span>
-                                    <input type="number" id="enroll-payment-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()">
-                                    <span class="enroll-payment-unit">元</span>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">现金</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-item">
-                                    <span class="enroll-payment-label">美团</span>
-                                    <input type="number" id="enroll-payment-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()">
-                                    <span class="enroll-payment-unit">元</span>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon enroll-payment-icon-meituan">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">美团</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
                             </div>
                             <div id="enroll-payment-hint" class="enroll-payment-hint" style="display:none;"></div>
                         </div>
-                        <div style="text-align:right;margin-top:16px;">
-                            <button class="btn btn-primary" id="btn-confirm-pay" onclick="confirmPayEnroll()">确认支付</button>
+
+                        <!-- 操作栏 -->
+                        <div class="enroll-action-bar">
+                            <button class="btn btn-primary btn-lg" id="btn-confirm-pay" onclick="confirmPayEnroll()">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                确认支付
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -3778,7 +4086,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-orders">
                         <thead><tr>
-                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>状态</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
+                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
                         </tr></thead>
                         <tbody></tbody>
                         <tfoot id="table-orders-foot" style="display:none;"></tfoot>
@@ -4068,7 +4376,8 @@ if (intval($countBt) === 0) {
         <div class="modal"><div class="modal-header"><h3>资源报名课程</h3><button class="modal-close" onclick="closeModal('modal-resource-enroll')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="enroll-resource-id">
-            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-resource-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>选择校区 <span class="required">*</span></label><select id="enroll-resource-campus"><option value="">请选择校区</option></select></div>
+            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-resource-course" disabled><option value="">请先选择校区</option></select></div>
             <div class="form-group"><label>价格方案 <span class="required">*</span></label><select id="enroll-resource-plan"><option value="">请先选择课程</option></select></div>
             <div class="form-group"><label>报价单 <span class="required">*</span></label><select id="enroll-resource-item"><option value="">请先选择价格方案</option></select></div>
             <div class="form-group" id="enroll-resource-detail" style="display:none;background:#f5f7fa;padding:12px;border-radius:4px;">
@@ -4083,7 +4392,8 @@ if (intval($countBt) === 0) {
         <div class="modal"><div class="modal-header"><h3>报名课程</h3><button class="modal-close" onclick="closeModal('modal-enroll')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="enroll-student-id">
-            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>选择校区 <span class="required">*</span></label><select id="enroll-campus"><option value="">请选择校区</option></select></div>
+            <div class="form-group"><label>选择课程 <span class="required">*</span></label><select id="enroll-course" disabled><option value="">请先选择校区</option></select></div>
             <div class="form-group"><label>价格方案 <span class="required">*</span></label><select id="enroll-plan"><option value="">请先选择课程</option></select></div>
             <div class="form-group"><label>报价单 <span class="required">*</span></label><select id="enroll-item"><option value="">请先选择价格方案</option></select></div>
             <div class="form-group" id="enroll-detail" style="display:none;background:#f5f7fa;padding:12px;border-radius:4px;">
@@ -4204,11 +4514,7 @@ if (intval($countBt) === 0) {
             <div id="schedule-rule-section">
                 <div class="form-group">
                     <label>上课日期 <span class="required">*</span></label>
-                    <div class="form-row">
-                        <input type="date" id="schedule-start-date">
-                        <span class="row-sep">至</span>
-                        <input type="date" id="schedule-end-date">
-                    </div>
+                    <input type="text" id="schedule-date-range" placeholder="选择起止日期" readonly>
                 </div>
                 <div class="form-group">
                     <label>上课周期 <span class="required">*</span></label>
@@ -4239,7 +4545,8 @@ if (intval($countBt) === 0) {
             <div id="schedule-date-section" style="display:none;">
                 <div class="form-group">
                     <label>选择日期 <span class="required">*</span></label>
-                    <textarea id="schedule-custom-dates" rows="3" placeholder="请逐行输入日期，格式如 2026-06-25&#10;或使用逗号分隔：2026-06-25, 2026-06-26"></textarea>
+                    <input type="text" id="schedule-custom-dates" placeholder="点击选择多个日期" readonly>
+                    <div id="schedule-custom-dates-tags" class="date-tags"></div>
                 </div>
             </div>
             <div class="form-group">
@@ -4261,10 +4568,16 @@ if (intval($countBt) === 0) {
         <div class="modal"><div class="modal-header"><h3 id="modal-attendance-title">新增上课记录</h3><button class="modal-close" onclick="closeModal('modal-attendance')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="edit-att-id">
-            <div class="form-group"><label>课程 <span class="required">*</span></label><select id="att-course"><option value="">请选择课程</option></select></div>
+            <div class="form-group"><label>课程 <span class="required">*</span></label><select id="att-course" onchange="onCourseChangeInAttendance()"><option value="">请选择课程</option></select></div>
             <div class="form-group"><label>上课日期 <span class="required">*</span></label><input type="date" id="att-lesson-date"></div>
             <div class="form-group"><label>出勤状态</label><select id="att-status"><option value="出勤">出勤</option><option value="请假">请假</option><option value="缺勤">缺勤</option></select></div>
-            <div class="form-group"><label>备注</label><textarea id="att-notes" rows="3" placeholder="选填备注信息"></textarea></div>
+            <div class="form-group"><label>班级</label><select id="att-class" onchange="onClassChangeInAttendance()"><option value="">请选择班级（选填）</option></select></div>
+            <div class="form-group"><label>校区</label><input type="text" id="att-campus" placeholder="选填，选择班级后自动填充"></div>
+            <div class="form-group"><label>授课教师</label><input type="text" id="att-teacher" placeholder="选填"></div>
+            <div class="form-group"><label>一级学科</label><input type="text" id="att-subject1" readonly placeholder="选择课程后自动填充"></div>
+            <div class="form-group"><label>二级学科</label><input type="text" id="att-subject2" readonly placeholder="选择课程后自动填充"></div>
+            <div class="form-group"><label>上课时间</label><input type="text" id="att-class-time" placeholder="如 09:00-10:30"></div>
+            <div class="form-group"><label>课耗金额（元）</label><input type="number" id="att-amount" step="0.01" min="0" placeholder="0.00"></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-attendance')">取消</button><button class="btn btn-primary" onclick="saveAttendance()">保存</button></div></div>
     </div>
@@ -4776,6 +5089,9 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css">
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
+    <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
     <script src="static/js/main.js"></script>
 </body>
 </html>
