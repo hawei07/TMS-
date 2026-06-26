@@ -2692,26 +2692,20 @@ $stmt->execute();
             $rows = [];
             foreach ($students as $stu) {
                 $aid = $attMap[$stu['id']] ?? null;
-                // 查询该学员在此课程的剩余课时
-                $remaining = 0;
-                if ($classCourseId > 0) {
-                    $oRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS rem FROM orders WHERE student_id = {$stu['id']} AND course_id = $classCourseId")->fetch(PDO::FETCH_ASSOC);
-                    $remaining = intval($oRow['rem'] ?? 0);
-                }
-                // 查询该学员在一级学科下所有订单的总剩余课时（步进器上限）
-                $maxDeductible = 0;
+                // 查询该学员在一级学科下所有订单的总剩余课时（用于展示和步进器上限）
+                $totalRemaining = 0;
                 if ($classFirstSubjectId > 0 && count($flCourseIds) > 0) {
                     $mdRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total FROM orders WHERE student_id = {$stu['id']} AND course_id IN (" . implode(',', $flCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
-                    $maxDeductible = max(0, intval($mdRow['total'] ?? 0));
+                    $totalRemaining = max(0, intval($mdRow['total'] ?? 0));
                 }
                 $rows[] = [
                     'student_id' => $stu['id'],
                     'student_no' => $stu['student_no'],
                     'student_name' => $stu['name'],
                     'course_name' => $classCourseName,
-                    'remaining_lessons' => max(0, $remaining),
+                    'remaining_lessons' => $totalRemaining,
                     'lesson_hours' => $classLessonHours,
-                    'max_deductible' => $maxDeductible,
+                    'max_deductible' => $totalRemaining,
                     'status' => $aid ? $aid['status'] : '',
                     'deducted_lessons' => $aid ? intval($aid['deducted_lessons']) : 0,
                     'deducted_order_id' => $aid ? intval($aid['deducted_order_id']) : 0,
