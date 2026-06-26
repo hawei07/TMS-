@@ -2912,7 +2912,7 @@ async function loadClasses(page) {
 function renderClassTable(rows) {
     const tbody = document.querySelector('#table-classes tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:30px;">暂无班级数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:30px;">暂无班级数据</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `
@@ -2920,6 +2920,8 @@ function renderClassTable(rows) {
             <td>${r.id}</td>
             <td><a href="javascript:void(0)" class="class-name-link" onclick="viewClassDetail(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')">${esc(r.name)}</a></td>
             <td>${esc(r.course_name || '')}</td>
+            <td>${esc(r.parent_subject || '')}</td>
+            <td>${esc(r.child_subject || '')}</td>
             <td>${esc(r.class_type)}</td>
             <td>${r.max_students}</td>
             <td>${r.lesson_hours || '-'}</td>
@@ -3420,7 +3422,7 @@ async function loadStudents() {
 function renderStudentTable(rows) {
     const tbody = document.querySelector('#table-students tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `
@@ -3432,6 +3434,7 @@ function renderStudentTable(rows) {
             <td>${esc(r.source)}</td>
             <td>${esc(r.follow_status)}</td>
             <td>${r.order_count || 0}</td>
+            <td>${esc(r.class_names || '')}</td>
             <td>
                 <div class="action-btns">
                     <button class="btn btn-primary btn-sm" onclick="goEnroll(${r.id})">报名</button>
