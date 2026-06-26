@@ -1089,6 +1089,13 @@ function isSmallPackage(val) {
 - 校区字段从班级表查询后写入 attendance_records.campus
 - 班级名称（class_name）始终保持班级原名不变
 
+**扣课时优先级规则**（三级优先级，跨订单连续扣，限定同校区）：
+1. 优先扣同一 `course_id` 的订单（同校区），多个时按报名时间 `created_at ASC` 优先
+2. 未扣满则继续扣同一二级学科的订单（同校区，排除已处理），报名时间优先
+3. 仍未扣满则继续扣同一级学科的订单（同校区，排除已处理），报名时间优先
+
+每级内部独立查询，逐级递减 `$remainingToDeduct`，扣完即止。已处理订单通过 `$processedOrderIds` 数组在后续级别查询中排除，避免低优先级层级的早期订单插队到高优先级层级的后期订单前面。扣课时明细记录为 `deduction_json` JSON 数组（`[{order_id, amount}]`），用于退课时逐笔还原。
+
 **涉及文件**：
 - `index.php`：attendance_records 表 campus/class_name/subject_level1/subject_level2/teacher/class_time/deducted_order_id/deducted_lessons/consumed_amount 字段、`save_class_attendance` / `add_attendance` / `update_attendance` / `list_attendance` / `list_all_attendance` API
 - `static/js/main.js`：`loadAttendance` / `loadStudentConsumption` / `saveAttendance` / `editAttendance` / `showAttendanceModal` / `loadAttendanceClassSelect` / `onClassChangeInAttendance`
