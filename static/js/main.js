@@ -5176,7 +5176,7 @@ function escJs(str) {
 
 async function showAttendanceSessionModal(classId, scheduleId, sessionDate, className, campus, courseName, teacher, classroom, sessionDateDisplay, dayOfWeek, timeStr) {
     const today = new Date().toISOString().slice(0, 10);
-    if (sessionDate > today) { showToast('未到考勤时间', 'error'); return; }
+    // 临时放开：if (sessionDate > today) { showToast('未到考勤时间', 'error'); return; }
     currentAttendanceClassId = classId;
     currentAttendanceScheduleId = scheduleId;
     currentAttendanceSessionDate = sessionDate;
