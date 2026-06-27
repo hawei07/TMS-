@@ -5200,8 +5200,8 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
             // 已扣值不得超过一级学科剩余课时上限
             if (maxDeductible > 0 && deducted > maxDeductible) deducted = maxDeductible;
             const remaining = r.remaining_lessons || 0;
-            return `<tr id="att-row-${r.student_id}">
-                <td><button class="btn-remove-att" onclick="removeAttendanceStudent(${r.student_id})" title="移除此学员">移除</button></td>
+            return `<tr id="att-row-${r.student_id}" data-cs-id="${r.cs_id}">
+                <td><button class="btn-remove-att" onclick="removeAttendanceStudent(${r.student_id}, ${r.cs_id})" title="移除此学员">移除</button></td>
                 <td><span style="font-weight:500;">${esc(r.student_name)}</span></td>
                 <td><span style="color:var(--color-text-secondary);">${esc(r.course_name || courseName)}</span></td>
                 <td style="text-align:center;"><span style="font-weight:600;color:${remaining > 0 ? 'var(--color-success)' : 'var(--color-danger)'}">${remaining}</span></td>
@@ -5236,7 +5236,10 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
     }
 }
 
-function removeAttendanceStudent(studentId) {
+async function removeAttendanceStudent(studentId, csId) {
+    if (!csId || csId <= 0) return;
+    const result = await api('remove_class_student', { id: csId, session_date: currentAttendanceSessionDate });
+    if (result.error) { showToast(result.error, 'error'); return; }
     const row = document.getElementById('att-row-' + studentId);
     if (row) {
         row.style.transition = 'all 0.25s ease';

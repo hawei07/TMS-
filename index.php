@@ -309,6 +309,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS class_students (
     created_at VARCHAR(500) NOT NULL DEFAULT '',
     UNIQUE(class_id, student_id)
 )");
+try { $db->exec("ALTER TABLE class_students ADD COLUMN left_at VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 
 $db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -2682,15 +2683,28 @@ $stmt->execute();
                 }
             }
             $n = now();
-            $db->exec("INSERT INTO class_students (class_id, student_id, created_at) VALUES ($classId, $studentId, '$n')");
-            json(['id' => $db->lastInsertId(), 'message' => '学员已加入班级']);
+            // 如果此前已出班（left_at 非空），则清空 left_at 重新激活入班
+            $existing = $db->query("SELECT id, left_at FROM class_students WHERE class_id = $classId AND student_id = $studentId")->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                $db->exec("UPDATE class_students SET left_at = '', created_at = '$n' WHERE id = " . intval($existing['id']));
+                json(['id' => intval($existing['id']), 'message' => '学员已重新加入班级']);
+            } else {
+                $db->exec("INSERT INTO class_students (class_id, student_id, created_at) VALUES ($classId, $studentId, '$n')");
+                json(['id' => $db->lastInsertId(), 'message' => '学员已加入班级']);
+            }
             break;
 
         case 'remove_class_student':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) json(['error' => '关联ID无效']);
-            $db->exec("DELETE FROM class_students WHERE id=$id");
+            $sessionDate = trim($input['session_date'] ?? '');
+            $leftAt = $sessionDate ? $sessionDate : date('Y-m-d');
+            // 标记出班日期（不影响历史考勤，课次日期 > left_at 的课次不再出现）
+            $db->exec("UPDATE class_students SET left_at = '$leftAt' WHERE id = $id");
+            // 如果已有此学员未来课次的考勤记录（还没发生的课次），删除之
+            $today = date('Y-m-d');
+            $db->exec("DELETE FROM class_attendance WHERE student_id = (SELECT student_id FROM class_students WHERE id = $id) AND session_date > '$today'");
             json(['message' => '学员已移出班级']);
             break;
 
@@ -2776,7 +2790,7 @@ $stmt->execute();
             // 获取班级所有学员（含出班但已有考勤记录的学员）
             $students = [];
             $studentIdsInClass = [];
-            $stmt = $db->query("SELECT s.id, s.student_no, s.name FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId ORDER BY cs.id ASC");
+            $stmt = $db->query("SELECT s.id, s.student_no, s.name, cs.id AS cs_id FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId AND (cs.left_at = '' OR cs.left_at >= '$sessionDate') ORDER BY cs.id ASC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = true; }
             // 获取已有考勤记录
             $attMap = [];
@@ -2814,6 +2828,7 @@ $stmt->execute();
                     'student_id' => $stu['id'],
                     'student_no' => $stu['student_no'],
                     'student_name' => $stu['name'],
+                    'cs_id' => $stu['cs_id'] ?? 0,
                     'course_name' => $classCourseName,
                     'remaining_lessons' => $totalRemaining,
                     'lesson_hours' => $classLessonHours,
