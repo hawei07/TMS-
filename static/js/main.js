@@ -5194,9 +5194,9 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
             return;
         }
         tbody.innerHTML = rows.map(r => {
-            const currentStatus = r.status || '出勤';
+            const currentStatus = r.status || '';
             const maxDeductible = r.max_deductible || 0;
-            let deducted = r.attendance_id ? (r.deducted_lessons || 0) : (r.lesson_hours || 1);
+            let deducted = r.attendance_id ? (r.deducted_lessons || 0) : 0;
             // 已扣值不得超过一级学科剩余课时上限
             if (maxDeductible > 0 && deducted > maxDeductible) deducted = maxDeductible;
             const remaining = r.remaining_lessons || 0;
@@ -5220,10 +5220,10 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
                 </td>
             </tr>`;
         }).join('');
-        // 初始化缺勤状态的步进器（禁用并置0）
-        document.querySelectorAll('#as-attendance-tbody .att-status-chip.active[data-val="缺勤"]').forEach(chip => {
-            const row = chip.closest('tr');
-            if (!row) return;
+        // 初始化缺勤状态或未考勤状态的步进器（禁用并置0）
+        document.querySelectorAll('#as-attendance-tbody tr').forEach(row => {
+            const activeChip = row.querySelector('.att-status-chip.active');
+            if (activeChip) return; // 已选出勤，步进器启用，跳过
             const stepper = row.querySelector('.att-deduct-stepper');
             const valSpan = stepper ? stepper.querySelector('.stepper-val') : null;
             if (stepper && valSpan) {
