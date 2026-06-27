@@ -2700,12 +2700,19 @@ $stmt->execute();
             if ($id <= 0) json(['error' => '关联ID无效']);
             $sessionDate = trim($input['session_date'] ?? '');
             $leftAt = $sessionDate ? $sessionDate : date('Y-m-d');
+            // 读取 student_id 和 class_id，用于查询历史考勤记录数
+            $csRow = $db->query("SELECT student_id, class_id FROM class_students WHERE id = $id")->fetch(PDO::FETCH_ASSOC);
+            $studentId = intval($csRow['student_id'] ?? 0);
+            $classId = intval($csRow['class_id'] ?? 0);
+            // 查询历史考勤记录数
+            $cntRow = $db->query("SELECT COUNT(*) AS cnt FROM class_attendance WHERE student_id = $studentId AND class_id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $historyCount = intval($cntRow['cnt'] ?? 0);
             // 标记出班日期（不影响历史考勤，课次日期 > left_at 的课次不再出现）
             $db->exec("UPDATE class_students SET left_at = '$leftAt' WHERE id = $id");
             // 如果已有此学员未来课次的考勤记录（还没发生的课次），删除之
             $today = date('Y-m-d');
-            $db->exec("DELETE FROM class_attendance WHERE student_id = (SELECT student_id FROM class_students WHERE id = $id) AND session_date > '$today'");
-            json(['message' => '学员已移出班级']);
+            $db->exec("DELETE FROM class_attendance WHERE student_id = $studentId AND class_id = $classId AND session_date > '$today'");
+            json(['message' => '学员已移出班级', 'history_count' => $historyCount]);
             break;
 
         case 'get_available_students':

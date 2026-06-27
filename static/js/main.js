@@ -4798,7 +4798,11 @@ async function removeStudentFromClass(csId, studentName) {
     showCustomConfirm(`确定将学员「${studentName}」移出此班级？`, async () => {
         const result = await api('remove_class_student', { id: csId });
         if (result.error) { showToast(result.error, 'error'); return; }
-        showToast(result.message);
+        if (result.history_count > 0) {
+            showToast(`该学员有 ${result.history_count} 条历史考勤记录，出班后不再参与未来课次`);
+        } else {
+            showToast(result.message);
+        }
         loadClassStudents();
     });
 }
@@ -5240,6 +5244,9 @@ async function removeAttendanceStudent(studentId, csId) {
     if (!csId || csId <= 0) return;
     const result = await api('remove_class_student', { id: csId, session_date: currentAttendanceSessionDate });
     if (result.error) { showToast(result.error, 'error'); return; }
+    if (result.history_count > 0) {
+        showToast(`该学员有 ${result.history_count} 条历史考勤记录，出班后不再参与未来课次`);
+    }
     const row = document.getElementById('att-row-' + studentId);
     if (row) {
         row.style.transition = 'all 0.25s ease';
