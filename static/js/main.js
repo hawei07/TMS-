@@ -542,7 +542,7 @@ function renderMyTable(rows) {
             <td><input type="checkbox" class="cb-my" value="${r.id}"></td>
             <td>${esc(r.name)}</td>
             <td>${esc(r.phone)}</td>
-            <td>${esc(r.source)}${r.source_detail ? ' / ' + esc(r.source_detail) : ''}</td>
+            <td>${esc(r.source)}</td>
             <td>${esc(r.intention_level)}</td>
             <td>${esc(r.assigned_to)}</td>
             <td>${esc(r.assigned_dept || '')}</td>
@@ -620,7 +620,7 @@ function toggleFollowStatusEdit(tagEl, rid) {
 function showAddModal() {
     document.getElementById('modal-resource-title').textContent = '新增资源';
     document.getElementById('edit-rid').value = '';
-    ['res-name','res-phone','res-source-detail'].forEach(id => document.getElementById(id).value = '');
+    ['res-name','res-phone'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('res-gender').value = '';
     document.getElementById('res-birth-date').value = '';
     document.getElementById('res-follow-status').value = '';
@@ -639,7 +639,6 @@ async function editResource(rid) {
     document.getElementById('edit-rid').value = item.id;
     document.getElementById('res-name').value = item.name;
     document.getElementById('res-phone').value = item.phone;
-    document.getElementById('res-source-detail').value = item.source_detail || '';
     document.getElementById('res-gender').value = item.gender || '';
     document.getElementById('res-birth-date').value = item.birth_date || '';
     document.getElementById('res-follow-status').value = item.follow_status || '';
@@ -656,7 +655,6 @@ async function saveResource() {
         name: document.getElementById('res-name').value.trim(),
         phone: document.getElementById('res-phone').value.trim(),
         source: document.getElementById('res-source').value,
-        source_detail: document.getElementById('res-source-detail').value.trim(),
         intention_level: document.getElementById('res-intention').value,
         gender: document.getElementById('res-gender').value,
         birth_date: document.getElementById('res-birth-date').value,
@@ -665,6 +663,7 @@ async function saveResource() {
         pool_type: '我的资源'
     };
     if (!data.name) return showToast('姓名不能为空', 'error');
+    if (!data.phone) return showToast('手机号不能为空', 'error');
     const action = rid ? 'update_resource' : 'add_resource';
     const result = await api(action, data);
     if (result.error) {
@@ -703,17 +702,17 @@ async function saveInlineResource() {
         name: document.getElementById('inline-res-name').value.trim(),
         phone: document.getElementById('inline-res-phone').value.trim(),
         source: document.getElementById('inline-res-source').value,
-        source_detail: document.getElementById('inline-res-source-detail').value.trim(),
         intention_level: document.getElementById('inline-res-intention').value,
         follow_status: document.getElementById('inline-res-follow-status')?.value ?? '',
         assigned_to: document.getElementById('inline-res-assigned').value.trim(),
         pool_type: '我的资源'
     };
     if (!data.name) return showToast('姓名不能为空', 'error');
+    if (!data.phone) return showToast('手机号不能为空', 'error');
     const result = await api('add_resource', data);
     showToast(result.message);
     // 清空表单
-    ['inline-res-name','inline-res-phone','inline-res-source-detail','inline-res-assigned'].forEach(id => document.getElementById(id).value = '');
+    ['inline-res-name','inline-res-phone','inline-res-assigned'].forEach(id => document.getElementById(id).value = '');
     document.getElementById('inline-res-source').value = '';
     document.getElementById('inline-res-intention').value = '';
     loadStats();
@@ -1098,12 +1097,11 @@ async function doInlineBatchImport() {
             name: (parts[0] || '').trim(),
             phone: (parts[1] || '').trim(),
             source: (parts[2] || '').trim(),
-            source_detail: (parts[3] || '').trim(),
-            intention_level: (parts[4] || '').trim(),
-            assigned_to: (parts[5] || '').trim(),
-            gender: (parts[6] || '').trim(),
-            birth_date: (parts[7] || '').trim(),
-            follow_status: (parts[8] || '').trim()
+            intention_level: (parts[3] || '').trim(),
+            assigned_to: (parts[4] || '').trim(),
+            gender: (parts[5] || '').trim(),
+            birth_date: (parts[6] || '').trim(),
+            follow_status: (parts[7] || '').trim()
         };
     }).filter(item => item.name && item.phone);
     if (items.length === 0) return showToast('没有有效数据', 'error');

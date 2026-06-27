@@ -620,19 +620,21 @@ $stmt->execute();
 
         case 'add_resource':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
             $phone = trim($input['phone'] ?? '');
-            // 手机号唯一性校验（空手机号不校验）
+            if ($name === '') json(['error' => '姓名不能为空']);
+            if ($phone === '') json(['error' => '手机号不能为空']);
+            // 手机号唯一性校验
             if ($phone !== '') {
                 $stmt = $db->query("SELECT COUNT(*) FROM resources WHERE phone = " . $db->quote($phone) . "");
                 $dup = $stmt->fetchColumn();
                 if (intval($dup) > 0) json(['error' => '手机号已存在，请勿重复录入']);
             }
             $n = now();
-            $stmt = $db->prepare("INSERT INTO resources (name,phone,source,source_detail,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:sd,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
-            $stmt->bindValue(':n', $input['name']??'');
+            $stmt = $db->prepare("INSERT INTO resources (name,phone,source,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
+            $stmt->bindValue(':n', $name);
             $stmt->bindValue(':p', $phone);
             $stmt->bindValue(':s', $input['source']??'');
-            $stmt->bindValue(':sd', $input['source_detail']??'');
             $stmt->bindValue(':i', $input['intention_level']??'');
             $stmt->bindValue(':g', $input['gender']??'');
             $stmt->bindValue(':bd', $input['birth_date']??'');
@@ -662,7 +664,7 @@ $stmt->execute();
                 if (intval($empCount) === 0) json(['error' => '归属人不存在于员工名册中，请从员工名册中选择']);
             }
             // 动态构建 UPDATE：仅更新 $input 中实际传入的字段（排除 id）
-            $allowedFields = ['name','phone','source','source_detail','intention_level','gender','birth_date','follow_status','status','assigned_to','pool_type'];
+            $allowedFields = ['name','phone','source','intention_level','gender','birth_date','follow_status','status','assigned_to','pool_type'];
             $sets = [];
             $params = [];
             foreach ($allowedFields as $f) {
@@ -702,7 +704,7 @@ $stmt->execute();
                 $items = $input['items'] ?? [];
                 $poolType = $input['pool_type'] ?? '我的资源';
                 $n = now(); $count = 0; $failCount = 0; $failures = [];
-                $stmt = $db->prepare("INSERT INTO resources (name,phone,source,source_detail,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:sd,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
+                $stmt = $db->prepare("INSERT INTO resources (name,phone,source,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
                 foreach ($items as $idx => $item) {
                     $rowNum = $idx + 1;
                     if (empty(trim($item['name'] ?? '')) || empty(trim($item['phone'] ?? ''))) { $failCount++; $failures[] = ['row' => $rowNum, 'reason' => '缺少必填字段：姓名或手机号']; continue; }
@@ -716,7 +718,6 @@ $stmt->execute();
                     $stmt->bindValue(':n', $item['name']??'');
                     $stmt->bindValue(':p', $phoneVal);
                     $stmt->bindValue(':s', $item['source']??'');
-                    $stmt->bindValue(':sd', $item['source_detail']??'');
                     $stmt->bindValue(':i', $item['intention_level']??'');
                     $stmt->bindValue(':g', $item['gender']??'');
                     $stmt->bindValue(':bd', $item['birth_date']??'');
@@ -776,7 +777,6 @@ $stmt->execute();
                 '姓名' => 'name',
                 '电话' => 'phone',
                 '来源' => 'source',
-                '来源详情' => 'source_detail',
                 '意向等级' => 'intention_level',
                 '归属人' => 'assigned_to',
                 '性别' => 'gender',
@@ -805,11 +805,11 @@ $stmt->execute();
             $successCount = 0;
             $failures = [];
 
-            $stmt = $db->prepare("INSERT INTO resources (name,phone,source,source_detail,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:sd,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
+            $stmt = $db->prepare("INSERT INTO resources (name,phone,source,intention_level,gender,birth_date,follow_status,status,assigned_to,pool_type,created_at,updated_at) VALUES (:n,:p,:s,:i,:g,:bd,:fs,:st,:a,:pt,:c,:u)");
 
             for ($rowIdx = 1; $rowIdx < count($rows); $rowIdx++) {
                 $row = $rows[$rowIdx];
-                $item = ['name' => '', 'phone' => '', 'source' => '', 'source_detail' => '',
+                $item = ['name' => '', 'phone' => '', 'source' => '',
                          'intention_level' => '', 'assigned_to' => '', 'gender' => '', 'birth_date' => '', 'follow_status' => ''];
 
                 foreach ($colMap as $colIdx => $field) {
@@ -852,7 +852,6 @@ $stmt->execute();
                 $stmt->bindValue(':n', $item['name']);
                 $stmt->bindValue(':p', $item['phone']);
                 $stmt->bindValue(':s', $item['source']);
-                $stmt->bindValue(':sd', $item['source_detail']);
                 $stmt->bindValue(':i', $item['intention_level']);
                 $stmt->bindValue(':g', $item['gender']);
                 $stmt->bindValue(':bd', $item['birth_date']);
@@ -879,7 +878,7 @@ $stmt->execute();
             $templatePath = __DIR__ . '/static/导入模板.xlsx';
             // 如果模板不存在，动态生成
             if (!file_exists($templatePath)) {
-                $headers = ['姓名', '电话', '来源', '来源详情', '意向等级', '归属人', '性别', '出生日期', '跟进状态'];
+                $headers = ['姓名', '电话', '来源', '意向等级', '归属人', '性别', '出生日期', '跟进状态'];
                 if (!generateTemplateXlsx($templatePath, $headers)) {
                     json(['error' => '生成模板失败']);
                 }
@@ -1158,7 +1157,7 @@ $stmt->execute();
             if ($followStatus) { $where[] = "follow_status = :fs"; $params[':fs'] = $followStatus; }
             $whereStr = implode(' AND ', $where);
 
-            $stmt = $db->prepare("SELECT r.name, r.phone, r.source, r.source_detail, r.intention_level, r.gender, r.birth_date, r.follow_status, r.assigned_to, e.department AS assigned_dept, r.created_at, r.updated_at FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC");
+            $stmt = $db->prepare("SELECT r.name, r.phone, r.source, r.intention_level, r.gender, r.birth_date, r.follow_status, r.assigned_to, e.department AS assigned_dept, r.created_at, r.updated_at FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
 $stmt->execute();
 
@@ -1168,10 +1167,10 @@ $stmt->execute();
 
             $output = fopen('php://output', 'w');
             fprintf($output, "\xEF\xBB\xBF");
-            fputcsv($output, ['姓名', '电话', '来源渠道', '来源详情', '意向等级', '性别', '出生日期', '跟进状态', '归属人', '归属部门', '创建时间', '更新时间']);
+            fputcsv($output, ['姓名', '电话', '来源渠道', '意向等级', '性别', '出生日期', '跟进状态', '归属人', '归属部门', '创建时间', '更新时间']);
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 fputcsv($output, [
-                    $r['name'], $r['phone'], $r['source'], $r['source_detail'],
+                    $r['name'], $r['phone'], $r['source'],
                     $r['intention_level'], $r['gender'], $r['birth_date'],
                     $r['follow_status'] ?? '',
                     $r['assigned_to'], $r['assigned_dept'] ?? '',
@@ -4145,9 +4144,8 @@ if (intval($countBt) === 0) {
         <div class="modal-body">
             <input type="hidden" id="edit-rid">
             <div class="form-group"><label>姓名 <span class="required">*</span></label><input type="text" id="res-name"></div>
-            <div class="form-group"><label>电话</label><input type="text" id="res-phone"></div>
+            <div class="form-group"><label>电话 <span class="required">*</span></label><input type="text" id="res-phone"></div>
             <div class="form-group"><label>来源渠道</label><select id="res-source"><option value="">请选择</option></select></div>
-            <div class="form-group"><label>来源详情</label><input type="text" id="res-source-detail"></div>
             <div class="form-group"><label>意向等级</label><select id="res-intention"><option value="">请选择</option></select></div>
             <div class="form-group"><label>性别</label><select id="res-gender"><option value="">请选择</option><option value="男">男</option><option value="女">女</option></select></div>
             <div class="form-group"><label>出生日期</label><input type="date" id="res-birth-date"></div>
