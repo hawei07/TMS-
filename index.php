@@ -2637,11 +2637,11 @@ $stmt->execute();
             $classId = intval($_GET['class_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             $rows = [];
-            $stmt = $db->query("SELECT cs.id as cs_id, cs.class_id, cs.student_id, cs.created_at as joined_at,
+            $stmt = $db->query("SELECT cs.id as cs_id, cs.class_id, cs.student_id, cs.created_at as joined_at, cs.left_at,
                 s.id, s.student_no, s.name, s.phone, s.source, s.follow_status
                 FROM class_students cs
                 JOIN students s ON s.id = cs.student_id
-                WHERE cs.class_id = $classId
+                WHERE cs.class_id = $classId AND cs.left_at = ''
                 ORDER BY cs.id ASC");
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
