@@ -4964,7 +4964,7 @@ async function enrollStudentToClass(classId, className) {
 // ==================== 班级考勤 ====================
 async function showClassAttendanceModal(classId, scheduleId, sessionDate, titleStr) {
     const today = new Date().toISOString().slice(0, 10);
-    if (sessionDate > today) { showToast('未到考勤时间', 'error'); return; }
+    // 临时放开：if (sessionDate > today) { showToast('未到考勤时间', 'error'); return; }
     document.getElementById('modal-class-attendance-title').textContent = '课次考勤 - ' + titleStr;
     document.getElementById('ca-class-id').value = classId;
     document.getElementById('ca-schedule-id').value = scheduleId;
