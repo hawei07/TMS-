@@ -2698,6 +2698,22 @@ $stmt->execute();
             $classId = intval($_GET['class_id'] ?? 0);
             $keyword = trim($_GET['keyword'] ?? '');
             if ($classId <= 0) json(['error' => '班级ID无效']);
+            // 获取班级的一级学科和校区
+            $classRow = $db->query("SELECT c.course_id, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $subject = $classRow['subject'] ?? '';
+            $classCampus = $classRow['campus'] ?? '';
+            $firstSubjectId = 0;
+            $subjectParts = explode(' > ', $subject);
+            $leafSubject = end($subjectParts);
+            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
+            if ($subjRow) {
+                $firstSubjectId = intval($subjRow['parent_id']) == 0 ? intval($subjRow['id']) : intval($subjRow['parent_id']);
+            }
+            $allCourseIds = [];
+            if ($firstSubjectId > 0) {
+                $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = intval($c['id']);
+            }
             $where = [];
             if ($keyword) {
                 $keywordEsc = $db->quote($keyword);
@@ -2705,12 +2721,21 @@ $stmt->execute();
             }
             $whereStr = $where ? 'AND ' . implode(' AND ', $where) : '';
             $rows = [];
-            $sql = "SELECT s.id, s.student_no, s.name, s.phone, s.source
-                FROM students s
-                WHERE s.id NOT IN (SELECT student_id FROM class_students)
-                $whereStr
-                ORDER BY s.id DESC
-                LIMIT 50";
+            if (count($allCourseIds) > 0) {
+                $sql = "SELECT DISTINCT s.id, s.student_no, s.name, s.phone
+                    FROM students s
+                    INNER JOIN orders o ON s.id = o.student_id
+                    WHERE s.id NOT IN (SELECT student_id FROM class_students)
+                    AND o.course_id IN (" . implode(',', $allCourseIds) . ")
+                    AND o.campus = " . $db->quote($classCampus) . "
+                    AND (o.lesson_count - o.consumed_lessons) > 0
+                    $whereStr
+                    ORDER BY s.id DESC
+                    LIMIT 50";
+            } else {
+                // 无匹配课程时返回空列表
+                $sql = "SELECT s.id, s.student_no, s.name, s.phone FROM students s WHERE 1=0";
+            }
             $stmt = $db->query($sql);
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows]);
@@ -5074,11 +5099,10 @@ if (intval($countBt) === 0) {
                             <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">学号</th>
                             <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">姓名</th>
                             <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">手机号</th>
-                            <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">来源</th>
                             <th width="60"></th>
                         </tr></thead>
                         <tbody id="available-students-tbody">
-                            <tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                            <tr><td colspan="4" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>

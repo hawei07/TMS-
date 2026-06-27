@@ -4756,7 +4756,7 @@ async function showAddStudentModal() {
 
 async function searchAvailableStudents() {
     const tbody = document.getElementById('available-students-tbody');
-    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     const keyword = document.getElementById('add-student-search').value.trim();
     try {
         let url = API_BASE + 'get_available_students&class_id=' + currentClassDetailId;
@@ -4765,20 +4765,19 @@ async function searchAvailableStudents() {
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">暂无可选学员</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;padding:20px;">暂无可选学员</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => `<tr>
             <td style="padding:8px;border-bottom:1px solid #f5f5f5;font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td style="padding:8px;border-bottom:1px solid #f5f5f5;">${esc(r.name)}</td>
             <td style="padding:8px;border-bottom:1px solid #f5f5f5;">${esc(r.phone)}</td>
-            <td style="padding:8px;border-bottom:1px solid #f5f5f5;">${esc(r.source)}</td>
             <td style="padding:8px;border-bottom:1px solid #f5f5f5;text-align:center;">
                 <button class="btn btn-sm btn-primary" onclick="addStudentToClass(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')">加入</button>
             </td>
         </tr>`).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
