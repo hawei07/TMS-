@@ -5104,10 +5104,14 @@ async function showTempStudentModal() {
 }
 
 function addTempStudentToSession(studentId, studentNo, studentName, remainingLessons) {
-    // 判断当前活跃的是哪个考勤弹窗
+    // 判断当前活跃的是哪个考勤弹窗，获取上下文参数
     const sessionModal = document.getElementById('modal-attendance-session');
     const classModal = document.getElementById('modal-class-attendance');
     const isSessionModal = sessionModal && sessionModal.classList.contains('show');
+    const useGlobals = isSessionModal;
+    const classId = useGlobals ? currentAttendanceClassId : parseInt(document.getElementById('ca-class-id')?.value) || currentAttendanceClassId;
+    const scheduleId = useGlobals ? currentAttendanceScheduleId : parseInt(document.getElementById('ca-schedule-id')?.value) || currentAttendanceScheduleId;
+    const sessionDate = useGlobals ? currentAttendanceSessionDate : document.getElementById('ca-session-date')?.value || currentAttendanceSessionDate;
 
     if (isSessionModal) {
         // 新弹窗 modal-attendance-session 的行结构
@@ -5139,6 +5143,8 @@ function addTempStudentToSession(studentId, studentNo, studentName, remainingLes
         `;
         tbody.appendChild(row);
         document.getElementById('as-total-count').textContent = tbody.querySelectorAll('tr').length;
+        // 立即持久化，确保关闭弹窗再打开时临时学员仍在
+        api('save_temp_attendance', { class_id: classId, schedule_id: scheduleId, session_date: sessionDate, student_id: studentId });
         closeModal('modal-temp-student');
         return;
     }
@@ -5173,6 +5179,8 @@ function addTempStudentToSession(studentId, studentNo, studentName, remainingLes
             display.textContent = this.value === '出勤' ? '扣' + lh + '课时' : '0';
         }
     });
+    // 立即持久化，确保关闭弹窗再打开时临时学员仍在
+    api('save_temp_attendance', { class_id: classId, schedule_id: scheduleId, session_date: sessionDate, student_id: studentId });
     closeModal('modal-temp-student');
     showToast('已添加临时学员：' + studentName);
 }

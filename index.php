@@ -2927,6 +2927,22 @@ $stmt->execute();
             json(['data' => $rows]);
             break;
 
+        case 'save_temp_attendance':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $classId = intval($input['class_id'] ?? 0);
+            $scheduleId = intval($input['schedule_id'] ?? 0);
+            $sessionDate = trim($input['session_date'] ?? '');
+            $studentId = intval($input['student_id'] ?? 0);
+            if ($classId <= 0 || $studentId <= 0 || !$sessionDate) json(['error' => '参数无效']);
+            $existing = $db->query("SELECT id FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId")->fetch(PDO::FETCH_ASSOC);
+            if ($existing) {
+                $db->exec("UPDATE class_attendance SET is_temporary=1 WHERE id=" . intval($existing['id']));
+            } else {
+                $db->exec("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, is_temporary) VALUES ($classId, $scheduleId, '$sessionDate', $studentId, '出勤', 0, 1)");
+            }
+            json(['success' => true]);
+            break;
+
         case 'save_class_attendance':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $classId = intval($input['class_id'] ?? 0);
