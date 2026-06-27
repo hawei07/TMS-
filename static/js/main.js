@@ -4812,13 +4812,13 @@ function debounceSearchAvailableStudent() {
 // ==================== 班级详情 - 编辑排课 ====================
 async function loadClassSchedules() {
     const tbody = document.querySelector('#table-class-schedules tbody');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + 'list_schedules&class_id=' + currentClassDetailId);
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:30px;">暂无排课记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无排课记录</td></tr>';
             return;
         }
         let allSessions = [];
@@ -4839,9 +4839,13 @@ async function loadClassSchedules() {
             });
         });
         if (allSessions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:30px;">排课规则已添加，但未生成具体课次</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">排课规则已添加，但未生成具体课次</td></tr>';
             return;
         }
+        // 按日期排序
+        allSessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        // 重新编号
+        allSessions.forEach((s, i) => { s.seq = i + 1; });
         // 批量查询考勤状态
         const attStatusMap = {};
         for (const s of allSessions) {
@@ -4877,7 +4881,7 @@ async function loadClassSchedules() {
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
