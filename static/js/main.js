@@ -5072,9 +5072,12 @@ async function saveClassAttendance() {
 // ==================== 添加临时学员 ====================
 
 async function showTempStudentModal() {
-    const classId = parseInt(document.getElementById('ca-class-id')?.value) || currentAttendanceClassId;
-    const scheduleId = parseInt(document.getElementById('ca-schedule-id')?.value) || currentAttendanceScheduleId;
-    const sessionDate = document.getElementById('ca-session-date')?.value || currentAttendanceSessionDate;
+    // 当 modal-attendance-session 活跃时，隐藏 input 可能来自旧弹窗，优先使用全局变量
+    const sessionModal = document.getElementById('modal-attendance-session');
+    const useGlobals = sessionModal && sessionModal.classList.contains('show');
+    const classId = (useGlobals ? currentAttendanceClassId : parseInt(document.getElementById('ca-class-id')?.value) || currentAttendanceClassId);
+    const scheduleId = (useGlobals ? currentAttendanceScheduleId : parseInt(document.getElementById('ca-schedule-id')?.value) || currentAttendanceScheduleId);
+    const sessionDate = (useGlobals ? currentAttendanceSessionDate : document.getElementById('ca-session-date')?.value || currentAttendanceSessionDate);
     if (!classId) { showToast('班级ID无效', 'error'); return; }
     openModal('modal-temp-student');
     const tbody = document.getElementById('temp-student-tbody');
