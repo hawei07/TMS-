@@ -3171,7 +3171,7 @@ $stmt->execute();
             }
             if ($className) {
                 $sessions = array_values(array_filter($sessions, function($s) use ($className) {
-                    return mb_stripos($s['class_name'], $className) !== false;
+                    return stripos($s['class_name'], $className) !== false;
                 }));
             }
             usort($sessions, function($a, $b) { return strcmp($a['session_date'], $b['session_date']); });
