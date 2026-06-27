@@ -5101,6 +5101,46 @@ async function showTempStudentModal() {
 }
 
 function addTempStudentToSession(studentId, studentNo, studentName, remainingLessons) {
+    // 判断当前活跃的是哪个考勤弹窗
+    const sessionModal = document.getElementById('modal-attendance-session');
+    const classModal = document.getElementById('modal-class-attendance');
+    const isSessionModal = sessionModal && sessionModal.classList.contains('show');
+
+    if (isSessionModal) {
+        // 新弹窗 modal-attendance-session 的行结构
+        const tbody = document.getElementById('as-attendance-tbody');
+        const existing = tbody.querySelector('tr[data-sid="' + studentId + '"]');
+        if (existing) { showToast('该学员已在考勤列表中', 'error'); return; }
+        const row = document.createElement('tr');
+        row.setAttribute('data-sid', studentId);
+        row.setAttribute('data-is-temp', '1');
+        row.id = 'att-row-' + studentId;
+        row.innerHTML = `
+            <td><span style="color:var(--color-text-muted);font-size:12px;">-</span></td>
+            <td><span style="font-weight:500;">${esc(studentName)}</span> <span style="color:#e74c3c;font-size:11px;font-weight:bold;">临时</span></td>
+            <td><span style="color:var(--color-text-secondary);">-</span></td>
+            <td style="text-align:center;"><span style="font-weight:600;color:var(--color-success)">${remainingLessons}</span></td>
+            <td>
+                <span class="att-deduct-stepper">
+                    <button class="stepper-btn" onclick="attDeductChange(this, -1)">−</button>
+                    <span class="stepper-val" data-sid="${studentId}" data-lesson-hours="1" data-max="${remainingLessons}">2</span>
+                    <button class="stepper-btn" onclick="attDeductChange(this, 1)">+</button>
+                </span>
+            </td>
+            <td>
+                <span class="att-status-group" data-sid="${studentId}">
+                    <span class="att-status-chip active" data-val="出勤" onclick="attStatusToggle(this, '出勤')">出勤</span>
+                    <span class="att-status-chip" data-val="缺勤" onclick="attStatusToggle(this, '缺勤')">缺勤</span>
+                </span>
+            </td>
+        `;
+        tbody.appendChild(row);
+        document.getElementById('as-total-count').textContent = tbody.querySelectorAll('tr').length;
+        closeModal('modal-temp-student');
+        return;
+    }
+
+    // 旧弹窗 modal-class-attendance 的行结构
     const tbody = document.getElementById('ca-attendance-tbody');
     // 检查是否已存在
     const existing = tbody.querySelector('.ca-status-select[data-sid="' + studentId + '"]');
@@ -5407,7 +5447,9 @@ async function saveAttendanceSession() {
         const studentId = parseInt(stepperVal.dataset.sid);
         const deducted = parseInt(stepperVal.textContent) || 0;
         const status = activeTag.dataset.val;
-        records.push({ student_id: studentId, status: status, deducted_lessons: deducted });
+        const record = { student_id: studentId, status: status, deducted_lessons: deducted };
+        if (parseInt(row.dataset.isTemp || '0') === 1) record.is_temporary = 1;
+        records.push(record);
     });
     if (records.length === 0) { showToast('无学员可考勤', 'error'); return; }
     const result = await api('save_class_attendance', {
