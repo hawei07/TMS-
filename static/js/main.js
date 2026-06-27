@@ -4774,6 +4774,18 @@ async function showAddStudentModal() {
     await searchAvailableStudents();
 }
 
+let addStudentFromAttendance = false;
+
+async function showAddStudentToAttendanceModal() {
+    if (!currentAttendanceClassId) return showToast('班级信息缺失', 'error');
+    addStudentFromAttendance = true;
+    currentClassDetailId = currentAttendanceClassId;
+    document.getElementById('modal-add-student-title').textContent = '添加学员到考勤';
+    document.getElementById('add-student-search').value = '';
+    openModal('modal-add-student');
+    await searchAvailableStudents();
+}
+
 async function searchAvailableStudents() {
     const tbody = document.getElementById('available-students-tbody');
     tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
@@ -4812,6 +4824,11 @@ async function addStudentToClass(studentId, studentName) {
     // 刷新可选列表和学员列表
     searchAvailableStudents();
     loadClassStudents();
+    // 若从考勤弹窗添加，同步刷新考勤列表
+    if (addStudentFromAttendance) {
+        addStudentFromAttendance = false;
+        reloadAttendanceSession();
+    }
 }
 
 async function removeStudentFromClass(csId, studentName) {
@@ -5396,6 +5413,64 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
         });
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-danger);padding:20px;">加载失败</td></tr>';
+    }
+}
+
+async function reloadAttendanceSession() {
+    const tbody = document.getElementById('as-attendance-tbody');
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:28px;">正在刷新...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + 'get_class_attendance&class_id=' + currentAttendanceClassId + '&schedule_id=' + currentAttendanceScheduleId + '&session_date=' + currentAttendanceSessionDate);
+        const data = await res.json();
+        const rows = data.data || [];
+        document.getElementById('as-total-count').textContent = rows.length;
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-text-muted);padding:36px;">该班级暂无学员</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const currentStatus = r.status || '';
+            const maxDeductible = r.max_deductible || 0;
+            let deducted = r.attendance_id ? (r.deducted_lessons || 0) : 0;
+            if (maxDeductible > 0 && deducted > maxDeductible) deducted = maxDeductible;
+            const remaining = r.remaining_lessons || 0;
+            const isTemp = r.is_temporary || 0;
+            const tempBadge = isTemp ? ' <span style="color:#e74c3c;font-size:11px;font-weight:bold;">临时</span>' : '';
+            const removeCell = isTemp
+                ? '<span style="color:var(--color-text-muted);font-size:12px;">-</span>'
+                : `<button class="btn-remove-att" onclick="removeAttendanceStudent(${r.student_id}, ${r.cs_id})" title="移除此学员">移除</button>`;
+            return `<tr id="att-row-${r.student_id}" data-cs-id="${r.cs_id}" data-is-temp="${isTemp}">
+                <td>${removeCell}</td>
+                <td><span style="font-weight:500;">${esc(r.student_name)}${tempBadge}</span></td>
+                <td><span style="color:var(--color-text-secondary);">${esc(r.course_name || '')}</span></td>
+                <td style="text-align:center;"><span style="font-weight:600;color:${remaining > 0 ? 'var(--color-success)' : 'var(--color-danger)'}">${remaining}</span></td>
+                <td>
+                    <span class="att-deduct-stepper">
+                        <button class="stepper-btn" onclick="attDeductChange(this, -1)">−</button>
+                        <span class="stepper-val" data-sid="${r.student_id}" data-lesson-hours="${r.lesson_hours || 1}" data-max="${maxDeductible}">${deducted}</span>
+                        <button class="stepper-btn" onclick="attDeductChange(this, 1)">+</button>
+                    </span>
+                </td>
+                <td>
+                    <span class="att-status-group" data-sid="${r.student_id}">
+                        <span class="att-status-chip ${currentStatus === '出勤' ? 'active' : ''}" data-val="出勤" onclick="attStatusToggle(this, '出勤')">出勤</span>
+                        <span class="att-status-chip ${currentStatus === '缺勤' ? 'active' : ''}" data-val="缺勤" onclick="attStatusToggle(this, '缺勤')">缺勤</span>
+                    </span>
+                </td>
+            </tr>`;
+        }).join('');
+        document.querySelectorAll('#as-attendance-tbody tr').forEach(row => {
+            const activeChip = row.querySelector('.att-status-chip.active');
+            if (activeChip) return;
+            const stepper = row.querySelector('.att-deduct-stepper');
+            const valSpan = stepper ? stepper.querySelector('.stepper-val') : null;
+            if (stepper && valSpan) {
+                valSpan.textContent = '0';
+                stepper.classList.add('disabled');
+            }
+        });
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-danger);padding:20px;">刷新失败</td></tr>';
     }
 }
 

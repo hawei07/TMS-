@@ -4830,6 +4830,7 @@ if (intval($countBt) === 0) {
                     <div class="att-student-actions">
                         <button class="btn btn-sm btn-outline" onclick="addTempStudent()">+ 临时学员</button>
                         <button class="btn btn-sm btn-outline" onclick="addMakeupStudent()">+ 补课学员</button>
+                        <button class="btn btn-sm btn-outline" onclick="showAddStudentToAttendanceModal()">+ 添加学员</button>
                     </div>
                 </div>
 
@@ -4850,7 +4851,6 @@ if (intval($countBt) === 0) {
             <div class="modal-footer">
                 <span class="att-footer-hint">共 <strong id="as-total-count">0</strong> 名学员</span>
                 <button class="btn btn-outline" onclick="closeModal('modal-attendance-session')">取消</button>
-                <button class="btn btn-outline btn-sm" onclick="showTempStudentModal()" style="margin-right:auto;">+ 添加临时学员</button>
                 <button class="btn btn-primary" onclick="saveAttendanceSession()">保存考勤</button>
             </div>
         </div>
