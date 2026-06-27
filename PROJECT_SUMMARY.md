@@ -1186,5 +1186,10 @@ function isSmallPackage(val) {
 | feat | **考勤列表增加班级名称搜索**：`list_attendance_sessions` API 新增 `class_name` 模糊搜索参数（`array_filter` + `stripos`）；前端工具栏增加 `#attendance-class-name` 输入框，支持回车搜索；JS `loadAttendanceSessions` 读取输入值拼入 URL | `index.php`、`index.html`、`static/js/main.js` | b97d763、666bdb5 |
 | fix | **班级详情学员列表过滤出班学员**：`list_class_students` 查询未过滤 `left_at`，导致已出班学员仍显示。修复：WHERE 增加 `AND cs.left_at = ''`，SELECT 增加 `cs.left_at` 字段 | `index.php` | 9b7ee22 |
 | fix | **添加学员弹窗过滤出班学员**：`get_available_students` 的 `NOT IN` 子查询仅按 `class_id` 过滤，导致已出班学员无法被重新添加。修复：子查询改为 `WHERE class_id=$classId AND left_at = ''`，使仅当前在班的学员被排除 | `index.php` | b32982f |
+| fix | **临时学员考勤状态默认改为未选择**：`save_temp_attendance` 后端 `status` 改为空字符串 `''`，前端 `main.js` 新增和加载临时学员模板均改为未选择默认状态，避免误操作 | `index.php`、`static/js/main.js` | 38bdd91 |
+| fix | **新考勤弹窗临时学员识别与保护**：`showAttendanceSession` 和 `reloadAttendanceSession` 根据 `is_temporary` 字段渲染「临时」标签，并隐藏移除按钮防止误删 | `static/js/main.js` | b7579c7 |
+| feat | **考勤弹窗新增添加学员功能**：去掉底部重复的临时学员按钮，新增 `showAddStudentToAttendanceModal` 弹窗（复用班级详情页添加逻辑），`reloadAttendanceSession` 支持刷新后渲染 | `static/js/main.js` | 2c26d5a |
+| style | **缺勤开关红色样式**：考勤状态弹窗中缺勤 switch 激活时背景色改为 `#e74c3c` 红色，与到场/请假/未到形成视觉区分 | `static/css/style.css` | a4883ce |
+| docs | **纳入 LLM 编码规范**：将 Andrej Karpathy 的 LLM 编码四原则（先思考再编码、简洁优先、外科手术式修改、目标驱动执行）纳入 `PROJECT_SUMMARY.md` 作为项目强制性代码约束 | `PROJECT_SUMMARY.md` | 2616bf5 |
 
 *（内容由AI生成，仅供参考）*
