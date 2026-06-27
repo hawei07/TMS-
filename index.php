@@ -2470,6 +2470,8 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) json(['error' => '班级ID无效']);
+            $attCount = $db->query("SELECT COUNT(*) FROM class_attendance WHERE class_id=$id")->fetchColumn();
+            if ($attCount > 0) json(['error' => '该班级已有考勤记录，不可删除']);
             $db->exec("DELETE FROM classes WHERE id=$id");
             json(['message' => '班级删除成功']);
             break;
