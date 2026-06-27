@@ -2752,7 +2752,7 @@ $stmt->execute();
                         AND o.course_id IN (" . implode(',', $allCourseIds) . ")
                         AND o.campus = " . $db->quote($classCampus) . "), 0) AS remaining_hours
                     FROM students s
-                    WHERE s.id NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId)
+                    WHERE s.id NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId AND left_at = '')
                     AND EXISTS (
                         SELECT 1 FROM orders o2
                         WHERE o2.student_id = s.id
