@@ -5358,9 +5358,14 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
             // 已扣值不得超过一级学科剩余课时上限
             if (maxDeductible > 0 && deducted > maxDeductible) deducted = maxDeductible;
             const remaining = r.remaining_lessons || 0;
-            return `<tr id="att-row-${r.student_id}" data-cs-id="${r.cs_id}">
-                <td><button class="btn-remove-att" onclick="removeAttendanceStudent(${r.student_id}, ${r.cs_id})" title="移除此学员">移除</button></td>
-                <td><span style="font-weight:500;">${esc(r.student_name)}</span></td>
+            const isTemp = r.is_temporary || 0;
+            const tempBadge = isTemp ? ' <span style="color:#e74c3c;font-size:11px;font-weight:bold;">临时</span>' : '';
+            const removeCell = isTemp
+                ? '<span style="color:var(--color-text-muted);font-size:12px;">-</span>'
+                : `<button class="btn-remove-att" onclick="removeAttendanceStudent(${r.student_id}, ${r.cs_id})" title="移除此学员">移除</button>`;
+            return `<tr id="att-row-${r.student_id}" data-cs-id="${r.cs_id}" data-is-temp="${isTemp}">
+                <td>${removeCell}</td>
+                <td><span style="font-weight:500;">${esc(r.student_name)}${tempBadge}</span></td>
                 <td><span style="color:var(--color-text-secondary);">${esc(r.course_name || courseName)}</span></td>
                 <td style="text-align:center;"><span style="font-weight:600;color:${remaining > 0 ? 'var(--color-success)' : 'var(--color-danger)'}">${remaining}</span></td>
                 <td>
