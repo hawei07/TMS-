@@ -593,7 +593,7 @@ function handleApi() {
             $params = [':pt' => $poolType];
             if ($keyword) {
                 $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR source LIKE :kw3)";
-                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%"; $params[':kw3'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
             }
             if ($followStatus) { $where[] = "follow_status = :fs"; $params[':fs'] = $followStatus; }
             if ($assignedTo) { $where[] = "assigned_to = :at"; $params[':at'] = $assignedTo; }
@@ -1154,7 +1154,7 @@ $stmt->execute();
             $params = [':pt' => $poolType];
             if ($keyword) {
                 $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR source LIKE :kw3)";
-                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
             }
             if ($followStatus) { $where[] = "follow_status = :fs"; $params[':fs'] = $followStatus; }
             $whereStr = implode(' AND ', $where);
@@ -1252,7 +1252,7 @@ $stmt->execute();
             $params = [];
             if ($keyword) {
                 $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR department LIKE :kw3 OR position LIKE :kw4)";
-                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
                 $params[':kw3'] = "%$keyword%"; $params[':kw4'] = "%$keyword%";
             }
             if ($department) { $where[] = "department = :dept"; $params[':dept'] = $department; }
@@ -1554,7 +1554,7 @@ $stmt->execute();
             $params = [];
             if ($keyword) {
                 $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR department LIKE :kw3 OR position LIKE :kw4)";
-                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
                 $params[':kw3'] = "%$keyword%"; $params[':kw4'] = "%$keyword%";
             }
             if ($department) { $where[] = "department = :dept"; $params[':dept'] = $department; }
@@ -1590,8 +1590,8 @@ $stmt->execute();
             $where = [];
             $params = [];
             if ($keyword) {
-                $where[] = "(name LIKE :kw1 OR subject LIKE :kw2)";
-                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+                $where[] = "(name LIKE :kw1 OR subject_level1 LIKE :kw2 OR subject_level2 LIKE :kw3)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
             }
             if ($campusId > 0) {
                 $where[] = "(campus_permission = '' OR campus_permission IS NULL OR FIND_IN_SET(:cid, campus_permission))";
@@ -1620,11 +1620,12 @@ $stmt->execute();
             $stmt = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name) . "");
             $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '课程名称已存在']);
-            $subject = trim($input['subject'] ?? '');
+            $subject_level1 = trim($input['subject_level1'] ?? '');
+            $subject_level2 = trim($input['subject_level2'] ?? '');
             $small_package = trim($input['small_package'] ?? '');
             $toddler = trim($input['toddler'] ?? '');
             $campus_permission = trim($input['campus_permission'] ?? '');
-            $db->exec("INSERT INTO courses (name, subject, small_package, toddler, campus_permission, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($subject) . ", " . $db->quote($small_package) . ", " . $db->quote($toddler) . ", " . $db->quote($campus_permission) . ", '" . now() . "')");
+            $db->exec("INSERT INTO courses (name, subject_level1, subject_level2, small_package, toddler, campus_permission, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($subject_level1) . ", " . $db->quote($subject_level2) . ", " . $db->quote($small_package) . ", " . $db->quote($toddler) . ", " . $db->quote($campus_permission) . ", '" . now() . "')");
             json(['id' => $db->lastInsertId(), 'message' => '课程添加成功']);
 
         case 'update_course':
@@ -1639,11 +1640,12 @@ $stmt->execute();
             $stmt = $db->query("SELECT COUNT(*) FROM courses WHERE name = " . $db->quote($name) . " AND id != $cid");
             $dup = $stmt->fetchColumn();
             if (intval($dup) > 0) json(['error' => '课程名称已存在']);
-            $subject = array_key_exists('subject', $input) ? trim($input['subject']) : $existing['subject'];
+            $subject_level1 = array_key_exists('subject_level1', $input) ? trim($input['subject_level1']) : ($existing['subject_level1'] ?? '');
+            $subject_level2 = array_key_exists('subject_level2', $input) ? trim($input['subject_level2']) : ($existing['subject_level2'] ?? '');
             $small_package = array_key_exists('small_package', $input) ? trim($input['small_package']) : ($existing['small_package'] ?? '');
             $toddler = array_key_exists('toddler', $input) ? trim($input['toddler']) : ($existing['toddler'] ?? '');
             $campus_permission = array_key_exists('campus_permission', $input) ? trim($input['campus_permission']) : ($existing['campus_permission'] ?? '');
-            $db->exec("UPDATE courses SET name=" . $db->quote($name) . ", subject=" . $db->quote($subject) . ", small_package=" . $db->quote($small_package) . ", toddler=" . $db->quote($toddler) . ", campus_permission=" . $db->quote($campus_permission) . " WHERE id=$cid");
+            $db->exec("UPDATE courses SET name=" . $db->quote($name) . ", subject_level1=" . $db->quote($subject_level1) . ", subject_level2=" . $db->quote($subject_level2) . ", small_package=" . $db->quote($small_package) . ", toddler=" . $db->quote($toddler) . ", campus_permission=" . $db->quote($campus_permission) . " WHERE id=$cid");
             json(['message' => '课程更新成功']);
 
         case 'delete_course':
@@ -1658,8 +1660,8 @@ $stmt->execute();
             $where = [];
             $params = [];
             if ($keyword) {
-                $where[] = "(name LIKE :kw1 OR subject LIKE :kw2)";
-                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+                $where[] = "(name LIKE :kw1 OR subject_level1 LIKE :kw2 OR subject_level2 LIKE :kw3)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
             }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -1676,7 +1678,7 @@ $stmt->execute();
             $campusMap = [];
             $campusRes = $db->query("SELECT id, name FROM organizations WHERE type='校区'");
             while ($cr = $campusRes->fetch(PDO::FETCH_ASSOC)) $campusMap[$cr['id']] = $cr['name'];
-            fputcsv($output, ['编号', '课程名称', '学科', '适用校区', '小课包', '低幼龄', '创建时间']);
+            fputcsv($output, ['编号', '课程名称', '一级学科', '二级学科', '适用校区', '小课包', '低幼龄', '创建时间']);
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $campusNames = [];
                 if (!empty($r['campus_permission'])) {
@@ -1686,7 +1688,7 @@ $stmt->execute();
                     }
                 }
                 fputcsv($output, [
-                    $r['id'], $r['name'], $r['subject'],
+                    $r['id'], $r['name'], $r['subject_level1'], $r['subject_level2'],
                     implode('，', $campusNames),
                     $r['small_package'] ?? '', $r['toddler'] ?? '', $r['created_at']
                 ]);
@@ -2219,7 +2221,7 @@ $stmt->execute();
             $sid = intval($_GET['student_id'] ?? 0);
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons, o.campus FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons, o.campus FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
@@ -2657,13 +2659,10 @@ $stmt->execute();
             $exists = $stmt->fetchColumn();
             if (intval($exists) > 0) json(['error' => '该学员已在此班级中']);
             // 检查一级学科下剩余课时
-            $classRow = $db->query("SELECT c.course_id, co.subject FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
-            $subject = $classRow['subject'] ?? '';
+            $classRow = $db->query("SELECT c.course_id, co.subject_level1, co.subject_level2 FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $subjectLevel1 = $classRow['subject_level1'] ?? '';
             $firstSubjectId = 0;
-            // courses.subject 存储格式为 "一级学科名 > 二级学科名"，取末段匹配
-            $subjectParts = explode(' > ', $subject);
-            $leafSubject = end($subjectParts);
-            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
+            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($subjectLevel1))->fetch(PDO::FETCH_ASSOC);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -2673,7 +2672,7 @@ $stmt->execute();
             }
             if ($firstSubjectId > 0) {
                 $allCourseIds = [];
-                $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                $sr = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                 while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
                     $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
@@ -2722,19 +2721,19 @@ $stmt->execute();
             $keyword = trim($_GET['keyword'] ?? '');
             if ($classId <= 0) json(['error' => '班级ID无效']);
             // 获取班级的一级学科和校区
-            $classRow = $db->query("SELECT c.course_id, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
-            $subject = $classRow['subject'] ?? '';
+            $classRow = $db->query("SELECT c.course_id, co.subject_level1, co.subject_level2, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $subjectLevel1 = $classRow['subject_level1'] ?? '';
             $classCampus = $classRow['campus'] ?? '';
             $firstSubjectId = 0;
-            $subjectParts = explode(' > ', $subject);
-            $leafSubject = end($subjectParts);
-            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
-            if ($subjRow) {
-                $firstSubjectId = intval($subjRow['parent_id']) == 0 ? intval($subjRow['id']) : intval($subjRow['parent_id']);
+            if ($subjectLevel1) {
+                $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($subjectLevel1))->fetch(PDO::FETCH_ASSOC);
+                if ($subjRow) {
+                    $firstSubjectId = intval($subjRow['parent_id']) == 0 ? intval($subjRow['id']) : intval($subjRow['parent_id']);
+                }
             }
             $allCourseIds = [];
             if ($firstSubjectId > 0) {
-                $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                $sr = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                 while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = intval($c['id']);
             }
             $where = [];
@@ -2773,6 +2772,55 @@ $stmt->execute();
             break;
 
         // ==================== 班级考勤 API ====================
+
+        case 'get_temp_student_candidates':
+            $classId = intval($_GET['class_id'] ?? 0);
+            if ($classId <= 0) json(['error' => '班级ID无效']);
+            // 查询班级的 course_id、campus、subject_level1
+            $classInfo = $db->query("SELECT c.course_id, c.campus, co.subject_level1 AS subject_raw FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            if (!$classInfo) json(['data' => []]);
+            $classCampus = $classInfo['campus'] ?? '';
+            // 解析一级学科ID
+            $firstSubjectId = 0;
+            $subjectRaw = $classInfo['subject_raw'] ?? '';
+            if ($subjectRaw) {
+                $sj = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($subjectRaw))->fetch(PDO::FETCH_ASSOC);
+                if ($sj) {
+                    $firstSubjectId = intval($sj['parent_id']) == 0 ? intval($sj['id']) : intval($sj['parent_id']);
+                }
+            }
+            if ($firstSubjectId <= 0) json(['data' => []]);
+            // 查询该一级学科下的所有课程ID
+            $subjectCourseIds = [];
+            $scRes = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+            while ($c = $scRes->fetch(PDO::FETCH_ASSOC)) $subjectCourseIds[] = $c['id'];
+            if (count($subjectCourseIds) === 0) json(['data' => []]);
+            $idsStr = implode(',', $subjectCourseIds);
+            $quotedCampus = $db->quote($classCampus);
+            // 查询有剩余课时且不在该班级的学员
+            $sql = "SELECT s.id, s.student_no, s.name, SUM(o.lesson_count - o.consumed_lessons) AS remaining
+                FROM students s
+                JOIN orders o ON o.student_id = s.id
+                WHERE o.course_id IN ($idsStr)
+                  AND o.campus = $quotedCampus
+                  AND o.lesson_count > o.consumed_lessons
+                  AND s.id NOT IN (SELECT cs.student_id FROM class_students cs WHERE cs.class_id = $classId AND cs.left_at = '')
+                GROUP BY s.id
+                HAVING remaining > 0
+                ORDER BY s.id ASC";
+            $stmt = $db->query($sql);
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $rows[] = [
+                    'id' => intval($r['id']),
+                    'student_no' => $r['student_no'],
+                    'name' => $r['name'],
+                    'remaining_lessons' => intval($r['remaining'])
+                ];
+            }
+            json(['data' => $rows]);
+            break;
+
         case 'get_class_attendance':
             $classId = intval($_GET['class_id'] ?? 0);
             $scheduleId = intval($_GET['schedule_id'] ?? 0);
@@ -2780,7 +2828,7 @@ $stmt->execute();
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
             // 获取班级课程信息
-            $classInfo = $db->query("SELECT c.course_id, co.subject AS course_name, c.lesson_hours, co.subject AS subject_raw, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $classInfo = $db->query("SELECT c.course_id, co.name AS course_name, c.lesson_hours, co.subject_level1 AS subject_raw, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             $classCourseId = intval($classInfo['course_id'] ?? 0);
             $classCourseName = $classInfo['course_name'] ?? '';
             $classLessonHours = intval($classInfo['lesson_hours'] ?? 0);
@@ -2789,9 +2837,7 @@ $stmt->execute();
             $classFirstSubjectId = 0;
             $subjectRaw = $classInfo['subject_raw'] ?? '';
             if ($subjectRaw) {
-                $parts = explode(' > ', $subjectRaw);
-                $leaf = end($parts);
-                $sj = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leaf))->fetch(PDO::FETCH_ASSOC);
+                $sj = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($subjectRaw))->fetch(PDO::FETCH_ASSOC);
                 if ($sj) {
                     $classFirstSubjectId = intval($sj['parent_id']) == 0 ? intval($sj['id']) : intval($sj['parent_id']);
                 }
@@ -2814,10 +2860,27 @@ $stmt->execute();
                 $extraRes = $db->query("SELECT id, student_no, name FROM students WHERE id IN (" . implode(',', $extraStudentIds) . ")");
                 while ($r = $extraRes->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = false; }
             }
+            // 补充：临时学员（is_temporary=1 的考勤记录）
+            $tempAttRes = $db->query("SELECT * FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND is_temporary=1");
+            while ($r = $tempAttRes->fetch(PDO::FETCH_ASSOC)) {
+                if (!isset($studentIdsInClass[$r['student_id']])) {
+                    $attMap[$r['student_id']] = $r;
+                    $extraStudentIds[] = $r['student_id'];
+                }
+            }
+            // 查询临时学员基本信息
+            if (count($extraStudentIds) > 0) {
+                $existingIds = array_keys($studentIdsInClass);
+                $newTempIds = array_filter($extraStudentIds, function($sid) use ($existingIds) { return !in_array($sid, $existingIds); });
+                if (count($newTempIds) > 0) {
+                    $extraRes2 = $db->query("SELECT id, student_no, name FROM students WHERE id IN (" . implode(',', $newTempIds) . ")");
+                    while ($r = $extraRes2->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = false; }
+                }
+            }
             // 预取一级学科下所有课程ID（用于计算 max_deductible）
             $flCourseIds = [];
             if ($classFirstSubjectId > 0) {
-                $flRes = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $classFirstSubjectId OR id = $classFirstSubjectId)");
+                $flRes = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $classFirstSubjectId OR id = $classFirstSubjectId)");
                 while ($c = $flRes->fetch(PDO::FETCH_ASSOC)) $flCourseIds[] = $c['id'];
             }
             $rows = [];
@@ -2845,7 +2908,8 @@ $stmt->execute();
                     'status' => $aid ? $aid['status'] : '',
                     'deducted_lessons' => $aid ? intval($aid['deducted_lessons']) : 0,
                     'deducted_order_id' => $aid ? intval($aid['deducted_order_id']) : 0,
-                    'attendance_id' => $aid ? $aid['id'] : 0
+                    'attendance_id' => $aid ? $aid['id'] : 0,
+                    'is_temporary' => ($aid && intval($aid['is_temporary'] ?? 0) === 1) ? 1 : 0
                 ];
             }
             json(['data' => $rows]);
@@ -2867,18 +2931,23 @@ $stmt->execute();
                     $studentId = intval($rec['student_id'] ?? 0);
                     $status = trim($rec['status'] ?? '出勤');
                     if ($studentId <= 0) continue;
+                    // 判断是否为临时学员（不在 class_students 中但有 is_temporary 标记）
+                    $isTempRecord = !empty($rec['is_temporary']) && intval($rec['is_temporary']) === 1;
+                    if ($isTempRecord) {
+                        $inClass = $db->query("SELECT id FROM class_students WHERE class_id=$classId AND student_id=$studentId AND left_at=''")->fetch(PDO::FETCH_ASSOC);
+                        $isTempRecord = !$inClass;
+                    }
+                    $isTemp = $isTempRecord ? 1 : 0;
                     if (!in_array($status, ['出勤', '请假', '缺勤'])) $status = '出勤';
                     // 查询该学员在此班级课程的一级学科
-                    $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+                    $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject_level1, co.subject_level2, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
                     $courseId = intval($classRow['course_id'] ?? 0);
-                    $subject = $classRow['subject'] ?? '';
+                    $subjectLevel1 = $classRow['subject_level1'] ?? '';
                     $classCampus = $classRow['campus'] ?? '';
-                    // 获取一级学科（courses.subject 格式为 "一级学科名 > 二级学科名"）
+                    // 获取一级学科
                     $firstSubjectId = 0;
                     $courseSubjId = 0; // 课程所属学科ID（可能就是二级学科）
-                    $subjectParts = explode(' > ', $subject);
-                    $leafSubject = end($subjectParts);
-                    $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
+                    $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($subjectLevel1))->fetch(PDO::FETCH_ASSOC);
                     if ($subjRow) {
                         $courseSubjId = intval($subjRow['id']);
                         if (intval($subjRow['parent_id']) == 0) {
@@ -2910,7 +2979,7 @@ $stmt->execute();
                     // 出勤上限校验：扣除课时数不得超过一级学科剩余课时（退还后重新计算）
                     if ($status === '出勤' && $deductedLessons > 0 && $firstSubjectId > 0) {
                         $allSubjCourseIds = [];
-                        $srMax = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                        $srMax = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                         while ($c = $srMax->fetch(PDO::FETCH_ASSOC)) $allSubjCourseIds[] = $c['id'];
                         if (count($allSubjCourseIds) > 0) {
                             $quotedCampus = $db->quote($classCampus);
@@ -2954,7 +3023,7 @@ $stmt->execute();
                         // 优先级2：同一二级学科的订单（先报名优先，排除已处理订单）
                         if ($remainingToDeduct > 0 && $courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
                             $sameSecondCourses = [];
-                            $sr2 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
+                            $sr2 = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
                             while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
                             if (count($sameSecondCourses) > 0) {
                                 $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
@@ -2978,7 +3047,7 @@ $stmt->execute();
                         // 优先级3：同一级学科的订单（先报名优先，排除已处理订单）
                         if ($remainingToDeduct > 0 && $firstSubjectId > 0) {
                             $firstLevelCourses = [];
-                            $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                            $sr3 = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                             while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
                             if (count($firstLevelCourses) > 0) {
                                 $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
@@ -3005,7 +3074,7 @@ $stmt->execute();
                     // 删除旧的考勤记录
                     $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId");
                     $n = now();
-                    $stmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, deducted_order_id, deduction_json, created_at) VALUES (:cid, :scid, :sd, :stid, :st, :dl, :doid, :dj, :ca)");
+                    $stmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, deducted_order_id, deduction_json, is_temporary, created_at) VALUES (:cid, :scid, :sd, :stid, :st, :dl, :doid, :dj, :it, :ca)");
                     $stmt->bindValue(':cid', $classId, PDO::PARAM_INT);
                     $stmt->bindValue(':scid', $scheduleId, PDO::PARAM_INT);
                     $stmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
@@ -3014,21 +3083,21 @@ $stmt->execute();
                     $stmt->bindValue(':dl', $deductedLessons, PDO::PARAM_INT);
                     $stmt->bindValue(':doid', $deductedOrderId, PDO::PARAM_INT);
                     $stmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
+                    $stmt->bindValue(':it', $isTemp, PDO::PARAM_INT);
                     $stmt->bindValue(':ca', $n, PDO::PARAM_STR);
                     $stmt->execute();
                     // 同步写入学员考勤明细记录（attendance_records）
                     // 课程信息优先使用实际扣除的订单对应课程，而非班级课程
                     $className = $classRow['course_name'] ?? ''; // c.name 即班级名称（别名误导）
                     $attCourseId = $courseId;
-                    $attSubjL1 = $subjectParts[0] ?? '';
-                    $attSubjL2 = $subjectParts[1] ?? '';
+                    $attSubjL1 = $subjectLevel1 ?? '';
+                    $attSubjL2 = $classRow['subject_level2'] ?? '';
                     if ($deductedOrderId > 0) {
-                        $deductedOrderCourse = $db->query("SELECT co.id, co.subject FROM orders o LEFT JOIN courses co ON o.course_id = co.id WHERE o.id = $deductedOrderId")->fetch(PDO::FETCH_ASSOC);
+                        $deductedOrderCourse = $db->query("SELECT co.id, co.subject_level1, co.subject_level2 FROM orders o LEFT JOIN courses co ON o.course_id = co.id WHERE o.id = $deductedOrderId")->fetch(PDO::FETCH_ASSOC);
                         if ($deductedOrderCourse) {
                             $attCourseId = intval($deductedOrderCourse['id']);
-                            $attSubjParts = explode(' > ', $deductedOrderCourse['subject'] ?? '');
-                            $attSubjL1 = $attSubjParts[0] ?? '';
-                            $attSubjL2 = $attSubjParts[1] ?? '';
+                            $attSubjL1 = $deductedOrderCourse['subject_level1'] ?? '';
+                            $attSubjL2 = $deductedOrderCourse['subject_level2'] ?? '';
                         }
                     }
                     $schedRow = $db->query("SELECT teacher, time_slots FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
@@ -3079,7 +3148,7 @@ $stmt->execute();
                     if ($firstSubjectId > 0) {
                         // 获取一级学科下所有课程ID
                         $allCourseIds = [];
-                        $sr3 = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                        $sr3 = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                         while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                         if (count($allCourseIds) > 0) {
                             $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
@@ -3105,14 +3174,11 @@ $stmt->execute();
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
             // 获取班级课程的一级学科及校区
-            $classRow = $db->query("SELECT c.course_id, co.subject, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
-            $subject = $classRow['subject'] ?? '';
+            $classRow = $db->query("SELECT c.course_id, co.subject_level1, co.subject_level2, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
+            $subjectLevel1 = $classRow['subject_level1'] ?? '';
             $classCampus = $classRow['campus'] ?? '';
             $firstSubjectId = 0;
-            // courses.subject 存储格式为 "一级学科名 > 二级学科名"，需取末段匹配 subjects.name
-            $subjectParts = explode(' > ', $subject);
-            $leafSubject = end($subjectParts);
-            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($leafSubject))->fetch(PDO::FETCH_ASSOC);
+            $subjRow = $db->query("SELECT id, parent_id FROM subjects WHERE name = " . $db->quote($subjectLevel1))->fetch(PDO::FETCH_ASSOC);
             if ($subjRow) {
                 if (intval($subjRow['parent_id']) == 0) {
                     $firstSubjectId = intval($subjRow['id']);
@@ -3123,7 +3189,7 @@ $stmt->execute();
             $totalRemaining = 0;
             if ($firstSubjectId > 0) {
                 $allCourseIds = [];
-                $sr = $db->query("SELECT id FROM courses WHERE (CASE WHEN instr(subject, ' > ') > 0 THEN substr(subject, instr(subject, ' > ') + 3) ELSE subject END) IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                $sr = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                 while ($c = $sr->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                 if (count($allCourseIds) > 0) {
                     $quotedCampus = $db->quote($classCampus);
@@ -3143,7 +3209,7 @@ $stmt->execute();
             $page = max(1, intval($_GET['page'] ?? 1));
             $pageSize = intval($_GET['page_size'] ?? 20);
             $sessions = [];
-            $stmt = $db->query("SELECT s.*, c.name AS class_name, c.campus, co.subject AS course_subject, co.name AS course_name 
+            $stmt = $db->query("SELECT s.*, c.name AS class_name, c.campus, co.subject_level1 AS course_subject_level1, co.subject_level2 AS course_subject_level2, co.name AS course_name 
                 FROM schedules s 
                 JOIN classes c ON s.class_id = c.id 
                 LEFT JOIN courses co ON c.course_id = co.id 
@@ -3159,7 +3225,7 @@ $stmt->execute();
                         'class_id' => intval($row['class_id']),
                         'class_name' => $row['class_name'],
                         'campus' => $row['campus'],
-                        'course_name' => $row['course_name'] ?: $row['course_subject'],
+                        'course_name' => $row['course_name'] ?: trim(($row['course_subject_level1'] ?? '') . ' ' . ($row['course_subject_level2'] ?? '')),
                         'teacher' => $row['teacher'],
                         'classroom' => $row['classroom'],
                         'session_date' => $d,
@@ -3810,7 +3876,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-courses">
                         <thead><tr>
-                            <th width="60">编号</th><th>课程名称</th><th>学科</th><th>适用校区</th><th>小课包</th><th>低幼龄</th><th width="180">操作</th>
+                            <th width="60">编号</th><th>课程名称</th><th>一级学科</th><th>二级学科</th><th>适用校区</th><th>小课包</th><th>低幼龄</th><th width="180">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -4261,7 +4327,8 @@ if (intval($countBt) === 0) {
         <div class="modal-body">
             <input type="hidden" id="edit-cid">
             <div class="form-group"><label>课程名称 <span class="required">*</span></label><input type="text" id="course-name" maxlength="100" placeholder="请输入课程名称"></div>
-            <div class="form-group"><label>学科</label><select id="course-subject"><option value="">请选择学科</option></select></div>
+            <div class="form-group"><label>一级学科</label><select id="course-subject-level1"><option value="">请选择一级学科</option></select></div>
+            <div class="form-group"><label>二级学科</label><select id="course-subject-level2"><option value="">请选择二级学科</option></select></div>
             <div class="form-group"><label>适用校区</label><div id="course-campus-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #dcdfe6;border-radius:4px;padding:8px;"></div></div>
             <div class="form-group"><label>小课包</label><select id="course-small-package"><option value="">请选择</option><option value="是">是</option><option value="否">否</option></select></div>
             <div class="form-group"><label>低幼龄</label><select id="course-toddler"><option value="">请选择</option><option value="是">是</option><option value="否">否</option></select></div>
@@ -4669,7 +4736,28 @@ if (intval($countBt) === 0) {
                 <th>学号</th><th>学员姓名</th><th>出勤状态</th><th>已扣课时</th>
             </tr></thead><tbody id="ca-attendance-tbody"></tbody></table></div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-attendance')">取消</button><button class="btn btn-primary" onclick="saveClassAttendance()">保存</button></div></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-attendance')">取消</button><button class="btn btn-outline btn-sm" onclick="showTempStudentModal()" style="margin-right:auto;">+ 添加临时学员</button><button class="btn btn-primary" onclick="saveClassAttendance()">保存</button></div></div>
+    </div>
+
+    <!-- 弹窗：添加临时学员 -->
+    <div class="modal-overlay" id="modal-temp-student">
+        <div class="modal" style="max-width:650px;width:94vw;">
+            <div class="modal-header">
+                <h3>添加临时学员</h3>
+                <button class="modal-close" onclick="closeModal('modal-temp-student')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="table-wrap"><table>
+                    <thead><tr><th>学号</th><th>姓名</th><th>剩余课时</th><th>操作</th></tr></thead>
+                    <tbody id="temp-student-tbody">
+                        <tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr>
+                    </tbody>
+                </table></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('modal-temp-student')">关闭</button>
+            </div>
+        </div>
     </div>
 
     <!-- 弹窗：考勤（按课次） -->

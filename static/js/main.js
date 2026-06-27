@@ -2050,7 +2050,7 @@ function renderCourseTable(rows) {
     const tbody = document.querySelector('#table-courses tbody');
     tbody.innerHTML = '';
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">暂无课程数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无课程数据</td></tr>';
         return;
     }
     rows.forEach(r => {
@@ -2059,7 +2059,7 @@ function renderCourseTable(rows) {
         tr.innerHTML = `
             <td>${r.id}</td>
             <td>${esc(r.name)}</td>
-            <td>${esc(r.subject)}</td>
+            <td>${esc(r.subject_level1) || '-'}</td><td>${esc(r.subject_level2) || '-'}</td>
             <td>${campusText || '-'}</td>
             <td>${esc(r.small_package) || '-'}</td>
             <td>${esc(r.toddler) || '-'}</td>
@@ -2078,7 +2078,7 @@ async function showCourseModal(id = null) {
     document.getElementById('edit-cid').value = id || '';
 
     // 加载学科下拉选项
-    await loadSubjectSelectOptions();
+    await loadSubjectLevel1Options();
     // 加载校区复选框
     await loadCampusCheckboxes();
 
@@ -2089,7 +2089,11 @@ async function showCourseModal(id = null) {
         const course = (data.data || []).find(c => c.id == id);
         if (course) {
             document.getElementById('course-name').value = course.name;
-            document.getElementById('course-subject').value = course.subject || '';
+            document.getElementById('course-subject-level1').value = course.subject_level1 || '';
+            if (course.subject_level1) {
+                await loadSubjectLevel2Options(course.subject_level1);
+            }
+            document.getElementById('course-subject-level2').value = course.subject_level2 || '';
             document.getElementById('course-small-package').value = course.small_package || '';
             document.getElementById('course-toddler').value = course.toddler || '';
             // 回填校区复选框
@@ -2102,7 +2106,8 @@ async function showCourseModal(id = null) {
         }
     } else {
         document.getElementById('course-name').value = '';
-        document.getElementById('course-subject').value = '';
+        document.getElementById('course-subject-level1').value = '';
+        document.getElementById('course-subject-level2').value = '';
         document.getElementById('course-small-package').value = '';
         document.getElementById('course-toddler').value = '';
         // 重置校区复选框
@@ -2110,37 +2115,51 @@ async function showCourseModal(id = null) {
             cb.checked = false;
         });
     }
+    // 绑定一级学科 onchange 事件，切换时加载对应二级学科
+    document.getElementById('course-subject-level1').onchange = async function() {
+        const parentName = this.value;
+        await loadSubjectLevel2Options(parentName);
+    };
     openModal('modal-course');
 }
 
-async function loadSubjectSelectOptions() {
-    const select = document.getElementById('course-subject');
-    select.innerHTML = '<option value="">请选择学科</option>';
+async function loadSubjectLevel1Options() {
+    const select = document.getElementById('course-subject-level1');
+    select.innerHTML = '<option value="">请选择一级学科</option>';
     try {
         const result = await api('list_subjects', null, 'GET');
         if (result && result.tree) {
             result.tree.forEach(parent => {
-                const optgroup = document.createElement('optgroup');
-                optgroup.label = parent.name;
-                // 一级学科本身作为一个选项
-                const optParent = document.createElement('option');
-                optParent.value = parent.name;
-                optParent.textContent = parent.name;
-                optgroup.appendChild(optParent);
-                // 二级学科
-                if (parent.children && parent.children.length > 0) {
-                    parent.children.forEach(child => {
-                        const opt = document.createElement('option');
-                        opt.value = parent.name + ' > ' + child.name;
-                        opt.textContent = '  ' + child.name;
-                        optgroup.appendChild(opt);
-                    });
-                }
-                select.appendChild(optgroup);
+                const opt = document.createElement('option');
+                opt.value = parent.name;
+                opt.textContent = parent.name;
+                select.appendChild(opt);
             });
         }
     } catch (e) {
-        // 静默处理，下拉保持"请选择学科"
+        // 静默处理
+    }
+}
+
+async function loadSubjectLevel2Options(parentName) {
+    const select = document.getElementById('course-subject-level2');
+    select.innerHTML = '<option value="">请选择二级学科</option>';
+    if (!parentName) return;
+    try {
+        const result = await api('list_subjects', null, 'GET');
+        if (result && result.tree) {
+            const parent = result.tree.find(p => p.name === parentName);
+            if (parent && parent.children && parent.children.length > 0) {
+                parent.children.forEach(child => {
+                    const opt = document.createElement('option');
+                    opt.value = child.name;
+                    opt.textContent = child.name;
+                    select.appendChild(opt);
+                });
+            }
+        }
+    } catch (e) {
+        // 静默处理
     }
 }
 
@@ -2151,7 +2170,8 @@ async function editCourse(id) {
 async function saveCourse() {
     const cid = document.getElementById('edit-cid').value;
     const name = document.getElementById('course-name').value.trim();
-    const subject = document.getElementById('course-subject').value.trim();
+    const subject_level1 = document.getElementById('course-subject-level1').value.trim();
+    const subject_level2 = document.getElementById('course-subject-level2').value.trim();
     const small_package = document.getElementById('course-small-package').value.trim();
     const toddler = document.getElementById('course-toddler').value.trim();
     // 收集校区权限
@@ -2161,7 +2181,7 @@ async function saveCourse() {
     if (!name) { showToast('课程名称不能为空', 'error'); return; }
 
     const action = cid ? 'update_course' : 'add_course';
-    const payload = cid ? { id: parseInt(cid), name, subject, small_package, toddler, campus_permission } : { name, subject, small_package, toddler, campus_permission };
+    const payload = cid ? { id: parseInt(cid), name, subject_level1, subject_level2, small_package, toddler, campus_permission } : { name, subject_level1, subject_level2, small_package, toddler, campus_permission };
     try {
         const r = await api(action, payload, 'POST');
         if (r && r.error) {
@@ -3697,12 +3717,12 @@ async function loadStudentCourses(sid) {
             <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${sid})">分班</button>
         </div>
         <div class="table-wrap"><table><thead><tr>
-            <th>课程名称</th><th>校区</th><th>学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
+            <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
         </tr></thead><tbody>
         ${rows.map(r => `<tr>
             <td>${esc(r.name)}</td>
             <td>${esc(r.campus || '-')}</td>
-            <td>${esc(r.subject)}</td>
+            <td>${esc(r.subject_level1) || '-'}</td><td>${esc(r.subject_level2) || '-'}</td>
             <td>${esc(r.plan_name)}</td>
             <td>${esc(r.item_name)}</td>
             <td>${r.lesson_count || ''}</td>
@@ -4982,9 +5002,11 @@ async function showClassAttendanceModal(classId, scheduleId, sessionDate, titleS
         }
         tbody.innerHTML = rows.map(r => {
             const currentStatus = r.status || '出勤';
-            return `<tr>
+            const isTemp = r.is_temporary || 0;
+            const tempBadge = isTemp ? ' <span style="color:#e74c3c;font-size:11px;font-weight:bold;">临时</span>' : '';
+            return `<tr data-is-temp="${isTemp}">
                 <td>${esc(r.student_no)}</td>
-                <td>${esc(r.student_name)}</td>
+                <td>${esc(r.student_name)}${tempBadge}</td>
                 <td><select class="ca-status-select" data-sid="${r.student_id}">
                     <option value="出勤" ${currentStatus === '出勤' ? 'selected' : ''}>出勤</option>
                     <option value="请假" ${currentStatus === '请假' ? 'selected' : ''}>请假</option>
@@ -5019,10 +5041,20 @@ async function saveClassAttendance() {
     if (sesYM < curYM) { showToast('不可修改之前月份的考勤', 'error'); return; }
     const records = [];
     document.querySelectorAll('.ca-status-select').forEach(sel => {
-        records.push({
+        const tr = sel.closest('tr');
+        const isTemp = tr ? parseInt(tr.dataset.isTemp || '0') : 0;
+        const nameCell = tr ? tr.children[1] : null;
+        const studentName = nameCell ? nameCell.textContent.replace('临时', '').trim() : '';
+        const record = {
             student_id: parseInt(sel.dataset.sid),
-            status: sel.value
-        });
+            status: sel.value,
+            student_name: studentName
+        };
+        if (isTemp === 1) {
+            record.is_temporary = 1;
+            record.student_name = studentName;
+        }
+        records.push(record);
     });
     if (records.length === 0) { showToast('无学员可考勤', 'error'); return; }
     const result = await api('save_class_attendance', {
@@ -5035,6 +5067,69 @@ async function saveClassAttendance() {
     showToast(result.message || '考勤保存成功');
     closeModal('modal-class-attendance');
     loadClassSchedules();
+}
+
+// ==================== 添加临时学员 ====================
+
+async function showTempStudentModal() {
+    const classId = parseInt(document.getElementById('ca-class-id')?.value) || currentAttendanceClassId;
+    if (!classId) { showToast('班级ID无效', 'error'); return; }
+    openModal('modal-temp-student');
+    const tbody = document.getElementById('temp-student-tbody');
+    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + 'get_temp_student_candidates&class_id=' + classId);
+        const data = await res.json();
+        const rows = data.data || [];
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;padding:20px;">暂无符合条件的学员</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            return `<tr>
+                <td>${esc(r.student_no)}</td>
+                <td>${esc(r.name)}</td>
+                <td>${r.remaining_lessons}</td>
+                <td><button class="btn btn-sm btn-primary" onclick="addTempStudentToSession(${r.id}, '${esc(r.student_no)}', '${esc(r.name)}', ${r.remaining_lessons})">添加</button></td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
+}
+
+function addTempStudentToSession(studentId, studentNo, studentName, remainingLessons) {
+    const tbody = document.getElementById('ca-attendance-tbody');
+    // 检查是否已存在
+    const existing = tbody.querySelector('.ca-status-select[data-sid="' + studentId + '"]');
+    if (existing) {
+        showToast('该学员已在考勤列表中', 'error');
+        return;
+    }
+    const row = document.createElement('tr');
+    row.setAttribute('data-is-temp', '1');
+    row.innerHTML = `
+        <td>${esc(studentNo)}</td>
+        <td>${esc(studentName)} <span style="color:#e74c3c;font-size:11px;font-weight:bold;">临时</span></td>
+        <td><select class="ca-status-select" data-sid="${studentId}">
+            <option value="出勤" selected>出勤</option>
+            <option value="请假">请假</option>
+            <option value="缺勤">缺勤</option>
+        </select></td>
+        <td class="ca-deducted-display" data-sid="${studentId}" data-lesson-hours="1">扣1课时</td>
+    `;
+    tbody.appendChild(row);
+    // 绑定状态变更事件
+    const sel = row.querySelector('.ca-status-select');
+    sel.addEventListener('change', function() {
+        const display = row.querySelector('.ca-deducted-display');
+        if (display) {
+            const lh = parseInt(display.dataset.lessonHours) || 1;
+            display.textContent = this.value === '出勤' ? '扣' + lh + '课时' : '0';
+        }
+    });
+    closeModal('modal-temp-student');
+    showToast('已添加临时学员：' + studentName);
 }
 
 // ==================== 考勤（按课次） ====================
@@ -5324,7 +5419,7 @@ async function saveAttendanceSession() {
 }
 
 function addTempStudent() {
-    showToast('添加临时学员功能开发中');
+    showTempStudentModal();
 }
 
 function addMakeupStudent() {
