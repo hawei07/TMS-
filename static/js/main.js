@@ -5008,6 +5008,7 @@ async function showClassAttendanceModal(classId, scheduleId, sessionDate, titleS
                 <td>${esc(r.student_no)}</td>
                 <td>${esc(r.student_name)}${tempBadge}</td>
                 <td><select class="ca-status-select" data-sid="${r.student_id}">
+                    <option value="" ${currentStatus === '' || currentStatus === null ? 'selected' : ''} disabled>未选择</option>
                     <option value="出勤" ${currentStatus === '出勤' ? 'selected' : ''}>出勤</option>
                     <option value="请假" ${currentStatus === '请假' ? 'selected' : ''}>请假</option>
                     <option value="缺勤" ${currentStatus === '缺勤' ? 'selected' : ''}>缺勤</option>
@@ -5128,15 +5129,15 @@ function addTempStudentToSession(studentId, studentNo, studentName, remainingLes
             <td><span style="color:var(--color-text-secondary);">-</span></td>
             <td style="text-align:center;"><span style="font-weight:600;color:var(--color-success)">${remainingLessons}</span></td>
             <td>
-                <span class="att-deduct-stepper">
+                <span class="att-deduct-stepper disabled">
                     <button class="stepper-btn" onclick="attDeductChange(this, -1)">−</button>
-                    <span class="stepper-val" data-sid="${studentId}" data-lesson-hours="2" data-max="${remainingLessons}">2</span>
+                    <span class="stepper-val" data-sid="${studentId}" data-lesson-hours="2" data-max="${remainingLessons}">0</span>
                     <button class="stepper-btn" onclick="attDeductChange(this, 1)">+</button>
                 </span>
             </td>
             <td>
                 <span class="att-status-group" data-sid="${studentId}">
-                    <span class="att-status-chip active" data-val="出勤" onclick="attStatusToggle(this, '出勤')">出勤</span>
+                    <span class="att-status-chip" data-val="出勤" onclick="attStatusToggle(this, '出勤')">出勤</span>
                     <span class="att-status-chip" data-val="缺勤" onclick="attStatusToggle(this, '缺勤')">缺勤</span>
                 </span>
             </td>

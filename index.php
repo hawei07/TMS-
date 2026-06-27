@@ -2938,7 +2938,7 @@ $stmt->execute();
             if ($existing) {
                 $db->exec("UPDATE class_attendance SET is_temporary=1 WHERE id=" . intval($existing['id']));
             } else {
-                $db->exec("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, is_temporary) VALUES ($classId, $scheduleId, '$sessionDate', $studentId, '出勤', 0, 1)");
+                $db->exec("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, status, deducted_lessons, is_temporary) VALUES ($classId, $scheduleId, '$sessionDate', $studentId, '', 0, 1)");
             }
             json(['success' => true]);
             break;
@@ -2966,7 +2966,7 @@ $stmt->execute();
                         $isTempRecord = !$inClass;
                     }
                     $isTemp = $isTempRecord ? 1 : 0;
-                    if (!in_array($status, ['出勤', '请假', '缺勤'])) $status = '出勤';
+                    if (!in_array($status, ['', '出勤', '请假', '缺勤'])) $status = '出勤';
                     // 查询该学员在此班级课程的一级学科
                     $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject_level1, co.subject_level2, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
                     $courseId = intval($classRow['course_id'] ?? 0);
