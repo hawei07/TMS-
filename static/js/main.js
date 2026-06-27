@@ -5009,6 +5009,10 @@ async function saveClassAttendance() {
     const classId = parseInt(document.getElementById('ca-class-id').value);
     const scheduleId = parseInt(document.getElementById('ca-schedule-id').value);
     const sessionDate = document.getElementById('ca-session-date').value;
+    const now = new Date();
+    const curYM = now.getFullYear() * 100 + (now.getMonth() + 1);
+    const sesYM = parseInt(sessionDate.slice(0, 7).replace('-', ''));
+    if (sesYM < curYM) { showToast('不可修改之前月份的考勤', 'error'); return; }
     const records = [];
     document.querySelectorAll('.ca-status-select').forEach(sel => {
         records.push({
@@ -5277,6 +5281,10 @@ function attStatusToggle(el, status) {
 }
 
 async function saveAttendanceSession() {
+    const now = new Date();
+    const curYM = now.getFullYear() * 100 + (now.getMonth() + 1);
+    const sesYM = parseInt(currentAttendanceSessionDate.slice(0, 7).replace('-', ''));
+    if (sesYM < curYM) { showToast('不可修改之前月份的考勤', 'error'); return; }
     const records = [];
     const tbody = document.getElementById('as-attendance-tbody');
     const rows = tbody.querySelectorAll('tr');
