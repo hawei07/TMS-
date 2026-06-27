@@ -5229,6 +5229,9 @@ if (intval($countBt) === 0) {
             color: #fff;
             box-shadow: inset 0 1px 2px rgba(0,0,0,0.08);
         }
+        .att-status-chip.active[data-val="缺勤"] {
+            background: #e74c3c;
+        }
         .att-status-chip:not(.active):hover {
             background: var(--color-primary-bg);
             color: var(--color-primary);
