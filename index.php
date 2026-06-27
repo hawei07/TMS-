@@ -4740,7 +4740,7 @@ if (intval($countBt) === 0) {
     </div>
 
     <!-- 弹窗：添加临时学员 -->
-    <div class="modal-overlay" id="modal-temp-student">
+    <div class="modal-overlay" id="modal-temp-student" style="z-index:1100">
         <div class="modal" style="max-width:650px;width:94vw;">
             <div class="modal-header">
                 <h3>添加临时学员</h3>
