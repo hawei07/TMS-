@@ -5126,7 +5126,7 @@ function addTempStudentToSession(studentId, studentNo, studentName, remainingLes
             <td>
                 <span class="att-deduct-stepper">
                     <button class="stepper-btn" onclick="attDeductChange(this, -1)">−</button>
-                    <span class="stepper-val" data-sid="${studentId}" data-lesson-hours="1" data-max="${remainingLessons}">2</span>
+                    <span class="stepper-val" data-sid="${studentId}" data-lesson-hours="2" data-max="${remainingLessons}">2</span>
                     <button class="stepper-btn" onclick="attDeductChange(this, 1)">+</button>
                 </span>
             </td>
@@ -5161,7 +5161,7 @@ function addTempStudentToSession(studentId, studentNo, studentName, remainingLes
             <option value="请假">请假</option>
             <option value="缺勤">缺勤</option>
         </select></td>
-        <td class="ca-deducted-display" data-sid="${studentId}" data-lesson-hours="1">扣1课时</td>
+        <td class="ca-deducted-display" data-sid="${studentId}" data-lesson-hours="2">扣2课时</td>
     `;
     tbody.appendChild(row);
     // 绑定状态变更事件
