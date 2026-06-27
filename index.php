@@ -2722,13 +2722,21 @@ $stmt->execute();
             $whereStr = $where ? 'AND ' . implode(' AND ', $where) : '';
             $rows = [];
             if (count($allCourseIds) > 0) {
-                $sql = "SELECT DISTINCT s.id, s.student_no, s.name, s.phone
+                $sql = "SELECT s.id, s.student_no, s.name, s.phone,
+                    COALESCE((SELECT SUM(o.lesson_count - o.consumed_lessons)
+                        FROM orders o
+                        WHERE o.student_id = s.id
+                        AND o.course_id IN (" . implode(',', $allCourseIds) . ")
+                        AND o.campus = " . $db->quote($classCampus) . "), 0) AS remaining_hours
                     FROM students s
-                    INNER JOIN orders o ON s.id = o.student_id
                     WHERE s.id NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId)
-                    AND o.course_id IN (" . implode(',', $allCourseIds) . ")
-                    AND o.campus = " . $db->quote($classCampus) . "
-                    AND (o.lesson_count - o.consumed_lessons) > 0
+                    AND EXISTS (
+                        SELECT 1 FROM orders o2
+                        WHERE o2.student_id = s.id
+                        AND o2.course_id IN (" . implode(',', $allCourseIds) . ")
+                        AND o2.campus = " . $db->quote($classCampus) . "
+                        AND (o2.lesson_count - o2.consumed_lessons) > 0
+                    )
                     $whereStr
                     ORDER BY s.id DESC
                     LIMIT 50";
@@ -5099,10 +5107,11 @@ if (intval($countBt) === 0) {
                             <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">学号</th>
                             <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">姓名</th>
                             <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">手机号</th>
+                            <th style="text-align:left;padding:8px;border-bottom:1px solid #f0f0f0;color:#888;font-size:12px;">剩余课时</th>
                             <th width="60"></th>
                         </tr></thead>
                         <tbody id="available-students-tbody">
-                            <tr><td colspan="4" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                            <tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                         </tbody>
                     </table>
                 </div>
