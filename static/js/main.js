@@ -5058,11 +5058,14 @@ async function loadAttendanceSessions(page = 1) {
     const pagination = document.getElementById('pagination-attendance-sessions');
     const dateFrom = dateFromEl.value;
     const dateTo = dateToEl.value;
+    const classNameEl = document.getElementById('attendance-class-name');
+    const className = classNameEl ? classNameEl.value.trim() : '';
     tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">加载中...</td></tr>';
     try {
         let url = API_BASE + 'list_attendance_sessions&page=' + page + '&page_size=20';
         if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
         if (dateTo) url += '&date_to=' + encodeURIComponent(dateTo);
+        if (className) url += '&class_name=' + encodeURIComponent(className);
         const res = await fetch(url);
         const data = await res.json();
         const sessions = data.data || [];

@@ -310,6 +310,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS class_students (
     UNIQUE(class_id, student_id)
 )");
 try { $db->exec("ALTER TABLE class_students ADD COLUMN left_at VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE class_students ADD COLUMN joined_at VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 
 $db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -2652,7 +2653,7 @@ $stmt->execute();
             $studentId = intval($input['student_id'] ?? 0);
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
-            $stmt = $db->query("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId");
+            $stmt = $db->query("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId AND left_at = ''");
             $exists = $stmt->fetchColumn();
             if (intval($exists) > 0) json(['error' => '该学员已在此班级中']);
             // 检查一级学科下剩余课时
@@ -2683,13 +2684,14 @@ $stmt->execute();
                 }
             }
             $n = now();
-            // 如果此前已出班（left_at 非空），则清空 left_at 重新激活入班
+            $today = date('Y-m-d');
+            // 如果此前已出班（left_at 非空），则清空 left_at 重新激活入班；joined_at 同步为当天
             $existing = $db->query("SELECT id, left_at FROM class_students WHERE class_id = $classId AND student_id = $studentId")->fetch(PDO::FETCH_ASSOC);
             if ($existing) {
-                $db->exec("UPDATE class_students SET left_at = '', created_at = '$n' WHERE id = " . intval($existing['id']));
+                $db->exec("UPDATE class_students SET left_at = '', joined_at = '$today', created_at = '$n' WHERE id = " . intval($existing['id']));
                 json(['id' => intval($existing['id']), 'message' => '学员已重新加入班级']);
             } else {
-                $db->exec("INSERT INTO class_students (class_id, student_id, created_at) VALUES ($classId, $studentId, '$n')");
+                $db->exec("INSERT INTO class_students (class_id, student_id, joined_at, created_at) VALUES ($classId, $studentId, '$today', '$n')");
                 json(['id' => $db->lastInsertId(), 'message' => '学员已加入班级']);
             }
             break;
@@ -2797,7 +2799,7 @@ $stmt->execute();
             // 获取班级所有学员（含出班但已有考勤记录的学员）
             $students = [];
             $studentIdsInClass = [];
-            $stmt = $db->query("SELECT s.id, s.student_no, s.name, cs.id AS cs_id FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId AND (cs.left_at = '' OR cs.left_at >= '$sessionDate') ORDER BY cs.id ASC");
+            $stmt = $db->query("SELECT s.id, s.student_no, s.name, cs.id AS cs_id FROM class_students cs JOIN students s ON s.id = cs.student_id WHERE cs.class_id = $classId AND (cs.left_at = '' OR cs.left_at >= '$sessionDate') AND (cs.joined_at = '' OR cs.joined_at <= '$sessionDate') ORDER BY cs.id ASC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = true; }
             // 获取已有考勤记录
             $attMap = [];
@@ -3137,6 +3139,7 @@ $stmt->execute();
         case 'list_attendance_sessions':
             $dateFrom = trim($_GET['date_from'] ?? '');
             $dateTo = trim($_GET['date_to'] ?? '');
+            $className = trim($_GET['class_name'] ?? '');
             $page = max(1, intval($_GET['page'] ?? 1));
             $pageSize = intval($_GET['page_size'] ?? 20);
             $sessions = [];
@@ -3165,6 +3168,11 @@ $stmt->execute();
                         'end_time' => $ses['end'],
                     ];
                 }
+            }
+            if ($className) {
+                $sessions = array_values(array_filter($sessions, function($s) use ($className) {
+                    return mb_stripos($s['class_name'], $className) !== false;
+                }));
             }
             usort($sessions, function($a, $b) { return strcmp($a['session_date'], $b['session_date']); });
             $total = count($sessions);
@@ -3854,6 +3862,8 @@ if (intval($countBt) === 0) {
                                 <span style="margin:0 6px;color:#999;">至</span>
                                 <input type="date" id="attendance-date-to" style="width:140px;" onchange="loadAttendanceSessions()">
                                 <button class="btn btn-primary btn-sm" onclick="loadAttendanceSessions()">查询</button>
+                                <span style="margin-left:16px;font-size:13px;">班级：</span>
+                                <input type="text" id="attendance-class-name" placeholder="搜索班级名称" style="width:160px;" onkeydown="if(event.key==='Enter')loadAttendanceSessions()">
                             </div>
                         </div>
                         <div class="table-wrap">
