@@ -1990,6 +1990,8 @@ async function loadCourses() {
         const res = await fetch(url);
         const data = await res.json();
         if (data.error) { showToast(data.error, 'error'); return; }
+        // 确保校区数据已加载，以便 getCampusDisplayText 将 ID 转为名称
+        if (!campusCheckboxData.length) await loadCampusData();
         renderCourseTable(data.data || []);
         renderPagination('pagination-course', data.total, coursePage, 15, (p) => { coursePage = p; loadCourses(); });
         document.getElementById('stat-courses-inline').textContent = data.total;
@@ -2023,6 +2025,16 @@ async function loadCampusCheckboxes() {
     } catch (e) {
         container.innerHTML = '<span style="color:#e6a23c;">加载校区失败</span>';
     }
+}
+
+// 仅加载校区数据（不渲染 DOM），供列表页使用
+async function loadCampusData() {
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const orgs = (data && data.data && data.data.flat) ? data.data.flat : [];
+        campusCheckboxData = orgs.filter(o => o.type === '校区');
+    } catch (e) { /* 静默失败，表格中展示原始 ID */ }
 }
 
 function getCampusDisplayText(campusPermissionStr) {
