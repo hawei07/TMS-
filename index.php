@@ -2775,7 +2775,11 @@ $stmt->execute();
 
         case 'get_temp_student_candidates':
             $classId = intval($_GET['class_id'] ?? 0);
+            $scheduleId = intval($_GET['schedule_id'] ?? 0);
+            $sessionDate = trim($_GET['session_date'] ?? '');
             if ($classId <= 0) json(['error' => '班级ID无效']);
+            if ($scheduleId <= 0) json(['error' => '排课ID无效']);
+            if (!$sessionDate) json(['error' => '课次日期无效']);
             // 查询班级的 course_id、campus、subject_level1
             $classInfo = $db->query("SELECT c.course_id, c.campus, co.subject_level1 AS subject_raw FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
             if (!$classInfo) json(['data' => []]);
@@ -2797,14 +2801,22 @@ $stmt->execute();
             if (count($subjectCourseIds) === 0) json(['data' => []]);
             $idsStr = implode(',', $subjectCourseIds);
             $quotedCampus = $db->quote($classCampus);
-            // 查询有剩余课时且不在该班级的学员
+            // 查询已在当前课次考勤中的学员ID（含临时学员），一并排除
+            $sessionStudentIds = [];
+            $ssRes = $db->query("SELECT student_id FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date=" . $db->quote($sessionDate));
+            while ($s = $ssRes->fetch(PDO::FETCH_NUM)) $sessionStudentIds[] = $s[0];
+            // 查询有剩余课时且不在该班级、不在当前课次的学员
+            $excludeClause = "AND s.id NOT IN (SELECT cs.student_id FROM class_students cs WHERE cs.class_id = $classId AND cs.left_at = '')";
+            if (count($sessionStudentIds) > 0) {
+                $excludeClause .= " AND s.id NOT IN (" . implode(',', $sessionStudentIds) . ")";
+            }
             $sql = "SELECT s.id, s.student_no, s.name, SUM(o.lesson_count - o.consumed_lessons) AS remaining
                 FROM students s
                 JOIN orders o ON o.student_id = s.id
                 WHERE o.course_id IN ($idsStr)
                   AND o.campus = $quotedCampus
                   AND o.lesson_count > o.consumed_lessons
-                  AND s.id NOT IN (SELECT cs.student_id FROM class_students cs WHERE cs.class_id = $classId AND cs.left_at = '')
+                  $excludeClause
                 GROUP BY s.id
                 HAVING remaining > 0
                 ORDER BY s.id ASC";
@@ -3226,6 +3238,8 @@ $stmt->execute();
                         'class_name' => $row['class_name'],
                         'campus' => $row['campus'],
                         'course_name' => $row['course_name'] ?: trim(($row['course_subject_level1'] ?? '') . ' ' . ($row['course_subject_level2'] ?? '')),
+                        'course_subject_level1' => $row['course_subject_level1'] ?? '',
+                        'course_subject_level2' => $row['course_subject_level2'] ?? '',
                         'teacher' => $row['teacher'],
                         'classroom' => $row['classroom'],
                         'session_date' => $d,
@@ -3935,7 +3949,7 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-attendance-sessions">
                                 <thead><tr>
-                                    <th width="110">上课日期</th><th>星期</th><th>班级名称</th><th>课程</th><th width="100">上课时间</th><th>上课老师</th><th>教室</th><th>校区</th><th width="70">状态</th><th width="80">操作</th>
+                                    <th width="110">上课日期</th><th>星期</th><th>班级名称</th><th>课程</th><th>一级学科</th><th>二级学科</th><th width="100">上课时间</th><th>上课老师</th><th>教室</th><th>校区</th><th width="70">状态</th><th width="80">操作</th>
                                 </tr></thead>
                                 <tbody></tbody>
                             </table>

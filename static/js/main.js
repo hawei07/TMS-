@@ -5073,12 +5073,14 @@ async function saveClassAttendance() {
 
 async function showTempStudentModal() {
     const classId = parseInt(document.getElementById('ca-class-id')?.value) || currentAttendanceClassId;
+    const scheduleId = parseInt(document.getElementById('ca-schedule-id')?.value) || currentAttendanceScheduleId;
+    const sessionDate = document.getElementById('ca-session-date')?.value || currentAttendanceSessionDate;
     if (!classId) { showToast('班级ID无效', 'error'); return; }
     openModal('modal-temp-student');
     const tbody = document.getElementById('temp-student-tbody');
     tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr>';
     try {
-        const res = await fetch(API_BASE + 'get_temp_student_candidates&class_id=' + classId);
+        const res = await fetch(API_BASE + 'get_temp_student_candidates&class_id=' + classId + '&schedule_id=' + scheduleId + '&session_date=' + encodeURIComponent(sessionDate));
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
@@ -5155,7 +5157,7 @@ async function loadAttendanceSessions(page = 1) {
     const dateTo = dateToEl.value;
     const classNameEl = document.getElementById('attendance-class-name');
     const className = classNameEl ? classNameEl.value.trim() : '';
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">加载中...</td></tr>';
     try {
         let url = API_BASE + 'list_attendance_sessions&page=' + page + '&page_size=20';
         if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
@@ -5166,7 +5168,7 @@ async function loadAttendanceSessions(page = 1) {
         const sessions = data.data || [];
         const total = data.total || 0;
         if (sessions.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无排课记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无排课记录</td></tr>';
             pagination.innerHTML = '';
             return;
         }
@@ -5191,6 +5193,8 @@ async function loadAttendanceSessions(page = 1) {
                 <td>${s.day_of_week}</td>
                 <td>${esc(s.class_name)}</td>
                 <td>${esc(s.course_name)}</td>
+                <td>${esc(s.course_subject_level1 || '-')}</td>
+                <td>${esc(s.course_subject_level2 || '-')}</td>
                 <td>${timeStr}</td>
                 <td>${esc(s.teacher)}</td>
                 <td>${esc(s.classroom)}</td>
@@ -5207,7 +5211,7 @@ async function loadAttendanceSessions(page = 1) {
               + '<button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadAttendanceSessions(' + (page + 1) + ')"') + '>下一页</button>'
             : '';
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
