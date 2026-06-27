@@ -1100,4 +1100,25 @@ function isSmallPackage(val) {
 - `index.php`：attendance_records 表 campus/class_name/subject_level1/subject_level2/teacher/class_time/deducted_order_id/deducted_lessons/consumed_amount 字段、`save_class_attendance` / `add_attendance` / `update_attendance` / `list_attendance` / `list_all_attendance` API
 - `static/js/main.js`：`loadAttendance` / `loadStudentConsumption` / `saveAttendance` / `editAttendance` / `showAttendanceModal` / `loadAttendanceClassSelect` / `onClassChangeInAttendance`
 
+### 6.23 出班机制（left_at 字段）
+
+学员从班级出班时，`class_students.left_at` 字段被设置为出班时间戳（如 `'2026-06-27'`），在班状态则为空串 `''`。系统多个查询点需同步过滤 `left_at`：
+
+| 查询点 | API / 函数 | 过滤规则 |
+|--------|-----------|----------|
+| 班级详情学员列表 | `list_class_students` | `WHERE cs.left_at = ''`（仅展示在班学员） |
+| 添加学员弹窗 | `get_available_students` | 子查询 `NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId AND left_at = '')`（仅排除在班学员，已出班的可重新添加） |
+
+---
+
+## 七、更新日志
+
+### 2026-06-27
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| feat | **考勤列表增加班级名称搜索**：`list_attendance_sessions` API 新增 `class_name` 模糊搜索参数（`array_filter` + `stripos`）；前端工具栏增加 `#attendance-class-name` 输入框，支持回车搜索；JS `loadAttendanceSessions` 读取输入值拼入 URL | `index.php`、`index.html`、`static/js/main.js` | b97d763、666bdb5 |
+| fix | **班级详情学员列表过滤出班学员**：`list_class_students` 查询未过滤 `left_at`，导致已出班学员仍显示。修复：WHERE 增加 `AND cs.left_at = ''`，SELECT 增加 `cs.left_at` 字段 | `index.php` | 9b7ee22 |
+| fix | **添加学员弹窗过滤出班学员**：`get_available_students` 的 `NOT IN` 子查询仅按 `class_id` 过滤，导致已出班学员无法被重新添加。修复：子查询改为 `WHERE class_id=$classId AND left_at = ''`，使仅当前在班的学员被排除 | `index.php` | b32982f |
+
 *（内容由AI生成，仅供参考）*
