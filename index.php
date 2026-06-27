@@ -2725,7 +2725,7 @@ $stmt->execute();
                 $sql = "SELECT DISTINCT s.id, s.student_no, s.name, s.phone
                     FROM students s
                     INNER JOIN orders o ON s.id = o.student_id
-                    WHERE s.id NOT IN (SELECT student_id FROM class_students)
+                    WHERE s.id NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId)
                     AND o.course_id IN (" . implode(',', $allCourseIds) . ")
                     AND o.campus = " . $db->quote($classCampus) . "
                     AND (o.lesson_count - o.consumed_lessons) > 0
