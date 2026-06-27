@@ -2707,7 +2707,7 @@ $stmt->execute();
             $rows = [];
             $sql = "SELECT s.id, s.student_no, s.name, s.phone, s.source
                 FROM students s
-                WHERE s.id NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId)
+                WHERE s.id NOT IN (SELECT student_id FROM class_students)
                 $whereStr
                 ORDER BY s.id DESC
                 LIMIT 50";
