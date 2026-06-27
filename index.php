@@ -516,7 +516,7 @@ function computeSessions($schedule) {
         $weekdaySet = array_flip(array_filter(explode(',', $weekdaysStr), 'strlen'));
         foreach ($period as $date) {
             $dow = $date->format('N');
-            $dowKey = ($dow == 7) ? '0' : (string)$dow;
+            $dowKey = (string)$dow;
             if (!isset($weekdaySet[$dowKey])) continue;
             if (isset($timeSlots[$dowKey]) && is_array($timeSlots[$dowKey])) {
                 $sessions[] = [
@@ -2978,7 +2978,7 @@ $stmt->execute();
                     $classTime = '';
                     $timeSlots = json_decode($schedRow['time_slots'] ?? '{}', true) ?: [];
                     $dow = date('N', strtotime($sessionDate));
-                    $dowKey = ($dow == 7) ? '0' : (string)$dow;
+                    $dowKey = (string)$dow;
                     $slot = $timeSlots[$dowKey] ?? [];
                     if (!empty($slot['start']) && !empty($slot['end'])) {
                         $classTime = $slot['start'] . '-' . $slot['end'];
