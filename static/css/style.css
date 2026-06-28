@@ -3045,3 +3045,122 @@ span.flatpickr-weekday {
 #panel-courses .action-button-group {
     grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 }
+
+
+/* ==================== Section Tabs (工作记录) ==================== */
+.section-tabs {
+    display: flex;
+    border-bottom: 1px solid #e0e0e0;
+    padding: 0 20px;
+    background: #fff;
+}
+.sec-tab {
+    padding: 10px 20px;
+    border: none;
+    background: none;
+    cursor: pointer;
+    font-size: 14px;
+    color: #666;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: all 0.2s;
+}
+.sec-tab:hover { color: #333; }
+.sec-tab.active {
+    color: #5a6bcf;
+    border-bottom-color: #5a6bcf;
+    font-weight: 600;
+}
+.section-tab-content .sec-panel {
+    display: none;
+}
+.section-tab-content .sec-panel.active {
+    display: block;
+}
+
+/* ========== 退费管理样式 ========== */
+
+/* 状态标签 */
+.tag {
+    display: inline-block;
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-size: 11px;
+    font-weight: 500;
+    line-height: 18px;
+}
+.tag-normal { background: #e8f5e9; color: #2e7d32; }
+.tag-refunded { background: #ffeaea; color: #c0392b; }
+.tag-refund-pending { background: #fff8e1; color: #f57f17; }
+.tag-orange { background: #fff3e0; color: #e65100; }
+.tag-blue { background: #e3f2fd; color: #1565c0; }
+.tag-green { background: #e8f5e9; color: #2e7d32; }
+.tag-red { background: #ffeaea; color: #c0392b; }
+
+/* 审批步骤条 */
+.approval-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 16px 0;
+}
+.approval-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 6px;
+    position: relative;
+    flex: 0 0 auto;
+    min-width: 70px;
+}
+.approval-step span {
+    font-size: 12px;
+    color: #999;
+    white-space: nowrap;
+}
+.approval-step-dot {
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: #ddd;
+    border: 2px solid #ddd;
+}
+.approval-step-current .approval-step-dot {
+    background: #fff;
+    border-color: #7C3AED;
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.2);
+}
+.approval-step-current span {
+    color: #7C3AED;
+    font-weight: 600;
+}
+.approval-step-done .approval-step-dot {
+    background: #7C3AED;
+    border-color: #7C3AED;
+}
+.approval-step-done span {
+    color: #7C3AED;
+}
+.approval-step-rejected .approval-step-dot {
+    background: #fff;
+    border-color: #e53e3e;
+}
+.approval-step-rejected span {
+    color: #e53e3e;
+}
+.approval-step-line {
+    flex: 1;
+    height: 2px;
+    background: #ddd;
+    min-width: 40px;
+    max-width: 80px;
+    margin: 0;
+    align-self: flex-start;
+    margin-top: 7px;
+}
+
+/* 弹窗中 form-row 辅助 */
+.form-row {
+    display: flex;
+    gap: 12px;
+}

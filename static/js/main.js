@@ -90,6 +90,7 @@ function refreshPanel(panelId) {
         case 'panel-students': loadStudents(); break;
         case 'panel-orders': loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
+        case 'panel-work-records': initWorkRecordTabs(); loadRefundRecords(); break;
     }
 }
 
@@ -464,6 +465,7 @@ function debounceSearch(tab) {
         else if (tab === 'course') { coursePage = 1; loadCourses(); }
         else if (tab === 'student') { studentPage = 1; loadStudents(); }
         else if (tab === 'order') { orderPage = 1; loadOrders(); }
+        else if (tab === 'refund') { refundPage = 1; loadRefundRecords(); }
         else if (tab === 'classroom') { loadClassrooms(); }
     }, 400);
 }
@@ -4101,9 +4103,33 @@ function renderStudentCoursesTable(rows) {
     const tableDiv = document.getElementById('student-courses-table');
     if (!tableDiv) return;
     tableDiv.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th><th>子订单号</th>
+        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
     </tr></thead><tbody>
-    ${rows.map(r => `<tr>
+    ${rows.map(r => {
+        const refundStatus = (r.refund_status || '正常');
+        let refundStatusHtml = '';
+        if (refundStatus === '已退费') {
+            refundStatusHtml = '<span class="tag tag-refunded">已退费</span>';
+        } else if (refundStatus === '退费申请中') {
+            refundStatusHtml = '<span class="tag tag-refund-pending">退费申请中</span>';
+        } else {
+            refundStatusHtml = '<span class="tag tag-normal">正常</span>';
+        }
+        const lc = parseInt(r.lesson_count) || 0;
+        const cl = parseInt(r.consumed_lessons) || 0;
+        const hasRemaining = lc > cl && refundStatus === '正常';
+        // 退费按钮
+        let optHtml = '';
+        if (hasRemaining) {
+            optHtml = `<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+        } else if (refundStatus === '退费申请中') {
+            optHtml = '<span style="color:#999;font-size:12px;">审批中</span>';
+        } else if (refundStatus === '已退费') {
+            optHtml = '<span style="color:#999;font-size:12px;">已退费</span>';
+        } else if (lc <= cl) {
+            optHtml = '<span style="color:#999;font-size:12px;">无剩余课时</span>';
+        }
+        return `<tr>
         <td>${esc(r.name)}</td>
         <td>${esc(r.campus || '-')}</td>
         <td>${esc(r.subject_level1) || '-'}</td><td>${esc(r.subject_level2) || '-'}</td>
@@ -4117,7 +4143,10 @@ function renderStudentCoursesTable(rows) {
         <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
         <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
-    </tr>`).join('')}
+        <td>${refundStatusHtml}</td>
+        <td>${optHtml}</td>
+    </tr>`;
+    }).join('')}
     </tbody></table></div>`;
 }
 
@@ -6148,5 +6177,286 @@ async function loadAbsenceRecords(page = 1) {
             (page < totalPages ? '<button class="btn btn-sm btn-outline" onclick="loadAbsenceRecords(' + (page + 1) + ')">下一页</button>' : '');
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
+}
+
+
+// ==================== 退费管理 ====================
+
+// 工作记录标签页初始化
+function initWorkRecordTabs() {
+    document.querySelectorAll('#panel-work-records .sec-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('#panel-work-records .sec-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('#panel-work-records .sec-panel').forEach(p => p.classList.remove('active'));
+            this.classList.add('active');
+            const targetId = this.dataset.tab;
+            const target = document.getElementById(targetId);
+            if (target) target.classList.add('active');
+            if (targetId === 'tab-refund-records') {
+                refundPage = 1;
+                loadRefundRecords();
+            }
+        });
+    });
+}
+
+// ==================== 退费申请（学员详情页） ====================
+let refundApplyRemainingAmount = 0;
+
+async function showRefundApplyModal(orderId) {
+    // 从当前学员课程数据中找到目标订单
+    const orderRow = studentCoursesAllRows.find(r => r.order_id == orderId);
+    if (!orderRow) { showToast('未找到订单信息', 'error'); return; }
+    
+    const cl = parseInt(orderRow.consumed_lessons) || 0;
+    const lc = parseInt(orderRow.lesson_count) || 0;
+    const ap = parseFloat(orderRow.actual_price) || 0;
+    const remainingLessons = lc - cl;
+    const remainingAmount = lc > 0 ? (ap * remainingLessons / lc) : 0;
+    refundApplyRemainingAmount = remainingAmount;
+
+    document.getElementById('refund-apply-order-id').value = orderId;
+    document.getElementById('refund-auto-campus').textContent = orderRow.campus || '-';
+    document.getElementById('refund-auto-course').textContent = orderRow.name || '-';
+    document.getElementById('refund-auto-total-lessons').textContent = lc;
+    document.getElementById('refund-auto-total-amount').textContent = '¥' + ap.toFixed(2);
+    document.getElementById('refund-auto-consumed-lessons').textContent = cl;
+    document.getElementById('refund-auto-consumed-amount').textContent = '¥' + (parseFloat(orderRow.consumed_amount || 0)).toFixed(2);
+    document.getElementById('refund-auto-remaining-lessons').textContent = remainingLessons;
+    document.getElementById('refund-auto-remaining-amount').textContent = '¥' + remainingAmount.toFixed(2);
+
+    document.getElementById('refund-custom-deduction').value = '0';
+    document.getElementById('refund-actual-amount-display').textContent = '¥' + remainingAmount.toFixed(2);
+    document.getElementById('refund-bank-name').value = '';
+    document.getElementById('refund-bank-account').value = '';
+    document.getElementById('refund-account-holder').value = '';
+    document.getElementById('refund-apply-reason').value = '';
+
+    openModal('modal-refund-apply');
+}
+
+function calcActualRefund() {
+    const deduction = parseFloat(document.getElementById('refund-custom-deduction').value) || 0;
+    const actual = Math.max(0, refundApplyRemainingAmount - deduction);
+    document.getElementById('refund-actual-amount-display').textContent = '¥' + actual.toFixed(2);
+}
+
+async function submitRefundApply() {
+    const orderId = parseInt(document.getElementById('refund-apply-order-id').value) || 0;
+    if (!orderId) { showToast('订单信息错误', 'error'); return; }
+    const customDeduction = parseFloat(document.getElementById('refund-custom-deduction').value) || 0;
+    const bankName = document.getElementById('refund-bank-name').value.trim();
+    const bankAccount = document.getElementById('refund-bank-account').value.trim();
+    const accountHolder = document.getElementById('refund-account-holder').value.trim();
+    const refundReason = document.getElementById('refund-apply-reason').value.trim();
+
+    try {
+        const res = await fetch(API_BASE + 'submit_refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                order_id: orderId,
+                custom_deduction: customDeduction,
+                bank_name: bankName,
+                bank_account: bankAccount,
+                account_holder: accountHolder,
+                refund_reason: refundReason
+            })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast('退费申请已提交');
+        closeModal('modal-refund-apply');
+        // 刷新学员课程列表
+        loadStudentCourses(currentViewStudentId);
+    } catch (e) {
+        showToast('网络错误，请重试', 'error');
+    }
+}
+
+// ==================== 退费记录列表（工作记录面板） ====================
+async function loadRefundRecords() {
+    const keyword = document.getElementById('search-refund')?.value || '';
+    const dateFrom = document.getElementById('filter-refund-date-from')?.value || '';
+    const dateTo = document.getElementById('filter-refund-date-to')?.value || '';
+    const status = document.getElementById('filter-refund-status')?.value || '';
+    const params = new URLSearchParams({ page: refundPage, page_size: 15 });
+    if (keyword) params.set('keyword', keyword);
+    if (dateFrom) params.set('date_from', dateFrom);
+    if (dateTo) params.set('date_to', dateTo);
+    if (status) params.set('status', status);
+    const res = await fetch(API_BASE + 'list_refund_records&' + params);
+    const data = await res.json();
+    renderRefundRecordTable(data.data);
+    renderPagination('pagination-refund', data.total, refundPage, 15, (p) => { refundPage = p; loadRefundRecords(); });
+}
+
+function renderRefundRecordTable(rows) {
+    const tbody = document.querySelector('#table-refund-records tbody');
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const ttl = parseInt(r.total_lessons) || 0;
+        const ta = parseFloat(r.total_amount) || 0;
+        const cl = parseInt(r.consumed_lessons) || 0;
+        const rl = parseInt(r.remaining_lessons) || 0;
+        const ar = parseFloat(r.actual_refund) || 0;
+        const status = r.status || '';
+        let statusHtml = '';
+        if (status === '待审批') statusHtml = '<span class="tag tag-orange">待审批</span>';
+        else if (status === '一级审批通过') statusHtml = '<span class="tag tag-blue">一级审批通过</span>';
+        else if (status === '二级审批通过') statusHtml = '<span class="tag tag-blue">二级审批通过</span>';
+        else if (status === '已退费') statusHtml = '<span class="tag tag-green">已退费</span>';
+        else if (status === '审批驳回') statusHtml = '<span class="tag tag-red">审批驳回</span>';
+        else statusHtml = status;
+        // 操作按钮
+        let optHtml = '';
+        if (status === '待审批' || status === '一级审批通过' || status === '二级审批通过') {
+            optHtml = `<button class="btn btn-primary btn-sm" onclick="showApproveModal(${r.id})" style="font-size:11px;padding:2px 8px;">审批</button>`;
+        } else {
+            optHtml = `<button class="btn btn-outline btn-sm" onclick="showApproveModal(${r.id})" style="font-size:11px;padding:2px 8px;">查看详情</button>`;
+        }
+        const created = r.created_at ? r.created_at.slice(0, 16) : '';
+        return `<tr>
+            <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
+            <td>${esc(r.student_name || '')}</td>
+            <td>${esc(r.course_name || '')}</td>
+            <td>${ttl}</td>
+            <td>${cl}</td>
+            <td>${rl}</td>
+            <td>¥${ta.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
+            <td>${statusHtml}</td>
+            <td>${created}</td>
+            <td>${optHtml}</td>
+        </tr>`;
+    }).join('');
+}
+
+// ==================== 退费审批弹窗 ====================
+let currentApproveId = null;
+
+async function showApproveModal(id) {
+    currentApproveId = id;
+    openModal('modal-refund-approve');
+    document.getElementById('refund-approve-content').innerHTML = '<div style="text-align:center;color:#999;padding:40px;">加载中...</div>';
+    document.getElementById('refund-approve-footer').style.display = 'none';
+    try {
+        const res = await fetch(API_BASE + 'get_refund_record&id=' + id);
+        const data = await res.json();
+        if (data.error) { showToast(data.error, 'error'); closeModal('modal-refund-approve'); return; }
+        const rr = data.data;
+        const status = rr.status || '';
+        const canApprove = (status === '待审批' || status === '一级审批通过' || status === '二级审批通过');
+        // 审批进度
+        const steps = ['一级审批', '二级审批', '财务确认'];
+        let currentStepIdx = 0;
+        if (rr.approval_stage === '二级审批') currentStepIdx = 1;
+        else if (rr.approval_stage === '财务确认') currentStepIdx = 2;
+        else if (status === '已退费') currentStepIdx = 3;
+        else if (status === '审批驳回') currentStepIdx = -1;
+
+        let stepsHtml = '<div class="approval-steps">';
+        steps.forEach((s, i) => {
+            let cls = 'approval-step';
+            if (status === '审批驳回') cls += ' approval-step-rejected';
+            else if (i < currentStepIdx || status === '已退费') cls += ' approval-step-done';
+            else if (i === currentStepIdx) cls += ' approval-step-current';
+            stepsHtml += `<div class="${cls}"><div class="approval-step-dot"></div><span>${s}</span></div>`;
+            if (i < 2) stepsHtml += '<div class="approval-step-line"></div>';
+        });
+        stepsHtml += '</div>';
+
+        if (status === '审批驳回') {
+            stepsHtml += `<div style="margin-top:12px;padding:8px 12px;background:#fff5f5;border-left:3px solid #e53e3e;color:#c53030;font-size:13px;">驳回原因：${esc(rr.reject_reason || '无')}</div>`;
+        }
+
+        let approverInfo = '';
+        if (rr.approver1) approverInfo += `<div style="font-size:12px;color:#888;">一级审批人：${esc(rr.approver1)}</div>`;
+        if (rr.approver2) approverInfo += `<div style="font-size:12px;color:#888;">二级审批人：${esc(rr.approver2)}</div>`;
+        if (rr.approver3) approverInfo += `<div style="font-size:12px;color:#888;">财务确认人：${esc(rr.approver3)}</div>`;
+
+        document.getElementById('refund-approve-content').innerHTML = `
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;margin-bottom:16px;">
+                <div><span style="color:#888;">学员：</span>${esc(rr.student_name || '')}</div>
+                <div><span style="color:#888;">校区：</span>${esc(rr.campus || '-')}</div>
+                <div><span style="color:#888;">课程：</span>${esc(rr.course_name || '')}</div>
+                <div><span style="color:#888;">订单号：</span><span style="font-family:monospace;">${esc(rr.order_no || '')}</span></div>
+                <div><span style="color:#888;">报读课时：</span>${parseInt(rr.total_lessons) || 0}</div>
+                <div><span style="color:#888;">报读金额：</span>¥${parseFloat(rr.total_amount || 0).toFixed(2)}</div>
+                <div><span style="color:#888;">消耗课时：</span>${parseInt(rr.consumed_lessons) || 0}</div>
+                <div><span style="color:#888;">消耗金额：</span>¥${parseFloat(rr.consumed_amount || 0).toFixed(2)}</div>
+                <div><span style="color:#888;">剩余可退课时：</span><b>${parseInt(rr.remaining_lessons) || 0}</b></div>
+                <div><span style="color:#888;">剩余可退金额：</span><b>¥${parseFloat(rr.remaining_amount || 0).toFixed(2)}</b></div>
+                <div><span style="color:#888;">自定义扣减：</span>¥${parseFloat(rr.custom_deduction || 0).toFixed(2)}</div>
+                <div><span style="color:#888;font-weight:bold;">实退金额：</span><b style="color:#e74c3c;">¥${parseFloat(rr.actual_refund || 0).toFixed(2)}</b></div>
+                <div><span style="color:#888;">转账银行：</span>${esc(rr.bank_name || '-')}</div>
+                <div><span style="color:#888;">银行卡号：</span>${esc(rr.bank_account || '-')}</div>
+                <div><span style="color:#888;">开户人：</span>${esc(rr.account_holder || '-')}</div>
+                <div><span style="color:#888;">退费原因：</span>${esc(rr.refund_reason || '-')}</div>
+            </div>
+            <div style="border-top:1px solid #e0e0e0;padding-top:16px;">
+                <h5 style="margin:0 0 12px;font-size:14px;color:#666;">审批进度</h5>
+                ${stepsHtml}
+                ${approverInfo ? '<div style="margin-top:8px;">' + approverInfo + '</div>' : ''}
+            </div>
+            ${canApprove ? `<div style="margin-top:16px;border-top:1px solid #e0e0e0;padding-top:12px;">
+                <div class="form-group">
+                    <label>审批人</label>
+                    <input type="text" id="approve-approver-name" class="form-input" placeholder="请输入审批人姓名">
+                </div>
+                <div class="form-group" id="approve-reject-reason-group" style="display:none;">
+                    <label>驳回原因 <span style="color:red;">*</span></label>
+                    <textarea id="approve-reject-reason" class="form-input" rows="2" placeholder="请输入驳回原因"></textarea>
+                </div>
+            </div>` : ''}
+        `;
+        if (canApprove) {
+            document.getElementById('refund-approve-footer').style.display = 'flex';
+            document.getElementById('btn-refund-reject').style.display = 'inline-block';
+            document.getElementById('btn-refund-approve').style.display = 'inline-block';
+        } else {
+            document.getElementById('refund-approve-footer').style.display = 'flex';
+            document.getElementById('btn-refund-reject').style.display = 'none';
+            document.getElementById('btn-refund-approve').style.display = 'none';
+        }
+    } catch (e) {
+        document.getElementById('refund-approve-content').innerHTML = '<div style="text-align:center;color:#e74c3c;padding:40px;">加载失败</div>';
+    }
+}
+
+async function submitApproval(action) {
+    const approver = document.getElementById('approve-approver-name')?.value.trim() || '';
+    const rejectReason = document.getElementById('approve-reject-reason')?.value.trim() || '';
+    if (action === 'reject') {
+        if (!rejectReason) {
+            const group = document.getElementById('approve-reject-reason-group');
+            if (group) group.style.display = 'block';
+            showToast('请输入驳回原因', 'error');
+            return;
+        }
+    }
+    try {
+        const res = await fetch(API_BASE + 'approve_refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                id: currentApproveId,
+                action: action,
+                approver: approver,
+                reject_reason: rejectReason
+            })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast(data.message || '操作成功');
+        closeModal('modal-refund-approve');
+        loadRefundRecords();
+        if (currentViewStudentId) loadStudentCourses(currentViewStudentId);
+    } catch (e) {
+        showToast('网络错误，请重试', 'error');
     }
 }
