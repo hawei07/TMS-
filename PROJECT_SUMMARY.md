@@ -381,6 +381,8 @@ market-system-php/
 | cash_amount | DECIMAL(10,2) | 0 | **现金支付金额** |
 | meituan_amount | DECIMAL(10,2) | 0 | **美团支付金额** |
 | status | VARCHAR(500) | '已报名' | 订单状态 |
+| pay_status | VARCHAR(20) | '待支付' | **支付状态**：已支付 / 待支付 / 已取消 |
+| is_voided | VARCHAR(5) | '否' | **是否作废**：是 / 否 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.20 attendance_records（上课记录表）
@@ -633,7 +635,7 @@ subjects                  courses              ┌──────────
 | `update_student` | POST | 编辑学员信息 |
 | `delete_student` | POST | 删除学员 |
 | `create_student_from_resource` | POST | 从资源创建学员（按手机号查重，存在则复用，不存在则新建，返回 student_id） |
-| `get_student_courses` | GET | 获取学员已报读课程列表（基于 orders 表关联查询） |
+| `get_student_courses` | GET | 获取学员已报读课程列表（基于 orders 表关联查询，过滤 is_voided='否' 的订单，含子订单号 order_no） |
 
 ### 4.13 班级管理（4 个）
 
@@ -663,16 +665,17 @@ subjects                  courses              ┌──────────
 | `update_classroom` | POST | 编辑教室（含自名排除重复校验） |
 | `delete_classroom` | POST | 删除教室 |
 
-### 4.16 报名 & 订单（6 个）
+### 4.16 报名 & 订单（7 个）
 
 | action | 方法 | 说明 |
 |--------|------|------|
 | `get_course_plans` | GET | 按 course_id 查询课程的所有价格方案及其报价单明细（含 plan_type） |
-| `pay_enroll` | POST | **核心报名支付**：按方案下所有报价单逐条生成子订单（自动生成 order_no 和 parent_order_no），支持现金+美团双支付方式，服务端校验金额合计=总额，采用"逐个填满"分配策略。从价格方案继承 plan_type 写入所有子订单的 order_type，若课程 small_package 非空则强制为"小课包" |
-| `enroll_course` | POST | 学员直接报名课程（单条订单） |
+| `pay_enroll` | POST | **核心报名支付**：按方案下所有报价单逐条生成子订单（自动生成 order_no 和 parent_order_no，含 pay_status='待支付'、is_voided='否'），支持现金+美团双支付方式，服务端校验金额合计=总额，采用"逐个填满"分配策略。从价格方案继承 plan_type 写入所有子订单的 order_type，若课程 small_package 非空则强制为"小课包" |
+| `enroll_course` | POST | 学员直接报名课程（单条订单，含 pay_status='待支付'、is_voided='否'） |
 | `enroll_from_resource` | POST | 从资源入口报名：将资源转为学员并生成订单（保留兼容） |
 | `create_student_from_resource` | POST | 从资源创建学员记录（供 panel-enroll 前端调用） |
-| `list_orders` | GET | 订单列表（15 列：订单号/父订单号/学号/编号/学员姓名/课程名称/价格方案/报价单名称/订单类型/课时数量/订单金额/现金/美团/状态/报名时间），含 `payment_summary` 汇总和 order_type 字段，支持 keyword 搜索 |
+| `list_orders` | GET | 订单列表（17 列：订单号/父订单号/学号/编号/学员姓名/课程名称/价格方案/报价单名称/订单类型/课时数量/订单金额/现金/美团/支付状态/是否作废/状态/报名时间），含 `payment_summary` 汇总和 order_type 字段，支持 keyword 搜索及 pay_status/is_voided 筛选 |
+| `void_order` | POST | **作废订单**：校验 consumed_lessons==0（无课耗），将 is_voided 设为'是'，作废后该订单对应报读课程从学员详情中消失 |
 
 ### 4.17 考勤 / 上课记录（4 个）
 
@@ -779,7 +782,7 @@ subjects                  courses              ┌──────────
 | **课程管理** | 课程 CRUD、价格方案、报价单、导出 | **价格方案**：每门课程可配置多个价格方案，每个方案包含多条报价单（课时数、单价、实际价格），支持设置方案类型（新报/续费/小课包）；**小课包**标记；**低幼龄**标记；**校区权限**控制字段 |
 | **学员管理** | 学员 CRUD、搜索、详情页（3 标签页） | 列表列：编号/学号/姓名/手机号/校区/已报课程数/所在班级/操作。校区取自该学员报过课程的订单去重拼接。学员详情页：标签页布局（报读课程 / 交易订单 / 上课记录），列表页提供**报名**按钮跳转 panel-enroll |
 | **班级管理** | 班级 CRUD、排课入口 | 班级列表表格（ID/名称/关联课程/班级类型/招生人数/授课课时/是否可试听/校区/备注/创建时间/操作-排课/编辑/删除）+ 搜索框 + 新增班级按钮；新增/编辑时授课课时必须为偶数（前端+后端双重校验） |
-| **交易订单** | 订单列表查看（15 列） | 列：订单号、父订单号、学号、编号、学员姓名、课程名称、价格方案、报价单名称、订单类型、课时数量、订单金额、现金、美团、状态、报名时间；订单类型列以三色标签展示（新报=蓝/续费=绿/小课包=橙）；列表顶部**支付方式汇总卡片**（现金/美团/总计）；支持 keyword 搜索 |
+| **交易订单** | 订单列表查看（17 列） | 列：订单号、父订单号、学号、编号、学员姓名、课程名称、价格方案、报价单名称、订单类型、课时数量、订单金额、现金、美团、支付状态、是否作废、状态、报名时间；支付状态列以三色标签展示（已支付=绿/待支付=橙/已取消=灰），是否作废列（是=红/否=-）；订单类型列以三色标签展示（新报=蓝/续费=绿/小课包=橙）；列表顶部筛选栏含支付状态和是否作废下拉筛选；列表顶部**支付方式汇总卡片**（现金/美团/总计）；支持 keyword 搜索 |
 | **报名详情** | 独立报名流程页面（panel-enroll） | 展示学员/资源姓名+手机号（只读）→ 选择课程 → 展示价格方案卡片（含类型标签：新报=蓝/续费=绿/小课包=橙）→ 选中方案展示报价单明细表格 + 合计金额 → **支付方式区域**（现金+美团输入框，实时校验金额匹配）→ 确认支付 → 逐条生成子订单（逐个填满分配策略，所有子订单继承方案 plan_type）+ 父订单 → 返回来源页 |
 | **学科设置** | 两级学科树增删改、批量删除 | 一级学科 → 二级学科，支持拖拽排序 |
 | **教室管理** | 教室 CRUD | 教室列表表格（名称/容纳人数/所属校区/备注/创建时间/操作-编辑/删除）+ 搜索框 + 新增教室按钮；名称唯一校验，编辑时排除自身重复 |
@@ -885,12 +888,18 @@ subjects                  courses              ┌──────────
 - 姓名+手机号双重唯一性校验
 - 模板为前端动态生成的 CSV（含示例数据行）
 
+### 6.6 订单作废规则
+
+| 场景 | 规则 |
+|------|------|
+| 作废条件 | 仅当订单 consumed_lessons==0（未产生课耗）时可作废 |
+| 作废效果 | 将 orders.is_voided 设为'是'，该订单对应报读课程从学员详情中消失 |
+| 历史数据处理 | 历史美团/现金订单自动标记为 pay_status='已支付' |
+| 支付状态流转 | 新增订单默认 pay_status='待支付'，支付后更新为'已支付'，取消后更新为'已取消' |
+| 前端筛选 | 订单列表支持 pay_status（已支付/待支付/已取消）和 is_voided（是/否）筛选，学员详情报读课程仅显示 is_voided='否' 的有效订单 |
 ### 6.5 导出
 
 **资源导出**：
-- 文件名：`资源导出_YYYYmmdd_HHMMSS.csv`
-- UTF-8 BOM 编码，Excel 直接打开不乱码
-- 表头：姓名、电话、来源渠道、来源详情、意向等级、性别、出生日期、跟进状态、归属人、创建时间、更新时间（共 11 列）
 - 根据当前 `pool_type` 和筛选条件导出
 
 **员工导出**：
@@ -1184,10 +1193,10 @@ function isSmallPackage(val) {
 
 | 类型 | 描述 | 涉及文件 | 提交 |
 |------|------|----------|------|
-| fix | **get_student 汇总 SQL 中 total_price 改为 actual_price**：学员详情页收费汇总的 SQL 错误使用了 `total_price` 字段（仅含学费），修正为 `actual_price`（含教材费等附加项），使汇总金额与订单实际金额一致 | `index.php` | 110a962 |
-| feat | **学员详情-报读课程增加筛选项**：报读课程标签新增一级学科、二级学科、课程名称三个下拉筛选框；二级学科根据一级学科动态联动（`window._subject2Map`）；筛选联动 `loadStudentOrders` | `static/js/main.js` | f604f43 |
-| fix | **课耗明细弹窗表格列对齐与内容截断修复**：表格布局从 `auto` 改为 `fixed`，列宽由 `<colgroup>` 严格控制，消除 sticky header 与滚动容器导致的表头表体错位；校区/上课日期/上课时间/考勤时间四列加宽（110→135/70→95/100→115/160→175），内容完整显示；弹窗宽度从 98vw 改为 `width:auto;max-width:95vw`，自适应内容 | `index.php`、`static/css/style.css`、`static/js/main.js` | a475532 |
-| fix | **班级列表学科显示为空**：`list_classes` 用 `SUBSTRING_INDEX(c.subject)` 提取学科，但 `add_course` 写入 `subject_level1`/`subject_level2` 而不写旧 `subject` 字段，导致新课程关联班级学科列空白。改为 `COALESCE(subject_level1, subject)` 兼容新旧数据，`add_course`/`update_course` 同步写入 `subject` 字段 | `index.php` | 965cba5 |
+| feat | **交易订单增加支付状态/作废字段**：orders 表新增 pay_status（已支付/待支付/已取消）和 is_voided（是/否）；前端表格新增两列及筛选下拉；JS 新增 renderPayStatus/renderVoidedStatus 渲染函数；enroll_course/pay_enroll 写入默认值；void_order API 完善（校验 consumed_lessons==0，作废后订单对应报读课程从学员详情移除）；get_student_courses 过滤 is_voided='否' 的订单 | `index.php`、`static/css/style.css`、`static/js/main.js` | 710d916 |
+| feat | **课程搜索并入筛选栏**：课程名称搜索输入框从独立工具栏移到筛选栏同行首个 filter-item，删除 toolbar-course 区域，新增 .filter-item-search 样式 | `index.php`、`static/css/style.css` | 710d916 |
+| feat | **学员报读课程增加子订单号列**：get_student_courses SQL 新增 o.order_no 字段，前端表头和每行增加"子订单号"列（等宽字体） | `index.php`、`static/js/main.js` | 710d916 |
+| data | **历史美团/现金订单标记已支付**：UPDATE orders SET pay_status='已支付' WHERE payment_method IN ('美团','现金')，10 行受影响 | — | 710d916 |
 
 ### 2026-06-27
 
