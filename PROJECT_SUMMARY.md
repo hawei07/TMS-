@@ -125,7 +125,7 @@ market-system-php/
 
 ## 三、数据库设计
 
-### 3.1 表概览（20 张表）
+### 3.1 表概览（21 张表）
 
 | 表名 | 用途 | 关联 |
 |------|------|------|
@@ -150,6 +150,7 @@ market-system-php/
 | `attendance_records` | 上课记录（考勤） | student_id → students.id, course_id → courses.id |
 | `absence_records` | 缺勤记录（考勤缺勤时自动同步，缺勤→出勤时自动删除） | student_id → students.id, course_id → courses.id, attendance_id → attendance_records.id |
 | `parent_orders` | 父订单（汇总同一录单的所有子订单） | parent_order_no → orders.parent_order_no |
+| `refund_records` | 退费记录（申请→三级审批→财务确认） | order_id → orders.id, student_id → students.id |
 
 ### 3.2 resources（资源表）
 
@@ -383,6 +384,7 @@ market-system-php/
 | status | VARCHAR(500) | '已报名' | 订单状态 |
 | pay_status | VARCHAR(20) | '待支付' | **支付状态**：已支付 / 待支付 / 已取消 |
 | is_voided | VARCHAR(5) | '否' | **是否作废**：是 / 否 |
+| refund_status | VARCHAR(10) | '正常' | **退费状态**：正常 / 退费申请中 / 已退费 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.20 attendance_records（上课记录表）
@@ -424,7 +426,33 @@ market-system-php/
 | meituan_amount | DECIMAL(10,2) | 0 | 美团总额 |
 | created_at | VARCHAR(500) | '' | 创建时间 |
 
-### 3.22 表关系图
+### 3.22 refund_records（退费记录表）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| order_id | INT | — | 关联子订单 ID（必填） |
+| student_id | INT | — | 关联学员 ID（必填） |
+| campus | VARCHAR(500) | '' | 报读校区 |
+| course_name | VARCHAR(500) | '' | 课程名称 |
+| total_lessons | INT | 0 | 报读课时 |
+| total_amount | DECIMAL(10,2) | 0 | 报读金额 |
+| consumed_lessons | INT | 0 | 消耗课时 |
+| consumed_amount | DECIMAL(10,2) | 0 | 消耗金额 |
+| remaining_lessons | INT | 0 | 剩余可退课时 |
+| remaining_amount | DECIMAL(10,2) | 0 | 剩余可退金额 |
+| custom_deduction | DECIMAL(10,2) | 0 | 自定义扣减金额 |
+| actual_refund | DECIMAL(10,2) | 0 | **实退金额**（= remaining_amount - custom_deduction） |
+| bank_name | VARCHAR(500) | '' | 转账银行 |
+| bank_account | VARCHAR(500) | '' | 银行卡号 |
+| account_holder | VARCHAR(500) | '' | 开户人 |
+| refund_reason | TEXT | '' | 退费原因 |
+| status | VARCHAR(20) | '待审批' | **审批状态**：待审批 / 一级审批通过 / 二级审批通过 / 已退费 / 审批驳回 |
+| approval_stage | VARCHAR(10) | '一级审批' | **当前审批阶段**：一级审批 / 二级审批 / 财务确认 |
+| created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | DATETIME | CURRENT_TIMESTAMP | 更新时间 |
+
+### 3.23 表关系图
 
 ```
 organizations                     employees
@@ -635,7 +663,7 @@ subjects                  courses              ┌──────────
 | `update_student` | POST | 编辑学员信息 |
 | `delete_student` | POST | 删除学员 |
 | `create_student_from_resource` | POST | 从资源创建学员（按手机号查重，存在则复用，不存在则新建，返回 student_id） |
-| `get_student_courses` | GET | 获取学员已报读课程列表（基于 orders 表关联查询，过滤 is_voided='否' 的订单，含子订单号 order_no） |
+| `get_student_courses` | GET | 获取学员已报读课程列表（基于 orders 表关联查询，过滤 is_voided='否' 的订单，含子订单号 order_no 和退款状态 refund_status） |
 
 ### 4.13 班级管理（4 个）
 
@@ -665,19 +693,28 @@ subjects                  courses              ┌──────────
 | `update_classroom` | POST | 编辑教室（含自名排除重复校验） |
 | `delete_classroom` | POST | 删除教室 |
 
-### 4.16 报名 & 订单（7 个）
+### 4.16 报名 & 订单（6 个）
 
 | action | 方法 | 说明 |
 |--------|------|------|
 | `get_course_plans` | GET | 按 course_id 查询课程的所有价格方案及其报价单明细（含 plan_type） |
-| `pay_enroll` | POST | **核心报名支付**：按方案下所有报价单逐条生成子订单（自动生成 order_no 和 parent_order_no，含 pay_status='待支付'、is_voided='否'），支持现金+美团双支付方式，服务端校验金额合计=总额，采用"逐个填满"分配策略。从价格方案继承 plan_type 写入所有子订单的 order_type，若课程 small_package 非空则强制为"小课包" |
-| `enroll_course` | POST | 学员直接报名课程（单条订单，含 pay_status='待支付'、is_voided='否'） |
+| `pay_enroll` | POST | **核心报名支付**：按方案下所有报价单逐条生成子订单（自动生成 order_no 和 parent_order_no，含 pay_status='待支付'、is_voided='否'、refund_status='正常'），支持现金+美团双支付方式，服务端校验金额合计=总额，采用"逐个填满"分配策略。从价格方案继承 plan_type 写入所有子订单的 order_type，若课程 small_package 非空则强制为"小课包" |
+| `enroll_course` | POST | 学员直接报名课程（单条订单，含 pay_status='待支付'、is_voided='否'、refund_status='正常'） |
 | `enroll_from_resource` | POST | 从资源入口报名：将资源转为学员并生成订单（保留兼容） |
 | `create_student_from_resource` | POST | 从资源创建学员记录（供 panel-enroll 前端调用） |
 | `list_orders` | GET | 订单列表（17 列：订单号/父订单号/学号/编号/学员姓名/课程名称/价格方案/报价单名称/订单类型/课时数量/订单金额/现金/美团/支付状态/是否作废/状态/报名时间），含 `payment_summary` 汇总和 order_type 字段，支持 keyword 搜索及 pay_status/is_voided 筛选 |
 | `void_order` | POST | **作废订单**：校验 consumed_lessons==0（无课耗），将 is_voided 设为'是'，作废后该订单对应报读课程从学员详情中消失 |
 
-### 4.17 考勤 / 上课记录（4 个）
+### 4.17 退费管理（4 个）
+
+| action | 方法 | 说明 |
+|--------|------|------|
+| `submit_refund` | POST | **提交退费申请**：校验 refund_status='正常' 且 consumed_lessons < lesson_count，自动计算剩余可退课时/金额（remaining_amount = actual_price × (lesson_count - consumed_lessons) / lesson_count），实退金额 = remaining_amount - custom_deduction（≥0），写入 refund_records（status='待审批', approval_stage='一级审批'），更新 orders.refund_status='退费申请中' |
+| `list_refund_records` | GET | 退费记录列表（分页，支持 keyword 搜索、status 筛选、日期范围筛选，LEFT JOIN orders 联查订单号/学员/课程信息） |
+| `approve_refund` | POST | **退费审批**：入参 id + action(approve/reject) + approver + reject_reason。一级审批通过→approval_stage='二级审批',status='一级审批通过'；二级审批通过→approval_stage='财务确认',status='二级审批通过'；财务确认通过→status='已退费'，同步更新 orders.refund_status='已退费'、consumed_lessons=lesson_count（剩余课时归零）；任意阶段驳回→status='审批驳回' |
+| `get_refund_record` | GET | 查询单条退费记录详情 |
+
+### 4.18 考勤 / 上课记录（4 个）
 
 | action | 方法 | 说明 |
 |--------|------|------|
@@ -686,13 +723,13 @@ subjects                  courses              ┌──────────
 | `update_attendance` | POST | 编辑上课记录（支持任意字段动态更新） |
 | `delete_attendance` | POST | 删除上课记录 |
 
-### 4.18 父订单（1 个）
+### 4.19 父订单（1 个）
 
 | action | 方法 | 说明 |
 |--------|------|------|
 | `list_parent_orders` | GET | 父订单列表（分页，支持 keyword 搜索学员名/课程名/父订单号/学号） |
 
-### 4.19 统计（1 个）
+### 4.20 统计（1 个）
 
 | action | 方法 | 说明 |
 |--------|------|------|
@@ -763,13 +800,15 @@ subjects                  courses              ┌──────────
 | | 班级管理 | — | `panel-classes` |
 | | 交易订单 | — | `panel-orders` |
 | | 报名详情 | — | `panel-enroll`（隐藏面板，通过按钮跳转） |
+| | 工作记录 | 退费记录 | `panel-work-log` |
+| | | 课程记录 | `panel-work-log`（预留） |
 | | 基础设置 | 学科设置 | `panel-subjects` |
 | | | 教室管理 | `panel-classrooms` |
 | **员工管理** | 员工名册 | — | `panel-employees` |
 | | 岗位管理 | — | `panel-position-settings` |
 | | 组织管理 | — | `panel-org` |
 
-### 5.3 十七个面板
+### 5.3 十八个面板
 
 | 面板 | 功能 | 关键特性 |
 |------|------|----------|
@@ -780,10 +819,11 @@ subjects                  courses              ┌──────────
 | 意向等级设置 | 意向等级增删改，支持排序号 | 改名/改排序事务同步 resources |
 | 基础类型设置 | 课程类型 + 沟通方式 Tab 切换，增删改排序 | 改名事务同步 appointments/communication_records |
 | **课程管理** | 课程 CRUD、价格方案、报价单、导出 | **价格方案**：每门课程可配置多个价格方案，每个方案包含多条报价单（课时数、单价、实际价格），支持设置方案类型（新报/续费/小课包）；**小课包**标记；**低幼龄**标记；**校区权限**控制字段 |
-| **学员管理** | 学员 CRUD、搜索、详情页（3 标签页） | 列表列：编号/学号/姓名/手机号/校区/已报课程数/所在班级/操作。校区取自该学员报过课程的订单去重拼接。学员详情页：标签页布局（报读课程 / 交易订单 / 上课记录），列表页提供**报名**按钮跳转 panel-enroll |
+| **学员管理** | 学员 CRUD、搜索、详情页（3 标签页） | 列表列：编号/学号/姓名/手机号/校区/已报课程数/所在班级/操作。校区取自该学员报过课程的订单去重拼接。学员详情页：标签页布局（报读课程 / 交易订单 / 上课记录），报读课程表格含状态列（正常/退费申请中/已退费）和退费操作按钮，列表页提供**报名**按钮跳转 panel-enroll |
 | **班级管理** | 班级 CRUD、排课入口 | 班级列表表格（ID/名称/关联课程/班级类型/招生人数/授课课时/是否可试听/校区/备注/创建时间/操作-排课/编辑/删除）+ 搜索框 + 新增班级按钮；新增/编辑时授课课时必须为偶数（前端+后端双重校验） |
 | **交易订单** | 订单列表查看（17 列） | 列：订单号、父订单号、学号、编号、学员姓名、课程名称、价格方案、报价单名称、订单类型、课时数量、订单金额、现金、美团、支付状态、是否作废、状态、报名时间；支付状态列以三色标签展示（已支付=绿/待支付=橙/已取消=灰），是否作废列（是=红/否=-）；订单类型列以三色标签展示（新报=蓝/续费=绿/小课包=橙）；列表顶部筛选栏含支付状态和是否作废下拉筛选；列表顶部**支付方式汇总卡片**（现金/美团/总计）；支持 keyword 搜索 |
 | **报名详情** | 独立报名流程页面（panel-enroll） | 展示学员/资源姓名+手机号（只读）→ 选择课程 → 展示价格方案卡片（含类型标签：新报=蓝/续费=绿/小课包=橙）→ 选中方案展示报价单明细表格 + 合计金额 → **支付方式区域**（现金+美团输入框，实时校验金额匹配）→ 确认支付 → 逐条生成子订单（逐个填满分配策略，所有子订单继承方案 plan_type）+ 父订单 → 返回来源页 |
+| **工作记录** | 双标签页（退费记录 / 课程记录） | **退费记录**标签：表格（订单号/学员/课程/报读课时/消耗课时/剩余课时/报读金额/实退金额/状态/申请时间/操作），状态颜色标签（待审批=橙/一级审批通过=蓝/二级审批通过=蓝/已退费=绿/审批驳回=红），支持 status 和日期筛选，操作列含审批按钮和查看详情；**审批弹窗**：三步审批进度条（当前步骤高亮），审批人输入框，通过/驳回（需填写驳回原因）；**课程记录**标签：预留空 |
 | **学科设置** | 两级学科树增删改、批量删除 | 一级学科 → 二级学科，支持拖拽排序 |
 | **教室管理** | 教室 CRUD | 教室列表表格（名称/容纳人数/所属校区/备注/创建时间/操作-编辑/删除）+ 搜索框 + 新增教室按钮；名称唯一校验，编辑时排除自身重复 |
 | **员工名册** | 员工 CRUD、批量导入/导出、部门/状态筛选 | 姓名+手机号双重唯一性校验，重复字段输入框红色高亮；**员工名册**列显示归属部门 |
@@ -897,6 +937,17 @@ subjects                  courses              ┌──────────
 | 历史数据处理 | 历史美团/现金订单自动标记为 pay_status='已支付' |
 | 支付状态流转 | 新增订单默认 pay_status='待支付'，支付后更新为'已支付'，取消后更新为'已取消' |
 | 前端筛选 | 订单列表支持 pay_status（已支付/待支付/已取消）和 is_voided（是/否）筛选，学员详情报读课程仅显示 is_voided='否' 的有效订单 |
+| 考勤排除 | 考勤重算课时消耗时自动跳过 refund_status='已退费' 的订单，防止 consumed_lessons 被覆盖归零 |
+
+### 6.7 退费管理规则
+
+| 场景 | 规则 |
+|------|------|
+| 退费条件 | 仅 refund_status='正常' 且 consumed_lessons < lesson_count（有剩余课时）的订单可发起退费 |
+| 金额计算 | remaining_amount = actual_price × (lesson_count - consumed_lessons) / lesson_count；actual_refund = remaining_amount - custom_deduction，不能为负 |
+| 审批流程 | 三步逐级审批：一级审批 → 二级审批 → 财务确认，必须按序完成不可跳过；任意阶段可驳回（需填写驳回原因），驳回后 status='审批驳回' |
+| 退费生效 | 财务确认通过后：orders.refund_status='已退费'，orders.consumed_lessons=lesson_count（剩余课时归零），refund_records.status='已退费' |
+| 状态流转 | 正常 → 退费申请中（提交申请）→ 已退费（审批通过）/ 正常（驳回后可重新申请） |
 ### 6.5 导出
 
 **资源导出**：
@@ -1193,6 +1244,7 @@ function isSmallPackage(val) {
 
 | 类型 | 描述 | 涉及文件 | 提交 |
 |------|------|----------|------|
+| feat | **退费管理完整功能**：orders 表新增 refund_status 字段（正常/退费申请中/已退费）；新建 refund_records 表；新增 4 个 API（submit_refund/list_refund_records/approve_refund/get_refund_record）；学员详情报读课程表格增加状态列和退费按钮；新增工作记录页面（退费记录/课程记录双标签）；审批弹窗三步进度条（一级审批→二级审批→财务确认）；财务确认通过后自动将剩余课时置零；考勤重算排除已退费订单 | `index.php`、`static/css/style.css`、`static/js/main.js` | 20ccba2 |
 | feat | **交易订单增加支付状态/作废字段**：orders 表新增 pay_status（已支付/待支付/已取消）和 is_voided（是/否）；前端表格新增两列及筛选下拉；JS 新增 renderPayStatus/renderVoidedStatus 渲染函数；enroll_course/pay_enroll 写入默认值；void_order API 完善（校验 consumed_lessons==0，作废后订单对应报读课程从学员详情移除）；get_student_courses 过滤 is_voided='否' 的订单 | `index.php`、`static/css/style.css`、`static/js/main.js` | 710d916 |
 | feat | **课程搜索并入筛选栏**：课程名称搜索输入框从独立工具栏移到筛选栏同行首个 filter-item，删除 toolbar-course 区域，新增 .filter-item-search 样式 | `index.php`、`static/css/style.css` | 710d916 |
 | feat | **学员报读课程增加子订单号列**：get_student_courses SQL 新增 o.order_no 字段，前端表头和每行增加"子订单号"列（等宽字体） | `index.php`、`static/js/main.js` | 710d916 |
