@@ -3671,6 +3671,20 @@ async function viewStudent(sid) {
     </div>`;
     document.getElementById('student-detail-info').innerHTML = infoHtml;
 
+    // 累计汇总
+    const summary = data.summary;
+    if (summary) {
+        document.getElementById('student-summary').style.display = 'block';
+        document.getElementById('student-summary').innerHTML = `<div style="background:#f7f9fc;border:1px solid #dce3e8;border-radius:8px;padding:14px 20px;display:flex;gap:32px;font-size:14px;">
+            <div><span style="color:#888;">累计报读课时：</span><b>${summary.total_lessons}</b></div>
+            <div><span style="color:#888;">已消耗课时：</span><b>${summary.consumed_lessons}</b></div>
+            <div><span style="color:#888;">累计报读金额：</span><b>¥${Number(summary.total_amount).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
+            <div><span style="color:#888;">已消耗金额：</span><b>¥${Number(summary.consumed_amount).toLocaleString('zh-CN', {minimumFractionDigits: 2, maximumFractionDigits: 2})}</b></div>
+        </div>`;
+    } else {
+        document.getElementById('student-summary').style.display = 'none';
+    }
+
     activatePanel('panel-student-detail');
     highlightLeafByPanel('panel-student-detail');
 

@@ -2081,7 +2081,14 @@ $stmt->execute();
             $orders = [];
             $oRes = $db->query("SELECT o.*, c.name AS course_name FROM orders o LEFT JOIN courses c ON o.course_id=c.id WHERE o.student_id=$id ORDER BY o.id DESC");
             while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) $orders[] = $o;
-            json(['student' => $student, 'orders' => $orders]);
+            // 汇总：累计报读课时、已消耗课时、累计报读金额、已消耗金额
+            $summary = $db->query("SELECT
+                COALESCE(SUM(lesson_count), 0) AS total_lessons,
+                COALESCE(SUM(consumed_lessons), 0) AS consumed_lessons,
+                COALESCE(SUM(total_price), 0) AS total_amount,
+                COALESCE(SUM(total_price * consumed_lessons / NULLIF(lesson_count, 0)), 0) AS consumed_amount
+                FROM orders WHERE student_id=$id")->fetch(PDO::FETCH_ASSOC);
+            json(['student' => $student, 'orders' => $orders, 'summary' => $summary]);
             break;
 
         case 'add_student':
@@ -4260,6 +4267,8 @@ if (intval($countBt) === 0) {
                 </div>
                 <!-- 学员基础信息 -->
                 <div id="student-detail-info" style="padding:16px 16px 0;"></div>
+                <!-- 累计汇总 -->
+                <div id="student-summary" style="margin:12px 16px 0;display:none;"></div>
                 <!-- 标签页 -->
                 <div class="student-detail-tabs">
                     <button class="sdt-tab active" data-tab="tab-courses">报读课程</button>
