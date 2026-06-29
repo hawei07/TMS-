@@ -244,6 +244,16 @@ $db->exec("CREATE TABLE IF NOT EXISTS attendance_records (
     created_at VARCHAR(500) DEFAULT ''
 )");
 
+// 为已有表补充 order_id 字段（如果不存在）
+$colCheck = $db->query("SHOW COLUMNS FROM attendance_records LIKE 'order_id'")->fetch();
+if (!$colCheck) {
+    $db->exec("ALTER TABLE attendance_records ADD COLUMN order_id INT DEFAULT 0");
+}
+// 回填旧记录的 order_id（按 student_id + course_id + campus 匹配订单）
+$db->exec("UPDATE attendance_records a JOIN orders o ON o.student_id = a.student_id AND o.course_id = a.course_id AND o.campus = a.campus SET a.order_id = o.id WHERE a.order_id = 0");
+// 按 attendance_records 重算订单 consumed_lessons（修正跨校区虚高）
+$db->exec("UPDATE orders o SET o.consumed_lessons = COALESCE((SELECT SUM(a.deducted_lessons) FROM attendance_records a WHERE a.order_id = o.id AND a.status = '出勤'), 0)");
+
 $db->exec("CREATE TABLE IF NOT EXISTS absence_records (
     id INT PRIMARY KEY AUTO_INCREMENT,
     student_id INT NOT NULL,
@@ -2291,12 +2301,14 @@ $stmt->execute();
             $subjectLevel2 = trim($input['subject_level2'] ?? '');
             $classTime = trim($input['class_time'] ?? '');
             $consumedAmount = floatval($input['consumed_amount'] ?? 0);
+            $orderId = intval($input['order_id'] ?? 0);
             if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
             $n = now();
-            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, campus, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :cp, :t, :ca2, :ct2)");
+            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, order_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, campus, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :oid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :cp, :t, :ca2, :ct2)");
             $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $cid, PDO::PARAM_INT);
+            $stmt->bindValue(':oid', $orderId, PDO::PARAM_INT);
             $stmt->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
             $stmt->bindValue(':sl2', $subjectLevel2, PDO::PARAM_STR);
             $stmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
@@ -2359,6 +2371,7 @@ $stmt->execute();
             if (isset($input['subject_level2'])) $fields[] = "subject_level2='" . $db->quote(trim($input['subject_level2'])) . "'";
             if (isset($input['class_time'])) $fields[] = "class_time='" . $db->quote(trim($input['class_time'])) . "'";
             if (isset($input['consumed_amount'])) $fields[] = "consumed_amount=" . round(floatval($input['consumed_amount']), 2);
+            if (isset($input['order_id'])) $fields[] = "order_id=" . intval($input['order_id']);
             if (empty($fields)) { json(['message' => '无变更']); break; }
             $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
             // 缺勤状态切换：从缺勤→非缺勤时删除缺勤记录；从非缺勤→缺勤时新增缺勤记录
@@ -5448,6 +5461,47 @@ if (intval($countBt) === 0) {
             </div>
             <div class="modal-footer">
                 <button class="btn btn-outline" onclick="closeModal('modal-add-student')">取消</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 课耗明细弹窗 -->
+    <div class="modal-overlay" id="modal-consumption-detail">
+        <div class="modal" style="max-width:98vw;width:98vw;">
+            <div class="modal-header">
+                <h3 id="modal-consumption-title">课耗明细</h3>
+                <button class="modal-close" onclick="closeModal('modal-consumption-detail')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div style="max-height:75vh;overflow:auto;">
+                    <table style="table-layout:fixed;width:1230px;border-collapse:collapse;font-size:13px;">
+                        <colgroup>
+                            <col style="width:80px;"><col style="width:120px;"><col style="width:90px;"><col style="width:90px;">
+                            <col style="width:135px;"><col style="width:95px;"><col style="width:115px;"><col style="width:90px;">
+                            <col style="width:175px;"><col style="width:70px;"><col style="width:80px;"><col style="width:90px;">
+                        </colgroup>
+                        <thead><tr>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">校区</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">课程</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">一级学科</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">二级学科</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">班级</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">老师</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">上课日期</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">上课时间</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">考勤时间</th>
+                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">状态</th>
+                            <th style="text-align:right;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;">消耗课时</th>
+                            <th style="text-align:right;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;">消耗金额</th>
+                        </tr></thead>
+                        <tbody id="consumption-detail-tbody">
+                            <tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">加载中...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('modal-consumption-detail')">关闭</button>
             </div>
         </div>
     </div>

@@ -3737,21 +3737,48 @@ async function loadStudentCourses(sid) {
 function renderStudentCoursesFilters(rows) {
     const container = document.getElementById('student-courses-content');
     const subject1s = [...new Set(rows.map(r => r.subject_level1).filter(Boolean))].sort();
-    const subject2s = [...new Set(rows.map(r => r.subject_level2).filter(Boolean))].sort();
+    // 构建一级→二级的映射
+    window._subject2Map = {};
+    rows.forEach(r => {
+        if (r.subject_level1 && r.subject_level2) {
+            if (!window._subject2Map[r.subject_level1]) window._subject2Map[r.subject_level1] = new Set();
+            window._subject2Map[r.subject_level1].add(r.subject_level2);
+        }
+    });
+    // 全部二级学科（无一级学科筛选时使用）
+    const allSubject2s = [...new Set(rows.map(r => r.subject_level2).filter(Boolean))].sort();
+    const renderSubject2Options = (subject1Value) => {
+        const set = (subject1Value && window._subject2Map[subject1Value]) ? new Set(window._subject2Map[subject1Value]) : new Set(allSubject2s);
+        return `<option value="">全部二级学科</option>` + [...set].sort().map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    };
     const html = `<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <select id="filter-subject1" onchange="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+        <select id="filter-subject1" onchange="onSubject1Change()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
             <option value="">全部一级学科</option>
             ${subject1s.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
         </select>
         <select id="filter-subject2" onchange="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
-            <option value="">全部二级学科</option>
-            ${subject2s.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+            ${renderSubject2Options('')}
         </select>
         <input type="text" id="filter-course-name" placeholder="搜索课程名称" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:180px;" autocomplete="off">
         <span style="font-size:14px;color:#888;margin-left:auto;">共 <b id="student-courses-count">${rows.length}</b> 门课程</span>
         <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${currentViewStudentId})">分班</button>
     </div>`;
     container.innerHTML = html + '<div id="student-courses-table"></div>';
+}
+
+function onSubject1Change() {
+    const subject1 = document.getElementById('filter-subject1')?.value || '';
+    const sel2 = document.getElementById('filter-subject2');
+    const prevVal = sel2.value;
+    // 根据当前一级学科更新二级下拉选项
+    const allSubject2s = [...new Set(studentCoursesAllRows.map(r => r.subject_level2).filter(Boolean))].sort();
+    const set = (subject1 && window._subject2Map[subject1]) ? new Set(window._subject2Map[subject1]) : new Set(allSubject2s);
+    sel2.innerHTML = `<option value="">全部二级学科</option>` + [...set].sort().map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
+    // 如果之前选中的二级还在新选项中，保留；否则重置为"全部"
+    if ([...set].includes(prevVal)) {
+        sel2.value = prevVal;
+    }
+    filterStudentCourses();
 }
 
 function filterStudentCourses() {
@@ -3780,13 +3807,52 @@ function renderStudentCoursesTable(rows) {
         <td>${esc(r.item_name)}</td>
         <td>${r.lesson_count || ''}</td>
         <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
-        <td>${r.consumed_lessons != null ? r.consumed_lessons : 0}</td>
+        <td>${r.consumed_lessons != null ? `<a href="javascript:void(0)" onclick="showConsumptionDetail(${r.order_id}, ${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')" style="color:#1677ff;text-decoration:underline;cursor:pointer;">${r.consumed_lessons}</a>` : 0}</td>
         <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
         <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
     </tr>`).join('')}
     </tbody></table></div>`;
+}
+
+// ==================== 课耗明细弹窗 ====================
+async function showConsumptionDetail(orderId, courseId, courseName) {
+    document.getElementById('modal-consumption-title').textContent = '课耗明细 - ' + courseName;
+    const tbody = document.getElementById('consumption-detail-tbody');
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    openModal('modal-consumption-detail');
+    try {
+        const res = await fetch(API_BASE + 'list_attendance&student_id=' + currentViewStudentId);
+        const data = await res.json();
+        const rows = (data.data || []).filter(r => r.order_id == orderId);
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂未产生课耗记录</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            let statusClass = 'status-出勤';
+            if (r.status === '缺勤') statusClass = 'status-缺勤';
+            else if (r.status === '请假') statusClass = 'status-请假';
+            const cell = (s) => `<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s)}</td>`;
+            return `<tr>
+                ${cell(r.campus)}
+                ${cell(r.course_name)}
+                ${cell(r.subject_level1)}
+                ${cell(r.subject_level2)}
+                ${cell(r.class_name)}
+                ${cell(r.teacher)}
+                ${cell(r.lesson_date)}
+                ${cell(r.class_time)}
+                ${cell(r.attended_at ? r.attended_at.slice(0, 19) : '')}
+                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
+                <td style="text-align:right;white-space:nowrap;">${r.deducted_lessons || 0}</td>
+                <td style="text-align:right;white-space:nowrap;">¥${(parseFloat(r.consumed_amount) || 0).toFixed(2)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
 }
 
 // ==================== 学员详情 - 交易订单 ====================
@@ -3906,6 +3972,7 @@ async function loadAttendanceCourseSelect(selectedCourseId) {
     const sel = document.getElementById('att-course');
     sel.innerHTML = '<option value="">请选择课程</option>';
     window._courseSubjects = {};
+    window._courseOrderMap = {};
     try {
         const res = await fetch(API_BASE + 'get_student_courses&student_id=' + currentViewStudentId);
         const data = await res.json();
@@ -3919,6 +3986,7 @@ async function loadAttendanceCourseSelect(selectedCourseId) {
                 opt.textContent = c.name + (c.subject ? ' (' + c.subject + ')' : '');
                 sel.appendChild(opt);
                 window._courseSubjects[c.id] = c.subject || '';
+                window._courseOrderMap[c.id] = c.order_id;
             }
         });
         if (selectedCourseId) sel.value = selectedCourseId;
@@ -4005,6 +4073,7 @@ async function saveAttendance() {
         result = await api('update_attendance', {
             id: currentEditAttId,
             course_id: courseId,
+            order_id: (window._courseOrderMap && window._courseOrderMap[courseId]) || 0,
             lesson_date: lessonDate,
             status: status,
             class_name: className,
@@ -4019,6 +4088,7 @@ async function saveAttendance() {
         result = await api('add_attendance', {
             student_id: sid,
             course_id: courseId,
+            order_id: (window._courseOrderMap && window._courseOrderMap[courseId]) || 0,
             lesson_date: lessonDate,
             status: status,
             class_name: className,
