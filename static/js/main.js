@@ -3691,7 +3691,6 @@ function switchStudentDetailTab(tabId) {
     if (tabId === 'tab-courses') loadStudentCourses(sid);
     else if (tabId === 'tab-orders') loadStudentOrders(sid);
     else if (tabId === 'tab-attendance') loadAttendance(sid);
-    else if (tabId === 'tab-absence') loadAbsenceRecords(sid);
 }
 
 // 标签页点击事件委托
@@ -3994,37 +3993,6 @@ async function deleteAttendance(id) {
         showToast(result.message);
         loadAttendance(currentViewStudentId);
     });
-}
-
-// ==================== 学员详情 - 缺勤记录 ====================
-async function loadAbsenceRecords(sid) {
-    const tbody = document.getElementById('absence-tbody');
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
-    try {
-        const res = await fetch(API_BASE + 'list_absence_records&student_id=' + sid);
-        const data = await res.json();
-        const rows = data.data || [];
-        if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无缺勤记录</td></tr>';
-            return;
-        }
-        tbody.innerHTML = rows.map(r => {
-            return `<tr>
-                <td>${esc(r.student_name)}</td>
-                <td>${esc(r.phone)}</td>
-                <td>${esc(r.campus)}</td>
-                <td>${esc(r.course_name || '')}</td>
-                <td>${esc(r.subject_level1)}</td>
-                <td>${esc(r.subject_level2)}</td>
-                <td>${esc(r.class_name)}</td>
-                <td>${esc(r.teacher)}</td>
-                <td>${esc(r.lesson_date)}</td>
-                <td>${esc(r.class_time)}</td>
-            </tr>`;
-        }).join('');
-    } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
-    }
 }
 
 function switchToStudents() {
@@ -4769,6 +4737,8 @@ function switchAttendanceTab(tabId) {
         loadAttendanceSessions();
     } else if (tabId === 'tab-student-consumption') {
         loadStudentConsumption();
+    } else if (tabId === 'tab-absence-records') {
+        loadAbsenceRecords();
     }
 }
 
@@ -5594,4 +5564,53 @@ function addTempStudent() {
 
 function addMakeupStudent() {
     showToast('添加补课学员功能开发中');
+}
+
+// ==================== 考勤模块 - 缺勤记录 ====================
+let absenceRecordPage = 1;
+
+async function loadAbsenceRecords(page = 1) {
+    absenceRecordPage = page;
+    const tbody = document.querySelector('#table-absence-records tbody');
+    const pagination = document.getElementById('pagination-absence-records');
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    const dateFrom = document.getElementById('absence-date-from').value;
+    const dateTo = document.getElementById('absence-date-to').value;
+    const className = document.getElementById('absence-class-name').value;
+    let url = API_BASE + 'list_absence_records&page=' + page + '&page_size=20';
+    if (dateFrom) url += '&date_from=' + dateFrom;
+    if (dateTo) url += '&date_to=' + dateTo;
+    if (className) url += '&class_name=' + encodeURIComponent(className);
+    try {
+        const res = await fetch(url);
+        const data = await res.json();
+        const rows = data.data || [];
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无缺勤记录</td></tr>';
+            pagination.innerHTML = '';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            return `<tr>
+                <td>${esc(r.student_name)}</td>
+                <td>${esc(r.phone)}</td>
+                <td>${esc(r.campus)}</td>
+                <td>${esc(r.course_name || '')}</td>
+                <td>${esc(r.subject_level1)}</td>
+                <td>${esc(r.subject_level2)}</td>
+                <td>${esc(r.class_name)}</td>
+                <td>${esc(r.teacher)}</td>
+                <td>${esc(r.lesson_date)}</td>
+                <td>${esc(r.class_time)}</td>
+            </tr>`;
+        }).join('');
+        const total = data.total || 0;
+        const totalPages = Math.ceil(total / (data.page_size || 20));
+        pagination.innerHTML = '<span>共 ' + total + ' 条</span>' +
+            (page > 1 ? '<button class="btn btn-sm btn-outline" onclick="loadAbsenceRecords(' + (page - 1) + ')">上一页</button>' : '') +
+            '<span>第 ' + page + '/' + totalPages + ' 页</span>' +
+            (page < totalPages ? '<button class="btn btn-sm btn-outline" onclick="loadAbsenceRecords(' + (page + 1) + ')">下一页</button>' : '');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
 }

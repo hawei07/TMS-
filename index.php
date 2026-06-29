@@ -2394,12 +2394,30 @@ $stmt->execute();
             break;
 
         case 'list_absence_records':
-            $sid = intval($_GET['student_id'] ?? 0);
-            if ($sid <= 0) { json(['error' => '参数错误']); break; }
-            $rows = [];
-            $stmt = $db->query("SELECT a.*, c.name AS course_name FROM absence_records a LEFT JOIN courses c ON a.course_id = c.id WHERE a.student_id = $sid ORDER BY a.lesson_date DESC, a.id DESC");
-            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
-            json(['data' => $rows]);
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 20)));
+            $offset = ($page - 1) * $pageSize;
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $className = trim($_GET['class_name'] ?? '');
+            $where = [];
+            $params = [];
+            if ($dateFrom) { $where[] = "a.lesson_date >= :df"; $params[':df'] = $dateFrom; }
+            if ($dateTo) { $where[] = "a.lesson_date <= :dt"; $params[':dt'] = $dateTo; }
+            if ($className) { $where[] = "a.class_name LIKE :cn"; $params[':cn'] = "%$className%"; }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+            $countSql = "SELECT COUNT(*) FROM absence_records a $whereStr";
+            $stmt = $db->prepare($countSql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
+            $sql = "SELECT a.*, c.name AS course_name FROM absence_records a LEFT JOIN courses c ON a.course_id = c.id $whereStr ORDER BY a.lesson_date DESC, a.id DESC LIMIT :limit OFFSET :offset";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
         // ==================== 交易订单 API ====================
@@ -4064,6 +4082,7 @@ if (intval($countBt) === 0) {
                 <div class="attendance-tabs">
                     <button class="att-tab active" data-tab="tab-attendance-operations">操作考勤</button>
                     <button class="att-tab" data-tab="tab-student-consumption">学员课耗</button>
+                    <button class="att-tab" data-tab="tab-absence-records">缺勤记录</button>
                 </div>
                 <div class="attendance-tab-content">
                     <!-- 操作考勤页签 -->
@@ -4111,6 +4130,31 @@ if (intval($countBt) === 0) {
                             </table>
                         </div>
                         <div class="pagination" id="pagination-student-consumption"></div>
+                    </div>
+                    <!-- 缺勤记录页签 -->
+                    <div class="att-panel" id="tab-absence-records">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <label style="font-size:13px;margin-right:6px;">日期范围：</label>
+                                <input type="date" id="absence-date-from" style="width:140px;" onchange="loadAbsenceRecords()">
+                                <span style="margin:0 6px;color:#999;">至</span>
+                                <input type="date" id="absence-date-to" style="width:140px;" onchange="loadAbsenceRecords()">
+                                <button class="btn btn-primary btn-sm" onclick="loadAbsenceRecords()">查询</button>
+                                <span style="margin-left:16px;font-size:13px;">班级：</span>
+                                <input type="text" id="absence-class-name" placeholder="搜索班级名称" style="width:160px;" onkeydown="if(event.key==='Enter')loadAbsenceRecords()">
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="table-absence-records">
+                                <thead><tr>
+                                    <th>姓名</th><th>手机号</th><th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th>
+                                </tr></thead>
+                                <tbody>
+                                    <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-absence-records"></div>
                     </div>
                 </div>
             </section>
@@ -4218,7 +4262,6 @@ if (intval($countBt) === 0) {
                     <button class="sdt-tab active" data-tab="tab-courses">报读课程</button>
                     <button class="sdt-tab" data-tab="tab-orders">交易订单</button>
                     <button class="sdt-tab" data-tab="tab-attendance">上课记录</button>
-                    <button class="sdt-tab" data-tab="tab-absence">缺勤记录</button>
                 </div>
                 <div class="student-detail-tab-content">
                     <!-- 报读课程 -->
@@ -4244,21 +4287,6 @@ if (intval($countBt) === 0) {
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
                                         <tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
-                                    </tbody>
-                                </table>
-                            </div>
-                        </div>
-                    </div>
-                    <!-- 缺勤记录 -->
-                    <div class="sdt-panel" id="tab-absence">
-                        <div style="padding:8px 16px 16px;">
-                            <div class="table-wrap">
-                                <table class="attendance-table">
-                                    <thead><tr>
-                                        <th>姓名</th><th>手机号</th><th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th>
-                                    </tr></thead>
-                                    <tbody id="absence-tbody">
-                                        <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
