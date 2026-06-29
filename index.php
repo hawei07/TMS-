@@ -2085,8 +2085,8 @@ $stmt->execute();
             $summary = $db->query("SELECT
                 COALESCE(SUM(lesson_count), 0) AS total_lessons,
                 COALESCE(SUM(consumed_lessons), 0) AS consumed_lessons,
-                COALESCE(SUM(total_price), 0) AS total_amount,
-                COALESCE(SUM(total_price * consumed_lessons / NULLIF(lesson_count, 0)), 0) AS consumed_amount
+                COALESCE(SUM(actual_price), 0) AS total_amount,
+                COALESCE(SUM(actual_price * consumed_lessons / NULLIF(lesson_count, 0)), 0) AS consumed_amount
                 FROM orders WHERE student_id=$id")->fetch(PDO::FETCH_ASSOC);
             json(['student' => $student, 'orders' => $orders, 'summary' => $summary]);
             break;
