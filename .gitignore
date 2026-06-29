@@ -9,3 +9,8 @@ __pycache__/
 Thumbs.db
 php_errors.log
 temp/
+
+# PHP runtime
+php.pid
+php_stderr.log
+php_stdout.log
