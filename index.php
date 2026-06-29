@@ -259,8 +259,8 @@ if (!$colCheck) {
 }
 // 回填旧记录的 order_id（按 student_id + course_id + campus 匹配订单）
 $db->exec("UPDATE attendance_records a JOIN orders o ON o.student_id = a.student_id AND o.course_id = a.course_id AND o.campus = a.campus SET a.order_id = o.id WHERE a.order_id = 0");
-// 按 attendance_records 重算订单 consumed_lessons（修正跨校区虚高）
-$db->exec("UPDATE orders o SET o.consumed_lessons = COALESCE((SELECT SUM(a.deducted_lessons) FROM attendance_records a WHERE a.order_id = o.id AND a.status = '出勤'), 0)");
+// 按 attendance_records 重算订单 consumed_lessons（修正跨校区虚高），跳过已退费订单
+$db->exec("UPDATE orders o SET o.consumed_lessons = COALESCE((SELECT SUM(a.deducted_lessons) FROM attendance_records a WHERE a.order_id = o.id AND a.status = '出勤'), 0) WHERE o.refund_status != '已退费'");
 
 $db->exec("CREATE TABLE IF NOT EXISTS absence_records (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -361,6 +361,41 @@ $db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
     created_at VARCHAR(500) NOT NULL DEFAULT ''
 )");
 
+
+// 退费记录表
+$db->exec("CREATE TABLE IF NOT EXISTS refund_records (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    order_id INT NOT NULL DEFAULT 0,
+    student_id INT NOT NULL DEFAULT 0,
+    campus VARCHAR(500) DEFAULT '',
+    course_name VARCHAR(500) DEFAULT '',
+    total_lessons INT DEFAULT 0,
+    total_amount DECIMAL(10,2) DEFAULT 0.00,
+    consumed_lessons INT DEFAULT 0,
+    consumed_amount DECIMAL(10,2) DEFAULT 0.00,
+    remaining_lessons INT DEFAULT 0,
+    remaining_amount DECIMAL(10,2) DEFAULT 0.00,
+    custom_deduction DECIMAL(10,2) DEFAULT 0.00,
+    actual_refund DECIMAL(10,2) DEFAULT 0.00,
+    bank_name VARCHAR(500) DEFAULT '',
+    bank_account VARCHAR(500) DEFAULT '',
+    account_holder VARCHAR(500) DEFAULT '',
+    refund_reason TEXT,
+    status VARCHAR(20) DEFAULT '待审批',
+    approval_stage VARCHAR(10) DEFAULT '一级审批',
+    reject_reason TEXT,
+    approver1 VARCHAR(500) DEFAULT '',
+    approver2 VARCHAR(500) DEFAULT '',
+    approver3 VARCHAR(500) DEFAULT '',
+    created_at VARCHAR(500) DEFAULT '',
+    updated_at VARCHAR(500) DEFAULT ''
+)");
+
+// orders 表新增退款状态字段
+$refundStatusCol = $db->query("SHOW COLUMNS FROM orders LIKE 'refund_status'")->fetch();
+if (!$refundStatusCol) {
+    $db->exec("ALTER TABLE orders ADD COLUMN refund_status VARCHAR(10) DEFAULT '正常'");
+}
 
 date_default_timezone_set('Asia/Shanghai');
 
@@ -2304,7 +2339,7 @@ $stmt->execute();
             $sid = intval($_GET['student_id'] ?? 0);
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
@@ -2571,6 +2606,168 @@ $stmt->execute();
             $rows = [];
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+// ==================== 退费记录 API ====================
+        // 提交退费申请
+        case 'submit_refund':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $orderId = intval($input['order_id'] ?? 0);
+            if ($orderId <= 0) { json(['error' => '订单ID无效']); break; }
+            // 查询订单信息
+            $order = $db->query("SELECT o.*, c.name AS course_name FROM orders o LEFT JOIN courses c ON o.course_id=c.id WHERE o.id=$orderId")->fetch(PDO::FETCH_ASSOC);
+            if (!$order) { json(['error' => '订单不存在']); break; }
+            if (($order['refund_status'] ?? '正常') !== '正常') { json(['error' => '该订单已申请退费，不能重复申请']); break; }
+            $lessonCount = intval($order['lesson_count'] ?? 0);
+            $consumedLessons = intval($order['consumed_lessons'] ?? 0);
+            if ($consumedLessons >= $lessonCount) { json(['error' => '该课程已全部消耗，无法退费']); break; }
+            $actualPrice = floatval($order['actual_price'] ?? 0);
+            // 计算剩余可退课时和金额
+            $remainingLessons = $lessonCount - $consumedLessons;
+            $remainingAmount = 0;
+            if ($lessonCount > 0) {
+                $remainingAmount = round($actualPrice * $remainingLessons / $lessonCount, 2);
+            }
+            $customDeduction = floatval($input['custom_deduction'] ?? 0);
+            if ($customDeduction < 0) { json(['error' => '扣减金额不能为负']); break; }
+            $actualRefund = round($remainingAmount - $customDeduction, 2);
+            if ($actualRefund < 0) $actualRefund = 0;
+            $bankName = trim($input['bank_name'] ?? '');
+            $bankAccount = trim($input['bank_account'] ?? '');
+            $accountHolder = trim($input['account_holder'] ?? '');
+            $refundReason = trim($input['refund_reason'] ?? '');
+            $n = now();
+            $db->exec("INSERT INTO refund_records (order_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
+                "$orderId, " .
+                intval($order['student_id']) . ", " .
+                $db->quote($order['campus'] ?? '') . ", " .
+                $db->quote($order['course_name'] ?? '') . ", " .
+                "$lessonCount, " .
+                "$actualPrice, " .
+                "$consumedLessons, " .
+                round($actualPrice * $consumedLessons / max($lessonCount, 1), 2) . ", " .
+                "$remainingLessons, " .
+                "$remainingAmount, " .
+                "$customDeduction, " .
+                "$actualRefund, " .
+                $db->quote($bankName) . ", " .
+                $db->quote($bankAccount) . ", " .
+                $db->quote($accountHolder) . ", " .
+                $db->quote($refundReason) . ", " .
+                "'待审批', '一级审批', '$n', '$n')");
+            // 更新订单退款状态为"退费申请中"（审批通过后才变"已退费"）
+            $db->exec("UPDATE orders SET refund_status='退费申请中' WHERE id=$orderId");
+            $newId = $db->query("SELECT LAST_INSERT_ID()")->fetchColumn();
+            json(['message' => '退费申请提交成功', 'id' => intval($newId)]);
+
+        // 查询退费记录列表
+        case 'list_refund_records':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 15)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $status = trim($_GET['status'] ?? '');
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+
+            $where = [];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(s.name LIKE :kw1 OR c.name LIKE :kw2 OR o.order_no LIKE :kw3)";
+                $params[':kw1'] = "%$keyword%";
+                $params[':kw2'] = "%$keyword%";
+                $params[':kw3'] = "%$keyword%";
+            }
+            if ($status) {
+                $where[] = "rr.status = :st";
+                $params[':st'] = $status;
+            }
+            if ($dateFrom) {
+                $where[] = "rr.created_at >= :df";
+                $params[':df'] = $dateFrom . ' 00:00:00';
+            }
+            if ($dateTo) {
+                $where[] = "rr.created_at <= :dt";
+                $params[':dt'] = $dateTo . ' 23:59:59';
+            }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $countSql = "SELECT COUNT(*) FROM refund_records rr
+                LEFT JOIN students s ON rr.student_id = s.id
+                LEFT JOIN orders o ON rr.order_id = o.id
+                LEFT JOIN courses c ON o.course_id = c.id
+                $whereStr";
+            $countStmt = $db->prepare($countSql);
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
+            $offset = ($page - 1) * $pageSize;
+            $sql = "SELECT rr.*, s.name AS student_name, s.phone AS student_phone, o.order_no
+                FROM refund_records rr
+                LEFT JOIN students s ON rr.student_id = s.id
+                LEFT JOIN orders o ON rr.order_id = o.id
+                LEFT JOIN courses c ON o.course_id = c.id
+                $whereStr ORDER BY rr.id DESC LIMIT :lim OFFSET :off";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+            $rows = [];
+            $stmt->execute();
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+            break;
+
+        // 审批退费
+        case 'approve_refund':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            $action = trim($input['action'] ?? ''); // approve / reject
+            $approver = trim($input['approver'] ?? '');
+            $rejectReason = trim($input['reject_reason'] ?? '');
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+            if (!in_array($action, ['approve', 'reject'])) { json(['error' => '操作无效']); break; }
+            $rr = $db->query("SELECT * FROM refund_records WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$rr) { json(['error' => '退费记录不存在']); break; }
+            $n = now();
+            if ($action === 'reject') {
+                $db->exec("UPDATE refund_records SET status='审批驳回', reject_reason=" . $db->quote($rejectReason) . ", updated_at='$n' WHERE id=$id");
+                // 恢复订单状态为正常
+                $db->exec("UPDATE orders SET refund_status='正常' WHERE id=" . intval($rr['order_id']));
+                json(['message' => '已驳回退费申请']);
+                break;
+            }
+            // 审批通过
+            $currentStage = $rr['approval_stage'];
+            if ($currentStage === '一级审批') {
+                $db->exec("UPDATE refund_records SET status='一级审批通过', approval_stage='二级审批', approver1=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                json(['message' => '一级审批通过，等待二级审批']);
+            } elseif ($currentStage === '二级审批') {
+                $db->exec("UPDATE refund_records SET status='二级审批通过', approval_stage='财务确认', approver2=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                json(['message' => '二级审批通过，等待财务确认']);
+            } elseif ($currentStage === '财务确认') {
+                // 财务确认通过：更新状态为已退费，同步更新订单
+                $db->exec("UPDATE refund_records SET status='已退费', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                $orderId = intval($rr['order_id']);
+                // 将订单消耗课时设置为总课时（剩余课时归零）
+                $order2 = $db->query("SELECT lesson_count FROM orders WHERE id=$orderId")->fetch(PDO::FETCH_ASSOC);
+                $lc = $order2 ? intval($order2['lesson_count']) : 0;
+                $affected = $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
+                json(['message' => '财务确认通过，退费已完成']);
+            } else {
+                json(['error' => '当前审批阶段异常']);
+            }
+            break;
+
+        // 获取单条退费记录详情
+        case 'get_refund_record':
+            $id = intval($_GET['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+            $rr = $db->query("SELECT rr.*, s.name AS student_name, s.phone AS student_phone, o.order_no
+                FROM refund_records rr
+                LEFT JOIN students s ON rr.student_id = s.id
+                LEFT JOIN orders o ON rr.order_id = o.id
+                WHERE rr.id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$rr) { json(['error' => '退费记录不存在']); break; }
+            json(['data' => $rr]);
             break;
 
 // ==================== 班级管理 API ====================
@@ -3675,6 +3872,12 @@ if (intval($countBt) === 0) {
                                     <span class="tree-label">交易订单</span>
                                 </div>
                             </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-work-records">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
+                                    <span class="tree-label">工作记录</span>
+                                </div>
+                            </li>
                             <li class="tree-node expanded">
                                 <div class="tree-parent sub-parent">
                                     <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
@@ -4562,6 +4765,55 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
                 <div class="pagination" id="pagination-order"></div>
+            </section>
+
+            <!-- 面板：工作记录 -->
+            <section class="content-panel" id="panel-work-records">
+                <div class="panel-header">
+                    <h3>工作记录</h3>
+                </div>
+                <div class="section-tabs">
+                    <button class="sec-tab active" data-tab="tab-refund-records">退费记录</button>
+                    <button class="sec-tab" data-tab="tab-course-records">课程记录</button>
+                </div>
+                <div class="section-tab-content">
+                    <!-- 退费记录 tab -->
+                    <div class="sec-panel active" id="tab-refund-records">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <select id="filter-refund-status" onchange="loadRefundRecords()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                                    <option value="">全部状态</option>
+                                    <option value="待审批">待审批</option>
+                                    <option value="一级审批通过">一级审批通过</option>
+                                    <option value="二级审批通过">二级审批通过</option>
+                                    <option value="已退费">已退费</option>
+                                    <option value="审批驳回">审批驳回</option>
+                                </select>
+                            </div>
+                            <div class="toolbar-right" style="margin-left:auto;">
+                                <input type="text" id="search-refund" placeholder="搜索学员/课程/订单号..." onkeyup="debounceSearch('refund')">
+                                <label style="font-size:13px;margin:0 6px;">申请时间：</label>
+                                <input type="date" id="filter-refund-date-from" style="width:140px;" onchange="loadRefundRecords()">
+                                <span style="margin:0 4px;color:#999;">至</span>
+                                <input type="date" id="filter-refund-date-to" style="width:140px;" onchange="loadRefundRecords()">
+                                <button class="btn btn-primary btn-sm" onclick="loadRefundRecords()">搜索</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="table-refund-records">
+                                <thead><tr>
+                                    <th width="80">订单号</th><th>学员</th><th>课程</th><th>报读课时</th><th>消耗课时</th><th>剩余课时</th><th>报读金额</th><th>实退金额</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-refund"></div>
+                    </div>
+                    <!-- 课程记录 tab（预留） -->
+                    <div class="sec-panel" id="tab-course-records">
+                        <div style="text-align:center;color:#999;padding:40px;">课程记录功能开发中...</div>
+                    </div>
+                </div>
             </section>
 
             <!-- 面板：学科设置 -->
@@ -5668,6 +5920,90 @@ if (intval($countBt) === 0) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+    <!-- 退费申请弹窗（学员详情页发起） -->
+    <div class="modal" id="modal-refund-apply">
+        <div class="modal-overlay" onclick="closeModal('modal-refund-apply')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h4>退费申请</h4>
+                <button class="modal-close" onclick="closeModal('modal-refund-apply')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="refund-apply-order-id">
+                <!-- 自动计算区（只读） -->
+                <div style="background:#f7f9fc;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px;">
+                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">自动计算信息</h5>
+                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
+                        <div><span style="color:#888;">报读校区：</span><span id="refund-auto-campus">-</span></div>
+                        <div><span style="color:#888;">课程名称：</span><span id="refund-auto-course">-</span></div>
+                        <div><span style="color:#888;">报读课时：</span><span id="refund-auto-total-lessons">0</span></div>
+                        <div><span style="color:#888;">报读金额：</span><span id="refund-auto-total-amount">¥0.00</span></div>
+                        <div><span style="color:#888;">消耗课时：</span><span id="refund-auto-consumed-lessons">0</span></div>
+                        <div><span style="color:#888;">消耗金额：</span><span id="refund-auto-consumed-amount">¥0.00</span></div>
+                        <div><span style="color:#888;">剩余可退课时：</span><b id="refund-auto-remaining-lessons">0</b></div>
+                        <div><span style="color:#888;">剩余可退金额：</span><b id="refund-auto-remaining-amount">¥0.00</b></div>
+                    </div>
+                </div>
+                <!-- 补充区 -->
+                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px;">
+                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">费用调整</h5>
+                    <div class="form-group">
+                        <label>自定义扣减金额 (元)</label>
+                        <input type="number" id="refund-custom-deduction" class="form-input" step="0.01" min="0" value="0" oninput="calcActualRefund()">
+                    </div>
+                    <div class="form-group" style="font-size:16px;font-weight:bold;color:#e74c3c;">
+                        实退金额：<span id="refund-actual-amount-display">¥0.00</span>
+                    </div>
+                </div>
+                <!-- 信息填写区 -->
+                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
+                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">收款信息</h5>
+                    <div class="form-row">
+                        <div class="form-group" style="flex:1;">
+                            <label>转账银行</label>
+                            <input type="text" id="refund-bank-name" class="form-input" placeholder="请输入银行名称">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label>银行卡号</label>
+                            <input type="text" id="refund-bank-account" class="form-input" placeholder="请输入银行卡号">
+                        </div>
+                        <div class="form-group" style="flex:1;">
+                            <label>开户人</label>
+                            <input type="text" id="refund-account-holder" class="form-input" placeholder="请输入开户人姓名">
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label>退费原因</label>
+                        <textarea id="refund-apply-reason" class="form-input" rows="3" placeholder="请输入退费原因"></textarea>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-default" onclick="closeModal('modal-refund-apply')">取消</button>
+                <button class="btn btn-primary" onclick="submitRefundApply()">提交申请</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 退费审批弹窗 -->
+    <div class="modal" id="modal-refund-approve">
+        <div class="modal-overlay" onclick="closeModal('modal-refund-approve')"></div>
+        <div class="modal-content modal-lg">
+            <div class="modal-header">
+                <h4>退费审批</h4>
+                <button class="modal-close" onclick="closeModal('modal-refund-approve')">&times;</button>
+            </div>
+            <div class="modal-body" id="refund-approve-content">
+                加载中...
+            </div>
+            <div class="modal-footer" id="refund-approve-footer" style="display:none;">
+                <button class="btn btn-default" onclick="closeModal('modal-refund-approve')">关闭</button>
+                <button class="btn btn-danger" id="btn-refund-reject" onclick="submitApproval('reject')">驳回</button>
+                <button class="btn btn-primary" id="btn-refund-approve" onclick="submitApproval('approve')">审批通过</button>
+            </div>
+        </div>
+    </div>
+
     <script src="static/js/main.js"></script>
 </body>
 </html>
