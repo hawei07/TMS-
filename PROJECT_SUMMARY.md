@@ -148,6 +148,7 @@ market-system-php/
 | `price_items` | 报价单明细 | plan_id → price_plans.id |
 | `orders` | 交易订单（子订单，含父订单号/现金/美团） | student_id → students.id, course_id → courses.id |
 | `attendance_records` | 上课记录（考勤） | student_id → students.id, course_id → courses.id |
+| `absence_records` | 缺勤记录（考勤缺勤时自动同步，缺勤→出勤时自动删除） | student_id → students.id, course_id → courses.id, attendance_id → attendance_records.id |
 | `parent_orders` | 父订单（汇总同一录单的所有子订单） | parent_order_no → orders.parent_order_no |
 
 ### 3.2 resources（资源表）
