@@ -1180,6 +1180,14 @@ function isSmallPackage(val) {
 
 ## 八、更新日志
 
+### 2026-06-29
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| fix | **get_student 汇总 SQL 中 total_price 改为 actual_price**：学员详情页收费汇总的 SQL 错误使用了 `total_price` 字段（仅含学费），修正为 `actual_price`（含教材费等附加项），使汇总金额与订单实际金额一致 | `index.php` | 110a962 |
+| feat | **学员详情-报读课程增加筛选项**：报读课程标签新增一级学科、二级学科、课程名称三个下拉筛选框；二级学科根据一级学科动态联动（`window._subject2Map`）；筛选联动 `loadStudentOrders` | `static/js/main.js` | f604f43 |
+| fix | **课耗明细弹窗表格列对齐与内容截断修复**：表格布局从 `auto` 改为 `fixed`，列宽由 `<colgroup>` 严格控制，消除 sticky header 与滚动容器导致的表头表体错位；校区/上课日期/上课时间/考勤时间四列加宽（110→135/70→95/100→115/160→175），内容完整显示；弹窗宽度从 98vw 改为 `width:auto;max-width:95vw`，自适应内容 | `index.php`、`static/css/style.css`、`static/js/main.js` | a475532 |
+
 ### 2026-06-27
 
 | 类型 | 描述 | 涉及文件 | 提交 |
