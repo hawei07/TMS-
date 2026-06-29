@@ -83,7 +83,7 @@ function refreshPanel(panelId) {
         case 'panel-employees': loadEmployees(); break;
         case 'panel-position-settings': loadPositionsTable(); break;
         case 'panel-org': loadOrgTree(); break;
-        case 'panel-courses': loadCourses(); break;
+        case 'panel-courses': loadFilterSubjects(); loadCourses(); break;
         case 'panel-subjects': loadSubjects(); break;
         case 'panel-classes': currentClassDetailId = null; loadClasses(); break;
         case 'panel-classrooms': loadClassrooms(); break;
@@ -1985,6 +1985,16 @@ async function deletePosition(id) {
 async function loadCourses() {
     const keyword = document.getElementById('search-course')?.value || '';
     const params = new URLSearchParams({ page: coursePage, page_size: 15, keyword });
+    const subject1 = document.getElementById('filter-subject1')?.value || '';
+    const subject2 = document.getElementById('filter-subject2')?.value || '';
+    const smallPackage = document.getElementById('filter-small-package')?.value || '';
+    const toddler = document.getElementById('filter-toddler')?.value || '';
+    const campusIds = getFilterCampusIds();
+    if (subject1) params.set('subject_level1', subject1);
+    if (subject2) params.set('subject_level2', subject2);
+    if (smallPackage) params.set('small_package', smallPackage);
+    if (toddler) params.set('toddler', toddler);
+    if (campusIds) params.set('campus_ids', campusIds);
     const url = API_BASE + 'list_courses&' + params.toString();
     try {
         const res = await fetch(url);
@@ -2000,31 +2010,132 @@ async function loadCourses() {
     }
 }
 
-// 校区权限辅助函数
-let campusCheckboxData = []; // [{id, name}]
+// 校区权限辅助函数（树形结构）
+let campusCheckboxData = []; // [{id, name, type, parent_id}]
 
-async function loadCampusCheckboxes() {
-    const container = document.getElementById('course-campus-checkboxes');
+async function loadCampusTree() {
+    const container = document.getElementById('course-campus-tree');
     if (!container) return;
-    container.innerHTML = '<span style="color:#999;">加载中...</span>';
+    container.innerHTML = '<span style="color:#999;font-size:13px;">加载中...</span>';
     try {
         const res = await fetch(API_BASE + 'list_organizations');
         const data = await res.json();
-        const orgs = (data && data.data && data.data.flat) ? data.data.flat : [];
-        const campuses = orgs.filter(o => o.type === '校区');
-        campusCheckboxData = campuses;
-        if (campuses.length === 0) {
-            container.innerHTML = '<span style="color:#999;">暂无校区数据，请先在组织管理中创建校区</span>';
+        const tree = (data && data.data && data.data.tree) ? data.data.tree : [];
+        campusCheckboxData = (data && data.data && data.data.flat) ? data.data.flat : [];
+        // 递归剪枝：只保留含校区节点的子树
+        function pruneTree(nodes) {
+            return nodes.filter(function(n) {
+                if (n.type === '校区') return true;
+                if (n.children && n.children.length > 0) {
+                    n.children = pruneTree(n.children);
+                    return n.children.length > 0;
+                }
+                return false;
+            });
+        }
+        const filteredTree = pruneTree(tree);
+        if (filteredTree.length === 0) {
+            container.innerHTML = '<span style="color:#999;font-size:13px;">暂无校区数据，请先在组织管理中创建校区</span>';
             return;
         }
-        container.innerHTML = campuses.map(c =>
-            `<label style="display:block;margin:2px 0;cursor:pointer;font-size:13px;">
-                <input type="checkbox" value="${c.id}" style="margin-right:6px;">${esc(c.name)}
-            </label>`
-        ).join('');
+        container.innerHTML = filteredTree.map(node => renderCampusTreeNode(node, 0)).join('');
+        updateCampusToggleLabel();
     } catch (e) {
-        container.innerHTML = '<span style="color:#e6a23c;">加载校区失败</span>';
+        container.innerHTML = '<span style="color:#e6a23c;font-size:13px;">加载校区失败</span>';
     }
+}
+
+function renderCampusTreeNode(node, level) {
+    const hasChildren = node.children && node.children.length > 0;
+    const expanded = level === 0;
+    let html = '<div class="campus-tree-node" data-id="' + node.id + '" data-type="' + (node.type || '') + '" data-has-children="' + hasChildren + '" data-expanded="' + expanded + '">';
+    html += '<div class="campus-tree-row" style="padding-left:' + (level * 20 + 12) + 'px">';
+    html += '<span class="campus-tree-arrow" onclick="toggleCampusTreeExpand(this)">' + (expanded ? '▾' : '▸') + '</span>';
+    html += '<input type="checkbox" class="campus-tree-check" onclick="toggleCampusTreeNode(this)">';
+    html += '<span class="campus-tree-label">' + esc(node.name) + '</span>';
+    html += '</div>';
+    if (hasChildren) {
+        html += '<div class="campus-tree-children"' + (expanded ? '' : ' style="display:none"') + '>';
+        node.children.forEach(function(child) { html += renderCampusTreeNode(child, level + 1); });
+        html += '</div>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function toggleCampusTreeExpand(el) {
+    const node = el.closest('.campus-tree-node');
+    if (!node) return;
+    const children = node.querySelector('.campus-tree-children');
+    if (!children) return;
+    const expanded = node.dataset.expanded === 'true';
+    node.dataset.expanded = expanded ? 'false' : 'true';
+    el.textContent = expanded ? '▸' : '▾';
+    children.style.display = expanded ? 'none' : '';
+}
+
+function toggleCampusTreeNode(el) {
+    const node = el.closest('.campus-tree-node');
+    if (!node) return;
+    const checked = el.checked;
+    // 传播到所有后代 checkbox
+    node.querySelectorAll('.campus-tree-check').forEach(function(c) { c.checked = checked; c.indeterminate = false; });
+    // 向上更新父节点三态
+    const parent = node.parentElement && node.parentElement.closest('.campus-tree-node');
+    if (parent) updateTreeNodeState(parent);
+    updateCampusToggleLabel();
+}
+
+function updateTreeNodeState(node) {
+    const check = node.querySelector('.campus-tree-check');
+    if (!check) return;
+    // 统计该节点下所有校区类型后代的勾选情况
+    const leafChecks = node.querySelectorAll('.campus-tree-node[data-type="校区"] .campus-tree-check');
+    if (leafChecks.length === 0) return;
+    const checkedCount = Array.from(leafChecks).filter(function(c) { return c.checked; }).length;
+    if (checkedCount === 0) {
+        check.checked = false;
+        check.indeterminate = false;
+    } else if (checkedCount === leafChecks.length) {
+        check.checked = true;
+        check.indeterminate = false;
+    } else {
+        check.checked = false;
+        check.indeterminate = true;
+    }
+    // 继续向上传播
+    const parent = node.parentElement && node.parentElement.closest('.campus-tree-node');
+    if (parent) updateTreeNodeState(parent);
+}
+
+function toggleAllCampuses() {
+    const checks = document.querySelectorAll('#course-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check');
+    if (checks.length === 0) return;
+    const allChecked = Array.from(checks).every(function(c) { return c.checked; });
+    checks.forEach(function(c) { c.checked = !allChecked; c.indeterminate = false; });
+    // 更新所有父节点三态
+    document.querySelectorAll('#course-campus-tree .campus-tree-node[data-has-children="true"]').forEach(function(n) {
+        updateTreeNodeState(n);
+    });
+    updateCampusToggleLabel();
+}
+
+function updateCampusToggleLabel() {
+    const btn = document.getElementById('campus-toggle-all');
+    const checks = document.querySelectorAll('#course-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check');
+    if (!btn || checks.length === 0) return;
+    const allChecked = Array.from(checks).every(function(c) { return c.checked; });
+    btn.textContent = allChecked ? '清空' : '全选';
+}
+
+function getSelectedCampuses() {
+    const checks = document.querySelectorAll('#course-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked');
+    return Array.from(checks).map(function(c) { return c.closest('.campus-tree-node').dataset.id; }).join(',');
+}
+
+function clearFormErrors() {
+    document.querySelectorAll('.form-error').forEach(e => e.textContent = '');
+    document.getElementById('course-name').classList.remove('input-error');
 }
 
 // 仅加载校区数据（不渲染 DOM），供列表页使用
@@ -2047,43 +2158,62 @@ function getCampusDisplayText(campusPermissionStr) {
 }
 
 function renderCourseTable(rows) {
-    const tbody = document.querySelector('#table-courses tbody');
-    tbody.innerHTML = '';
+    const container = document.getElementById('table-courses');
+    const emptyEl = container.querySelector('.course-cards-empty');
+    // 清空除 empty 占位元素外的所有卡片
+    container.querySelectorAll('.course-card').forEach(el => el.remove());
     if (!rows.length) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">暂无课程数据</td></tr>';
+        if (emptyEl) emptyEl.style.display = 'block';
         return;
     }
+    if (emptyEl) emptyEl.style.display = 'none';
     rows.forEach(r => {
         const campusText = getCampusDisplayText(r.campus_permission);
-        const tr = document.createElement('tr');
-        tr.innerHTML = `
-            <td>${r.id}</td>
-            <td>${esc(r.name)}</td>
-            <td>${esc(r.subject_level1) || '-'}</td><td>${esc(r.subject_level2) || '-'}</td>
-            <td>${campusText || '-'}</td>
-            <td>${esc(r.small_package) || '-'}</td>
-            <td>${esc(r.toddler) || '-'}</td>
-            <td class="action-cell">
-                <button class="btn-edit" onclick="showPriceModal(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}', '${esc(r.small_package || '').replace(/'/g, "\\'")}')">设置价格</button>
-                <button class="btn-edit" onclick="editCourse(${r.id})">编辑</button>
-                <button class="btn-delete" onclick="deleteCourse(${r.id})">删除</button>
-            </td>
+        const card = document.createElement('div');
+        card.className = 'course-card';
+        card.innerHTML = `
+            <div class="course-card-body">
+                <div class="course-card-main">
+                    <h4 class="course-card-name">${esc(r.name)}</h4>
+                    <div class="course-card-subjects">
+                        <span class="course-tag course-tag-level1">${esc(r.subject_level1) || '-'}</span>
+                        ${r.subject_level2 ? '<span class="course-tag course-tag-level2">' + esc(r.subject_level2) + '</span>' : ''}
+                    </div>
+                </div>
+                <div class="course-card-meta">
+                    <span class="course-meta-item"><span class="course-meta-label">校区</span>${campusText || '-'}</span>
+                    <span class="course-meta-item"><span class="course-meta-label">小课包</span>${esc(r.small_package) || '-'}</span>
+                    <span class="course-meta-item"><span class="course-meta-label">低幼龄</span>${esc(r.toddler) || '-'}</span>
+                </div>
+                <div class="course-card-actions">
+                    <button class="btn-card-action btn-card-price" onclick="showPriceModal(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}', '${esc(r.small_package || '').replace(/'/g, "\\'")}')" title="设置价格">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                        <span>设置价格</span>
+                    </button>
+                    <button class="btn-card-action btn-card-edit" onclick="editCourse(${r.id})" title="编辑">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                        <span>编辑</span>
+                    </button>
+                    <button class="btn-card-action btn-card-delete" onclick="deleteCourse(${r.id})" title="删除">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                        <span>删除</span>
+                    </button>
+                </div>
+            </div>
         `;
-        tbody.appendChild(tr);
+        container.appendChild(card);
     });
 }
 
 async function showCourseModal(id = null) {
     document.getElementById('modal-course-title').textContent = id ? '编辑课程' : '新增课程';
     document.getElementById('edit-cid').value = id || '';
+    clearFormErrors();
 
-    // 加载学科下拉选项
     await loadSubjectLevel1Options();
-    // 加载校区复选框
-    await loadCampusCheckboxes();
+    await loadCampusTree();
 
     if (id) {
-        // 从表格中获取数据
         const res = await fetch(API_BASE + 'list_courses&page=1&page_size=200');
         const data = await res.json();
         const course = (data.data || []).find(c => c.id == id);
@@ -2096,12 +2226,18 @@ async function showCourseModal(id = null) {
             document.getElementById('course-subject-level2').value = course.subject_level2 || '';
             document.getElementById('course-small-package').value = course.small_package || '';
             document.getElementById('course-toddler').value = course.toddler || '';
-            // 回填校区复选框
+            // 回填校区树
             if (course.campus_permission) {
                 const selectedIds = course.campus_permission.split(',').map(s => s.trim());
-                document.querySelectorAll('#course-campus-checkboxes input[type="checkbox"]').forEach(cb => {
-                    cb.checked = selectedIds.includes(cb.value);
+                document.querySelectorAll('#course-campus-tree .campus-tree-node[data-type="校区"]').forEach(function(node) {
+                    const check = node.querySelector('.campus-tree-check');
+                    if (check) check.checked = selectedIds.includes(node.dataset.id);
                 });
+                // 更新所有父节点三态
+                document.querySelectorAll('#course-campus-tree .campus-tree-node[data-has-children="true"]').forEach(function(n) {
+                    updateTreeNodeState(n);
+                });
+                updateCampusToggleLabel();
             }
         }
     } else {
@@ -2110,12 +2246,9 @@ async function showCourseModal(id = null) {
         document.getElementById('course-subject-level2').value = '';
         document.getElementById('course-small-package').value = '';
         document.getElementById('course-toddler').value = '';
-        // 重置校区复选框
-        document.querySelectorAll('#course-campus-checkboxes input[type="checkbox"]').forEach(cb => {
-            cb.checked = false;
-        });
+        document.querySelectorAll('#course-campus-tree .campus-tree-check').forEach(function(c) { c.checked = false; c.indeterminate = false; });
+        updateCampusToggleLabel();
     }
-    // 绑定一级学科 onchange 事件，切换时加载对应二级学科
     document.getElementById('course-subject-level1').onchange = async function() {
         const parentName = this.value;
         await loadSubjectLevel2Options(parentName);
@@ -2168,29 +2301,49 @@ async function editCourse(id) {
 }
 
 async function saveCourse() {
+    const btn = document.getElementById('btn-save-course');
+    const originalText = btn.textContent;
+    btn.textContent = '保存中...';
+    btn.disabled = true;
+    clearFormErrors();
+
     const cid = document.getElementById('edit-cid').value;
     const name = document.getElementById('course-name').value.trim();
     const subject_level1 = document.getElementById('course-subject-level1').value.trim();
     const subject_level2 = document.getElementById('course-subject-level2').value.trim();
     const small_package = document.getElementById('course-small-package').value.trim();
     const toddler = document.getElementById('course-toddler').value.trim();
-    // 收集校区权限
-    const campusCheckboxes = document.querySelectorAll('#course-campus-checkboxes input[type="checkbox"]:checked');
-    const campus_permission = Array.from(campusCheckboxes).map(cb => cb.value).join(',');
+    const campus_permission = getSelectedCampuses();
 
-    if (!name) { showToast('课程名称不能为空', 'error'); return; }
+    let hasError = false;
+    if (!name) {
+        document.getElementById('err-course-name').textContent = '请输入课程名称';
+        document.getElementById('course-name').classList.add('input-error');
+        hasError = true;
+    }
+    if (!campus_permission) {
+        document.getElementById('err-campus').textContent = '请至少选择一个校区';
+        hasError = true;
+    }
+    if (hasError) {
+        btn.textContent = originalText;
+        btn.disabled = false;
+        return;
+    }
 
     const action = cid ? 'update_course' : 'add_course';
-    const payload = cid ? { id: parseInt(cid), name, subject_level1, subject_level2, small_package, toddler, campus_permission } : { name, subject_level1, subject_level2, small_package, toddler, campus_permission };
+    const payload = cid ? { id: parseInt(cid), name, subject_level1, subject_level2, small_package, toddler, campus_permission }
+                        : { name, subject_level1, subject_level2, small_package, toddler, campus_permission };
     try {
         const r = await api(action, payload, 'POST');
         if (r && r.error) {
             showToast(r.error, 'error');
-            // 名称重复时高亮提示
             if (r.error.includes('已存在')) {
-                document.getElementById('course-name').style.borderColor = '#f56c6c';
-                setTimeout(() => { document.getElementById('course-name').style.borderColor = ''; }, 2000);
+                document.getElementById('err-course-name').textContent = '课程名称已存在';
+                document.getElementById('course-name').classList.add('input-error');
             }
+            btn.textContent = originalText;
+            btn.disabled = false;
             return;
         }
         closeModal('modal-course');
@@ -2199,6 +2352,9 @@ async function saveCourse() {
         loadStats();
     } catch (e) {
         showToast('保存失败：' + e.message, 'error');
+    } finally {
+        btn.textContent = originalText;
+        btn.disabled = false;
     }
 }
 
@@ -2213,14 +2369,6 @@ async function deleteCourse(id) {
     } catch (e) {
         showToast('删除失败：' + e.message, 'error');
     }
-}
-
-function exportCourses() {
-    const keyword = document.getElementById('search-course')?.value || '';
-    const params = new URLSearchParams();
-    if (keyword) params.append('keyword', keyword);
-    const qs = params.toString();
-    window.open(API_BASE + 'export_courses' + (qs ? '&' + qs : ''), '_blank');
 }
 
 // ==================== 价格管理 ====================
@@ -2245,6 +2393,162 @@ function showPriceModal(courseId, courseName, smallPackage) {
     openModal('modal-price');
     loadPricePlans(courseId);
 }
+
+// ==================== 课程筛选 ====================
+function onFilterChange() {
+    coursePage = 1;
+    loadCourses();
+}
+
+async function onFilterSubject1Change() {
+    const val = document.getElementById('filter-subject1').value;
+    const sel2 = document.getElementById('filter-subject2');
+    sel2.innerHTML = '<option value="">全部</option>';
+    if (val && filterSubjectsFlat) {
+        filterSubjectsFlat.filter(s => String(s.parent_id) !== '0' && s.parent_name === val).forEach(s => {
+            sel2.innerHTML += '<option value="' + esc(s.name) + '">' + esc(s.name) + '</option>';
+        });
+    }
+    onFilterChange();
+}
+
+let filterSubjectsFlat = [];
+let filterCampusFlat = [];
+
+async function loadFilterSubjects() {
+    try {
+        const res = await fetch(API_BASE + 'list_subjects');
+        const data = await res.json();
+        const flat = (data && data.flat) ? data.flat : [];
+        // 为每个二级学科附加 parent_name
+        const idMap = {};
+        flat.forEach(s => { idMap[s.id] = s.name; });
+        flat.forEach(s => {
+            s.parent_name = s.parent_id ? (idMap[s.parent_id] || '') : '';
+        });
+        filterSubjectsFlat = flat;
+        const sel1 = document.getElementById('filter-subject1');
+        if (sel1) {
+            flat.filter(s => !s.parent_id || s.parent_id == 0).forEach(s => {
+                sel1.innerHTML += '<option value="' + esc(s.name) + '">' + esc(s.name) + '</option>';
+            });
+        }
+    } catch (e) { /* 静默 */ }
+}
+
+async function loadFilterCampusTree() {
+    const container = document.getElementById('filter-campus-tree');
+    if (!container) return;
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const tree = (data && data.data && data.data.tree) ? data.data.tree : [];
+        filterCampusFlat = (data && data.data && data.data.flat) ? data.data.flat.filter(o => o.type === '校区') : [];
+        // 剪枝
+        function prune(nodes) {
+            return nodes.filter(function(n) {
+                if (n.type === '校区') return true;
+                if (n.children && n.children.length > 0) {
+                    n.children = prune(n.children);
+                    return n.children.length > 0;
+                }
+                return false;
+            });
+        }
+        const filtered = prune(tree);
+        container.innerHTML = filtered.map(n => renderCampusTreeNode(n, 0)).join('');
+        updateFilterCampusToggleLabel();
+    } catch (e) { /* 静默 */ }
+}
+
+function getFilterCampusIds() {
+    const checks = document.querySelectorAll('#filter-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked');
+    return Array.from(checks).map(c => c.closest('.campus-tree-node').dataset.id).join(',');
+}
+
+function updateFilterCampusTriggerLabel() {
+    const btn = document.getElementById('filter-campus-trigger');
+    const ids = getFilterCampusIds();
+    if (!ids) { btn.textContent = '全部校区 ▾'; return; }
+    const count = ids.split(',').length;
+    btn.textContent = '已选' + count + '个校区 ▾';
+}
+
+function updateFilterCampusToggleLabel() {
+    const btn = document.getElementById('filter-campus-toggle-all');
+    const checks = document.querySelectorAll('#filter-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check');
+    if (!btn || checks.length === 0) return;
+    const allChecked = Array.from(checks).every(c => c.checked);
+    btn.textContent = allChecked ? '清空' : '全选';
+}
+
+function toggleFilterCampusPanel() {
+    const panel = document.getElementById('filter-campus-panel');
+    if (!panel) return;
+    const show = panel.style.display !== 'block';
+    panel.style.display = show ? 'block' : 'none';
+    if (show && !document.getElementById('filter-campus-tree').innerHTML.trim()) {
+        loadFilterCampusTree();
+    }
+}
+
+function filterCampusToggleAll() {
+    const checks = document.querySelectorAll('#filter-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check');
+    if (checks.length === 0) return;
+    const allChecked = Array.from(checks).every(c => c.checked);
+    checks.forEach(c => { c.checked = !allChecked; c.indeterminate = false; });
+    document.querySelectorAll('#filter-campus-tree .campus-tree-node[data-has-children="true"]').forEach(n => updateTreeNodeState(n));
+    updateFilterCampusToggleLabel();
+    updateFilterCampusTriggerLabel();
+    onFilterChange();
+}
+
+function clearFilterCampus() {
+    document.querySelectorAll('#filter-campus-tree .campus-tree-check').forEach(c => { c.checked = false; c.indeterminate = false; });
+    updateFilterCampusToggleLabel();
+    updateFilterCampusTriggerLabel();
+    // 不在这里触发 onFilterChange()，由关闭面板或用户主动操作触发
+}
+
+async function resetCourseFilters() {
+    document.getElementById('search-course').value = '';
+    document.getElementById('filter-subject1').value = '';
+    document.getElementById('filter-subject2').innerHTML = '<option value="">全部</option>';
+    document.getElementById('filter-small-package').value = '';
+    document.getElementById('filter-toddler').value = '';
+    clearFilterCampus();
+    document.getElementById('filter-campus-trigger').textContent = '全部校区 ▾';
+    onFilterChange();
+}
+
+// 点击面板外部关闭
+document.addEventListener('click', function(e) {
+    const panel = document.getElementById('filter-campus-panel');
+    const trigger = document.getElementById('filter-campus-trigger');
+    if (!panel || !trigger) return;
+    if (!trigger.contains(e.target) && !panel.contains(e.target)) {
+        panel.style.display = 'none';
+    }
+});
+
+// 监听筛选校区树的 checkbox 变化（委托）
+document.addEventListener('change', function(e) {
+    if (e.target && e.target.classList.contains('campus-tree-check') && e.target.closest('#filter-campus-tree')) {
+        updateFilterCampusToggleLabel();
+        updateFilterCampusTriggerLabel();
+    }
+});
+
+// 覆盖 toggleCampusTreeNode：如果是筛选面板的树，需要额外更新 trigger label 和触发筛选
+var _origToggleCampusTreeNode = toggleCampusTreeNode;
+toggleCampusTreeNode = function(el) {
+    _origToggleCampusTreeNode(el);
+    if (el.closest('#filter-campus-tree')) {
+        updateFilterCampusToggleLabel();
+        updateFilterCampusTriggerLabel();
+        onFilterChange();
+    }
+};
 
 async function loadPricePlans(courseId) {
     try {
@@ -3797,7 +4101,7 @@ function renderStudentCoursesTable(rows) {
     const tableDiv = document.getElementById('student-courses-table');
     if (!tableDiv) return;
     tableDiv.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
+        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th><th>子订单号</th>
     </tr></thead><tbody>
     ${rows.map(r => `<tr>
         <td>${esc(r.name)}</td>
@@ -3812,46 +4116,86 @@ function renderStudentCoursesTable(rows) {
         <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
         <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
+        <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
     </tr>`).join('')}
     </tbody></table></div>`;
 }
 
 // ==================== 课耗明细弹窗 ====================
+function statusMap(s) {
+    if (s === '缺勤') return { cls: 'cst-dot-red', bg: 'cst-badge-red' };
+    if (s === '请假') return { cls: 'cst-dot-orange', bg: 'cst-badge-orange' };
+    return { cls: 'cst-dot-green', bg: 'cst-badge-green' };
+}
+
 async function showConsumptionDetail(orderId, courseId, courseName) {
     document.getElementById('modal-consumption-title').textContent = '课耗明细 - ' + courseName;
-    const tbody = document.getElementById('consumption-detail-tbody');
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    const list = document.getElementById('consumption-detail-list');
+    const summary = document.getElementById('consumption-summary');
+    list.innerHTML = '<div class="consumption-empty">加载中...</div>';
+    summary.style.display = 'none';
     openModal('modal-consumption-detail');
     try {
         const res = await fetch(API_BASE + 'list_attendance&student_id=' + currentViewStudentId);
         const data = await res.json();
         const rows = (data.data || []).filter(r => r.order_id == orderId);
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂未产生课耗记录</td></tr>';
+            list.innerHTML = '<div class="consumption-empty">暂未产生课耗记录</div>';
             return;
         }
-        tbody.innerHTML = rows.map(r => {
-            let statusClass = 'status-出勤';
-            if (r.status === '缺勤') statusClass = 'status-缺勤';
-            else if (r.status === '请假') statusClass = 'status-请假';
-            const cell = (s) => `<td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(s)}</td>`;
-            return `<tr>
-                ${cell(r.campus)}
-                ${cell(r.course_name)}
-                ${cell(r.subject_level1)}
-                ${cell(r.subject_level2)}
-                ${cell(r.class_name)}
-                ${cell(r.teacher)}
-                ${cell(r.lesson_date)}
-                ${cell(r.class_time)}
-                ${cell(r.attended_at ? r.attended_at.slice(0, 19) : '')}
-                <td style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;"><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
-                <td style="text-align:right;white-space:nowrap;">${r.deducted_lessons || 0}</td>
-                <td style="text-align:right;white-space:nowrap;">¥${(parseFloat(r.consumed_amount) || 0).toFixed(2)}</td>
-            </tr>`;
+        // 汇总
+        let totalLessons = 0, totalAmount = 0;
+        rows.forEach(r => {
+            if (r.status === '出勤') {
+                totalLessons += (parseFloat(r.deducted_lessons) || 0);
+                totalAmount += (parseFloat(r.consumed_amount) || 0);
+            }
+        });
+        document.getElementById('consumption-count').textContent = '共 ' + rows.length + ' 条记录';
+        document.getElementById('consumption-total-lessons').textContent = totalLessons;
+        document.getElementById('consumption-total-amount').textContent = '¥' + totalAmount.toFixed(2);
+        summary.style.display = 'flex';
+        // 渲染卡片
+        list.innerHTML = rows.map(r => {
+            const st = statusMap(r.status);
+            const clsTime = (r.class_time || '').replace('~', '—');
+            const lessons = parseFloat(r.deducted_lessons) || 0;
+            const amount = (parseFloat(r.consumed_amount) || 0).toFixed(2);
+            const attTime = r.attended_at ? r.attended_at.slice(0, 16).replace('T', ' ') : '—';
+            return `<div class="consumption-card">
+                <div class="cst-accent ${st.cls}"></div>
+                <div class="cst-body">
+                    <div class="cst-main">
+                        <div class="cst-date-block">
+                            <span class="cst-date">${esc(r.lesson_date)}</span>
+                            <span class="cst-time">${esc(clsTime)}</span>
+                        </div>
+                        <div class="cst-status-block">
+                            <span class="cst-badge ${st.bg}">${esc(r.status)}</span>
+                        </div>
+                        <div class="cst-consume-block">
+                            <div class="cst-consume-lessons">${lessons} <span class="cst-unit">课时</span></div>
+                            <div class="cst-consume-amount">¥${amount}</div>
+                        </div>
+                    </div>
+                    <div class="cst-meta">
+                        <span>${esc(r.campus)}</span><span class="cst-sep">·</span>
+                        <span>${esc(r.course_name)}</span><span class="cst-sep">·</span>
+                        <span>${esc(r.class_name)}</span><span class="cst-sep">·</span>
+                        <span>${esc(r.teacher)}</span>
+                    </div>
+                    <div class="cst-sub">
+                        <span class="cst-sub-label">学科</span>
+                        <span>${esc(r.subject_level1)}${r.subject_level2 ? ' > ' + esc(r.subject_level2) : ''}</span>
+                        <span class="cst-sub-sep">|</span>
+                        <span class="cst-sub-label">考勤</span>
+                        <span>${esc(attTime)}</span>
+                    </div>
+                </div>
+            </div>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        list.innerHTML = '<div class="consumption-empty" style="color:#e74c3c;">加载失败</div>';
     }
 }
 
@@ -3880,7 +4224,7 @@ async function loadStudentOrders(sid) {
         }
         container.innerHTML = `<span style="font-size:14px;color:#888;">共 ${rows.length} 笔订单</span>
         <div class="table-wrap" style="margin-top:8px;"><table><thead><tr>
-            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
+            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
         </tr></thead><tbody>
         ${rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
@@ -3907,6 +4251,9 @@ async function loadStudentOrders(sid) {
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td>${orderTypeHtml}</td>
+            <td>${renderPayStatus(r.pay_status)}</td>
+            <td>${renderVoidedStatus(r.is_voided)}</td>
+            <td>${r.is_voided === '否' ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button>` : '-'}</td>
         </tr>`;
         }).join('')}
         </tbody></table></div>`;
@@ -4731,21 +5078,39 @@ async function confirmResourceEnroll() {
 // ==================== 交易订单 ====================
 async function loadOrders() {
     const keyword = document.getElementById('search-order').value;
+    const payStatus = document.getElementById('filter-pay-status')?.value || '';
+    const isVoided = document.getElementById('filter-is-voided')?.value || '';
     const params = new URLSearchParams({ page: orderPage, page_size: 15 });
     if (keyword) params.set('keyword', keyword);
+    if (payStatus) params.set('pay_status', payStatus);
+    if (isVoided) params.set('is_voided', isVoided);
     const res = await fetch(API_BASE + 'list_orders&' + params);
     const data = await res.json();
     renderOrderTable(data.data);
     renderPagination('pagination-order', data.total, orderPage, 15, (p) => { orderPage = p; loadOrders(); });
     document.getElementById('stat-orders-inline').textContent = data.total || 0;
     renderPaymentSummary(data.payment_summary || []);
+    initOrderTableScrollSync();
+}
+
+function renderPayStatus(status) {
+    const s = (status || '').trim();
+    if (s === '已支付') return '<span style="color:#27ae60;font-weight:bold;">已支付</span>';
+    if (s === '待支付') return '<span style="color:#e67e22;font-weight:bold;">待支付</span>';
+    if (s === '已取消') return '<span style="color:#999;">已取消</span>';
+    return '<span style="color:#999;">-</span>';
+}
+function renderVoidedStatus(status) {
+    const s = (status || '').trim();
+    if (s === '是') return '<span style="color:#e74c3c;font-weight:bold;">是</span>';
+    return s || '否';
 }
 
 function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="19" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
@@ -4778,15 +5143,39 @@ function renderOrderTable(rows) {
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td>${orderTypeHtml}</td>
+            <td>${renderPayStatus(r.pay_status)}</td>
+            <td>${renderVoidedStatus(r.is_voided)}</td>
+            <td>${r.is_voided === '否' ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button>` : '-'}</td>
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
         <td colspan="12" style="text-align:right;font-weight:bold;">合计</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
-        <td colspan="2"></td>
+        <td colspan="5"></td>
     </tr>`;
     tfoot.style.display = '';
+    syncOrderTableScrollWidth();
+}
+
+async function voidOrder(orderId) {
+    if (!confirm('确定作废该订单吗？作废后该笔订单对应的报读课程将被删除。')) return;
+    try {
+        const res = await fetch(API_BASE + 'void_order', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ order_id: orderId })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('订单作废成功');
+            loadOrders();
+        } else {
+            showToast(data.message || '作废失败');
+        }
+    } catch (e) {
+        showToast('网络错误，请重试');
+    }
 }
 
 function renderPaymentSummary(summary) {
@@ -4816,6 +5205,22 @@ function renderPaymentSummary(summary) {
     el.style.display = 'block';
 }
 
+// ==================== 订单表格水平滚动联动 ====================
+function initOrderTableScrollSync() {
+    const topScroll = document.querySelector('#panel-orders .table-scroll-top');
+    const bodyScroll = document.querySelector('#panel-orders .table-scroll-body');
+    if (!topScroll || !bodyScroll) return;
+    topScroll.onscroll = function() { bodyScroll.scrollLeft = this.scrollLeft; };
+    bodyScroll.onscroll = function() { topScroll.scrollLeft = this.scrollLeft; };
+}
+
+function syncOrderTableScrollWidth() {
+    const table = document.getElementById('table-orders');
+    const inner = document.querySelector('#panel-orders .table-scroll-top-inner');
+    if (table && inner) {
+        inner.style.width = table.scrollWidth + 'px';
+    }
+}
 
 // ==================== 班级详情 ====================
 function viewClassDetail(classId, className) {

@@ -227,6 +227,12 @@ if (!in_array('consumed_lessons', $existingCols)) {
 if (!in_array('campus', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN campus VARCHAR(500) DEFAULT ''");
 }
+if (!in_array('pay_status', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN pay_status VARCHAR(20) DEFAULT '待支付'");
+}
+if (!in_array('is_voided', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN is_voided VARCHAR(5) DEFAULT '否'");
+}
 
 // 兼容已有数据库：学生表添加学号字段
 $existingColsS = [];
@@ -1617,6 +1623,11 @@ $stmt->execute();
             $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
             $keyword = $_GET['keyword'] ?? '';
             $campusId = intval($_GET['campus_id'] ?? 0);
+            $subjectLevel1 = $_GET['subject_level1'] ?? '';
+            $subjectLevel2 = $_GET['subject_level2'] ?? '';
+            $smallPackage = $_GET['small_package'] ?? '';
+            $toddler = $_GET['toddler'] ?? '';
+            $campusIds = $_GET['campus_ids'] ?? '';
 
             $where = [];
             $params = [];
@@ -1627,6 +1638,34 @@ $stmt->execute();
             if ($campusId > 0) {
                 $where[] = "(campus_permission = '' OR campus_permission IS NULL OR FIND_IN_SET(:cid, campus_permission))";
                 $params[':cid'] = $campusId;
+            }
+            if ($subjectLevel1) {
+                $where[] = "subject_level1 = :sl1";
+                $params[':sl1'] = $subjectLevel1;
+            }
+            if ($subjectLevel2) {
+                $where[] = "subject_level2 = :sl2";
+                $params[':sl2'] = $subjectLevel2;
+            }
+            if ($smallPackage !== '') {
+                $where[] = "small_package = :spk";
+                $params[':spk'] = $smallPackage;
+            }
+            if ($toddler !== '') {
+                $where[] = "toddler = :tdl";
+                $params[':tdl'] = $toddler;
+            }
+            if ($campusIds) {
+                $ids = array_filter(array_map('intval', explode(',', $campusIds)));
+                if ($ids) {
+                    $campusClauses = [];
+                    foreach ($ids as $i => $cid) {
+                        $key = ":cid$i";
+                        $campusClauses[] = "FIND_IN_SET($key, campus_permission)";
+                        $params[$key] = $cid;
+                    }
+                    $where[] = '(' . implode(' OR ', $campusClauses) . ')';
+                }
             }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
@@ -1793,7 +1832,7 @@ $stmt->execute();
             $orderIds = [];
             $childOrderNos = [];
             $totalLessons = 0;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot, :campus)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
@@ -1820,6 +1859,8 @@ $stmt->execute();
                 $stmt->bindValue(':pat', $n, PDO::PARAM_STR);
                 $stmt->bindValue(':ot', $orderType, PDO::PARAM_STR);
                 $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
+                $stmt->bindValue(':ps', '已支付', PDO::PARAM_STR);
+                $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
                 $stmt->execute();
                 $orderIds[] = $db->lastInsertId();
                 $childOrderNos[] = $orderNo;
@@ -2164,7 +2205,7 @@ $stmt->execute();
             }
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus, :ps, :iv)");
             $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
             $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2174,6 +2215,8 @@ $stmt->execute();
             $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
             $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
+                $stmt->bindValue(':ps', '待支付', PDO::PARAM_STR);
+                $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
             $stmt->execute();
             json(['message' => '报名成功', 'order_id' => $db->lastInsertId(), 'order_no' => $orderNo]);
             break;
@@ -2214,7 +2257,7 @@ $stmt->execute();
             }
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus, :ps, :iv)");
             $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
             $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2224,6 +2267,8 @@ $stmt->execute();
             $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
             $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
+                $stmt->bindValue(':ps', '待支付', PDO::PARAM_STR);
+                $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
             $stmt->execute();
             json(['message' => '报名成功，学员ID：' . $studentId, 'id' => $db->lastInsertId(), 'student_id' => $studentId]);
             break;
@@ -2259,7 +2304,7 @@ $stmt->execute();
             $sid = intval($_GET['student_id'] ?? 0);
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.created_at, o.consumed_lessons, o.campus FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
@@ -2447,18 +2492,32 @@ $stmt->execute();
             $page = max(1, intval($_GET['page'] ?? 1));
             $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 15)));
             $keyword = trim($_GET['keyword'] ?? '');
+            $payStatus = trim($_GET['pay_status'] ?? '');
+            $isVoided = trim($_GET['is_voided'] ?? '');
             $offset = ($page - 1) * $pageSize;
             $where = '';
             $params = [];
+            $conds = [];
             if ($keyword) {
-                $where = "WHERE (s.name LIKE :kw OR c.name LIKE :kw)";
+                $conds[] = "(s.name LIKE :kw OR c.name LIKE :kw)";
                 $params[':kw'] = "%$keyword%";
+            }
+            if ($payStatus) {
+                $conds[] = "o.pay_status = :pst";
+                $params[':pst'] = $payStatus;
+            }
+            if ($isVoided) {
+                $conds[] = "o.is_voided = :ivd";
+                $params[':ivd'] = $isVoided;
+            }
+            if (!empty($conds)) {
+                $where = "WHERE " . implode(' AND ', $conds);
             }
             $countSql = "SELECT COUNT(*) FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, o.campus, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -2473,6 +2532,21 @@ $stmt->execute();
 $sumStmt->execute();
             $paymentSummary = $sumStmt->fetch(PDO::FETCH_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0];
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize, 'payment_summary' => $paymentSummary]);
+            break;
+
+        case 'void_order':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $oid = intval($input['order_id'] ?? 0);
+            if ($oid <= 0) { json(['success' => false, 'message' => '订单ID无效']); break; }
+            $order = $db->query("SELECT student_id, course_id, lesson_count, consumed_lessons, is_voided FROM orders WHERE id = $oid")->fetch();
+            if (!$order) { json(['success' => false, 'message' => '订单不存在']); break; }
+            if ($order['is_voided'] === '是') { json(['success' => false, 'message' => '该订单已作废']); break; }
+            $lc = intval($order['lesson_count']);
+            $cl = intval($order['consumed_lessons']);
+            $remaining = $lc - $cl;
+            if ($lc != $remaining) { json(['success' => false, 'message' => '该订单已有课时消耗，无法作废']); break; }
+            $db->exec("UPDATE orders SET is_voided = '是' WHERE id = $oid");
+            json(['success' => true]);
             break;
 
         case 'list_parent_orders':
@@ -4040,7 +4114,7 @@ if (intval($countBt) === 0) {
                 <div class="panel-header">
                     <h3>课程管理</h3>
                     <div class="header-stats-inline">
-                        <span class="stat-badge">课程总数：<strong id="stat-courses-inline">0</strong></span>
+                        <span class="stat-badge stat-badge-courses">课程总数：<strong id="stat-courses-inline">0</strong></span>
                     </div>
                 </div>
                 <div class="action-button-group">
@@ -4050,26 +4124,57 @@ if (intval($countBt) === 0) {
                         </span>
                         <span class="action-btn-label">新增课程</span>
                     </button>
-                    <button class="action-btn" onclick="exportCourses()" title="导出 CSV">
-                        <span class="action-btn-icon">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                        </span>
-                        <span class="action-btn-label">导出</span>
-                    </button>
+
                 </div>
-                <div class="toolbar">
-                    <div class="toolbar-right" style="margin-left:auto;">
-                        <input type="text" id="search-course" placeholder="搜索课程名称/学科..." onkeyup="debounceSearch('course')">
-                        <button class="btn btn-primary btn-sm" onclick="loadCourses()">搜索</button>
+                <div class="filter-bar" id="filter-bar-course">
+                    <div class="filter-item filter-item-search">
+                        <label class="filter-label">课程名称</label>
+                        <div class="filter-search-wrap">
+                            <svg class="filter-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                            <input type="text" id="search-course" placeholder="搜索课程名称..." onkeyup="debounceSearch('course')">
+                        </div>
                     </div>
+                    <div class="filter-item">
+                        <label class="filter-label">一级学科</label>
+                        <select id="filter-subject1" onchange="onFilterSubject1Change()"><option value="">全部</option></select>
+                    </div>
+                    <div class="filter-item">
+                        <label class="filter-label">二级学科</label>
+                        <select id="filter-subject2" onchange="onFilterChange()"><option value="">全部</option></select>
+                    </div>
+                    <div class="filter-item">
+                        <label class="filter-label">小课包</label>
+                        <select id="filter-small-package" onchange="onFilterChange()">
+                            <option value="">全部</option>
+                            <option value="是">是</option>
+                            <option value="否">否</option>
+                        </select>
+                    </div>
+                    <div class="filter-item">
+                        <label class="filter-label">低幼龄</label>
+                        <select id="filter-toddler" onchange="onFilterChange()">
+                            <option value="">全部</option>
+                            <option value="是">是</option>
+                            <option value="否">否</option>
+                        </select>
+                    </div>
+                    <div class="filter-item filter-item-campus">
+                        <label class="filter-label">适用校区</label>
+                        <div class="filter-campus-dropdown" id="filter-campus-dropdown">
+                            <button class="filter-campus-trigger" onclick="toggleFilterCampusPanel()" id="filter-campus-trigger">全部校区 ▾</button>
+                            <div class="filter-campus-panel" id="filter-campus-panel">
+                                <div class="filter-campus-actions">
+                                    <a href="javascript:void(0)" onclick="filterCampusToggleAll()" id="filter-campus-toggle-all">全选</a>
+                                    <a href="javascript:void(0)" onclick="clearFilterCampus()">清空</a>
+                                </div>
+                                <div class="filter-campus-tree" id="filter-campus-tree"></div>
+                            </div>
+                        </div>
+                    </div>
+                    <button class="filter-reset-btn" onclick="resetCourseFilters()" title="重置筛选">重置</button>
                 </div>
-                <div class="table-wrap">
-                    <table id="table-courses">
-                        <thead><tr>
-                            <th width="60">编号</th><th>课程名称</th><th>一级学科</th><th>二级学科</th><th>适用校区</th><th>小课包</th><th>低幼龄</th><th width="180">操作</th>
-                        </tr></thead>
-                        <tbody></tbody>
-                    </table>
+                <div class="course-cards-wrap" id="table-courses">
+                    <div class="course-cards-empty" style="display:none;">暂无课程数据</div>
                 </div>
                 <div class="pagination" id="pagination-course"></div>
             </section>
@@ -4429,18 +4534,32 @@ if (intval($countBt) === 0) {
                 <div class="toolbar">
                     <div class="toolbar-right" style="margin-left:auto;">
                         <input type="text" id="search-order" placeholder="搜索学员/课程..." onkeyup="debounceSearch('order')">
+                        <select id="filter-pay-status" onchange="loadOrders()" style="margin-left:6px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;">
+                            <option value="">支付状态</option>
+                            <option value="已支付">已支付</option>
+                            <option value="待支付">待支付</option>
+                            <option value="已取消">已取消</option>
+                        </select>
+                        <select id="filter-is-voided" onchange="loadOrders()" style="margin-left:4px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;">
+                            <option value="">是否作废</option>
+                            <option value="否">否</option>
+                            <option value="是">是</option>
+                        </select>
                         <button class="btn btn-primary btn-sm" onclick="loadOrders()">搜索</button>
                     </div>
                 </div>
                 <div class="payment-summary" id="payment-summary-order" style="display:none;"></div>
-                <div class="table-wrap">
-                    <table id="table-orders">
-                        <thead><tr>
-                            <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th>
-                        </tr></thead>
-                        <tbody></tbody>
-                        <tfoot id="table-orders-foot" style="display:none;"></tfoot>
-                    </table>
+                <div class="table-scroll-wrapper">
+                    <div class="table-scroll-top"><div class="table-scroll-top-inner"></div></div>
+                    <div class="table-scroll-body">
+                        <table id="table-orders">
+                            <thead><tr>
+                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                            <tfoot id="table-orders-foot" style="display:none;"></tfoot>
+                        </table>
+                    </div>
                 </div>
                 <div class="pagination" id="pagination-order"></div>
             </section>
@@ -4541,17 +4660,74 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：新增/编辑课程 -->
     <div class="modal-overlay" id="modal-course">
-        <div class="modal"><div class="modal-header"><h3 id="modal-course-title">新增课程</h3><button class="modal-close" onclick="closeModal('modal-course')">&times;</button></div>
-        <div class="modal-body">
-            <input type="hidden" id="edit-cid">
-            <div class="form-group"><label>课程名称 <span class="required">*</span></label><input type="text" id="course-name" maxlength="100" placeholder="请输入课程名称"></div>
-            <div class="form-group"><label>一级学科</label><select id="course-subject-level1"><option value="">请选择一级学科</option></select></div>
-            <div class="form-group"><label>二级学科</label><select id="course-subject-level2"><option value="">请选择二级学科</option></select></div>
-            <div class="form-group"><label>适用校区</label><div id="course-campus-checkboxes" style="max-height:150px;overflow-y:auto;border:1px solid #dcdfe6;border-radius:4px;padding:8px;"></div></div>
-            <div class="form-group"><label>小课包</label><select id="course-small-package"><option value="">请选择</option><option value="是">是</option><option value="否">否</option></select></div>
-            <div class="form-group"><label>低幼龄</label><select id="course-toddler"><option value="">请选择</option><option value="是">是</option><option value="否">否</option></select></div>
+        <div class="modal" style="max-width:540px;">
+            <div class="modal-header">
+                <h3 id="modal-course-title">新增课程</h3>
+                <button class="modal-close" onclick="closeModal('modal-course')">&times;</button>
+            </div>
+            <div class="modal-body course-form-body">
+                <input type="hidden" id="edit-cid">
+
+                <!-- 基本信息 -->
+                <div class="form-section">
+                    <div class="form-section-title">基本信息</div>
+                    <div class="form-group">
+                        <label>课程名称 <span class="required">*</span></label>
+                        <input type="text" id="course-name" maxlength="100" placeholder="请输入课程名称" autocomplete="off">
+                        <span class="form-error" id="err-course-name"></span>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label>一级学科</label>
+                            <select id="course-subject-level1"><option value="">请选择一级学科</option></select>
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label>二级学科</label>
+                            <select id="course-subject-level2"><option value="">请先选择一级学科</option></select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 课程属性 -->
+                <div class="form-section">
+                    <div class="form-section-title">课程属性</div>
+                    <div class="form-row">
+                        <div class="form-group form-group-half">
+                            <label>小课包 <span class="form-tip" title="是否为短期小课时包课程">?</span></label>
+                            <select id="course-small-package">
+                                <option value="">请选择类型</option>
+                                <option value="是">是（小课包）</option>
+                                <option value="否">否（常规课程）</option>
+                            </select>
+                        </div>
+                        <div class="form-group form-group-half">
+                            <label>低幼龄 <span class="form-tip" title="是否面向低龄幼儿">?</span></label>
+                            <select id="course-toddler">
+                                <option value="">请选择类型</option>
+                                <option value="是">是（低幼龄）</option>
+                                <option value="否">否（常规）</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 适用校区 -->
+                <div class="form-section">
+                    <div class="form-section-header">
+                        <span class="form-section-title">适用校区 <span class="required">*</span></span>
+                        <button type="button" class="form-section-action" id="campus-toggle-all" onclick="toggleAllCampuses()">全选</button>
+                    </div>
+                    <div class="campus-tree" id="course-campus-tree">
+                        <span style="color:#999;font-size:13px;">加载中...</span>
+                    </div>
+                    <span class="form-error" id="err-campus"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('modal-course')">取消</button>
+                <button class="btn btn-primary" id="btn-save-course" onclick="saveCourse()">保存</button>
+            </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-course')">取消</button><button class="btn btn-primary" onclick="saveCourse()">保存</button></div></div>
     </div>
 
     <!-- 弹窗：设置价格 -->
@@ -5469,37 +5645,18 @@ if (intval($countBt) === 0) {
 
     <!-- 课耗明细弹窗 -->
     <div class="modal-overlay" id="modal-consumption-detail">
-        <div class="modal" style="max-width:98vw;width:98vw;">
+        <div class="modal" style="max-width:820px;width:95vw;">
             <div class="modal-header">
                 <h3 id="modal-consumption-title">课耗明细</h3>
                 <button class="modal-close" onclick="closeModal('modal-consumption-detail')">&times;</button>
             </div>
-            <div class="modal-body">
-                <div style="max-height:75vh;overflow:auto;">
-                    <table style="table-layout:fixed;width:1230px;border-collapse:collapse;font-size:13px;">
-                        <colgroup>
-                            <col style="width:80px;"><col style="width:120px;"><col style="width:90px;"><col style="width:90px;">
-                            <col style="width:135px;"><col style="width:95px;"><col style="width:115px;"><col style="width:90px;">
-                            <col style="width:175px;"><col style="width:70px;"><col style="width:80px;"><col style="width:90px;">
-                        </colgroup>
-                        <thead><tr>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">校区</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">课程</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">一级学科</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">二级学科</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">班级</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">老师</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">上课日期</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">上课时间</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">考勤时间</th>
-                            <th style="text-align:left;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;overflow:hidden;text-overflow:ellipsis;">状态</th>
-                            <th style="text-align:right;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;">消耗课时</th>
-                            <th style="text-align:right;padding:8px;border-bottom:2px solid #f0f0f0;position:sticky;top:0;background:#fff;z-index:1;">消耗金额</th>
-                        </tr></thead>
-                        <tbody id="consumption-detail-tbody">
-                            <tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">加载中...</td></tr>
-                        </tbody>
-                    </table>
+            <div class="modal-body" style="padding:0;max-height:70vh;overflow-y:auto;">
+                <div class="consumption-summary" id="consumption-summary" style="display:none;">
+                    <span class="consumption-summary-count" id="consumption-count"></span>
+                    <span class="consumption-summary-total">合计消耗 <strong id="consumption-total-lessons"></strong> 课时，<strong id="consumption-total-amount"></strong></span>
+                </div>
+                <div class="consumption-list" id="consumption-detail-list">
+                    <div class="consumption-empty">加载中...</div>
                 </div>
             </div>
             <div class="modal-footer">
