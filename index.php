@@ -2838,8 +2838,8 @@ $stmt->execute();
             }
             $where = [];
             if ($keyword) {
-                $keywordEsc = $db->quote($keyword);
-                $where[] = "(s.name LIKE '%$keywordEsc%' OR s.phone LIKE '%$keywordEsc%' OR s.student_no LIKE '%$keywordEsc%')";
+                $likePattern = $db->quote("%$keyword%");
+                $where[] = "(s.name LIKE $likePattern OR s.phone LIKE $likePattern OR s.student_no LIKE $likePattern)";
             }
             $whereStr = $where ? 'AND ' . implode(' AND ', $where) : '';
             $rows = [];
