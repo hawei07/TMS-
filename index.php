@@ -3307,18 +3307,18 @@ $stmt->execute();
                         $absStmt->bindValue(':ca', $n, PDO::PARAM_STR);
                         $absStmt->execute();
                     }
-                    // 考勤完成后，判断是否需要移出班级
+                    // 考勤完成后，判断是否需要移出班级（按校区统计剩余课时）
                     if ($firstSubjectId > 0) {
-                        // 获取一级学科下所有课程ID
                         $allCourseIds = [];
                         $sr3 = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
                         while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $allCourseIds[] = $c['id'];
                         if (count($allCourseIds) > 0) {
-                            $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
+                            $quotedCampus = $db->quote($classCampus);
+                            $sumRow = $db->query("SELECT SUM(lesson_count - consumed_lessons) AS total_remaining FROM orders WHERE student_id = $studentId AND campus = $quotedCampus AND course_id IN (" . implode(',', $allCourseIds) . ")")->fetch(PDO::FETCH_ASSOC);
                             $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
                             if ($totalRemaining <= 0) {
-                                // 移出该学员在此一级学科下所有班级的记录
-                                $db->exec("DELETE FROM class_students WHERE student_id = $studentId AND class_id IN (SELECT id FROM classes WHERE course_id IN (" . implode(',', $allCourseIds) . "))");
+                                // 移出该学员在此一级学科同校区下所有班级
+                                $db->exec("DELETE FROM class_students WHERE student_id = $studentId AND class_id IN (SELECT id FROM classes WHERE campus = $quotedCampus AND course_id IN (" . implode(',', $allCourseIds) . "))");
                             }
                         }
                     }
