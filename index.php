@@ -4069,7 +4069,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-students">
                         <thead><tr>
-                            <th width="60">编号</th><th width="70">学号</th><th>姓名</th><th>手机号</th><th>校区</th><th>已报课程数</th><th>所在班级</th><th width="180">操作</th>
+                            <th width="70">学号</th><th>姓名</th><th>手机号</th><th>校区</th><th>已报课程数</th><th>所在班级</th><th width="180">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>

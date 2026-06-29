@@ -3547,12 +3547,11 @@ async function loadStudents() {
 function renderStudentTable(rows) {
     const tbody = document.querySelector('#table-students tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `
         <tr>
-            <td>${r.id}</td>
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td><a class="student-name-link" href="javascript:void(0)" onclick="viewStudent(${r.id})">${esc(r.name)}</a></td>
             <td>${esc(r.phone)}</td>
