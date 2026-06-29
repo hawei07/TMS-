@@ -142,6 +142,8 @@ $db->exec("CREATE TABLE IF NOT EXISTS courses (
 try { $db->exec("ALTER TABLE courses ADD COLUMN small_package VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 try { $db->exec("ALTER TABLE courses ADD COLUMN toddler VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 try { $db->exec("ALTER TABLE courses ADD COLUMN campus_permission VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE courses ADD COLUMN subject_level1 VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE courses ADD COLUMN subject_level2 VARCHAR(500) DEFAULT ''"); } catch (PDOException $e) {}
 
 // 价格方案表
 $db->exec("CREATE TABLE IF NOT EXISTS price_plans (
@@ -1654,7 +1656,7 @@ $stmt->execute();
             $small_package = trim($input['small_package'] ?? '');
             $toddler = trim($input['toddler'] ?? '');
             $campus_permission = trim($input['campus_permission'] ?? '');
-            $db->exec("INSERT INTO courses (name, subject_level1, subject_level2, small_package, toddler, campus_permission, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($subject_level1) . ", " . $db->quote($subject_level2) . ", " . $db->quote($small_package) . ", " . $db->quote($toddler) . ", " . $db->quote($campus_permission) . ", '" . now() . "')");
+            $db->exec("INSERT INTO courses (name, subject, subject_level1, subject_level2, small_package, toddler, campus_permission, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($subject_level1 . ' > ' . $subject_level2) . ", " . $db->quote($subject_level1) . ", " . $db->quote($subject_level2) . ", " . $db->quote($small_package) . ", " . $db->quote($toddler) . ", " . $db->quote($campus_permission) . ", '" . now() . "')");
             json(['id' => $db->lastInsertId(), 'message' => '课程添加成功']);
 
         case 'update_course':
@@ -1674,7 +1676,7 @@ $stmt->execute();
             $small_package = array_key_exists('small_package', $input) ? trim($input['small_package']) : ($existing['small_package'] ?? '');
             $toddler = array_key_exists('toddler', $input) ? trim($input['toddler']) : ($existing['toddler'] ?? '');
             $campus_permission = array_key_exists('campus_permission', $input) ? trim($input['campus_permission']) : ($existing['campus_permission'] ?? '');
-            $db->exec("UPDATE courses SET name=" . $db->quote($name) . ", subject_level1=" . $db->quote($subject_level1) . ", subject_level2=" . $db->quote($subject_level2) . ", small_package=" . $db->quote($small_package) . ", toddler=" . $db->quote($toddler) . ", campus_permission=" . $db->quote($campus_permission) . " WHERE id=$cid");
+            $db->exec("UPDATE courses SET name=" . $db->quote($name) . ", subject=" . $db->quote($subject_level1 . ' > ' . $subject_level2) . ", subject_level1=" . $db->quote($subject_level1) . ", subject_level2=" . $db->quote($subject_level2) . ", small_package=" . $db->quote($small_package) . ", toddler=" . $db->quote($toddler) . ", campus_permission=" . $db->quote($campus_permission) . " WHERE id=$cid");
             json(['message' => '课程更新成功']);
 
         case 'delete_course':
@@ -2516,7 +2518,7 @@ $stmt->execute();
             $stmt = $db->prepare("SELECT COUNT(*) FROM classes cl $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT cl.*, c.name AS course_name, SUBSTRING_INDEX(c.subject, ' > ', 1) AS parent_subject, SUBSTRING_INDEX(c.subject, ' > ', -1) AS child_subject FROM classes cl LEFT JOIN courses c ON cl.course_id = c.id $where ORDER BY cl.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT cl.*, c.name AS course_name, COALESCE(NULLIF(c.subject_level1,''), SUBSTRING_INDEX(c.subject, ' > ', 1)) AS parent_subject, COALESCE(NULLIF(c.subject_level2,''), SUBSTRING_INDEX(c.subject, ' > ', -1)) AS child_subject FROM classes cl LEFT JOIN courses c ON cl.course_id = c.id $where ORDER BY cl.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
