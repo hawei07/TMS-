@@ -244,6 +244,25 @@ $db->exec("CREATE TABLE IF NOT EXISTS attendance_records (
     created_at VARCHAR(500) DEFAULT ''
 )");
 
+$db->exec("CREATE TABLE IF NOT EXISTS absence_records (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT NOT NULL,
+    course_id INT NOT NULL,
+    class_id INT DEFAULT 0,
+    schedule_id INT DEFAULT 0,
+    class_name VARCHAR(500) DEFAULT '',
+    campus VARCHAR(500) DEFAULT '',
+    teacher VARCHAR(500) DEFAULT '',
+    subject_level1 VARCHAR(500) DEFAULT '',
+    subject_level2 VARCHAR(500) DEFAULT '',
+    class_time VARCHAR(500) DEFAULT '',
+    lesson_date VARCHAR(500) DEFAULT '',
+    student_name VARCHAR(500) DEFAULT '',
+    phone VARCHAR(500) DEFAULT '',
+    attendance_id INT DEFAULT 0,
+    created_at VARCHAR(500) DEFAULT ''
+)");
+
 $db->exec("CREATE TABLE IF NOT EXISTS parent_orders (
     id INT PRIMARY KEY AUTO_INCREMENT,
     parent_order_no VARCHAR(500) DEFAULT '',
@@ -2283,7 +2302,30 @@ $stmt->execute();
             $stmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
             $stmt->bindValue(':ct2', $n, PDO::PARAM_STR);
             $stmt->execute();
-            json(['id' => $db->lastInsertId(), 'message' => '考勤记录添加成功']);
+            $attId = $db->lastInsertId();
+            // 缺勤时同步写入缺勤记录表
+            if ($status === '缺勤') {
+                $studentName = '';
+                $phone = '';
+                $sr = $db->query("SELECT name, phone FROM students WHERE id=$sid")->fetch(PDO::FETCH_ASSOC);
+                if ($sr) { $studentName = $sr['name']; $phone = $sr['phone']; }
+                $arStmt = $db->prepare("INSERT INTO absence_records (student_id, course_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, student_name, phone, attendance_id, created_at) VALUES (:sid, :cid, :cn, :cp, :t, :sl1, :sl2, :ct, :dt, :sn, :ph, :aid, :ca)");
+                $arStmt->bindValue(':sid', $sid, PDO::PARAM_INT);
+                $arStmt->bindValue(':cid', $cid, PDO::PARAM_INT);
+                $arStmt->bindValue(':cn', $className, PDO::PARAM_STR);
+                $arStmt->bindValue(':cp', $campus, PDO::PARAM_STR);
+                $arStmt->bindValue(':t', $teacher, PDO::PARAM_STR);
+                $arStmt->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
+                $arStmt->bindValue(':sl2', $subjectLevel2, PDO::PARAM_STR);
+                $arStmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
+                $arStmt->bindValue(':dt', $lessonDate, PDO::PARAM_STR);
+                $arStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
+                $arStmt->bindValue(':ph', $phone, PDO::PARAM_STR);
+                $arStmt->bindValue(':aid', $attId, PDO::PARAM_INT);
+                $arStmt->bindValue(':ca', $n, PDO::PARAM_STR);
+                $arStmt->execute();
+            }
+            json(['id' => $attId, 'message' => '考勤记录添加成功']);
             break;
 
         case 'update_attendance':
@@ -2295,10 +2337,13 @@ $stmt->execute();
             $fields = [];
             if (isset($input['course_id'])) $fields[] = "course_id=" . intval($input['course_id']);
             if (isset($input['lesson_date'])) $fields[] = "lesson_date='" . $db->quote(trim($input['lesson_date'])) . "'";
+            $oldStatus = $existing['status'] ?? '';
+            $newStatus = $oldStatus;
             if (isset($input['status'])) {
                 $st = trim($input['status']);
                 if (!in_array($st, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
                 $fields[] = "status=" . $db->quote($st) . "";
+                $newStatus = $st;
             }
             if (isset($input['class_name'])) $fields[] = "class_name='" . $db->quote(trim($input['class_name'])) . "'";
             if (isset($input['campus'])) $fields[] = "campus='" . $db->quote(trim($input['campus'])) . "'";
@@ -2309,6 +2354,33 @@ $stmt->execute();
             if (isset($input['consumed_amount'])) $fields[] = "consumed_amount=" . round(floatval($input['consumed_amount']), 2);
             if (empty($fields)) { json(['message' => '无变更']); break; }
             $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
+            // 缺勤状态切换：从缺勤→非缺勤时删除缺勤记录；从非缺勤→缺勤时新增缺勤记录
+            if ($newStatus !== $oldStatus) {
+                if ($oldStatus === '缺勤' && $newStatus !== '缺勤') {
+                    $db->exec("DELETE FROM absence_records WHERE attendance_id=$id");
+                } elseif ($oldStatus !== '缺勤' && $newStatus === '缺勤') {
+                    $sid = intval($existing['student_id']);
+                    $cid = intval($existing['course_id'] ?? 0);
+                    $sn = ''; $ph = '';
+                    $sr = $db->query("SELECT name, phone FROM students WHERE id=$sid")->fetch(PDO::FETCH_ASSOC);
+                    if ($sr) { $sn = $sr['name']; $ph = $sr['phone']; }
+                    $arStmt = $db->prepare("INSERT INTO absence_records (student_id, course_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, student_name, phone, attendance_id, created_at) VALUES (:sid, :cid, :cn, :cp, :t, :sl1, :sl2, :ct, :dt, :sn, :ph, :aid, :ca)");
+                    $arStmt->bindValue(':sid', $sid, PDO::PARAM_INT);
+                    $arStmt->bindValue(':cid', $cid, PDO::PARAM_INT);
+                    $arStmt->bindValue(':cn', $existing['class_name'] ?? '', PDO::PARAM_STR);
+                    $arStmt->bindValue(':cp', $existing['campus'] ?? '', PDO::PARAM_STR);
+                    $arStmt->bindValue(':t', $existing['teacher'] ?? '', PDO::PARAM_STR);
+                    $arStmt->bindValue(':sl1', $existing['subject_level1'] ?? '', PDO::PARAM_STR);
+                    $arStmt->bindValue(':sl2', $existing['subject_level2'] ?? '', PDO::PARAM_STR);
+                    $arStmt->bindValue(':ct', $existing['class_time'] ?? '', PDO::PARAM_STR);
+                    $arStmt->bindValue(':dt', $existing['lesson_date'] ?? '', PDO::PARAM_STR);
+                    $arStmt->bindValue(':sn', $sn, PDO::PARAM_STR);
+                    $arStmt->bindValue(':ph', $ph, PDO::PARAM_STR);
+                    $arStmt->bindValue(':aid', $id, PDO::PARAM_INT);
+                    $arStmt->bindValue(':ca', now(), PDO::PARAM_STR);
+                    $arStmt->execute();
+                }
+            }
             json(['message' => '考勤记录更新成功']);
             break;
 
@@ -2316,8 +2388,18 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $db->exec("DELETE FROM absence_records WHERE attendance_id=$id");
             $db->exec("DELETE FROM attendance_records WHERE id=$id");
             json(['message' => '考勤记录删除成功']);
+            break;
+
+        case 'list_absence_records':
+            $sid = intval($_GET['student_id'] ?? 0);
+            if ($sid <= 0) { json(['error' => '参数错误']); break; }
+            $rows = [];
+            $stmt = $db->query("SELECT a.*, c.name AS course_name FROM absence_records a LEFT JOIN courses c ON a.course_id = c.id WHERE a.student_id = $sid ORDER BY a.lesson_date DESC, a.id DESC");
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            json(['data' => $rows]);
             break;
 
         // ==================== 交易订单 API ====================
@@ -3151,7 +3233,17 @@ $stmt->execute();
                             }
                         }
                     }
+                    // 查询旧的考勤记录状态
+                    $oldAttRec = $db->query("SELECT id, status FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'")->fetch(PDO::FETCH_ASSOC);
+                    $oldAttStatus = $oldAttRec ? $oldAttRec['status'] : '';
+                    $oldAttRecId = $oldAttRec ? intval($oldAttRec['id']) : 0;
                     $db->exec("DELETE FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
+                    // 删除旧的缺勤记录（无论旧状态是什么，先清理）
+                    if ($oldAttRecId > 0) {
+                        $db->exec("DELETE FROM absence_records WHERE attendance_id=$oldAttRecId");
+                    }
+                    $db->exec("DELETE FROM absence_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
+                    $newAttRecId = 0;
                     if ($status === '出勤' && $deductedLessons > 0) {
                         $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :cp, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :ca)");
                         $arStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
@@ -3171,6 +3263,31 @@ $stmt->execute();
                         $arStmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
                         $arStmt->bindValue(':ca', $n, PDO::PARAM_STR);
                         $arStmt->execute();
+                        $newAttRecId = intval($db->lastInsertId());
+                    }
+                    // 缺勤状态：写入缺勤记录表
+                    if ($status === '缺勤') {
+                        $studentName = '';
+                        $phone = '';
+                        $sr = $db->query("SELECT name, phone FROM students WHERE id=$studentId")->fetch(PDO::FETCH_ASSOC);
+                        if ($sr) { $studentName = $sr['name']; $phone = $sr['phone']; }
+                        $absStmt = $db->prepare("INSERT INTO absence_records (student_id, course_id, class_id, schedule_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, student_name, phone, attendance_id, created_at) VALUES (:sid, :cid, :clid, :scid, :cn, :cp, :t, :sl1, :sl2, :ct, :dt, :sn, :ph, :aid, :ca)");
+                        $absStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $absStmt->bindValue(':cid', $attCourseId, PDO::PARAM_INT);
+                        $absStmt->bindValue(':clid', $classId, PDO::PARAM_INT);
+                        $absStmt->bindValue(':scid', $scheduleId, PDO::PARAM_INT);
+                        $absStmt->bindValue(':cn', $className, PDO::PARAM_STR);
+                        $absStmt->bindValue(':cp', $classCampus, PDO::PARAM_STR);
+                        $absStmt->bindValue(':t', $teacher, PDO::PARAM_STR);
+                        $absStmt->bindValue(':sl1', $attSubjL1, PDO::PARAM_STR);
+                        $absStmt->bindValue(':sl2', $attSubjL2, PDO::PARAM_STR);
+                        $absStmt->bindValue(':ct', $classTime, PDO::PARAM_STR);
+                        $absStmt->bindValue(':dt', $sessionDate, PDO::PARAM_STR);
+                        $absStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
+                        $absStmt->bindValue(':ph', $phone, PDO::PARAM_STR);
+                        $absStmt->bindValue(':aid', $newAttRecId, PDO::PARAM_INT);
+                        $absStmt->bindValue(':ca', $n, PDO::PARAM_STR);
+                        $absStmt->execute();
                     }
                     // 考勤完成后，判断是否需要移出班级
                     if ($firstSubjectId > 0) {
@@ -4101,6 +4218,7 @@ if (intval($countBt) === 0) {
                     <button class="sdt-tab active" data-tab="tab-courses">报读课程</button>
                     <button class="sdt-tab" data-tab="tab-orders">交易订单</button>
                     <button class="sdt-tab" data-tab="tab-attendance">上课记录</button>
+                    <button class="sdt-tab" data-tab="tab-absence">缺勤记录</button>
                 </div>
                 <div class="student-detail-tab-content">
                     <!-- 报读课程 -->
@@ -4126,6 +4244,21 @@ if (intval($countBt) === 0) {
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
                                         <tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- 缺勤记录 -->
+                    <div class="sdt-panel" id="tab-absence">
+                        <div style="padding:8px 16px 16px;">
+                            <div class="table-wrap">
+                                <table class="attendance-table">
+                                    <thead><tr>
+                                        <th>姓名</th><th>手机号</th><th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th>
+                                    </tr></thead>
+                                    <tbody id="absence-tbody">
+                                        <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>

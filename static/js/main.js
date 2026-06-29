@@ -3691,6 +3691,7 @@ function switchStudentDetailTab(tabId) {
     if (tabId === 'tab-courses') loadStudentCourses(sid);
     else if (tabId === 'tab-orders') loadStudentOrders(sid);
     else if (tabId === 'tab-attendance') loadAttendance(sid);
+    else if (tabId === 'tab-absence') loadAbsenceRecords(sid);
 }
 
 // 标签页点击事件委托
@@ -3993,6 +3994,37 @@ async function deleteAttendance(id) {
         showToast(result.message);
         loadAttendance(currentViewStudentId);
     });
+}
+
+// ==================== 学员详情 - 缺勤记录 ====================
+async function loadAbsenceRecords(sid) {
+    const tbody = document.getElementById('absence-tbody');
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + 'list_absence_records&student_id=' + sid);
+        const data = await res.json();
+        const rows = data.data || [];
+        if (rows.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无缺勤记录</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            return `<tr>
+                <td>${esc(r.student_name)}</td>
+                <td>${esc(r.phone)}</td>
+                <td>${esc(r.campus)}</td>
+                <td>${esc(r.course_name || '')}</td>
+                <td>${esc(r.subject_level1)}</td>
+                <td>${esc(r.subject_level2)}</td>
+                <td>${esc(r.class_name)}</td>
+                <td>${esc(r.teacher)}</td>
+                <td>${esc(r.lesson_date)}</td>
+                <td>${esc(r.class_time)}</td>
+            </tr>`;
+        }).join('');
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
 }
 
 function switchToStudents() {
