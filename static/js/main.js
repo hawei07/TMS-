@@ -3713,6 +3713,8 @@ document.addEventListener('click', function(e) {
 });
 
 // ==================== 学员详情 - 报读课程 ====================
+let studentCoursesAllRows = [];
+
 async function loadStudentCourses(sid) {
     const container = document.getElementById('student-courses-content');
     container.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
@@ -3720,35 +3722,71 @@ async function loadStudentCourses(sid) {
         const res = await fetch(API_BASE + 'get_student_courses&student_id=' + sid);
         const data = await res.json();
         const rows = data.data || [];
+        studentCoursesAllRows = rows;
         if (rows.length === 0) {
             container.innerHTML = '<div style="text-align:center;color:#999;padding:30px;">暂未报读课程</div>';
             return;
         }
-        container.innerHTML = `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">
-            <span style="font-size:14px;color:#888;">共 ${rows.length} 门课程</span>
-            <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${sid})">分班</button>
-        </div>
-        <div class="table-wrap"><table><thead><tr>
-            <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
-        </tr></thead><tbody>
-        ${rows.map(r => `<tr>
-            <td>${esc(r.name)}</td>
-            <td>${esc(r.campus || '-')}</td>
-            <td>${esc(r.subject_level1) || '-'}</td><td>${esc(r.subject_level2) || '-'}</td>
-            <td>${esc(r.plan_name)}</td>
-            <td>${esc(r.item_name)}</td>
-            <td>${r.lesson_count || ''}</td>
-            <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
-            <td>${r.consumed_lessons != null ? r.consumed_lessons : 0}</td>
-            <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
-            <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
-            <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
-            <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
-        </tr>`).join('')}
-        </tbody></table></div>`;
+        renderStudentCoursesFilters(rows);
+        renderStudentCoursesTable(rows);
     } catch (e) {
         container.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载失败</div>';
     }
+}
+
+function renderStudentCoursesFilters(rows) {
+    const container = document.getElementById('student-courses-content');
+    const subject1s = [...new Set(rows.map(r => r.subject_level1).filter(Boolean))].sort();
+    const subject2s = [...new Set(rows.map(r => r.subject_level2).filter(Boolean))].sort();
+    const html = `<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
+        <select id="filter-subject1" onchange="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+            <option value="">全部一级学科</option>
+            ${subject1s.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+        </select>
+        <select id="filter-subject2" onchange="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+            <option value="">全部二级学科</option>
+            ${subject2s.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
+        </select>
+        <input type="text" id="filter-course-name" placeholder="搜索课程名称" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:180px;" autocomplete="off">
+        <span style="font-size:14px;color:#888;margin-left:auto;">共 <b id="student-courses-count">${rows.length}</b> 门课程</span>
+        <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${currentViewStudentId})">分班</button>
+    </div>`;
+    container.innerHTML = html + '<div id="student-courses-table"></div>';
+}
+
+function filterStudentCourses() {
+    const subject1 = document.getElementById('filter-subject1')?.value || '';
+    const subject2 = document.getElementById('filter-subject2')?.value || '';
+    const nameKw = (document.getElementById('filter-course-name')?.value || '').trim().toLowerCase();
+    let filtered = studentCoursesAllRows;
+    if (subject1) filtered = filtered.filter(r => r.subject_level1 === subject1);
+    if (subject2) filtered = filtered.filter(r => r.subject_level2 === subject2);
+    if (nameKw) filtered = filtered.filter(r => (r.name || '').toLowerCase().includes(nameKw));
+    document.getElementById('student-courses-count').textContent = filtered.length;
+    renderStudentCoursesTable(filtered);
+}
+
+function renderStudentCoursesTable(rows) {
+    const tableDiv = document.getElementById('student-courses-table');
+    if (!tableDiv) return;
+    tableDiv.innerHTML = `<div class="table-wrap"><table><thead><tr>
+        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th>
+    </tr></thead><tbody>
+    ${rows.map(r => `<tr>
+        <td>${esc(r.name)}</td>
+        <td>${esc(r.campus || '-')}</td>
+        <td>${esc(r.subject_level1) || '-'}</td><td>${esc(r.subject_level2) || '-'}</td>
+        <td>${esc(r.plan_name)}</td>
+        <td>${esc(r.item_name)}</td>
+        <td>${r.lesson_count || ''}</td>
+        <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
+        <td>${r.consumed_lessons != null ? r.consumed_lessons : 0}</td>
+        <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
+        <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
+        <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
+        <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
+    </tr>`).join('')}
+    </tbody></table></div>`;
 }
 
 // ==================== 学员详情 - 交易订单 ====================
