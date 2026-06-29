@@ -3562,7 +3562,6 @@ function renderStudentTable(rows) {
             <td>
                 <div class="action-btns">
                     <button class="btn btn-primary btn-sm" onclick="goEnroll(${r.id})">报名</button>
-                    <button class="btn btn-outline-gray btn-sm" onclick="viewStudent(${r.id})">详情</button>
                     <button class="btn btn-outline-gray btn-sm" onclick="editStudent(${r.id})">编辑</button>
                 </div>
             </td>
@@ -5091,7 +5090,7 @@ async function saveClassAttendance() {
 
 // ==================== 添加临时学员 ====================
 
-async function showTempStudentModal() {
+async function showTempStudentModal(keyword = '') {
     // 当 modal-attendance-session 活跃时，隐藏 input 可能来自旧弹窗，优先使用全局变量
     const sessionModal = document.getElementById('modal-attendance-session');
     const useGlobals = sessionModal && sessionModal.classList.contains('show');
@@ -5101,26 +5100,34 @@ async function showTempStudentModal() {
     if (!classId) { showToast('班级ID无效', 'error'); return; }
     openModal('modal-temp-student');
     const tbody = document.getElementById('temp-student-tbody');
-    tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr>';
     try {
-        const res = await fetch(API_BASE + 'get_temp_student_candidates&class_id=' + classId + '&schedule_id=' + scheduleId + '&session_date=' + encodeURIComponent(sessionDate));
+        const res = await fetch(API_BASE + 'get_temp_student_candidates&class_id=' + classId + '&schedule_id=' + scheduleId + '&session_date=' + encodeURIComponent(sessionDate) + '&keyword=' + encodeURIComponent(keyword));
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#999;padding:20px;">暂无符合条件的学员</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:20px;">暂无符合条件的学员</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
             return `<tr>
                 <td>${esc(r.student_no)}</td>
                 <td>${esc(r.name)}</td>
+                <td>${esc(r.phone || '')}</td>
                 <td>${r.remaining_lessons}</td>
                 <td><button class="btn btn-sm btn-primary" onclick="addTempStudentToSession(${r.id}, '${esc(r.student_no)}', '${esc(r.name)}', ${r.remaining_lessons})">添加</button></td>
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="4" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
+}
+
+let tempStudentSearchTimer = null;
+function onTempStudentSearch() {
+    clearTimeout(tempStudentSearchTimer);
+    const keyword = document.getElementById('temp-student-search')?.value || '';
+    tempStudentSearchTimer = setTimeout(() => showTempStudentModal(keyword), 300);
 }
 
 function addTempStudentToSession(studentId, studentNo, studentName, remainingLessons) {
@@ -5559,6 +5566,8 @@ async function saveAttendanceSession() {
 }
 
 function addTempStudent() {
+    const searchInput = document.getElementById('temp-student-search');
+    if (searchInput) searchInput.value = '';
     showTempStudentModal();
 }
 
@@ -5573,7 +5582,7 @@ async function loadAbsenceRecords(page = 1) {
     absenceRecordPage = page;
     const tbody = document.querySelector('#table-absence-records tbody');
     const pagination = document.getElementById('pagination-absence-records');
-    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     const dateFrom = document.getElementById('absence-date-from').value;
     const dateTo = document.getElementById('absence-date-to').value;
     const className = document.getElementById('absence-class-name').value;
@@ -5586,13 +5595,14 @@ async function loadAbsenceRecords(page = 1) {
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无缺勤记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:30px;">暂无缺勤记录</td></tr>';
             pagination.innerHTML = '';
             return;
         }
         tbody.innerHTML = rows.map(r => {
             return `<tr>
                 <td>${esc(r.student_name)}</td>
+                <td>${esc(r.student_no || '')}</td>
                 <td>${esc(r.phone)}</td>
                 <td>${esc(r.campus)}</td>
                 <td>${esc(r.course_name || '')}</td>
@@ -5611,6 +5621,6 @@ async function loadAbsenceRecords(page = 1) {
             '<span>第 ' + page + '/' + totalPages + ' 页</span>' +
             (page < totalPages ? '<button class="btn btn-sm btn-outline" onclick="loadAbsenceRecords(' + (page + 1) + ')">下一页</button>' : '');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }

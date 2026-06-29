@@ -2410,7 +2410,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT a.*, c.name AS course_name FROM absence_records a LEFT JOIN courses c ON a.course_id = c.id $whereStr ORDER BY a.lesson_date DESC, a.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT a.*, c.name AS course_name, s.student_no FROM absence_records a LEFT JOIN courses c ON a.course_id = c.id LEFT JOIN students s ON a.student_id = s.id $whereStr ORDER BY a.lesson_date DESC, a.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -2877,6 +2877,7 @@ $stmt->execute();
             $classId = intval($_GET['class_id'] ?? 0);
             $scheduleId = intval($_GET['schedule_id'] ?? 0);
             $sessionDate = trim($_GET['session_date'] ?? '');
+            $keyword = trim($_GET['keyword'] ?? '');
             if ($classId <= 0) json(['error' => '班级ID无效']);
             if ($scheduleId <= 0) json(['error' => '排课ID无效']);
             if (!$sessionDate) json(['error' => '课次日期无效']);
@@ -2910,13 +2911,14 @@ $stmt->execute();
             if (count($sessionStudentIds) > 0) {
                 $excludeClause .= " AND s.id NOT IN (" . implode(',', $sessionStudentIds) . ")";
             }
-            $sql = "SELECT s.id, s.student_no, s.name, SUM(o.lesson_count - o.consumed_lessons) AS remaining
+            $sql = "SELECT s.id, s.student_no, s.name, s.phone, SUM(o.lesson_count - o.consumed_lessons) AS remaining
                 FROM students s
                 JOIN orders o ON o.student_id = s.id
                 WHERE o.course_id IN ($idsStr)
                   AND o.campus = $quotedCampus
                   AND o.lesson_count > o.consumed_lessons
-                  $excludeClause
+                  $excludeClause" .
+                  ($keyword !== '' ? " AND (s.student_no LIKE " . $db->quote("%$keyword%") . " OR s.name LIKE " . $db->quote("%$keyword%") . " OR s.phone LIKE " . $db->quote("%$keyword%") . ")" : "") . "
                 GROUP BY s.id
                 HAVING remaining > 0
                 ORDER BY s.id ASC";
@@ -2927,6 +2929,7 @@ $stmt->execute();
                     'id' => intval($r['id']),
                     'student_no' => $r['student_no'],
                     'name' => $r['name'],
+                    'phone' => $r['phone'],
                     'remaining_lessons' => intval($r['remaining'])
                 ];
             }
@@ -4147,10 +4150,10 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-absence-records">
                                 <thead><tr>
-                                    <th>姓名</th><th>手机号</th><th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th>
+                                    <th>姓名</th><th>学号</th><th>手机号</th><th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th>
                                 </tr></thead>
                                 <tbody>
-                                    <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                    <tr><td colspan="11" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -4932,16 +4935,19 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：添加临时学员 -->
     <div class="modal-overlay" id="modal-temp-student" style="z-index:1100">
-        <div class="modal" style="max-width:650px;width:94vw;">
+        <div class="modal" style="max-width:750px;width:94vw;">
             <div class="modal-header">
                 <h3>添加临时学员</h3>
                 <button class="modal-close" onclick="closeModal('modal-temp-student')">&times;</button>
             </div>
             <div class="modal-body">
+                <div style="margin-bottom:12px;">
+                    <input type="text" id="temp-student-search" placeholder="搜索：学号 / 姓名 / 手机号" style="width:100%;padding:8px 12px;border:1px solid var(--border);border-radius:6px;font-size:14px;" oninput="onTempStudentSearch()" autocomplete="off">
+                </div>
                 <div class="table-wrap"><table>
-                    <thead><tr><th>学号</th><th>姓名</th><th>剩余课时</th><th>操作</th></tr></thead>
+                    <thead><tr><th>学号</th><th>姓名</th><th>手机号</th><th>剩余课时</th><th>操作</th></tr></thead>
                     <tbody id="temp-student-tbody">
-                        <tr><td colspan="4" style="text-align:center;color:#999;">加载中...</td></tr>
+                        <tr><td colspan="5" style="text-align:center;color:#999;">加载中...</td></tr>
                     </tbody>
                 </table></div>
             </div>
