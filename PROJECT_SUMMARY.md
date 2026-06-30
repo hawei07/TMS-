@@ -21,10 +21,10 @@ AIGC:
 |------|-----|
 | PHP 路径 | Winget PHP 8.4（`php.exe` 在 PATH 中） |
 | 配置文件 | `C:\Users\吴赛\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.ini` |
-| 监听端口 | `127.0.0.1:5001` |
+| 监听端口 | `0.0.0.0:5001` |
 | 数据库 | **MySQL 8.4.9**（`tms_db`，127.0.0.1:3306，root/root） |
 | MySQL 安装路径 | `D:\dvptool\mysql\` |
-| 访问地址 | http://127.0.0.1:5001 |
+| 访问地址 | http://localhost:5001 |
 
 ### Git 版本管理
 
@@ -1257,6 +1257,8 @@ function isSmallPackage(val) {
 | chore | 新增 debug_save.log 记录考勤保存诊断日志（退还/扣课时/执行前后快照） | `debug_save.log` | — |
 | style | **学员列表标签暖木自然配色**：方案5配色——班级标签底色 #F2E8D5；学科标签按学科分色（绘画/书法/语文/数学/英语）；标签改为纵向堆叠（每标签独占一行）；底色宽度适配文字（width: fit-content）；课时为0的学科不渲染，全为0时该格留空 | `index.php`、`static/css/style.css`、`static/js/main.js` | — |
 | feat | **新增校区筛选功能**：学员列表筛选栏新增「校区」下拉框（数据源从组织树 API `type='校区'` 获取）；后端 `list_students` API 新增 `campus` 参数，WHERE 通过 `EXISTS (SELECT 1 FROM orders o WHERE o.student_id=s.id AND o.campus=:campus)` 过滤学员；`class_names` 子查询 JOIN 增加 `AND c.campus=:campus_cls`；`subject_remaining` 子查询内部增加 `AND o.campus=<校区名>` 条件 | `index.php`、`static/js/main.js` | — |
+| fix | **编辑学员来源下拉框为空**：`list_channels` API 返回格式修复 —— `json($rows)` → `json(['data' => $rows])`，前端 `populateStudentSourceSelect` 原取 `result.data` 拿到 undefined 导致渠道列表为空 | `index.php` | — |
+| fix | **router.php 静态文件 404**：`return false` 不可靠，改为直接 `readfile($file)` + 根据扩展名设置正确 `Content-Type`（css/js/png/jpg/svg/woff2 等）并 `exit`，确保 CSS/JS 正常加载 | `router.php` | — |
 
 ### 2026-06-29
 

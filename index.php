@@ -1142,7 +1142,7 @@ $stmt->execute();
             $stmt = $db->query("SELECT * FROM channels ORDER BY created_at DESC");
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
-            json($rows);
+            json(['data' => $rows]);
 
         case 'add_channel':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -2171,7 +2171,7 @@ $stmt->execute();
             // 校区展示列：按校区过滤
             $campusColJoin = $campus ? "AND o.campus = :campus_col" : "AND o.campus IS NOT NULL AND o.campus != ''";
             $campusColParam = $campus ? [':campus_col' => $campus] : [];
-            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count, (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id $campusColJoin) AS campus, cg.class_names FROM students s LEFT JOIN (SELECT cs.student_id, GROUP_CONCAT(c.name SEPARATOR ', ') AS class_names FROM class_students cs JOIN classes c ON c.id = cs.class_id $campusClsJoin GROUP BY cs.student_id) cg ON cg.student_id = s.id $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT s.*, r.source AS resource_source, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count, (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id $campusColJoin) AS campus, cg.class_names FROM students s LEFT JOIN resources r ON s.resource_id = r.id LEFT JOIN (SELECT cs.student_id, GROUP_CONCAT(c.name SEPARATOR ', ') AS class_names FROM class_students cs JOIN classes c ON c.id = cs.class_id $campusClsJoin GROUP BY cs.student_id) cg ON cg.student_id = s.id $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
             $allParams = array_merge($params, $campusClsParam, $campusColParam);
             $stmt = $db->prepare($sql);
             foreach ($allParams as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);

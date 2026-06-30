@@ -3941,7 +3941,7 @@ async function editStudent(sid) {
     document.getElementById('student-name').value = student.name || '';
     document.getElementById('student-phone').value = student.phone || '';
     document.getElementById('student-follow-status').value = student.follow_status || '';
-    await populateStudentSourceSelect(student.source || '');
+    await populateStudentSourceSelect(student.resource_source || student.source || '');
     openModal('modal-student');
 }
 
