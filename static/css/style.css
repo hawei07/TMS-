@@ -3164,3 +3164,57 @@ span.flatpickr-weekday {
     display: flex;
     gap: 12px;
 }
+
+/* ==================== 学员列表标签样式（方案5：暖木自然） ==================== */
+/* 所在班级标签 */
+.class-tag {
+    display: block;
+    width: fit-content;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+.class-tag-bg {
+    background: #F2E8D5;
+    color: #5c4a2a;
+}
+
+/* 学科剩余课时标签 */
+.subj-tag {
+    display: block;
+    width: fit-content;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: nowrap;
+}
+/* 各学科配色（方案5：暖木自然） */
+.subj-tag-yuwen {
+    background: #F5E0D0;
+    color: #8b4513;
+}
+.subj-tag-shuxue {
+    background: #D8E8EB;
+    color: #2c5f6d;
+}
+.subj-tag-yingyu {
+    background: #E5D8EB;
+    color: #5b3a6b;
+}
+.subj-tag-huihua {
+    background: #F5EDC8;
+    color: #7a6a1f;
+}
+.subj-tag-shufa {
+    background: #D0EAD0;
+    color: #3a5a3a;
+}
+.subj-tag-other {
+    background: #E8E4DD;
+    color: #666;
+}

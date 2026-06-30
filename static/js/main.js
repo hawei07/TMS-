@@ -87,7 +87,7 @@ function refreshPanel(panelId) {
         case 'panel-subjects': loadSubjects(); break;
         case 'panel-classes': currentClassDetailId = null; loadClasses(); break;
         case 'panel-classrooms': loadClassrooms(); break;
-        case 'panel-students': loadStudents(); break;
+        case 'panel-students': initStudentCampusFilter(); loadStudents(); break;
         case 'panel-orders': loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
         case 'panel-work-records': initWorkRecordTabs(); loadRefundRecords(); break;
@@ -3839,10 +3839,41 @@ async function deleteClassroom(id) {
 
 
 // ==================== 学员管理 ====================
+// 渲染所在班级标签（方案5：暖木自然）
+function renderClassTags(classNames) {
+    if (!classNames) return '';
+    return classNames.split(',').map(function(c) {
+        var name = c.trim();
+        if (!name) return '';
+        return '<span class="class-tag class-tag-bg">' + esc(name) + '</span>';
+    }).join('');
+}
+
+// 渲染学科剩余课时标签（方案5：暖木自然）
+function renderSubjectTags(subjectRemaining) {
+    if (!subjectRemaining || subjectRemaining === '-') return '';
+    var subjectMap = {
+        '语文': 'yuwen', '数学': 'shuxue', '英语': 'yingyu',
+        '绘画': 'huihua', '书法': 'shufa'
+    };
+    var tags = subjectRemaining.split(',').map(function(s) {
+        var colonIdx = s.indexOf(':');
+        var name = colonIdx > 0 ? s.substring(0, colonIdx).trim() : s.trim();
+        var hours = colonIdx > 0 ? s.substring(colonIdx + 1).trim() : '';
+        if (!name) return '';
+        if (hours === '0') return '';
+        var cssSuffix = subjectMap[name] || 'other';
+        return '<span class="subj-tag subj-tag-' + cssSuffix + '">' + esc(name) + ':' + esc(hours) + '</span>';
+    }).filter(function(t) { return t !== ''; });
+    return tags.length === 0 ? '' : tags.join('');
+}
+
 async function loadStudents() {
     const keyword = document.getElementById('search-student').value;
+    const campus = document.getElementById('student-filter-campus')?.value || '';
     const params = new URLSearchParams({ page: studentPage, page_size: 15 });
     if (keyword) params.set('keyword', keyword);
+    if (campus) params.set('campus', campus);
     const res = await fetch(API_BASE + 'list_students&' + params);
     const data = await res.json();
     renderStudentTable(data.data);
@@ -3856,14 +3887,15 @@ function renderStudentTable(rows) {
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
         return;
     }
-    tbody.innerHTML = rows.map(r => `
+    tbody.innerHTML = rows.map(r => {
+        return `
         <tr>
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td><a class="student-name-link" href="javascript:void(0)" onclick="viewStudent(${r.id})">${esc(r.name)}</a></td>
             <td>${esc(r.phone)}</td>
             <td>${esc(r.campus || '')}</td>
-            <td>${r.order_count || 0}</td>
-            <td>${esc(r.class_names || '')}</td>
+            <td>${renderClassTags(r.class_names)}</td>
+            <td>${renderSubjectTags(r.subject_remaining)}</td>
             <td>
                 <div class="action-btns">
                     <button class="btn btn-primary btn-sm" onclick="goEnroll(${r.id})">报名</button>
@@ -3871,7 +3903,8 @@ function renderStudentTable(rows) {
                 </div>
             </td>
         </tr>
-    `).join('');
+    `;
+    }).join('');
 }
 
 
@@ -4087,6 +4120,28 @@ function onStudentSubject1Change() {
     filterStudentCourses();
 }
 
+function onStudentCampusChange() {
+    studentPage = 1;
+    loadStudents();
+}
+
+async function initStudentCampusFilter() {
+    const sel = document.getElementById('student-filter-campus');
+    if (!sel) return;
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const orgs = (data && data.data && data.data.flat) ? data.data.flat : [];
+        const campuses = orgs.filter(o => o.type === '校区');
+        campuses.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* silently ignore */ }
+}
+
 function filterStudentCourses() {
     const subject1 = document.getElementById('student-filter-subject1')?.value || '';
     const subject2 = document.getElementById('student-filter-subject2')?.value || '';
@@ -4103,7 +4158,7 @@ function renderStudentCoursesTable(rows) {
     const tableDiv = document.getElementById('student-courses-table');
     if (!tableDiv) return;
     tableDiv.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
+        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
     </tr></thead><tbody>
     ${rows.map(r => {
         const refundStatus = (r.refund_status || '正常');
@@ -4139,6 +4194,7 @@ function renderStudentCoursesTable(rows) {
         <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
         <td>${r.consumed_lessons != null ? `<a href="javascript:void(0)" onclick="showConsumptionDetail(${r.order_id}, ${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')" style="color:#1677ff;text-decoration:underline;cursor:pointer;">${r.consumed_lessons}</a>` : 0}</td>
         <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
+        <td>${r.refunded_lessons || 0}</td>
         <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
         <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
@@ -6310,6 +6366,7 @@ function renderRefundRecordTable(rows) {
         const cl = parseInt(r.consumed_lessons) || 0;
         const rl = parseInt(r.remaining_lessons) || 0;
         const ar = parseFloat(r.actual_refund) || 0;
+        const da = parseFloat(r.consumed_amount) || 0;
         const status = r.status || '';
         let statusHtml = '';
         if (status === '待审批') statusHtml = '<span class="tag tag-orange">待审批</span>';
@@ -6319,16 +6376,17 @@ function renderRefundRecordTable(rows) {
         else if (status === '审批驳回') statusHtml = '<span class="tag tag-red">审批驳回</span>';
         else statusHtml = status;
         // 操作按钮
-        let optHtml = '';
+        let btns = [];
         if (status === '待审批' || status === '一级审批通过' || status === '二级审批通过') {
-            optHtml = `<button class="btn btn-primary btn-sm" onclick="showApproveModal(${r.id})" style="font-size:11px;padding:2px 8px;">审批</button>`;
+            btns.push(`<button class="btn btn-primary btn-sm" onclick="showApproveModal(${r.id})">审批</button>`);
         } else {
-            optHtml = `<button class="btn btn-outline btn-sm" onclick="showApproveModal(${r.id})" style="font-size:11px;padding:2px 8px;">查看详情</button>`;
+            btns.push(`<button class="btn-link" onclick="showApproveModal(${r.id})" style="padding:5px 0;">查看详情</button>`);
         }
         // 撤销按钮：已退费或驳回不可撤销
         if (status !== '已退费' && status !== '审批驳回') {
-            optHtml += ` <button class="btn btn-outline btn-sm" onclick="cancelRefund(${r.id})" style="font-size:11px;padding:2px 8px;">撤销</button>`;
+            btns.push(`<button class="btn btn-warn btn-sm" onclick="cancelRefund(${r.id})">撤销</button>`);
         }
+        let optHtml = btns.length > 0 ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap;">${btns.join('')}</div>` : '';
         const created = r.created_at ? r.created_at.slice(0, 16) : '';
         return `<tr>
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
@@ -6339,7 +6397,8 @@ function renderRefundRecordTable(rows) {
             <td>${rl}</td>
             <td>¥${ta.toFixed(2)}</td>
             <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
-            <td>${statusHtml}</td>
+            <td>¥${da.toFixed(2)}</td>
+            <td style="white-space:nowrap;">${statusHtml}</td>
             <td>${created}</td>
             <td>${optHtml}</td>
         </tr>`;

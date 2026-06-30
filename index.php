@@ -1,5 +1,14 @@
 ﻿<?php
 error_reporting(E_ALL);
+// PHP 内置服务器：静态文件直接返回，不经过 PHP 处理
+if (php_sapi_name() === 'cli-server') {
+    $uri = parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH);
+    $file = __DIR__ . $uri;
+    if ($uri !== '/' && is_file($file)) {
+        return false;
+    }
+}
+
 ini_set('display_errors', 0);
 ini_set('log_errors', 1);
 ini_set('error_log', __DIR__ . '/php_errors.log');
@@ -2140,24 +2149,85 @@ $stmt->execute();
             $page = max(1, intval($_GET['page'] ?? 1));
             $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 15)));
             $keyword = trim($_GET['keyword'] ?? '');
+            $campus = trim($_GET['campus'] ?? '');
             $offset = ($page - 1) * $pageSize;
-            $where = '';
+            $conditions = [];
             $params = [];
             if ($keyword) {
-                $where = "WHERE (s.name LIKE :kw OR s.phone LIKE :kw)";
+                $conditions[] = "(s.name LIKE :kw OR s.phone LIKE :kw)";
                 $params[':kw'] = "%$keyword%";
             }
+            if ($campus) {
+                $conditions[] = "EXISTS (SELECT 1 FROM orders o WHERE o.student_id = s.id AND o.campus = :campus)";
+                $params[':campus'] = $campus;
+            }
+            $where = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
             $stmt = $db->prepare("SELECT COUNT(*) FROM students s $where");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count, (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id AND o.campus IS NOT NULL AND o.campus != '') AS campus, cg.class_names FROM students s LEFT JOIN (SELECT cs.student_id, GROUP_CONCAT(c.name SEPARATOR ', ') AS class_names FROM class_students cs JOIN classes c ON c.id = cs.class_id GROUP BY cs.student_id) cg ON cg.student_id = s.id $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
+            // 班级子查询：按校区过滤
+            $campusClsJoin = $campus ? "AND c.campus = :campus_cls" : "";
+            $campusClsParam = $campus ? [':campus_cls' => $campus] : [];
+            // 校区展示列：按校区过滤
+            $campusColJoin = $campus ? "AND o.campus = :campus_col" : "AND o.campus IS NOT NULL AND o.campus != ''";
+            $campusColParam = $campus ? [':campus_col' => $campus] : [];
+            $sql = "SELECT s.*, (SELECT COUNT(*) FROM orders o WHERE o.student_id=s.id) AS order_count, (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id $campusColJoin) AS campus, cg.class_names FROM students s LEFT JOIN (SELECT cs.student_id, GROUP_CONCAT(c.name SEPARATOR ', ') AS class_names FROM class_students cs JOIN classes c ON c.id = cs.class_id $campusClsJoin GROUP BY cs.student_id) cg ON cg.student_id = s.id $where ORDER BY s.id DESC LIMIT :limit OFFSET :offset";
+            $allParams = array_merge($params, $campusClsParam, $campusColParam);
             $stmt = $db->prepare($sql);
-            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            foreach ($allParams as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':offset', $offset, PDO::PARAM_INT);
             $rows = [];
-$stmt->execute();
+            $stmt->execute();
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+
+            // 计算各学科剩余课时
+            if (!empty($rows)) {
+                $studentIds = array_column($rows, 'id');
+                $idsStr = implode(',', array_map('intval', $studentIds));
+                // 批量查询每个学员在各一级学科下的剩余课时
+                // 真实消耗 = attendance_records 中 status='出勤' 的 SUM(deducted_lessons)
+                // 剩余 = lesson_count - 真实消耗；退费申请中视为 0；已退费/已作废不统计
+                $campusSubFilter = $campus ? "AND o.campus = " . $db->quote($campus) : "";
+                $subSql = "SELECT t.student_id,
+                    GROUP_CONCAT(CONCAT(t.subject_level1, ':', t.remaining) SEPARATOR ', ') AS subject_remaining
+                    FROM (
+                        SELECT o.student_id, c.subject_level1,
+                            SUM(
+                                CASE WHEN o.refund_status = '退费申请中' THEN 0
+                                ELSE o.lesson_count - COALESCE(ar_sum.consumed, 0)
+                                END
+                            ) AS remaining
+                        FROM orders o
+                        JOIN courses c ON o.course_id = c.id
+                        LEFT JOIN (
+                            SELECT order_id, SUM(deducted_lessons) AS consumed
+                            FROM attendance_records
+                            WHERE status = '出勤'
+                            GROUP BY order_id
+                        ) ar_sum ON ar_sum.order_id = o.id
+                        WHERE o.student_id IN ($idsStr)
+                            AND o.is_voided = '否'
+                            AND (o.refund_status IS NULL OR o.refund_status != '已退费')
+                            AND c.subject_level1 IS NOT NULL AND c.subject_level1 != ''
+                            $campusSubFilter
+                        GROUP BY o.student_id, c.subject_level1
+                        HAVING remaining > 0
+                    ) t
+                    GROUP BY t.student_id
+                    ORDER BY t.student_id";
+                $subRes = $db->query($subSql);
+                $subjectRemainingMap = [];
+                while ($sr = $subRes->fetch(PDO::FETCH_ASSOC)) {
+                    $subjectRemainingMap[$sr['student_id']] = $sr['subject_remaining'];
+                }
+                foreach ($rows as &$row) {
+                    $sid = $row['id'];
+                    $row['subject_remaining'] = $subjectRemainingMap[$sid] ?? '-';
+                }
+                unset($row);
+            }
+
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
@@ -2344,22 +2414,48 @@ $stmt->execute();
             $refStmt = $db->query("SELECT DISTINCT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')");
             while ($refR = $refStmt->fetch(PDO::FETCH_ASSOC)) $pendingRefundIds[$refR['order_id']] = true;
             $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
-            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+            $orderRows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
+            // 批量查询考勤记录获取真实消耗课时
+            $attMap = [];
+            $oids = array_column($orderRows, 'order_id');
+            if (!empty($oids)) {
+                $idsStr = implode(',', $oids);
+                $aStmt = $db->query("SELECT order_id, COALESCE(SUM(deducted_lessons), 0) AS real_consumed FROM attendance_records WHERE order_id IN ($idsStr) AND status='出勤' GROUP BY order_id");
+                while ($a = $aStmt->fetch(PDO::FETCH_ASSOC)) $attMap[$a['order_id']] = intval($a['real_consumed']);
+            }
+            foreach ($orderRows as $r) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
-                $cl = intval($r['consumed_lessons'] ?? 0);
-                if (isset($pendingRefundIds[$r['order_id']])) {
+                $realConsumed = $attMap[$r['order_id']] ?? 0;
+                $refundStatus = $r['refund_status'] ?? '正常';
+                if ($refundStatus === '已退费') {
+                    // 已退费：展示真实消耗和退费课时
+                    $refundedLessons = max(0, $lc - $realConsumed);
+                    $r['consumed_lessons'] = $realConsumed;
+                    $r['refunded_lessons'] = $refundedLessons;
+                    $r['consumed_amount'] = $lc > 0 ? round(($ap / $lc) * $realConsumed, 2) : 0;
+                    $r['remaining_lessons'] = 0;
+                    $r['remaining_amount'] = 0;
+                } elseif (isset($pendingRefundIds[$r['order_id']])) {
                     // 退费申请中：课时冻结，剩余=0
-                    $r['consumed_amount'] = round(($ap / max($lc, 1)) * $cl, 2);
+                    $r['consumed_lessons'] = $realConsumed;
+                    $r['refunded_lessons'] = 0;
+                    $r['consumed_amount'] = $lc > 0 ? round(($ap / $lc) * $realConsumed, 2) : 0;
                     $r['remaining_lessons'] = 0;
                     $r['remaining_amount'] = 0;
                 } elseif ($lc > 0) {
+                    // 正常订单：以考勤记录为准
+                    $r['consumed_lessons'] = $realConsumed;
+                    $r['refunded_lessons'] = 0;
                     $unitPrice = $ap / $lc;
-                    $r['consumed_amount'] = round($unitPrice * $cl, 2);
-                    $rl = $lc - $cl;
+                    $r['consumed_amount'] = round($unitPrice * $realConsumed, 2);
+                    $rl = $lc - $realConsumed;
                     $r['remaining_lessons'] = $rl > 0 ? $rl : 0;
                     $r['remaining_amount'] = round($unitPrice * $r['remaining_lessons'], 2);
                 } else {
+                    $r['consumed_lessons'] = $realConsumed;
+                    $r['refunded_lessons'] = 0;
                     $r['consumed_amount'] = 0;
                     $r['remaining_lessons'] = 0;
                     $r['remaining_amount'] = 0;
@@ -4447,7 +4543,13 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
                 <div class="toolbar">
-                    <div class="toolbar-right" style="margin-left:auto;">
+                    <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">
+                        <label style="font-size:13px;white-space:nowrap;">校区：</label>
+                        <select id="student-filter-campus" onchange="onStudentCampusChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
+                            <option value="">全部校区</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;display:flex;align-items:center;gap:8px;">
                         <input type="text" id="search-student" placeholder="搜索姓名/手机号..." onkeyup="debounceSearch('student')">
                         <button class="btn btn-primary btn-sm" onclick="loadStudents()">搜索</button>
                     </div>
@@ -4455,7 +4557,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-students">
                         <thead><tr>
-                            <th width="70">学号</th><th>姓名</th><th>手机号</th><th>校区</th><th>已报课程数</th><th>所在班级</th><th width="180">操作</th>
+                            <th width="70">学号</th><th>姓名</th><th>手机号</th><th>校区</th><th>所在班级</th><th>学科剩余课时</th><th width="180">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -4858,7 +4960,7 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-refund-records">
                                 <thead><tr>
-                                    <th width="80">订单号</th><th>学员</th><th>课程</th><th>报读课时</th><th>消耗课时</th><th>剩余课时</th><th>报读金额</th><th>实退金额</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
+                                    <th width="80">订单号</th><th>学员</th><th>课程</th><th>报读课时</th><th>消耗课时</th><th>剩余课时</th><th>报读金额</th><th>实退金额</th><th>扣减金额</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
                                 </tr></thead>
                                 <tbody></tbody>
                             </table>

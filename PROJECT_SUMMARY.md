@@ -1255,6 +1255,8 @@ function isSmallPackage(val) {
 | fix | **学员报读课程筛选下拉框 ID 冲突修复**：`filter-subject1`/`filter-subject2` 重命名为 `student-filter-subject1`/`student-filter-subject2`，对应函数 `onSubject1Change` → `onStudentSubject1Change`，避免与工作记录面板同类元素 ID 冲突 | `static/js/main.js` | — |
 | data | **修正脏数据**：attendance_records id=105 的 order_id 从 52 修正为 67（对应正确扣课时订单） | — | — |
 | chore | 新增 debug_save.log 记录考勤保存诊断日志（退还/扣课时/执行前后快照） | `debug_save.log` | — |
+| style | **学员列表标签暖木自然配色**：方案5配色——班级标签底色 #F2E8D5；学科标签按学科分色（绘画/书法/语文/数学/英语）；标签改为纵向堆叠（每标签独占一行）；底色宽度适配文字（width: fit-content）；课时为0的学科不渲染，全为0时该格留空 | `index.php`、`static/css/style.css`、`static/js/main.js` | — |
+| feat | **新增校区筛选功能**：学员列表筛选栏新增「校区」下拉框（数据源从组织树 API `type='校区'` 获取）；后端 `list_students` API 新增 `campus` 参数，WHERE 通过 `EXISTS (SELECT 1 FROM orders o WHERE o.student_id=s.id AND o.campus=:campus)` 过滤学员；`class_names` 子查询 JOIN 增加 `AND c.campus=:campus_cls`；`subject_remaining` 子查询内部增加 `AND o.campus=<校区名>` 条件 | `index.php`、`static/js/main.js` | — |
 
 ### 2026-06-29
 
