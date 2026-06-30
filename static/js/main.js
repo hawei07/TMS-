@@ -1,6 +1,6 @@
 // ==================== 全局状态 ====================
 const API_BASE = '?action=';
-let myPage = 1, aptPage = 1, seaPage = 1, empPage = 1, coursePage = 1, studentPage = 1, orderPage = 1;
+let myPage = 1, aptPage = 1, seaPage = 1, empPage = 1, coursePage = 1, studentPage = 1, orderPage = 1, refundPage = 1;
 let searchTimers = {};
 let commResourceId = null;
 let commResourceName = '';
@@ -4058,11 +4058,11 @@ function renderStudentCoursesFilters(rows) {
         return `<option value="">全部二级学科</option>` + [...set].sort().map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('');
     };
     const html = `<div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;">
-        <select id="filter-subject1" onchange="onSubject1Change()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+        <select id="student-filter-subject1" onchange="onStudentSubject1Change()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
             <option value="">全部一级学科</option>
             ${subject1s.map(s => `<option value="${esc(s)}">${esc(s)}</option>`).join('')}
         </select>
-        <select id="filter-subject2" onchange="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+        <select id="student-filter-subject2" onchange="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
             ${renderSubject2Options('')}
         </select>
         <input type="text" id="filter-course-name" placeholder="搜索课程名称" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:180px;" autocomplete="off">
@@ -4072,9 +4072,9 @@ function renderStudentCoursesFilters(rows) {
     container.innerHTML = html + '<div id="student-courses-table"></div>';
 }
 
-function onSubject1Change() {
-    const subject1 = document.getElementById('filter-subject1')?.value || '';
-    const sel2 = document.getElementById('filter-subject2');
+function onStudentSubject1Change() {
+    const subject1 = document.getElementById('student-filter-subject1')?.value || '';
+    const sel2 = document.getElementById('student-filter-subject2');
     const prevVal = sel2.value;
     // 根据当前一级学科更新二级下拉选项
     const allSubject2s = [...new Set(studentCoursesAllRows.map(r => r.subject_level2).filter(Boolean))].sort();
@@ -4088,8 +4088,8 @@ function onSubject1Change() {
 }
 
 function filterStudentCourses() {
-    const subject1 = document.getElementById('filter-subject1')?.value || '';
-    const subject2 = document.getElementById('filter-subject2')?.value || '';
+    const subject1 = document.getElementById('student-filter-subject1')?.value || '';
+    const subject2 = document.getElementById('student-filter-subject2')?.value || '';
     const nameKw = (document.getElementById('filter-course-name')?.value || '').trim().toLowerCase();
     let filtered = studentCoursesAllRows;
     if (subject1) filtered = filtered.filter(r => r.subject_level1 === subject1);
@@ -6277,19 +6277,25 @@ async function submitRefundApply() {
 
 // ==================== 退费记录列表（工作记录面板） ====================
 async function loadRefundRecords() {
-    const keyword = document.getElementById('search-refund')?.value || '';
-    const dateFrom = document.getElementById('filter-refund-date-from')?.value || '';
-    const dateTo = document.getElementById('filter-refund-date-to')?.value || '';
-    const status = document.getElementById('filter-refund-status')?.value || '';
-    const params = new URLSearchParams({ page: refundPage, page_size: 15 });
-    if (keyword) params.set('keyword', keyword);
-    if (dateFrom) params.set('date_from', dateFrom);
-    if (dateTo) params.set('date_to', dateTo);
-    if (status) params.set('status', status);
-    const res = await fetch(API_BASE + 'list_refund_records&' + params);
-    const data = await res.json();
-    renderRefundRecordTable(data.data);
-    renderPagination('pagination-refund', data.total, refundPage, 15, (p) => { refundPage = p; loadRefundRecords(); });
+    try {
+        const keyword = document.getElementById('search-refund')?.value || '';
+        const dateFrom = document.getElementById('filter-refund-date-from')?.value || '';
+        const dateTo = document.getElementById('filter-refund-date-to')?.value || '';
+        const status = document.getElementById('filter-refund-status')?.value || '';
+        const params = new URLSearchParams({ page: refundPage, page_size: 15 });
+        if (keyword) params.set('keyword', keyword);
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
+        if (status) params.set('status', status);
+        const res = await fetch(API_BASE + 'list_refund_records&' + params);
+        const data = await res.json();
+        renderRefundRecordTable(data.data);
+        renderPagination('pagination-refund', data.total, refundPage, 15, (p) => { refundPage = p; loadRefundRecords(); });
+    } catch (e) {
+        console.error('loadRefundRecords error:', e);
+        const tbody = document.querySelector('#table-refund-records tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
+    }
 }
 
 function renderRefundRecordTable(rows) {
@@ -6318,6 +6324,10 @@ function renderRefundRecordTable(rows) {
             optHtml = `<button class="btn btn-primary btn-sm" onclick="showApproveModal(${r.id})" style="font-size:11px;padding:2px 8px;">审批</button>`;
         } else {
             optHtml = `<button class="btn btn-outline btn-sm" onclick="showApproveModal(${r.id})" style="font-size:11px;padding:2px 8px;">查看详情</button>`;
+        }
+        // 撤销按钮：已退费或驳回不可撤销
+        if (status !== '已退费' && status !== '审批驳回') {
+            optHtml += ` <button class="btn btn-outline btn-sm" onclick="cancelRefund(${r.id})" style="font-size:11px;padding:2px 8px;">撤销</button>`;
         }
         const created = r.created_at ? r.created_at.slice(0, 16) : '';
         return `<tr>
@@ -6454,6 +6464,24 @@ async function submitApproval(action) {
         if (data.error) { showToast(data.error, 'error'); return; }
         showToast(data.message || '操作成功');
         closeModal('modal-refund-approve');
+        loadRefundRecords();
+        if (currentViewStudentId) loadStudentCourses(currentViewStudentId);
+    } catch (e) {
+        showToast('网络错误，请重试', 'error');
+    }
+}
+
+async function cancelRefund(id) {
+    if (!confirm('确定要撤销该退费申请吗？撤销后订单将恢复正常状态。')) return;
+    try {
+        const res = await fetch(API_BASE + 'cancel_refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id: id })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast(data.message || '撤销成功');
         loadRefundRecords();
         if (currentViewStudentId) loadStudentCourses(currentViewStudentId);
     } catch (e) {

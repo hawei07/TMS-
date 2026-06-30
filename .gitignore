@@ -14,3 +14,6 @@ temp/
 php.pid
 php_stderr.log
 php_stdout.log
+
+# Debug logs
+debug_save.log

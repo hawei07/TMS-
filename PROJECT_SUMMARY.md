@@ -542,7 +542,7 @@ subjects                  courses              ┌──────────
 
 ## 四、后端 API 完整列表
 
-所有 API 通过 `?action=<name>` 路由，统一返回 JSON。共 **85 个** action。
+所有 API 通过 `?action=<name>` 路由，统一返回 JSON。共 **86 个** action。
 
 ### 4.1 资源管理（9 个）
 
@@ -705,13 +705,14 @@ subjects                  courses              ┌──────────
 | `list_orders` | GET | 订单列表（17 列：订单号/父订单号/学号/编号/学员姓名/课程名称/价格方案/报价单名称/订单类型/课时数量/订单金额/现金/美团/支付状态/是否作废/状态/报名时间），含 `payment_summary` 汇总和 order_type 字段，支持 keyword 搜索及 pay_status/is_voided 筛选 |
 | `void_order` | POST | **作废订单**：校验 consumed_lessons==0（无课耗），将 is_voided 设为'是'，作废后该订单对应报读课程从学员详情中消失 |
 
-### 4.17 退费管理（4 个）
+### 4.17 退费管理（5 个）
 
 | action | 方法 | 说明 |
 |--------|------|------|
 | `submit_refund` | POST | **提交退费申请**：校验 refund_status='正常' 且 consumed_lessons < lesson_count，自动计算剩余可退课时/金额（remaining_amount = actual_price × (lesson_count - consumed_lessons) / lesson_count），实退金额 = remaining_amount - custom_deduction（≥0），写入 refund_records（status='待审批', approval_stage='一级审批'），更新 orders.refund_status='退费申请中' |
 | `list_refund_records` | GET | 退费记录列表（分页，支持 keyword 搜索、status 筛选、日期范围筛选，LEFT JOIN orders 联查订单号/学员/课程信息） |
-| `approve_refund` | POST | **退费审批**：入参 id + action(approve/reject) + approver + reject_reason。一级审批通过→approval_stage='二级审批',status='一级审批通过'；二级审批通过→approval_stage='财务确认',status='二级审批通过'；财务确认通过→status='已退费'，同步更新 orders.refund_status='已退费'、consumed_lessons=lesson_count（剩余课时归零）；任意阶段驳回→status='审批驳回' |
+| `approve_refund` | POST | **退费审批**：入参 id + action(approve/reject) + approver + reject_reason。已退费/驳回状态拒绝继续审批。一级审批通过→approval_stage='二级审批',status='一级审批通过'；二级审批通过→approval_stage='财务确认',status='二级审批通过'；财务确认通过→status='已退费'，同步更新 orders.refund_status='已退费'、consumed_lessons=lesson_count（剩余课时归零）；任意阶段驳回→status='审批驳回' |
+| `cancel_refund` | POST | **撤销退费申请**：校验状态非已退费/审批驳回，恢复订单 refund_status='正常'，删除 refund_records 记录 |
 | `get_refund_record` | GET | 查询单条退费记录详情 |
 
 ### 4.18 考勤 / 上课记录（4 个）
@@ -1239,6 +1240,21 @@ function isSmallPackage(val) {
 ---
 
 ## 八、更新日志
+
+### 2026-06-30
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| fix | **考勤扣课时三级优先级排除退费订单**：三级 SELECT（3471/3497/3525 行）和三级 UPDATE 新增 `AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))` 子查询，防止退费申请中订单被继续扣课时；退还阶段增加详细诊断日志（revert/deduct 前后快照、rowCount 验证）和二次保护子句 | `index.php` | — |
+| fix | **全局 consumed_lessons 重算排除退费订单**：263 行初始化重算逻辑新增 `AND o.id NOT IN (SELECT order_id FROM refund_records WHERE ...)` 子查询，防止退费申请中订单的 consumed_lessons 被重算归零 | `index.php` | — |
+| fix | **attendance_records 写入补全 order_id**：3617 行考勤 INSERT 新增 `order_id` 列 + `:oid` 绑定（`$deductedOrderId`），修复页面加载时 JOIN 回填随机匹配错误订单的 Bug | `index.php` | — |
+| fix | **退费申请中学员剩余课时显示为 0**：`get_student_courses` API 新增 pendingRefundIds 收集逻辑，退费申请中订单课时冻结显示为 0，防止继续扣课 | `index.php` | — |
+| fix | **多处剩余课时查询排除退费/作废订单**：`add_student_to_class` 分班校验、考勤编辑剩余课时上限、考勤后自动移班判断，三处 `SUM(lesson_count - consumed_lessons)` 查询统一添加 `AND is_voided='否' AND id NOT IN (...)` 过滤 | `index.php` | — |
+| fix | **已终止退费不可继续审批**：`approve_refund` 新增状态校验，已退费/审批驳回的记录拒绝继续审批 | `index.php` | — |
+| feat | **退费申请撤销功能**：新增 `cancel_refund` API（恢复订单 refund_status='正常'、删除 refund_records 记录）；前端退费记录表格增加「撤销」按钮（已退费/驳回时隐藏），`loadRefundRecords` 增加 try/catch 错误提示 | `index.php`、`static/js/main.js` | — |
+| fix | **学员报读课程筛选下拉框 ID 冲突修复**：`filter-subject1`/`filter-subject2` 重命名为 `student-filter-subject1`/`student-filter-subject2`，对应函数 `onSubject1Change` → `onStudentSubject1Change`，避免与工作记录面板同类元素 ID 冲突 | `static/js/main.js` | — |
+| data | **修正脏数据**：attendance_records id=105 的 order_id 从 52 修正为 67（对应正确扣课时订单） | — | — |
+| chore | 新增 debug_save.log 记录考勤保存诊断日志（退还/扣课时/执行前后快照） | `debug_save.log` | — |
 
 ### 2026-06-29
 
