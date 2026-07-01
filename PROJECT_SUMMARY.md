@@ -125,7 +125,7 @@ market-system-php/
 
 ## 三、数据库设计
 
-### 3.1 表概览（21 张表）
+### 3.1 表概览（22 张表）
 
 | 表名 | 用途 | 关联 |
 |------|------|------|
@@ -140,7 +140,7 @@ market-system-php/
 | `communication_records` | 沟通记录 | resource_id → resources.id |
 | `courses` | 课程信息（含小课包/低幼龄/校区权限） | — |
 | `subjects` | 学科设置（两级树形） | parent_id 自引用 |
-| `students` | 学员信息（含学号） | resource_id → resources.id |
+| `students` | 学员信息（含学号/学员类型） | resource_id → resources.id |
 | `classes` | 班级信息（标准班/活动班） | course_id → courses.id |
 | `schedules` | 排课信息（规则排课/日期排课） | class_id → classes.id |
 | `classrooms` | 教室信息 | — |
@@ -151,6 +151,7 @@ market-system-php/
 | `absence_records` | 缺勤记录（考勤缺勤时自动同步，缺勤→出勤时自动删除） | student_id → students.id, course_id → courses.id, attendance_id → attendance_records.id |
 | `parent_orders` | 父订单（汇总同一录单的所有子订单） | parent_order_no → orders.parent_order_no |
 | `refund_records` | 退费记录（申请→三级审批→财务确认） | order_id → orders.id, student_id → students.id |
+| `student_subject_teacher` | 学员-校区-学科-授课老师关联 | student_id → students.id, campus_id → organizations.id, subject_id → subjects.id, teacher_id → employees.id |
 
 ### 3.2 resources（资源表）
 
@@ -296,8 +297,9 @@ market-system-php/
 | resource_id | INT | — | 关联资源 ID（可为空） |
 | name | VARCHAR(500) | — | 学员姓名（必填） |
 | phone | VARCHAR(500) | — | 电话（唯一约束） |
-| source | VARCHAR(500) | — | 来源 |
-| follow_status | VARCHAR(500) | — | 跟进状态 |
+| source | VARCHAR(500) | — | 来源（保留字段，前端不再展示） |
+| follow_status | VARCHAR(500) | — | 跟进状态（保留字段，前端不再展示） |
+| student_type | VARCHAR(500) | '小课包' | **学员类型**：小课包 / 常规。新增学员默认小课包，存在非小课包订单时自动升级为常规（不可逆） |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
 ### 3.14 classes（班级表）
@@ -426,7 +428,20 @@ market-system-php/
 | meituan_amount | DECIMAL(10,2) | 0 | 美团总额 |
 | created_at | VARCHAR(500) | '' | 创建时间 |
 
-### 3.22 refund_records（退费记录表）
+### 3.22 student_subject_teacher（学员-校区-学科-授课老师关联表）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| student_id | INT | — | 关联学员 ID（必填） |
+| campus_id | INT | — | 关联校区 ID（对应 organizations.id，必填） |
+| subject_id | INT | — | 关联学科 ID（对应 subjects.id，必填） |
+| teacher_id | INT | 0 | 关联授课老师 ID（对应 employees.id，0 表示未设置） |
+| created_at | VARCHAR(500) | '' | 创建时间 |
+
+唯一约束：`student_id + campus_id + subject_id` 三元组唯一（同一学员在同一校区的同一学科下只能关联一条记录）。
+
+### 3.23 refund_records（退费记录表）
 
 | 字段 | 类型 | 默认值 | 说明 |
 |------|------|--------|------|
@@ -452,7 +467,7 @@ market-system-php/
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 | updated_at | DATETIME | CURRENT_TIMESTAMP | 更新时间 |
 
-### 3.23 表关系图
+### 3.24 表关系图
 
 ```
 organizations                     employees
@@ -542,7 +557,7 @@ subjects                  courses              ┌──────────
 
 ## 四、后端 API 完整列表
 
-所有 API 通过 `?action=<name>` 路由，统一返回 JSON。共 **86 个** action。
+所有 API 通过 `?action=<name>` 路由，统一返回 JSON。共 **88 个** action。
 
 ### 4.1 资源管理（9 个）
 
@@ -657,11 +672,11 @@ subjects                  courses              ┌──────────
 
 | action | 方法 | 说明 |
 |--------|------|------|
-| `list_students` | GET | 学员列表（分页，支持 keyword 筛选，含校区字段——通过子查询 GROUP_CONCAT orders 表 campus 去重拼接） |
-| `get_student` | GET | 查询单个学员详情 |
-| `add_student` | POST | 新增学员（自动生成 10 位学号，手机号唯一约束） |
-| `update_student` | POST | 编辑学员信息 |
-| `delete_student` | POST | 删除学员 |
+| `list_students` | GET | 学员列表（分页，支持 keyword / campus / student_filter / subject_level1 筛选；含校区、所在班级、学科剩余课时、授课老师列；在册学员筛选规则：student_type=常规 + 指定校区下剩余课时>0，可选限定学科） |
+| `get_student` | GET | 查询单个学员详情（含订单/汇总/sst_records 校区-学科-老师关联记录） |
+| `add_student` | POST | 新增学员（自动生成 10 位学号，手机号唯一约束，默认 student_type='小课包'，支持 sst_items 保存校区-学科-老师关联） |
+| `update_student` | POST | 编辑学员信息（仅姓名+手机号可编辑，自动重算 student_type，支持 sst_items 全量替换关联） |
+| `delete_student` | POST | 删除学员（级联删除 orders 和 student_subject_teacher 关联） |
 | `create_student_from_resource` | POST | 从资源创建学员（按手机号查重，存在则复用，不存在则新建，返回 student_id） |
 | `get_student_courses` | GET | 获取学员已报读课程列表（基于 orders 表关联查询，过滤 is_voided='否' 的订单，含子订单号 order_no 和退款状态 refund_status） |
 
@@ -673,6 +688,13 @@ subjects                  courses              ┌──────────
 | `add_class` | POST | 新增班级（授课课时必须为偶数，前后端双重校验） |
 | `update_class` | POST | 编辑班级（动态字段更新，授课课时偶数校验） |
 | `delete_class` | POST | 删除班级 |
+
+### 4.13a 校区-学科-老师关联（2 个）
+
+| action | 方法 | 说明 |
+|--------|------|------|
+| `get_campus_subjects` | GET | 根据 campus_id 获取该校区下所有一级学科（从 courses 表 campus_permission 匹配） |
+| `get_teachers` | GET | 获取所有在职教师列表（is_teacher='是' 且 status!='离职'，按部门/姓名排序） |
 
 ### 4.14 排课管理（5 个）
 
@@ -820,7 +842,7 @@ subjects                  courses              ┌──────────
 | 意向等级设置 | 意向等级增删改，支持排序号 | 改名/改排序事务同步 resources |
 | 基础类型设置 | 课程类型 + 沟通方式 Tab 切换，增删改排序 | 改名事务同步 appointments/communication_records |
 | **课程管理** | 课程 CRUD、价格方案、报价单、导出 | **价格方案**：每门课程可配置多个价格方案，每个方案包含多条报价单（课时数、单价、实际价格），支持设置方案类型（新报/续费/小课包）；**小课包**标记；**低幼龄**标记；**校区权限**控制字段 |
-| **学员管理** | 学员 CRUD、搜索、详情页（3 标签页） | 列表列：编号/学号/姓名/手机号/校区/已报课程数/所在班级/操作。校区取自该学员报过课程的订单去重拼接。学员详情页：标签页布局（报读课程 / 交易订单 / 上课记录），报读课程表格含状态列（正常/退费申请中/已退费）和退费操作按钮，列表页提供**报名**按钮跳转 panel-enroll |
+| **学员管理** | 学员 CRUD、搜索、详情页（3 标签页） | 列表列：学号/姓名/手机号/学员类型/校区/所在班级/学科剩余课时/授课老师/操作。学员类型自动计算（小课包/常规）。校区取自该学员报过课程的订单去重拼接。授课老师列展示校区-学科-老师关联，按校区筛选时仅展示当前校区记录。学员详情页：标签页布局（报读课程 / 交易订单 / 上课记录），报读课程表格含状态列（正常/退费申请中/已退费）和退费操作按钮，列表页提供**报名**按钮跳转 panel-enroll |
 | **班级管理** | 班级 CRUD、排课入口 | 班级列表表格（ID/名称/关联课程/班级类型/招生人数/授课课时/是否可试听/校区/备注/创建时间/操作-排课/编辑/删除）+ 搜索框 + 新增班级按钮；新增/编辑时授课课时必须为偶数（前端+后端双重校验） |
 | **交易订单** | 订单列表查看（17 列） | 列：订单号、父订单号、学号、编号、学员姓名、课程名称、价格方案、报价单名称、订单类型、课时数量、订单金额、现金、美团、支付状态、是否作废、状态、报名时间；支付状态列以三色标签展示（已支付=绿/待支付=橙/已取消=灰），是否作废列（是=红/否=-）；订单类型列以三色标签展示（新报=蓝/续费=绿/小课包=橙）；列表顶部筛选栏含支付状态和是否作废下拉筛选；列表顶部**支付方式汇总卡片**（现金/美团/总计）；支持 keyword 搜索 |
 | **报名详情** | 独立报名流程页面（panel-enroll） | 展示学员/资源姓名+手机号（只读）→ 选择课程 → 展示价格方案卡片（含类型标签：新报=蓝/续费=绿/小课包=橙）→ 选中方案展示报价单明细表格 + 合计金额 → **支付方式区域**（现金+美团输入框，实时校验金额匹配）→ 确认支付 → 逐条生成子订单（逐个填满分配策略，所有子订单继承方案 plan_type）+ 父订单 → 返回来源页 |
@@ -1000,6 +1022,7 @@ subjects                  courses              ┌──────────
    - 自动生成 16 位 `order_no`（子订单号）和 `parent_order_no`（父订单号，同一录单共用）
    - 同时插入一条 `parent_orders` 汇总记录
    - 支付成功 → 返回来源页面
+   - 支付完成后自动重算学员类型：存在非小课包订单则升级为"常规"
 
 ### 6.9 支付方式与分配策略
 
@@ -1171,6 +1194,34 @@ function isSmallPackage(val) {
 | 班级详情学员列表 | `list_class_students` | `WHERE cs.left_at = ''`（仅展示在班学员） |
 | 添加学员弹窗 | `get_available_students` | 子查询 `NOT IN (SELECT student_id FROM class_students WHERE class_id=$classId AND left_at = '')`（仅排除在班学员，已出班的可重新添加） |
 
+### 6.24 学员类型自动计算
+
+| 场景 | 规则 |
+|------|------|
+| 默认值 | 新增学员 `student_type` 默认为 `'小课包'` |
+| 自动升级 | 报名支付（`pay_enroll` / `enroll_course`）或编辑学员（`update_student`）后，查询该学员是否存在有效非小课包订单（`is_voided='否'` 且 `order_type != '小课包'` 且 `order_type != ''`） |
+| 升级条件 | 只要存在至少一条符合条件的订单，立即将 `student_type` 更新为 `'常规'` |
+| 不可逆 | 一旦升级为 `'常规'` 后永久保持，不会回退为 `'小课包'` |
+
+### 6.25 在册学员筛选规则
+
+在册学员（`student_filter='active'`）的筛选逻辑包含两个条件：
+
+1. **学员类型**：必须为 `'常规'` 类型（`student_type = '常规'`）
+2. **剩余课时 > 0**：当指定校区时，通过 EXISTS 子查询检查该学员在指定校区下是否存在有效订单（`is_voided='否'`、非已退费）且剩余课时 > 0；剩余课时 = `lesson_count - COALESCE(consumed_lessons, 0)`，退费申请中订单课时冻结为 0
+
+campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refund_status != '已退费')` 过滤，防止作废/已退费订单干扰校区筛选。
+
+### 6.26 校区-学科-授课老师关联
+
+| 场景 | 规则 |
+|------|------|
+| 数据载体 | `student_subject_teacher` 表，三元组唯一约束（student_id + campus_id + subject_id） |
+| 新增/编辑 | 学员新增/编辑弹窗支持配置多条关联（选择校区 → 自动加载该校区下学科 → 选择老师），通过 `sst_items` 数组提交。编辑时全量替换旧关联（先删后插） |
+| 删除学员 | 级联删除 `student_subject_teacher` 中该学员所有关联记录 |
+| 列表展示 | 学员列表"授课老师"列展示格式：`校区:学科-老师`，多个用逗号分隔；按校区筛选时仅展示该校区下的关联记录 |
+| 详情展示 | `get_student` API 返回 `sst_records` 数组，含校区名、学科名（一级+二级）、老师名及部门 |
+
 ---
 
 ## 七、代码规范
@@ -1240,6 +1291,17 @@ function isSmallPackage(val) {
 ---
 
 ## 八、更新日志
+
+### 2026-07-01
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| feat | **新增 student_subject_teacher 关联表**：学员-校区-学科-授课老师四元关联，三元组唯一约束；新增/编辑学员弹窗支持配置校区-学科-老师关联，编辑时全量替换；列表新增"授课老师"列（按校区筛选时仅展示当前校区记录）；get_student 返回 sst_records | `index.php`、`static/js/main.js`、`static/css/style.css` | 3a2f740 |
+| feat | **新增学员类型字段 student_type**：students 表新增 student_type（默认'小课包'）；报名支付/编辑学员后自动计算——存在有效非小课包订单即升级为'常规'（不可逆）；列表新增"学员类型"列 | `index.php`、`static/js/main.js` | 3a2f740 |
+| feat | **新增 get_campus_subjects / get_teachers API**：get_campus_subjects 根据校区ID返回该校区下所有一级学科（从 courses.campus_permission 匹配）；get_teachers 返回所有在职教师（is_teacher='是'） | `index.php` | 3a2f740 |
+| fix | **修复在册学员筛选 Bug**：campus 筛选 EXISTS 增加 `is_voided='否'` 和 `refund_status!='已退费'` 过滤；在册筛选条件从 `if ($campus && $subjectLevel1)` 改为 `if ($campus)`，确保选校区就检查剩余课时 > 0；消除作废订单通过校区筛选、退化为仅按 student_type 判断的缺陷 | `index.php` | 3a2f740 |
+| refactor | **学员编辑弹窗精简**：移除来源和跟进状态下拉框（字段保留在数据库但前端不再展示），新增只读学员类型展示 | `index.php` | 3a2f740 |
+| style | **新增授课老师标签样式**：`.teacher-tag` 暖木配色标签 | `static/css/style.css` | 3a2f740 |
 
 ### 2026-06-30
 

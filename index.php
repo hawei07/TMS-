@@ -2090,7 +2090,7 @@ $stmt->execute();
 
 // ==================== 学科设置 API ====================
         case 'list_subjects':
-            $res = $db->query("SELECT * FROM subjects ORDER BY sort_order, id");
+            $res = $db->query("SELECT s.* FROM subjects s INNER JOIN (SELECT MIN(id) as mid FROM subjects GROUP BY name, parent_id) AS t ON s.id = t.mid ORDER BY s.sort_order, s.id");
             $subjects = [];
             while ($r = $res->fetch(PDO::FETCH_ASSOC)) $subjects[] = $r;
             // 构建树形结构
@@ -2172,11 +2172,12 @@ $stmt->execute();
         case 'get_campus_subjects':
             $campusId = intval($_GET['campus_id'] ?? 0);
             if ($campusId <= 0) json(['error' => '请提供校区ID']);
-            // 从 courses 表找出该校区下所有一级学科
-            $stmt = $db->prepare("SELECT DISTINCT s.id, s.name, s.parent_id
+            // 从 courses 表找出该校区下所有一级学科（GROUP BY name 去重）
+            $stmt = $db->prepare("SELECT MIN(s.id) AS id, s.name, s.parent_id
                 FROM courses c
                 JOIN subjects s ON s.name = c.subject_level1 AND s.parent_id = 0
                 WHERE FIND_IN_SET(:cid, c.campus_permission)
+                GROUP BY s.name, s.parent_id
                 ORDER BY s.name");
             $stmt->bindValue(':cid', $campusId, PDO::PARAM_STR);
             $stmt->execute();
@@ -2195,6 +2196,8 @@ $stmt->execute();
             $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 15)));
             $keyword = trim($_GET['keyword'] ?? '');
             $campus = trim($_GET['campus'] ?? '');
+            $subjectLevel1 = trim($_GET['subject_level1'] ?? '');
+            $studentFilter = trim($_GET['student_filter'] ?? '');
             $offset = ($page - 1) * $pageSize;
             $conditions = [];
             $params = [];
@@ -2203,8 +2206,51 @@ $stmt->execute();
                 $params[':kw'] = "%$keyword%";
             }
             if ($campus) {
-                $conditions[] = "EXISTS (SELECT 1 FROM orders o WHERE o.student_id = s.id AND o.campus = :campus)";
+                $conditions[] = "EXISTS (SELECT 1 FROM orders o WHERE o.student_id = s.id AND o.campus = :campus AND o.is_voided = '否' AND (o.refund_status IS NULL OR o.refund_status != '已退费'))";
                 $params[':campus'] = $campus;
+            }
+            // 在册学员筛选：student_type=常规 + 指定校区下剩余课时>0（有学科则限定学科）
+            if ($studentFilter === 'active') {
+                $conditions[] = "s.student_type = '常规'";
+                if ($campus) {
+                    $subj1Cond = $subjectLevel1 ? "AND c2.subject_level1 = :subj1_active" : "";
+                    $conditions[] = "EXISTS (
+                        SELECT 1 FROM orders o2
+                        JOIN courses c2 ON o2.course_id = c2.id
+                        LEFT JOIN (
+                            SELECT order_id, COALESCE(SUM(deducted_lessons), 0) AS consumed
+                            FROM attendance_records
+                            WHERE status = '出勤'
+                            GROUP BY order_id
+                        ) ar ON ar.order_id = o2.id
+                        WHERE o2.student_id = s.id
+                            AND o2.is_voided = '否'
+                            AND (o2.refund_status IS NULL OR o2.refund_status != '已退费')
+                            $subj1Cond
+                            AND o2.campus = :campus_active
+                        GROUP BY o2.student_id
+                        HAVING SUM(
+                            CASE WHEN o2.refund_status = '退费申请中' THEN 0
+                            ELSE o2.lesson_count - COALESCE(ar.consumed, 0)
+                            END
+                        ) > 0
+                    )";
+                    $params[':campus_active'] = $campus;
+                    if ($subjectLevel1) {
+                        $params[':subj1_active'] = $subjectLevel1;
+                    }
+                }
+            }
+            // 一级学科独立筛选（不配合学员筛选时）：筛选有该学科订单的学员
+            if ($subjectLevel1 && $studentFilter !== 'active') {
+                $conditions[] = "EXISTS (
+                    SELECT 1 FROM orders o3
+                    JOIN courses c3 ON o3.course_id = c3.id
+                    WHERE o3.student_id = s.id
+                        AND o3.is_voided = '否'
+                        AND c3.subject_level1 = :subj1_only
+                )";
+                $params[':subj1_only'] = $subjectLevel1;
             }
             $where = !empty($conditions) ? 'WHERE ' . implode(' AND ', $conditions) : '';
             $stmt = $db->prepare("SELECT COUNT(*) FROM students s $where");
@@ -4664,10 +4710,22 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
                 <div class="toolbar">
-                    <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;">
+                    <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         <label style="font-size:13px;white-space:nowrap;">校区：</label>
-                        <select id="student-filter-campus" onchange="onStudentCampusChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
+                        <select id="student-filter-campus" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
                             <option value="">全部校区</option>
+                        </select>
+                        <label style="font-size:13px;white-space:nowrap;margin-left:4px;">一级学科：</label>
+                        <select id="student-filter-subject1" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
+                            <option value="">全部学科</option>
+                        </select>
+                        <label style="font-size:13px;white-space:nowrap;margin-left:4px;">学员筛选：</label>
+                        <select id="student-filter-type" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
+                            <option value="">全部学员</option>
+                            <option value="active">在册学员</option>
+                            <option value="active_other" disabled>活跃学员（待开发）</option>
+                            <option value="sleeping" disabled>沉睡学员（待开发）</option>
+                            <option value="lost" disabled>流失学员（待开发）</option>
                         </select>
                     </div>
                     <div class="toolbar-right" style="margin-left:auto;display:flex;align-items:center;gap:8px;">

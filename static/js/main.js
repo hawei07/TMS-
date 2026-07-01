@@ -3883,9 +3883,13 @@ function renderTeacherTags(teacherInfo) {
 async function loadStudents() {
     const keyword = document.getElementById('search-student').value;
     const campus = document.getElementById('student-filter-campus')?.value || '';
+    const subjectLevel1 = document.getElementById('student-filter-subject1')?.value || '';
+    const studentFilter = document.getElementById('student-filter-type')?.value || '';
     const params = new URLSearchParams({ page: studentPage, page_size: 15 });
     if (keyword) params.set('keyword', keyword);
     if (campus) params.set('campus', campus);
+    if (subjectLevel1) params.set('subject_level1', subjectLevel1);
+    if (studentFilter) params.set('student_filter', studentFilter);
     const res = await fetch(API_BASE + 'list_students&' + params);
     const data = await res.json();
     renderStudentTable(data.data);
@@ -4276,7 +4280,7 @@ function onStudentSubject1Change() {
     filterStudentCourses();
 }
 
-function onStudentCampusChange() {
+function onStudentFilterChange() {
     studentPage = 1;
     loadStudents();
 }
@@ -4293,6 +4297,26 @@ async function initStudentCampusFilter() {
             const opt = document.createElement('option');
             opt.value = c.name;
             opt.textContent = c.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* silently ignore */ }
+    // 加载一级学科下拉
+    initStudentSubjectFilter();
+}
+
+async function initStudentSubjectFilter() {
+    const sel = document.getElementById('student-filter-subject1');
+    if (!sel) return;
+    try {
+        const res = await fetch(API_BASE + 'list_subjects');
+        const data = await res.json();
+        const flat = data.flat || [];
+        // 只取一级学科（parent_id=0）
+        const level1 = flat.filter(s => s.parent_id === 0);
+        level1.forEach(s => {
+            const opt = document.createElement('option');
+            opt.value = s.name;
+            opt.textContent = s.name;
             sel.appendChild(opt);
         });
     } catch (e) { /* silently ignore */ }
