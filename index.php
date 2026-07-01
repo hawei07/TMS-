@@ -183,6 +183,7 @@ $db->exec("CREATE TABLE IF NOT EXISTS students (
     phone VARCHAR(500) NOT NULL UNIQUE,
     source VARCHAR(500),
     follow_status VARCHAR(500),
+    student_type VARCHAR(500) DEFAULT '小课包',
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP
 )");
 
@@ -249,6 +250,9 @@ $colResS = $db->query("SHOW COLUMNS FROM students");
 while ($colRowS = $colResS->fetch(PDO::FETCH_ASSOC)) $existingColsS[] = $colRowS['Field'];
 if (!in_array('student_no', $existingColsS)) {
     $db->exec("ALTER TABLE students ADD COLUMN student_no VARCHAR(500) DEFAULT ''");
+}
+if (!in_array('student_type', $existingColsS)) {
+    $db->exec("ALTER TABLE students ADD COLUMN student_type VARCHAR(500) DEFAULT '小课包'");
 }
 
 $db->exec("CREATE TABLE IF NOT EXISTS attendance_records (
@@ -405,6 +409,17 @@ $refundStatusCol = $db->query("SHOW COLUMNS FROM orders LIKE 'refund_status'")->
 if (!$refundStatusCol) {
     $db->exec("ALTER TABLE orders ADD COLUMN refund_status VARCHAR(10) DEFAULT '正常'");
 }
+
+// 学员-校区-学科-授课老师 关联表
+$db->exec("CREATE TABLE IF NOT EXISTS student_subject_teacher (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT NOT NULL,
+    campus_id INT NOT NULL,
+    subject_id INT NOT NULL,
+    teacher_id INT NOT NULL DEFAULT 0,
+    created_at VARCHAR(500) DEFAULT '',
+    UNIQUE KEY uk_sct (student_id, campus_id, subject_id)
+)");
 
 date_default_timezone_set('Asia/Shanghai');
 
@@ -1937,6 +1952,15 @@ $stmt->execute();
             } else {
                 $msg .= '（' . ($paymentCash > 0 ? '现金' : '美团') . '）';
             }
+            // 重新计算学员类型：只要存在非小课包订单即升级为常规
+            $st = $db->query("SELECT student_type FROM students WHERE id=$studentId")->fetch(PDO::FETCH_ASSOC);
+            $currentType = $st['student_type'] ?? '小课包';
+            if ($currentType !== '常规') {
+                $hasNonXKB = $db->query("SELECT COUNT(*) FROM orders WHERE student_id=$studentId AND is_voided='否' AND order_type != '小课包' AND order_type != ''")->fetchColumn();
+                if ($hasNonXKB > 0) {
+                    $db->exec("UPDATE students SET student_type='常规' WHERE id=$studentId");
+                }
+            }
             json(['message' => $msg, 'order_ids' => $orderIds, 'count' => count($orderIds)]);
 
         case 'save_price_plan':
@@ -2144,6 +2168,27 @@ $stmt->execute();
             }
             json(['message' => "成功删除 $deleted 个学科", 'deleted' => $deleted, 'failed' => $failed]);
 
+        // ==================== 校区-学科-老师 关联 API ====================
+        case 'get_campus_subjects':
+            $campusId = intval($_GET['campus_id'] ?? 0);
+            if ($campusId <= 0) json(['error' => '请提供校区ID']);
+            // 从 courses 表找出该校区下所有一级学科
+            $stmt = $db->prepare("SELECT DISTINCT s.id, s.name, s.parent_id
+                FROM courses c
+                JOIN subjects s ON s.name = c.subject_level1 AND s.parent_id = 0
+                WHERE FIND_IN_SET(:cid, c.campus_permission)
+                ORDER BY s.name");
+            $stmt->bindValue(':cid', $campusId, PDO::PARAM_STR);
+            $stmt->execute();
+            $subjects = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            json(['subjects' => $subjects]);
+
+        case 'get_teachers':
+            $res = $db->query("SELECT id, name, department, phone FROM employees WHERE is_teacher='是' AND status!='离职' ORDER BY department, name");
+            $teachers = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) $teachers[] = $r;
+            json(['teachers' => $teachers]);
+
         // ==================== 学员管理 API ====================
         case 'list_students':
             $page = max(1, intval($_GET['page'] ?? 1));
@@ -2226,6 +2271,35 @@ $stmt->execute();
                     $row['subject_remaining'] = $subjectRemainingMap[$sid] ?? '-';
                 }
                 unset($row);
+
+                // 批量查询学员-校区-学科-授课老师关联
+                // 若按校区筛选，则只展示该学员在当前校区下的授课老师
+                $sstCampusFilter = '';
+                if ($campus) {
+                    $campusOrgId = $db->query("SELECT id FROM organizations WHERE name = " . $db->quote($campus) . " LIMIT 1")->fetchColumn();
+                    if ($campusOrgId) {
+                        $sstCampusFilter = "AND sst.campus_id = " . intval($campusOrgId);
+                    }
+                }
+                $sstSql = "SELECT sst.student_id,
+                    GROUP_CONCAT(CONCAT(org.name, ':', sub.name, '-', COALESCE(emp.name, '未设置')) SEPARATOR ', ') AS teacher_info
+                    FROM student_subject_teacher sst
+                    LEFT JOIN organizations org ON org.id = sst.campus_id
+                    LEFT JOIN subjects sub ON sub.id = sst.subject_id
+                    LEFT JOIN employees emp ON emp.id = sst.teacher_id
+                    WHERE sst.student_id IN ($idsStr) $sstCampusFilter
+                    GROUP BY sst.student_id
+                    ORDER BY sst.student_id";
+                $sstRes = $db->query($sstSql);
+                $teacherInfoMap = [];
+                while ($tr = $sstRes->fetch(PDO::FETCH_ASSOC)) {
+                    $teacherInfoMap[$tr['student_id']] = $tr['teacher_info'];
+                }
+                foreach ($rows as &$row) {
+                    $sid = $row['id'];
+                    $row['teacher_info'] = $teacherInfoMap[$sid] ?? '-';
+                }
+                unset($row);
             }
 
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
@@ -2246,7 +2320,20 @@ $stmt->execute();
                 COALESCE(SUM(actual_price), 0) AS total_amount,
                 COALESCE(SUM(actual_price * consumed_lessons / NULLIF(lesson_count, 0)), 0) AS consumed_amount
                 FROM orders WHERE student_id=$id")->fetch(PDO::FETCH_ASSOC);
-            json(['student' => $student, 'orders' => $orders, 'summary' => $summary]);
+            // 学员-校区-学科-授课老师 关联记录
+            $sstRecords = [];
+            $sstRes = $db->query("SELECT sst.id, sst.student_id, sst.campus_id, sst.subject_id, sst.teacher_id,
+                org.name AS campus_name, sub.name AS subject_name, sub.parent_id AS subject_parent_id,
+                p.name AS subject_parent_name,
+                emp.name AS teacher_name, emp.department AS teacher_department
+                FROM student_subject_teacher sst
+                LEFT JOIN organizations org ON org.id = sst.campus_id
+                LEFT JOIN subjects sub ON sub.id = sst.subject_id
+                LEFT JOIN subjects p ON p.id = sub.parent_id
+                LEFT JOIN employees emp ON emp.id = sst.teacher_id
+                WHERE sst.student_id=$id ORDER BY org.name, p.name, sub.name");
+            while ($r = $sstRes->fetch(PDO::FETCH_ASSOC)) $sstRecords[] = $r;
+            json(['student' => $student, 'orders' => $orders, 'summary' => $summary, 'sst_records' => $sstRecords]);
             break;
 
         case 'add_student':
@@ -2257,14 +2344,25 @@ $stmt->execute();
             $stmt = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone) . "");
             $exist = $stmt->fetchColumn();
             if ($exist > 0) { json(['error' => '手机号已存在']); break; }
-            $source = trim($input['source'] ?? '');
-            $followStatus = trim($input['follow_status'] ?? '');
             $resourceId = intval($input['resource_id'] ?? 0);
             $rid = $resourceId > 0 ? $resourceId : 'NULL';
             $n = now();
             $studentNo = generateStudentNo($db);
-            $db->exec("INSERT INTO students (resource_id, name, phone, source, follow_status, student_no, created_at) VALUES ($rid, " . $db->quote($name) . ", " . $db->quote($phone) . ", " . $db->quote($source) . ", " . $db->quote($followStatus) . ", '$studentNo', '$n')");
-            json(['message' => '新增学员成功', 'id' => $db->lastInsertId()]);
+            $db->exec("INSERT INTO students (resource_id, name, phone, student_no, student_type, created_at) VALUES ($rid, " . $db->quote($name) . ", " . $db->quote($phone) . ", '$studentNo', '小课包', '$n')");
+            $newId = $db->lastInsertId();
+            // 保存校区-学科-授课老师关联
+            $sstItems = $input['sst_items'] ?? [];
+            if (is_array($sstItems)) {
+                foreach ($sstItems as $item) {
+                    $campusId = intval($item['campus_id'] ?? 0);
+                    $subjectId = intval($item['subject_id'] ?? 0);
+                    $teacherId = intval($item['teacher_id'] ?? 0);
+                    if ($campusId > 0 && $subjectId > 0) {
+                        $db->exec("INSERT INTO student_subject_teacher (student_id, campus_id, subject_id, teacher_id, created_at) VALUES ($newId, $campusId, $subjectId, $teacherId, '$n')");
+                    }
+                }
+            }
+            json(['message' => '新增学员成功', 'id' => $newId]);
             break;
 
         case 'update_student':
@@ -2277,9 +2375,31 @@ $stmt->execute();
             $stmt = $db->query("SELECT COUNT(*) FROM students WHERE phone=" . $db->quote($phone) . " AND id!=$id");
             $exist = $stmt->fetchColumn();
             if ($exist > 0) { json(['error' => '手机号已被其他学员使用']); break; }
-            $source = trim($input['source'] ?? '');
-            $followStatus = trim($input['follow_status'] ?? '');
-            $db->exec("UPDATE students SET name=" . $db->quote($name) . ", phone=" . $db->quote($phone) . ", source=" . $db->quote($source) . ", follow_status=" . $db->quote($followStatus) . " WHERE id=$id");
+            $db->exec("UPDATE students SET name=" . $db->quote($name) . ", phone=" . $db->quote($phone) . " WHERE id=$id");
+            // 重新计算学员类型：只要存在非小课包订单即升级为常规（不可逆）
+            $st = $db->query("SELECT student_type FROM students WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            $currentType = $st['student_type'] ?? '小课包';
+            if ($currentType !== '常规') {
+                $hasNonXKB = $db->query("SELECT COUNT(*) FROM orders WHERE student_id=$id AND is_voided='否' AND order_type != '小课包' AND order_type != ''")->fetchColumn();
+                if ($hasNonXKB > 0) {
+                    $db->exec("UPDATE students SET student_type='常规' WHERE id=$id");
+                }
+            }
+            // 保存校区-学科-授课老师关联
+            $sstItems = $input['sst_items'] ?? [];
+            if (is_array($sstItems)) {
+                // 先删除该学员所有旧关联
+                $db->exec("DELETE FROM student_subject_teacher WHERE student_id=$id");
+                $n = now();
+                foreach ($sstItems as $item) {
+                    $campusId = intval($item['campus_id'] ?? 0);
+                    $subjectId = intval($item['subject_id'] ?? 0);
+                    $teacherId = intval($item['teacher_id'] ?? 0);
+                    if ($campusId > 0 && $subjectId > 0) {
+                        $db->exec("INSERT INTO student_subject_teacher (student_id, campus_id, subject_id, teacher_id, created_at) VALUES ($id, $campusId, $subjectId, $teacherId, '$n')");
+                    }
+                }
+            }
             json(['message' => '更新成功']);
             break;
 
@@ -2287,6 +2407,7 @@ $stmt->execute();
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $db->exec("DELETE FROM student_subject_teacher WHERE student_id=$id");
             $db->exec("DELETE FROM orders WHERE student_id=$id");
             $db->exec("DELETE FROM students WHERE id=$id");
             json(['message' => '删除成功']);
@@ -4557,7 +4678,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-students">
                         <thead><tr>
-                            <th width="70">学号</th><th>姓名</th><th>手机号</th><th>校区</th><th>所在班级</th><th>学科剩余课时</th><th width="180">操作</th>
+                            <th width="70">学号</th><th>姓名</th><th>手机号</th><th width="70">学员类型</th><th>校区</th><th>所在班级</th><th>学科剩余课时</th><th>授课老师</th><th width="180">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -5300,8 +5421,15 @@ if (intval($countBt) === 0) {
             <input type="hidden" id="edit-sid">
             <div class="form-group"><label>姓名 <span class="required">*</span></label><input type="text" id="student-name" maxlength="50"></div>
             <div class="form-group"><label>手机号 <span class="required">*</span></label><input type="text" id="student-phone" maxlength="20"></div>
-            <div class="form-group"><label>来源</label><select id="student-source"><option value="">请选择</option></select></div>
-            <div class="form-group"><label>跟进状态</label><select id="student-follow-status"><option value="">请选择</option><option value="未沟通">未沟通</option><option value="沟通中">沟通中</option><option value="已邀约未试听">已邀约未试听</option><option value="已试听待转化">已试听待转化</option><option value="已转化—定金">已转化—定金</option><option value="已转化—全款">已转化—全款</option><option value="无效客户">无效客户</option></select></div>
+            <div class="form-group"><label>学员类型</label><input type="text" id="student-type" readonly style="background:#f5f7fa;color:#666;"></div>
+
+            <!-- 校区-学科-授课老师 设置区块 -->
+            <div class="form-group" style="margin-top:20px;border-top:1px solid #e8e8e8;padding-top:16px;">
+                <label style="font-weight:600;margin-bottom:8px;">校区-学科-授课老师设置</label>
+                <div id="sst-rows-container" style="margin-bottom:8px;"></div>
+                <button type="button" class="btn btn-outline btn-sm" onclick="addSstRow()" style="font-size:13px;">+ 新增一行</button>
+            </div>
+
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-student')">取消</button><button class="btn btn-primary" onclick="saveStudent()">保存</button></div></div>
     </div>
@@ -6160,6 +6288,6 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260630"></script>
+    <script src="static/js/main.js?v=20260701"></script>
 </body>
 </html>

@@ -3868,6 +3868,18 @@ function renderSubjectTags(subjectRemaining) {
     return tags.length === 0 ? '' : tags.join('');
 }
 
+// 渲染授课老师标签（格式：校区:学科-老师）
+function renderTeacherTags(teacherInfo) {
+    if (!teacherInfo || teacherInfo === '-') return '-';
+    var items = teacherInfo.split(', ');
+    var tags = items.map(function(s) {
+        var trimmed = s.trim();
+        if (!trimmed) return '';
+        return '<span class="teacher-tag">' + esc(trimmed) + '</span>';
+    }).filter(function(t) { return t !== ''; });
+    return tags.length === 0 ? '-' : tags.join('');
+}
+
 async function loadStudents() {
     const keyword = document.getElementById('search-student').value;
     const campus = document.getElementById('student-filter-campus')?.value || '';
@@ -3884,7 +3896,7 @@ async function loadStudents() {
 function renderStudentTable(rows) {
     const tbody = document.querySelector('#table-students tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -3893,9 +3905,11 @@ function renderStudentTable(rows) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td><a class="student-name-link" href="javascript:void(0)" onclick="viewStudent(${r.id})">${esc(r.name)}</a></td>
             <td>${esc(r.phone)}</td>
+            <td>${esc(r.student_type || '小课包')}</td>
             <td>${esc(r.campus || '')}</td>
             <td>${renderClassTags(r.class_names)}</td>
             <td>${renderSubjectTags(r.subject_remaining)}</td>
+            <td>${renderTeacherTags(r.teacher_info)}</td>
             <td>
                 <div class="action-btns">
                     <button class="btn btn-primary btn-sm" onclick="goEnroll(${r.id})">报名</button>
@@ -3908,40 +3922,20 @@ function renderStudentTable(rows) {
 }
 
 
-async function populateStudentSourceSelect(selectedValue) {
-    const sel = document.getElementById('student-source');
-    if (!sel) return;
-    sel.innerHTML = '<option value="">请选择</option>';
-    try {
-        const result = await api('list_channels', null, 'GET');
-        const channels = Array.isArray(result.data) ? result.data : [];
-        channels.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            opt.textContent = c.name;
-            sel.appendChild(opt);
-        });
-        if (selectedValue) sel.value = selectedValue;
-    } catch (e) { /* ignore */ }
-}
-
 async function editStudent(sid) {
-    const res = await fetch(API_BASE + 'list_students&page=1&page_size=1&keyword=');
+    const res = await fetch(API_BASE + 'get_student&id=' + sid);
     const data = await res.json();
-    let student = null;
-    if (data.data) student = data.data.find(s => s.id === sid);
-    if (!student) {
-        const res2 = await fetch(API_BASE + 'list_students&page=1&page_size=' + (sid + 10));
-        const data2 = await res2.json();
-        if (data2.data) student = data2.data.find(s => s.id === sid);
-    }
+    if (data.error) { showToast(data.error, 'error'); return; }
+    const student = data.student;
     if (!student) { showToast('未找到该学员', 'error'); return; }
     document.getElementById('edit-sid').value = student.id;
     document.getElementById('modal-student-title').textContent = '编辑学员';
     document.getElementById('student-name').value = student.name || '';
     document.getElementById('student-phone').value = student.phone || '';
-    document.getElementById('student-follow-status').value = student.follow_status || '';
-    await populateStudentSourceSelect(student.resource_source || student.source || '');
+    document.getElementById('student-type').value = student.student_type || '小课包';
+
+    // 渲染已有 SST 记录
+    renderSstRows(data.sst_records || []);
     openModal('modal-student');
 }
 
@@ -3954,8 +3948,7 @@ async function saveStudent() {
     const data = {
         name,
         phone,
-        source: document.getElementById('student-source').value.trim(),
-        follow_status: document.getElementById('student-follow-status').value
+        sst_items: collectSstItems()
     };
     let result;
     if (sid) {
@@ -3984,6 +3977,169 @@ async function deleteStudent(sid, name) {
         loadStudents();
         loadStats();
     });
+}
+
+// ==================== 校区-学科-授课老师（SST）功能 ====================
+let sstTeacherCache = null;
+let sstRowIdCounter = 0;
+
+async function loadSstTeachers() {
+    if (sstTeacherCache) return sstTeacherCache;
+    const res = await fetch(API_BASE + 'get_teachers');
+    const data = await res.json();
+    sstTeacherCache = data.teachers || [];
+    return sstTeacherCache;
+}
+
+async function loadCampusSubjects(campusId) {
+    if (!campusId) return [];
+    const res = await fetch(API_BASE + 'get_campus_subjects&campus_id=' + campusId);
+    const data = await res.json();
+    return data.subjects || [];
+}
+
+function renderSstRows(records) {
+    const container = document.getElementById('sst-rows-container');
+    sstRowIdCounter = 0;
+    if (!records || records.length === 0) {
+        container.innerHTML = '<div style="color:#999;font-size:13px;padding:8px 0;">暂无设置</div>';
+        // 预加载校区列表和老师列表
+        loadSstTeachers();
+        return;
+    }
+    container.innerHTML = '';
+    loadSstTeachers().then(() => {
+        records.forEach(r => {
+            addSstRowWithData(r);
+        });
+    });
+}
+
+async function addSstRowWithData(record) {
+    const rowId = ++sstRowIdCounter;
+    const container = document.getElementById('sst-rows-container');
+    if (container.querySelector('.sst-row-empty')) {
+        container.innerHTML = '';
+    }
+
+    const row = document.createElement('div');
+    row.className = 'sst-row';
+    row.id = 'sst-row-' + rowId;
+    row.style.cssText = 'display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;';
+
+    // 校区下拉
+    const campusSel = document.createElement('select');
+    campusSel.className = 'sst-campus';
+    campusSel.style.cssText = 'flex:1;min-width:130px;';
+    campusSel.innerHTML = '<option value="">选择校区</option>';
+    // 加载校区列表
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const odata = await res.json();
+        const orgs = odata.data ? odata.data.flat : [];
+        orgs.filter(o => o.type === '校区').forEach(o => {
+            campusSel.innerHTML += '<option value="' + o.id + '">' + esc(o.name) + '</option>';
+        });
+    } catch(e) {}
+    row.appendChild(campusSel);
+
+    // 学科下拉
+    const subjSel = document.createElement('select');
+    subjSel.className = 'sst-subject';
+    subjSel.style.cssText = 'flex:1;min-width:160px;';
+    subjSel.innerHTML = '<option value="">选择学科</option>';
+    row.appendChild(subjSel);
+
+    // 老师下拉
+    const teacherSel = document.createElement('select');
+    teacherSel.className = 'sst-teacher';
+    teacherSel.style.cssText = 'flex:1;min-width:130px;';
+    teacherSel.innerHTML = '<option value="">选择老师</option>';
+    const teachers = await loadSstTeachers();
+    teachers.forEach(t => {
+        teacherSel.innerHTML += '<option value="' + t.id + '">' + esc(t.name) + (t.department ? ' (' + esc(t.department) + ')' : '') + '</option>';
+    });
+    row.appendChild(teacherSel);
+
+    // 删除按钮
+    const delBtn = document.createElement('button');
+    delBtn.type = 'button';
+    delBtn.className = 'btn btn-outline btn-sm';
+    delBtn.style.cssText = 'color:#e74c3c;border-color:#e74c3c;';
+    delBtn.textContent = '删除';
+    delBtn.onclick = function() { removeSstRow(rowId); };
+    row.appendChild(delBtn);
+
+    // 校区变更时加载学科
+    campusSel.onchange = async function() {
+        const cid = this.value;
+        subjSel.innerHTML = '<option value="">加载中...</option>';
+        subjSel.disabled = true;
+        try {
+            const subjects = await loadCampusSubjects(cid);
+            subjSel.innerHTML = '<option value="">选择学科</option>';
+            subjects.forEach(s => {
+                const label = s.parent_name ? s.parent_name + ' > ' + s.name : s.name;
+                subjSel.innerHTML += '<option value="' + s.id + '">' + esc(label) + '</option>';
+            });
+        } catch(e) {
+            subjSel.innerHTML = '<option value="">加载失败</option>';
+        }
+        subjSel.disabled = false;
+    };
+
+    container.appendChild(row);
+
+    // 如果有预设数据，加载
+    if (record) {
+        campusSel.value = record.campus_id || '';
+        if (record.campus_id) {
+            campusSel.onchange();
+            // 等待学科加载完成后设置值
+            const checkSubj = setInterval(() => {
+                if (subjSel.options.length > 1 && subjSel.options[0].textContent !== '加载中...') {
+                    clearInterval(checkSubj);
+                    subjSel.value = record.subject_id || '';
+                }
+            }, 100);
+            setTimeout(() => clearInterval(checkSubj), 3000);
+        }
+        if (record.teacher_id) {
+            teacherSel.value = record.teacher_id;
+        }
+        // 存储 SST 记录 ID（用于更新而非新增）
+        row.setAttribute('data-sst-id', record.id || '');
+    }
+}
+
+async function addSstRow() {
+    await addSstRowWithData(null);
+}
+
+function removeSstRow(rowId) {
+    const row = document.getElementById('sst-row-' + rowId);
+    if (row) row.remove();
+    const container = document.getElementById('sst-rows-container');
+    if (!container.querySelector('.sst-row')) {
+        container.innerHTML = '<div class="sst-row-empty" style="color:#999;font-size:13px;padding:8px 0;">暂无设置</div>';
+    }
+}
+
+function collectSstItems() {
+    const items = [];
+    const rows = document.querySelectorAll('#sst-rows-container .sst-row');
+    rows.forEach(row => {
+        const campusSel = row.querySelector('.sst-campus');
+        const subjSel = row.querySelector('.sst-subject');
+        const teacherSel = row.querySelector('.sst-teacher');
+        const campusId = campusSel ? parseInt(campusSel.value) || 0 : 0;
+        const subjectId = subjSel ? parseInt(subjSel.value) || 0 : 0;
+        const teacherId = teacherSel ? parseInt(teacherSel.value) || 0 : 0;
+        if (campusId > 0 && subjectId > 0) {
+            items.push({ campus_id: campusId, subject_id: subjectId, teacher_id: teacherId });
+        }
+    });
+    return items;
 }
 
 // ==================== 学员详情 ====================

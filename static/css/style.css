@@ -3218,3 +3218,17 @@ span.flatpickr-weekday {
     background: #E8E4DD;
     color: #666;
 }
+
+/* 授课老师标签 */
+.teacher-tag {
+    display: block;
+    width: fit-content;
+    padding: 2px 8px;
+    border-radius: 4px;
+    margin-bottom: 3px;
+    font-size: 12px;
+    line-height: 1.5;
+    white-space: nowrap;
+    background: #EEF0F6;
+    color: #4a5568;
+}
