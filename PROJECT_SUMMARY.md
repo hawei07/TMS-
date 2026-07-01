@@ -1305,6 +1305,7 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | feat | **现金流统计收入口径调整**：`get_cashflow_stats` 收入统计去掉 `refund_status` 过滤条件，仅保留 `pay_status='已支付' AND is_voided='否'`。已退费订单的收入如实计入收入端，退费金额在支出端体现 | `index.php` | — |
 | feat | **现金流统计图表优化（全部校区模式）**：`renderCashflowCharts` 新增 `campusFilter` 参数，全部校区模式下按日期对各校区数据求和，堆叠柱状图改为普通柱状图（单色"全部校区"柱），折线图仅显示一条汇总折线；单校区模式保持原有堆叠+多折线行为 | `static/js/main.js` | — |
 | feat | **净现金流图表类型改为柱状图**：第二个图表从 `type: 'line'` 改为 `type: 'bar'`，标题从"各校区净现金流趋势"改为"各校区净现金流" | `static/js/main.js`、`index.php` | — |
+| style | **图表标题重命名**：第一个图表标题从"各订单类型收入堆叠柱状图"改为"总收入"，净现金流图表标题从"各校区净现金流"改为"净现金流" | `index.php` | — |
 
 ### 2026-06-30
 
