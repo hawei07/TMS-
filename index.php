@@ -2801,6 +2801,9 @@ $stmt->execute();
             $keyword = trim($_GET['keyword'] ?? '');
             $payStatus = trim($_GET['pay_status'] ?? '');
             $isVoided = trim($_GET['is_voided'] ?? '');
+            $campus = trim($_GET['campus'] ?? '');
+            $payDateStart = trim($_GET['pay_date_start'] ?? '');
+            $payDateEnd = trim($_GET['pay_date_end'] ?? '');
             $offset = ($page - 1) * $pageSize;
             $where = '';
             $params = [];
@@ -2816,6 +2819,29 @@ $stmt->execute();
             if ($isVoided) {
                 $conds[] = "o.is_voided = :ivd";
                 $params[':ivd'] = $isVoided;
+            }
+            if ($campus) {
+                $campusList = array_values(array_filter(array_map('trim', explode(',', $campus))));
+                if (count($campusList) === 1) {
+                    $conds[] = "o.campus = :cps";
+                    $params[':cps'] = $campusList[0];
+                } elseif (count($campusList) > 1) {
+                    $phs = [];
+                    foreach ($campusList as $i => $cp) {
+                        $ph = ":cps$i";
+                        $phs[] = $ph;
+                        $params[$ph] = $cp;
+                    }
+                    $conds[] = "o.campus IN (" . implode(',', $phs) . ")";
+                }
+            }
+            if ($payDateStart) {
+                $conds[] = "o.paid_at >= :pds";
+                $params[':pds'] = $payDateStart . ' 00:00:00';
+            }
+            if ($payDateEnd) {
+                $conds[] = "o.paid_at <= :pde";
+                $params[':pde'] = $payDateEnd . ' 23:59:59';
             }
             if (!empty($conds)) {
                 $where = "WHERE " . implode(' AND ', $conds);
@@ -2938,6 +2964,7 @@ $stmt->execute();
             $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 15)));
             $keyword = trim($_GET['keyword'] ?? '');
             $status = trim($_GET['status'] ?? '');
+            $campus = trim($_GET['campus'] ?? '');
             $dateFrom = trim($_GET['date_from'] ?? '');
             $dateTo = trim($_GET['date_to'] ?? '');
 
@@ -2952,6 +2979,21 @@ $stmt->execute();
             if ($status) {
                 $where[] = "rr.status = :st";
                 $params[':st'] = $status;
+            }
+            if ($campus) {
+                $campusList = array_values(array_filter(array_map('trim', explode(',', $campus))));
+                if (count($campusList) === 1) {
+                    $where[] = "rr.campus = :cps";
+                    $params[':cps'] = $campusList[0];
+                } elseif (count($campusList) > 1) {
+                    $phs = [];
+                    foreach ($campusList as $i => $cp) {
+                        $ph = ":cps$i";
+                        $phs[] = $ph;
+                        $params[$ph] = $cp;
+                    }
+                    $where[] = "rr.campus IN (" . implode(',', $phs) . ")";
+                }
             }
             if ($dateFrom) {
                 $where[] = "rr.created_at >= :df";
@@ -4045,6 +4087,180 @@ $stmt->execute();
             json(['data' => $paged, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
+        case 'get_cashflow_stats':
+            $granularity = $_GET['granularity'] ?? 'monthly';
+            $campus = $_GET['campus'] ?? '';
+            $dateFrom = $_GET['date_from'] ?? '';
+            $dateTo = $_GET['date_to'] ?? '';
+            // 默认近12个月
+            if (!$dateFrom) $dateFrom = date('Y-m', strtotime('-11 months'));
+            if (!$dateTo) $dateTo = date('Y-m');
+
+            if ($granularity === 'yearly') {
+                $fromYear = substr($dateFrom, 0, 4);
+                $toYear = substr($dateTo, 0, 4);
+                $from = $fromYear . '-01-01';
+                $to = $toYear . '-12-31';
+                $groupByExpr = "DATE_FORMAT(o.paid_at, '%Y')";
+            } elseif ($granularity === 'daily') {
+                $from = (strlen($dateFrom) === 10) ? $dateFrom : ($dateFrom . '-01');
+                $to   = (strlen($dateTo) === 10)   ? $dateTo   : date('Y-m-t', strtotime($dateTo . '-01'));
+                $groupByExpr = "DATE_FORMAT(o.paid_at, '%Y-%m-%d')";
+            } else {
+                $from = $dateFrom . '-01';
+                $to = date('Y-m-t', strtotime($dateTo . '-01'));
+                $groupByExpr = "DATE_FORMAT(o.paid_at, '%Y-%m')";
+            }
+
+            $campusWhere = '';
+            $campusWhereE = '';
+            if ($campus !== '') {
+                $campusWhere = "AND o.campus = :campus";
+                $campusWhereE = "AND rr.campus = :campus_e";
+            }
+
+            // 收入：已支付且未作废且非已退费的订单，按校区+日期统计
+            $incomeSql = "SELECT o.campus, $groupByExpr AS period, COUNT(*) AS cnt, COALESCE(SUM(o.actual_price), 0) AS amount
+                FROM orders o
+                WHERE o.pay_status = '已支付' AND o.is_voided = '否'
+                  AND o.paid_at >= :from AND o.paid_at <= :to2
+                  $campusWhere
+                GROUP BY o.campus, $groupByExpr ORDER BY o.campus, period ASC";
+            $stmt = $db->prepare($incomeSql);
+            $stmt->bindValue(':from', $from . ' 00:00:00');
+            $stmt->bindValue(':to2', $to . ' 23:59:59');
+            if ($campus !== '') $stmt->bindValue(':campus', $campus);
+            $stmt->execute();
+            $incomeRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 支出：已退费的退款记录，按校区+日期统计
+            $expenseGroupByExpr = str_replace('o.paid_at', 'rr.updated_at', $groupByExpr);
+            $expenseSql = "SELECT rr.campus, $expenseGroupByExpr AS period, COUNT(*) AS cnt, COALESCE(SUM(rr.actual_refund), 0) AS amount
+                FROM refund_records rr
+                WHERE rr.status = '已退费'
+                  AND rr.updated_at >= :from AND rr.updated_at <= :to2
+                  $campusWhereE
+                GROUP BY rr.campus, $expenseGroupByExpr ORDER BY rr.campus, period ASC";
+            $stmt = $db->prepare($expenseSql);
+            $stmt->bindValue(':from', $from . ' 00:00:00');
+            $stmt->bindValue(':to2', $to . ' 23:59:59');
+            if ($campus !== '') $stmt->bindValue(':campus_e', $campus);
+            $stmt->execute();
+            $expenseRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 按订单类型的收入明细（用于堆叠柱状图）
+            $incomeByTypeSql = "SELECT o.order_type, $groupByExpr AS period, COALESCE(SUM(o.actual_price), 0) AS amount, COUNT(*) AS cnt
+                FROM orders o
+                WHERE o.pay_status = '已支付' AND o.is_voided = '否'
+                  AND o.paid_at >= :from AND o.paid_at <= :to2
+                  $campusWhere
+                GROUP BY o.order_type, $groupByExpr ORDER BY o.order_type, period ASC";
+            $stmt = $db->prepare($incomeByTypeSql);
+            $stmt->bindValue(':from', $from . ' 00:00:00');
+            $stmt->bindValue(':to2', $to . ' 23:59:59');
+            if ($campus !== '') $stmt->bindValue(':campus', $campus);
+            $stmt->execute();
+            $incomeByTypeRows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $incomeByTypeRows[] = [
+                    'order_type' => $r['order_type'] ?: '其他',
+                    'date' => $r['period'],
+                    'amount' => round(floatval($r['amount']), 2),
+                    'cnt' => intval($r['cnt']),
+                ];
+            }
+
+            // 合并数据：key = campus|period
+            $incomeMap = []; foreach ($incomeRows as $r) $incomeMap[$r['campus'] . '|' . $r['period']] = $r;
+            $expenseMap = []; foreach ($expenseRows as $r) $expenseMap[$r['campus'] . '|' . $r['period']] = $r;
+
+            $allKeys = array_unique(array_merge(array_keys($incomeMap), array_keys($expenseMap)));
+            sort($allKeys);
+
+            $rows = [];
+            $totalIncome = 0; $totalExpense = 0; $totalIncomeCnt = 0; $totalExpenseCnt = 0;
+            foreach ($allKeys as $key) {
+                list($campusKey, $period) = explode('|', $key, 2);
+                $inc = $incomeMap[$key] ?? ['cnt' => 0, 'amount' => 0];
+                $exp = $expenseMap[$key] ?? ['cnt' => 0, 'amount' => 0];
+                $incAmt = floatval($inc['amount']);
+                $expAmt = floatval($exp['amount']);
+                $rows[] = [
+                    'campus' => $campusKey ?: '未指定校区',
+                    'date' => $period,
+                    'income_cnt' => intval($inc['cnt']),
+                    'income_amount' => $incAmt,
+                    'expense_cnt' => intval($exp['cnt']),
+                    'expense_amount' => $expAmt,
+                    'net' => round($incAmt - $expAmt, 2),
+                ];
+                $totalIncome += $incAmt;
+                $totalExpense += $expAmt;
+                $totalIncomeCnt += intval($inc['cnt']);
+                $totalExpenseCnt += intval($exp['cnt']);
+            }
+
+            // 按日期倒序，同日期内按校区排序
+            usort($rows, function($a, $b) {
+                $cmp = strcmp($b['date'], $a['date']);
+                return $cmp !== 0 ? $cmp : strcmp($a['campus'], $b['campus']);
+            });
+
+            // 校区排名：仅当未筛选单个校区时（campus为空），按校区汇总排名
+            $rankings = [];
+            if ($campus === '') {
+                $rankIncomeSql = "SELECT o.campus, o.order_type, COALESCE(SUM(o.actual_price), 0) AS amount
+                    FROM orders o
+                    WHERE o.pay_status = '已支付' AND o.is_voided = '否'
+                      AND o.paid_at >= :from AND o.paid_at <= :to2
+                    GROUP BY o.campus, o.order_type
+                    ORDER BY o.campus, o.order_type";
+                $stmt = $db->prepare($rankIncomeSql);
+                $stmt->bindValue(':from', $from . ' 00:00:00');
+                $stmt->bindValue(':to2', $to . ' 23:59:59');
+                $stmt->execute();
+                $rankRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                // 按校区汇总总收入用于排序
+                $campusTotal = [];
+                foreach ($rankRows as $r) {
+                    $c = $r['campus'] ?: '未指定校区';
+                    if (!isset($campusTotal[$c])) $campusTotal[$c] = 0;
+                    $campusTotal[$c] += floatval($r['amount']);
+                }
+                arsort($campusTotal);
+                $campusOrder = array_keys($campusTotal);
+                $orderMap = array_flip($campusOrder);
+
+                $rankings = [];
+                foreach ($rankRows as $r) {
+                    $rankings[] = [
+                        'campus' => $r['campus'] ?: '未指定校区',
+                        'order_type' => $r['order_type'] ?: '其他',
+                        'income' => round(floatval($r['amount']), 2),
+                    ];
+                }
+                usort($rankings, function($a, $b) use ($orderMap) {
+                    $cmp = ($orderMap[$a['campus']] ?? 999) - ($orderMap[$b['campus']] ?? 999);
+                    if ($cmp !== 0) return $cmp;
+                    return strcmp($a['order_type'], $b['order_type']);
+                });
+            }
+
+            json([
+                'data' => $rows,
+                'income_by_type' => $incomeByTypeRows,
+                'rankings' => $rankings,
+                'summary' => [
+                    'total_income' => round($totalIncome, 2),
+                    'total_expense' => round($totalExpense, 2),
+                    'net_cashflow' => round($totalIncome - $totalExpense, 2),
+                    'income_cnt' => $totalIncomeCnt,
+                    'expense_cnt' => $totalExpenseCnt,
+                ],
+            ]);
+            break;
+
         default:
             json(['error' => 'Unknown action']);
     }
@@ -4085,6 +4301,7 @@ if (intval($countBt) === 0) {
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>TMS管理系统</title>
     <link rel="stylesheet" href="static/css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="app-layout">
@@ -4150,6 +4367,22 @@ if (intval($countBt) === 0) {
                                         </div>
                                     </li>
                                 </ul>
+                            </li>
+                        </ul>
+                    </li>
+                    <!-- 数据中心（父节点） -->
+                    <li class="tree-node expanded">
+                        <div class="tree-parent">
+                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
+                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
+                            <span class="tree-label">数据中心</span>
+                        </div>
+                        <ul class="tree-children">
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-cashflow">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                                    <span class="tree-label">现金流统计</span>
+                                </div>
                             </li>
                         </ul>
                     </li>
@@ -5072,6 +5305,20 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
                 <div class="toolbar">
+                    <div class="toolbar-left" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                        <label style="font-size:13px;white-space:nowrap;">区域：</label>
+                        <select id="filter-order-region" onchange="onOrderRegionChange()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:100px;">
+                            <option value="">全部区域</option>
+                        </select>
+                        <label style="font-size:13px;white-space:nowrap;">校区：</label>
+                        <select id="filter-order-campus" onchange="loadOrders()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:120px;">
+                            <option value="">全部校区</option>
+                        </select>
+                        <label style="font-size:13px;white-space:nowrap;margin-left:4px;">支付时间：</label>
+                        <input type="date" id="filter-pay-date-start" onchange="loadOrders()" style="padding:4px 6px;border:1px solid #ddd;border-radius:4px;width:130px;">
+                        <span style="color:#999;">至</span>
+                        <input type="date" id="filter-pay-date-end" onchange="loadOrders()" style="padding:4px 6px;border:1px solid #ddd;border-radius:4px;width:130px;">
+                    </div>
                     <div class="toolbar-right" style="margin-left:auto;">
                         <input type="text" id="search-order" placeholder="搜索学员/课程..." onkeyup="debounceSearch('order')">
                         <select id="filter-pay-status" onchange="loadOrders()" style="margin-left:6px;padding:4px 8px;border:1px solid #ddd;border-radius:4px;">
@@ -5117,7 +5364,15 @@ if (intval($countBt) === 0) {
                     <!-- 退费记录 tab -->
                     <div class="sec-panel active" id="tab-refund-records">
                         <div class="toolbar">
-                            <div class="toolbar-left">
+                            <div class="toolbar-left" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+                                <label style="font-size:13px;white-space:nowrap;">区域：</label>
+                                <select id="filter-refund-region" onchange="onRefundRegionChange()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:100px;">
+                                    <option value="">全部区域</option>
+                                </select>
+                                <label style="font-size:13px;white-space:nowrap;">校区：</label>
+                                <select id="filter-refund-campus" onchange="loadRefundRecords()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:120px;">
+                                    <option value="">全部校区</option>
+                                </select>
                                 <select id="filter-refund-status" onchange="loadRefundRecords()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
                                     <option value="">全部状态</option>
                                     <option value="待审批">待审批</option>
@@ -5139,7 +5394,7 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-refund-records">
                                 <thead><tr>
-                                    <th width="80">订单号</th><th>学员</th><th>课程</th><th>报读课时</th><th>消耗课时</th><th>剩余课时</th><th>报读金额</th><th>实退金额</th><th>扣减金额</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
+                                    <th width="80">订单号</th><th>学员</th><th>课程</th><th>校区</th><th>报读课时</th><th>消耗课时</th><th>剩余课时</th><th>报读金额</th><th>实退金额</th><th>扣减金额</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
                                 </tr></thead>
                                 <tbody></tbody>
                             </table>
@@ -5189,6 +5444,65 @@ if (intval($countBt) === 0) {
                     <table id="table-classrooms">
                         <thead><tr>
                             <th>教室名称</th><th>容纳人数</th><th>所属校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- 面板：现金流统计 -->
+            <section class="content-panel" id="panel-cashflow">
+                <div class="panel-header">
+                    <h3>现金流统计</h3>
+                </div>
+                <!-- 筛选栏 -->
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <label style="font-size:13px;margin-right:6px;">校区：</label>
+                        <select id="cf-campus" onchange="loadCashflow()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:120px;">
+                            <option value="">全部校区</option>
+                        </select>
+                        <label style="font-size:13px;margin:0 6px;">日期范围：</label>
+                        <input type="month" id="cf-date-from" style="width:150px;padding:5px 8px;border:1px solid #ddd;border-radius:4px;" onchange="loadCashflow()">
+                        <span style="margin:0 4px;color:#999;">至</span>
+                        <input type="month" id="cf-date-to" style="width:150px;padding:5px 8px;border:1px solid #ddd;border-radius:4px;" onchange="loadCashflow()">
+                        <label style="font-size:13px;margin:0 6px;">粒度：</label>
+                        <select id="cf-granularity" onchange="onCashflowGranularityChange()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;">
+                            <option value="monthly">按月</option>
+                            <option value="daily">按日</option>
+                            <option value="yearly">按年</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <button class="btn btn-primary btn-sm" onclick="loadCashflow()" style="margin-left:6px;">查询</button>
+                    </div>
+                </div>
+                <!-- 汇总卡片 -->
+                <div class="cashflow-summary" id="cashflow-summary">
+                    <div class="cf-card cf-card-income"><div class="cf-card-label">总收入</div><div class="cf-card-value" id="cf-total-income">--</div></div>
+                    <div class="cf-card cf-card-expense"><div class="cf-card-label">总支出</div><div class="cf-card-value" id="cf-total-expense">--</div></div>
+                    <div class="cf-card cf-card-net"><div class="cf-card-label">净现金流</div><div class="cf-card-value" id="cf-net-cashflow">--</div></div>
+                </div>
+                <!-- 图表区域 -->
+                <div class="cf-charts" id="cf-charts" style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap;">
+                    <div class="cf-chart-container" style="flex:1;min-width:400px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                        <h4 style="margin:0 0 12px;font-size:14px;color:#333;">各订单类型收入堆叠柱状图</h4>
+                        <div style="position:relative;height:300px;"><canvas id="cf-bar-chart"></canvas></div>
+                    </div>
+                    <div class="cf-chart-container" style="flex:1;min-width:400px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                        <h4 style="margin:0 0 12px;font-size:14px;color:#333;">各校区净现金流</h4>
+                        <div style="position:relative;height:300px;"><canvas id="cf-line-chart"></canvas></div>
+                    </div>
+                </div>
+                <!-- 校区排名图表 -->
+                <div id="cf-rank-chart-wrapper" style="margin-bottom:16px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                    <h4 style="margin:0 0 12px;font-size:14px;color:#333;">校区现金流排名</h4>
+                    <div style="position:relative;height:300px;"><canvas id="cf-rank-chart"></canvas></div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-cashflow">
+                        <thead><tr>
+                            <th>校区</th><th>日期</th><th>收入笔数</th><th>收入金额</th><th>支出笔数</th><th>支出金额</th><th>净现金流</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
@@ -6346,6 +6660,6 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260701"></script>
+    <script src="static/js/main.js?v=20260701k"></script>
 </body>
 </html>

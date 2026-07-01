@@ -3232,3 +3232,21 @@ span.flatpickr-weekday {
     background: #EEF0F6;
     color: #4a5568;
 }
+
+/* ==================== 现金流统计 ==================== */
+.cashflow-summary {
+    display: flex;
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.cf-card {
+    flex: 1;
+    border-radius: var(--radius-lg);
+    padding: 20px 24px;
+    color: #fff;
+}
+.cf-card-income { background: linear-gradient(135deg, #38A169, #48BB78); }
+.cf-card-expense { background: linear-gradient(135deg, #E53E3E, #FC8181); }
+.cf-card-net { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light)); }
+.cf-card-label { font-size: 13px; opacity: 0.9; margin-bottom: 6px; }
+.cf-card-value { font-size: 28px; font-weight: 700; letter-spacing: 0.5px; }

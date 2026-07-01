@@ -6,6 +6,7 @@ let commResourceId = null;
 let commResourceName = '';
 let currentBasicTypeCategory = 'course_type';
 let currentClassDetailId = null;
+let orderCampusData = []; // 订单校区筛选数据 [{name, region}]
 
 // ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -88,9 +89,10 @@ function refreshPanel(panelId) {
         case 'panel-classes': currentClassDetailId = null; loadClasses(); break;
         case 'panel-classrooms': loadClassrooms(); break;
         case 'panel-students': initStudentCampusFilter(); loadStudents(); break;
-        case 'panel-orders': loadOrders(); break;
+        case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
-        case 'panel-work-records': initWorkRecordTabs(); loadRefundRecords(); break;
+        case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
+        case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
     }
 }
 
@@ -5345,10 +5347,28 @@ async function loadOrders() {
     const keyword = document.getElementById('search-order').value;
     const payStatus = document.getElementById('filter-pay-status')?.value || '';
     const isVoided = document.getElementById('filter-is-voided')?.value || '';
+    const region = document.getElementById('filter-order-region')?.value || '';
+    const campusSel = document.getElementById('filter-order-campus');
+    const campusVal = campusSel?.value || '';
+    const payDateStart = document.getElementById('filter-pay-date-start')?.value || '';
+    const payDateEnd = document.getElementById('filter-pay-date-end')?.value || '';
+
+    // 构建 campus 参数：如果选了具体校区直接用；如果只选了区域，收集该区域下所有校区
+    let campusParam = campusVal;
+    if (!campusVal && region) {
+        campusParam = orderCampusData
+            .filter(c => c.region === region)
+            .map(c => c.name)
+            .join(',');
+    }
+
     const params = new URLSearchParams({ page: orderPage, page_size: 15 });
     if (keyword) params.set('keyword', keyword);
     if (payStatus) params.set('pay_status', payStatus);
     if (isVoided) params.set('is_voided', isVoided);
+    if (campusParam) params.set('campus', campusParam);
+    if (payDateStart) params.set('pay_date_start', payDateStart);
+    if (payDateEnd) params.set('pay_date_end', payDateEnd);
     const res = await fetch(API_BASE + 'list_orders&' + params);
     const data = await res.json();
     renderOrderTable(data.data);
@@ -6511,18 +6531,119 @@ async function submitRefundApply() {
     }
 }
 
+function renderCashflowRankChart(data) {
+    const wrapper = document.getElementById('cf-rank-chart-wrapper');
+    const canvas = document.getElementById('cf-rank-chart');
+    if (!wrapper || !canvas) return;
+
+    const campus = document.getElementById('cf-campus')?.value || '';
+    const rankings = data.rankings || [];
+
+    // 筛选了单个校区时隐藏排名图
+    if (campus !== '' || rankings.length === 0) {
+        wrapper.style.display = 'none';
+        if (cfRankChart) { cfRankChart.destroy(); cfRankChart = null; }
+        return;
+    }
+
+    wrapper.style.display = 'block';
+
+    // 按净现金流降序排列（前端兜底排序，后端已排但防 Object.keys 等打乱顺序）
+    const sorted = [...rankings].sort((a, b) => b.net - a.net);
+    const labels = sorted.map(r => r.campus);
+    const incomeData = sorted.map(r => r.income);
+    const expenseData = sorted.map(r => r.expense);
+    const netData = sorted.map(r => r.net);
+
+    // 颜色：收入绿色，支出红色，净现金流蓝/橙
+    if (cfRankChart) cfRankChart.destroy();
+
+    cfRankChart = new Chart(canvas, {
+        type: 'bar',
+        data: {
+            labels: labels,
+            datasets: [
+                {
+                    label: '总收入',
+                    data: incomeData,
+                    backgroundColor: 'rgba(75,192,192,0.7)',
+                    borderColor: 'rgba(75,192,192,1)',
+                    borderWidth: 1,
+                    barPercentage: 0.7,
+                },
+                {
+                    label: '总支出',
+                    data: expenseData,
+                    backgroundColor: 'rgba(255,99,132,0.7)',
+                    borderColor: 'rgba(255,99,132,1)',
+                    borderWidth: 1,
+                    barPercentage: 0.7,
+                },
+                {
+                    label: '净现金流',
+                    data: netData,
+                    backgroundColor: netData.map(v => v >= 0 ? 'rgba(54,162,235,0.7)' : 'rgba(255,159,64,0.7)'),
+                    borderColor: netData.map(v => v >= 0 ? 'rgba(54,162,235,1)' : 'rgba(255,159,64,1)'),
+                    borderWidth: 1,
+                    barPercentage: 0.7,
+                }
+            ]
+        },
+        options: {
+            indexAxis: 'y',
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+                x: {
+                    ticks: { callback: v => '¥' + (v / 10000).toFixed(1) + '万' }
+                },
+                y: {
+                    ticks: { font: { size: 12 } }
+                }
+            },
+            plugins: {
+                legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                tooltip: {
+                    callbacks: {
+                        label: ctx => ctx.dataset.label + '：¥' + ctx.raw.toLocaleString('zh-CN', { minimumFractionDigits: 2 })
+                    }
+                }
+            },
+            interaction: { mode: 'index' }
+        }
+    });
+}
+
 // ==================== 退费记录列表（工作记录面板） ====================
+let refundCampusData = []; // 退费校区筛选数据 [{name, region}]
+
 async function loadRefundRecords() {
     try {
         const keyword = document.getElementById('search-refund')?.value || '';
         const dateFrom = document.getElementById('filter-refund-date-from')?.value || '';
         const dateTo = document.getElementById('filter-refund-date-to')?.value || '';
         const status = document.getElementById('filter-refund-status')?.value || '';
-        const params = new URLSearchParams({ page: refundPage, page_size: 15 });
+        const regionSel = document.getElementById('filter-refund-region');
+        const campusSel = document.getElementById('filter-refund-campus');
+        const params = new URLSearchParams({ page: refundPage, page_size: 15, _: Date.now() });
         if (keyword) params.set('keyword', keyword);
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo) params.set('date_to', dateTo);
         if (status) params.set('status', status);
+        // 校区筛选：选区域时收集该区域下所有校区；选具体校区时传单个校区
+        let campusValue = '';
+        if (regionSel && campusSel) {
+            const region = regionSel.value;
+            const campus = campusSel.value;
+            if (region && !campus) {
+                // 仅选了区域：收集该区域下所有校区
+                const regionCampuses = refundCampusData.filter(c => c.region === region).map(c => c.name);
+                if (regionCampuses.length > 0) campusValue = regionCampuses.join(',');
+            } else if (campus) {
+                campusValue = campus;
+            }
+        }
+        if (campusValue) params.set('campus', campusValue);
         const res = await fetch(API_BASE + 'list_refund_records&' + params);
         const data = await res.json();
         renderRefundRecordTable(data.data);
@@ -6530,7 +6651,7 @@ async function loadRefundRecords() {
     } catch (e) {
         console.error('loadRefundRecords error:', e);
         const tbody = document.querySelector('#table-refund-records tbody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
     }
 }
 
@@ -6572,6 +6693,7 @@ function renderRefundRecordTable(rows) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
             <td>${esc(r.student_name || '')}</td>
             <td>${esc(r.course_name || '')}</td>
+            <td>${esc(r.campus || '')}</td>
             <td>${ttl}</td>
             <td>${cl}</td>
             <td>${rl}</td>
@@ -6583,6 +6705,66 @@ function renderRefundRecordTable(rows) {
             <td>${optHtml}</td>
         </tr>`;
     }).join('');
+}
+
+// ==================== 退费记录区域/校区两级筛选 ====================
+async function initRefundCampusFilter() {
+    const regionSel = document.getElementById('filter-refund-region');
+    const campusSel = document.getElementById('filter-refund-campus');
+    if (!regionSel || !campusSel) return;
+    if (regionSel.options.length > 1) return; // 已初始化过，跳过
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const orgs = (data.data && data.data.flat) || [];
+        // 构建区域→校区映射
+        const regionMap = {}; // regionName -> [{id, name}]
+        refundCampusData = [];
+        orgs.forEach(o => {
+            if (o.type === '校区' && o.parent_id) {
+                const parent = orgs.find(p => p.id == o.parent_id);
+                if (parent) {
+                    if (!regionMap[parent.name]) regionMap[parent.name] = [];
+                    regionMap[parent.name].push({ id: o.id, name: o.name });
+                    refundCampusData.push({ name: o.name, region: parent.name });
+                }
+            }
+        });
+        // 填充区域下拉
+        Object.keys(regionMap).sort().forEach(rName => {
+            const opt = document.createElement('option');
+            opt.value = rName;
+            opt.textContent = rName;
+            regionSel.appendChild(opt);
+        });
+        // 填充校区下拉（初始显示全部）
+        orgs.filter(o => o.type === '校区').forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            campusSel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('initRefundCampusFilter error:', e);
+    }
+}
+
+function onRefundRegionChange() {
+    const regionSel = document.getElementById('filter-refund-region');
+    const campusSel = document.getElementById('filter-refund-campus');
+    if (!regionSel || !campusSel) return;
+    const region = regionSel.value;
+    // 重建校区下拉选项
+    campusSel.innerHTML = '<option value="">全部校区</option>';
+    refundCampusData
+        .filter(c => !region || c.region === region)
+        .forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            campusSel.appendChild(opt);
+        });
+    loadRefundRecords();
 }
 
 // ==================== 退费审批弹窗 ====================
@@ -6725,5 +6907,413 @@ async function cancelRefund(id) {
         if (currentViewStudentId) loadStudentCourses(currentViewStudentId);
     } catch (e) {
         showToast('网络错误，请重试', 'error');
+    }
+}
+
+// ==================== 现金流统计 ====================
+let cfBarChart = null;
+let cfLineChart = null;
+let cfRankChart = null;
+
+function initCashflowDateRange() {
+    const granularity = document.getElementById('cf-granularity')?.value || 'monthly';
+    updateCashflowDateInputs(granularity);
+    initCashflowCampusFilter();
+}
+
+function updateCashflowDateInputs(granularity) {
+    const elFrom = document.getElementById('cf-date-from');
+    const elTo = document.getElementById('cf-date-to');
+    if (!elFrom || !elTo) return;
+
+    const now = new Date();
+    const toYear = now.getFullYear();
+    const toMonth = String(now.getMonth() + 1).padStart(2, '0');
+
+    if (granularity === 'daily') {
+        elFrom.type = 'date';
+        elTo.type = 'date';
+        const from3m = new Date(now);
+        from3m.setMonth(from3m.getMonth() - 3);
+        const fy = from3m.getFullYear();
+        const fm = String(from3m.getMonth() + 1).padStart(2, '0');
+        const fd = String(from3m.getDate()).padStart(2, '0');
+        const td = String(now.getDate()).padStart(2, '0');
+        elFrom.value = fy + '-' + fm + '-' + fd;
+        elTo.value = toYear + '-' + toMonth + '-' + td;
+    } else {
+        elFrom.type = 'month';
+        elTo.type = 'month';
+        const from = new Date(now.getFullYear(), now.getMonth() - 2, 1);
+        const fromYear = from.getFullYear();
+        const fromMonth = String(from.getMonth() + 1).padStart(2, '0');
+        elFrom.value = fromYear + '-' + fromMonth;
+        elTo.value = toYear + '-' + toMonth;
+    }
+}
+
+function onCashflowGranularityChange() {
+    updateCashflowDateInputs(document.getElementById('cf-granularity').value);
+    loadCashflow();
+}
+
+async function initOrderCampusFilter() {
+    const regionSel = document.getElementById('filter-order-region');
+    const campusSel = document.getElementById('filter-order-campus');
+    if (!regionSel || !campusSel) return;
+    if (regionSel.options.length > 1) return; // 已初始化过，跳过
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const orgs = (data.data && data.data.flat) || [];
+        // 构建区域→校区映射，并存储校区数据
+        const regionMap = {}; // regionName -> [{id, name}]
+        orderCampusData = [];
+        orgs.forEach(o => {
+            if (o.type === '校区' && o.parent_id) {
+                const parent = orgs.find(p => p.id == o.parent_id);
+                if (parent) {
+                    if (!regionMap[parent.name]) regionMap[parent.name] = [];
+                    regionMap[parent.name].push({ id: o.id, name: o.name });
+                    orderCampusData.push({ name: o.name, region: parent.name });
+                }
+            }
+        });
+        // 填充区域下拉
+        Object.keys(regionMap).sort().forEach(rName => {
+            const opt = document.createElement('option');
+            opt.value = rName;
+            opt.textContent = rName;
+            regionSel.appendChild(opt);
+        });
+        // 填充校区下拉（初始显示全部）
+        orgs.filter(o => o.type === '校区').forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            campusSel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('initOrderCampusFilter error:', e);
+    }
+}
+
+function onOrderRegionChange() {
+    const regionSel = document.getElementById('filter-order-region');
+    const campusSel = document.getElementById('filter-order-campus');
+    if (!regionSel || !campusSel) return;
+    const region = regionSel.value;
+    // 重建校区下拉选项（display:none 对 option 元素无效）
+    campusSel.innerHTML = '<option value="">全部校区</option>';
+    orderCampusData
+        .filter(c => !region || c.region === region)
+        .forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            campusSel.appendChild(opt);
+        });
+    loadOrders();
+}
+
+async function initCashflowCampusFilter() {
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const sel = document.getElementById('cf-campus');
+        if (!sel) return;
+        const orgs = (data.data && data.data.flat) || [];
+        // 优先加载"校区"类型，若为空则加载所有组织作为备选
+        let campuses = orgs.filter(o => o.type === '校区');
+        if (campuses.length === 0) {
+            campuses = orgs; // 兜底：显示所有组织
+        }
+        campuses.forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('initCashflowCampusFilter error:', e);
+    }
+}
+
+async function loadCashflow() {
+    try {
+        const granularity = document.getElementById('cf-granularity')?.value || 'monthly';
+        const campus = document.getElementById('cf-campus')?.value || '';
+        const dateFrom = document.getElementById('cf-date-from')?.value || '';
+        const dateTo = document.getElementById('cf-date-to')?.value || '';
+        const params = new URLSearchParams({ granularity: granularity });
+        if (campus) params.set('campus', campus);
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
+        const res = await fetch(API_BASE + 'get_cashflow_stats&' + params);
+        const data = await res.json();
+        renderCashflow(data);
+        renderCashflowCharts(data, campus);
+        renderCashflowRankChart(data);
+    } catch (e) {
+        console.error('loadCashflow error:', e);
+        const tbody = document.querySelector('#table-cashflow tbody');
+        if (tbody) tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
+    }
+}
+
+function renderCashflow(data) {
+    const s = data.summary || {};
+    const totalIncome = parseFloat(s.total_income) || 0;
+    const totalExpense = parseFloat(s.total_expense) || 0;
+    const netCashflow = parseFloat(s.net_cashflow) || 0;
+    document.getElementById('cf-total-income').textContent = '¥' + totalIncome.toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    document.getElementById('cf-total-expense').textContent = '¥' + totalExpense.toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    const netEl = document.getElementById('cf-net-cashflow');
+    netEl.textContent = (netCashflow >= 0 ? '¥' : '-¥') + Math.abs(netCashflow).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+    netEl.style.color = netCashflow >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+
+    const rows = data.data || [];
+    const tbody = document.querySelector('#table-cashflow tbody');
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无数据</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const incAmt = parseFloat(r.income_amount) || 0;
+        const expAmt = parseFloat(r.expense_amount) || 0;
+        const net = parseFloat(r.net) || 0;
+        const netCls = net >= 0 ? 'color:var(--color-success);' : 'color:var(--color-danger);';
+        return `<tr>
+            <td>${esc(r.campus)}</td>
+            <td>${esc(r.date)}</td>
+            <td>${r.income_cnt}</td>
+            <td>¥${incAmt.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</td>
+            <td>${r.expense_cnt}</td>
+            <td>¥${expAmt.toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</td>
+            <td style="font-weight:bold;${netCls}">${net >= 0 ? '¥' : '-¥'}${Math.abs(net).toLocaleString('zh-CN', { minimumFractionDigits: 2 })}</td>
+        </tr>`;
+    }).join('');
+}
+
+function renderCashflowCharts(data, campusFilter) {
+    const rows = data.data || [];
+    if (rows.length === 0) {
+        if (cfBarChart) { cfBarChart.destroy(); cfBarChart = null; }
+        if (cfLineChart) { cfLineChart.destroy(); cfLineChart = null; }
+        return;
+    }
+
+    const isAllCampuses = !campusFilter;
+
+    if (isAllCampuses) {
+        // 全部校区模式：各校区数据按日期求和
+        const dateAgg = {};
+        const dateOrder = [];
+        rows.forEach(r => {
+            if (!dateAgg[r.date]) {
+                dateAgg[r.date] = { income: 0, net: 0 };
+                dateOrder.push(r.date);
+            }
+            dateAgg[r.date].income += parseFloat(r.income_amount) || 0;
+            dateAgg[r.date].net += parseFloat(r.net) || 0;
+        });
+        // 按日期排序
+        dateOrder.sort();
+        const dates = dateOrder;
+        const incomeData = dates.map(d => dateAgg[d].income);
+        const netData = dates.map(d => dateAgg[d].net);
+
+        const singleColor = 'rgba(54,162,235,0.8)';
+        const singleBorder = 'rgba(54,162,235,1)';
+
+        // 按订单类型堆叠柱状图
+        const incomeByType = data.income_by_type || [];
+        const typeColors = {
+            '新报': 'rgba(54,162,235,0.8)',
+            '续费': 'rgba(255,99,132,0.8)',
+            '小课包': 'rgba(75,192,192,0.8)'
+        };
+        const typeDateMap = {};
+        const allTypeDates = new Set();
+        incomeByType.forEach(item => {
+            if (!typeDateMap[item.order_type]) typeDateMap[item.order_type] = {};
+            typeDateMap[item.order_type][item.date] = item.amount;
+            allTypeDates.add(item.date);
+        });
+        const typeDates = Array.from(allTypeDates).sort();
+        const orderTypes = ['新报', '续费', '小课包'];
+        const typeDatasets = orderTypes.filter(t => typeDateMap[t]).map(t => ({
+            label: t,
+            data: typeDates.map(d => typeDateMap[t][d] || 0),
+            backgroundColor: typeColors[t] || 'rgba(201,203,207,0.8)',
+            borderColor: (typeColors[t] || 'rgba(201,203,207,0.8)').replace('0.8', '1'),
+            borderWidth: 1
+        }));
+
+        const barCtx = document.getElementById('cf-bar-chart');
+        if (barCtx) {
+            if (cfBarChart) cfBarChart.destroy();
+            cfBarChart = new Chart(barCtx, {
+                type: 'bar',
+                data: {
+                    labels: typeDates,
+                    datasets: typeDatasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { stacked: true, ticks: { maxRotation: 45, font: { size: 10 } } },
+                        y: { stacked: true, ticks: { callback: v => '¥' + (v / 10000).toFixed(1) + '万' } }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ¥' + ctx.raw.toLocaleString('zh-CN', { minimumFractionDigits: 2 }) } }
+                    },
+                    interaction: { mode: 'index' }
+                }
+            });
+        }
+
+        // 柱状图
+        const lineCtx = document.getElementById('cf-line-chart');
+        if (lineCtx) {
+            if (cfLineChart) cfLineChart.destroy();
+            cfLineChart = new Chart(lineCtx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: '全部校区',
+                        data: netData,
+                        backgroundColor: singleColor,
+                        borderColor: singleBorder,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { maxRotation: 45, font: { size: 10 } } },
+                        y: { ticks: { callback: v => '¥' + (v / 10000).toFixed(1) + '万' } }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: { callbacks: { label: ctx => '全部校区: ¥' + ctx.raw.toLocaleString('zh-CN', { minimumFractionDigits: 2 }) } }
+                    },
+                    interaction: { mode: 'index' }
+                }
+            });
+        }
+        return;
+    }
+
+    // 单校区模式：保持原有行为
+    const campusSet = new Set();
+    const dateSet = new Set();
+    rows.forEach(r => {
+        campusSet.add(r.campus);
+        dateSet.add(r.date);
+    });
+    const campuses = Array.from(campusSet);
+    const dates = Array.from(dateSet);
+
+    const lookup = {};
+    rows.forEach(r => {
+        if (!lookup[r.date]) lookup[r.date] = {};
+        lookup[r.date][r.campus] = {
+            income: parseFloat(r.income_amount) || 0,
+            net: parseFloat(r.net) || 0
+        };
+    });
+
+    const colors = [
+        'rgba(54,162,235,0.8)', 'rgba(255,99,132,0.8)', 'rgba(75,192,192,0.8)',
+        'rgba(255,159,64,0.8)', 'rgba(153,102,255,0.8)', 'rgba(255,205,86,0.8)',
+        'rgba(201,203,207,0.8)', 'rgba(100,200,100,0.8)', 'rgba(220,80,150,0.8)',
+        'rgba(80,180,220,0.8)'
+    ];
+    const borderColors = colors.map(c => c.replace('0.8', '1'));
+
+    // 按订单类型堆叠柱状图
+    const incomeByTypeSingle = data.income_by_type || [];
+    const typeColorsSingle = {
+        '新报': 'rgba(54,162,235,0.8)',
+        '续费': 'rgba(255,99,132,0.8)',
+        '小课包': 'rgba(75,192,192,0.8)'
+    };
+    const typeDateMapSingle = {};
+    const allTypeDatesSingle = new Set();
+    incomeByTypeSingle.forEach(item => {
+        if (!typeDateMapSingle[item.order_type]) typeDateMapSingle[item.order_type] = {};
+        typeDateMapSingle[item.order_type][item.date] = item.amount;
+        allTypeDatesSingle.add(item.date);
+    });
+    const typeDatesSingle = Array.from(allTypeDatesSingle).sort();
+    const orderTypesList = ['新报', '续费', '小课包'];
+    const barDatasets = orderTypesList.filter(t => typeDateMapSingle[t]).map(t => ({
+        label: t,
+        data: typeDatesSingle.map(d => typeDateMapSingle[t][d] || 0),
+        backgroundColor: typeColorsSingle[t] || 'rgba(201,203,207,0.8)',
+        borderColor: (typeColorsSingle[t] || 'rgba(201,203,207,0.8)').replace('0.8', '1'),
+        borderWidth: 1
+    }));
+
+    const barCtx = document.getElementById('cf-bar-chart');
+    if (barCtx) {
+        if (cfBarChart) cfBarChart.destroy();
+        cfBarChart = new Chart(barCtx, {
+            type: 'bar',
+            data: { labels: typeDatesSingle, datasets: barDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { stacked: true, ticks: { maxRotation: 45, font: { size: 10 } } },
+                    y: { stacked: true, ticks: { callback: v => '¥' + (v / 10000).toFixed(1) + '万' } }
+                },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ¥' + ctx.raw.toLocaleString('zh-CN', { minimumFractionDigits: 2 }) } }
+                },
+                interaction: { mode: 'index' }
+            }
+        });
+    }
+
+    const lineDatasets = campuses.map((campus, i) => ({
+        label: campus,
+        data: dates.map(d => (lookup[d] && lookup[d][campus] ? lookup[d][campus].net : null)),
+        backgroundColor: colors[i % colors.length],
+        borderColor: borderColors[i % colors.length],
+        borderWidth: 2,
+        pointRadius: 3,
+        pointHoverRadius: 5,
+        tension: 0.2,
+        fill: false,
+        spanGaps: false
+    }));
+
+    const lineCtx = document.getElementById('cf-line-chart');
+    if (lineCtx) {
+        if (cfLineChart) cfLineChart.destroy();
+        cfLineChart = new Chart(lineCtx, {
+            type: 'line',
+            data: { labels: dates, datasets: lineDatasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { maxRotation: 45, font: { size: 10 } } },
+                    y: { ticks: { callback: v => '¥' + (v / 10000).toFixed(1) + '万' } }
+                },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ¥' + ctx.raw.toLocaleString('zh-CN', { minimumFractionDigits: 2 }) } }
+                },
+                interaction: { mode: 'index' }
+            }
+        });
     }
 }
