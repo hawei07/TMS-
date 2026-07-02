@@ -3561,3 +3561,126 @@ span.flatpickr-weekday {
         color: #fff;
     }
 }
+
+/* ===== 拖拽排课 ===== */
+.schedule-layout {
+    display: flex;
+    gap: 0;
+    height: calc(100vh - 140px);
+    overflow: hidden;
+}
+
+.schedule-resource-panel {
+    width: 0;
+    overflow: hidden;
+    background: #fafafa;
+    border-right: 0 solid #e0e0e0;
+    transition: width 0.25s ease, border-width 0.25s ease;
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    flex-shrink: 0;
+}
+.schedule-resource-panel--open {
+    width: 220px;
+    min-width: 220px;
+    border-right-width: 1px;
+    padding: 8px;
+    overflow-y: auto;
+}
+
+.schedule-main {
+    flex: 1;
+    overflow: auto;
+    min-width: 0;
+}
+
+.resource-section {
+    margin-bottom: 12px;
+}
+.resource-section-title {
+    font-size: 12px;
+    font-weight: 700;
+    color: #666;
+    padding: 4px 8px;
+    background: #f0f0f0;
+    border-radius: 4px;
+    margin-bottom: 4px;
+}
+.resource-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.resource-empty {
+    font-size: 11px;
+    color: #bbb;
+    text-align: center;
+    padding: 12px 0;
+}
+
+.drag-item {
+    padding: 5px 8px;
+    font-size: 12px;
+    background: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 4px;
+    cursor: grab;
+    user-select: none;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    transition: background 0.15s, box-shadow 0.15s, opacity 0.15s;
+}
+.drag-item:hover {
+    background: #e6f7ff;
+    border-color: #91d5ff;
+    box-shadow: 0 1px 4px rgba(24,144,255,0.15);
+}
+.drag-item--dragging {
+    opacity: 0.4;
+}
+
+.schedule-drop-cell {
+    position: relative;
+    min-height: 36px;
+}
+.schedule-drop-cell--over {
+    background: #e6f7ff !important;
+    outline: 2px dashed #1890ff;
+    outline-offset: -2px;
+}
+
+.schedule-drop-pending {
+    position: relative;
+    margin-top: 4px;
+    padding: 6px 8px;
+    font-size: 11px;
+    background: #f0fdf4;
+    border: 1px dashed #52c41a;
+    border-radius: 4px;
+    color: #333;
+    line-height: 1.6;
+}
+.schedule-drop-confirm {
+    display: block;
+    margin-top: 6px;
+    padding: 3px 12px;
+    font-size: 11px;
+    font-weight: 600;
+    background: #52c41a;
+    color: #fff;
+    border: none;
+    border-radius: 4px;
+    cursor: pointer;
+    width: 100%;
+    text-align: center;
+}
+.schedule-drop-confirm:hover {
+    background: #389e0d;
+}
+
+/* 排课模式按钮的过渡 */
+#schedule-drag-toggle {
+    transition: background 0.25s, color 0.25s, border-color 0.25s;
+}
