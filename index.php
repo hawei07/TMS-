@@ -6689,6 +6689,59 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
+    <!-- 资源操作弹窗（tab导航） -->
+    <div class="modal-overlay" id="modal-resource-actions" style="display:none;">
+        <div class="modal" style="max-width:520px;">
+            <div class="modal-header">
+                <h3 id="ract-title">资源操作</h3>
+                <button class="modal-close" onclick="closeModal('modal-resource-actions')">&times;</button>
+            </div>
+            <div class="ract-tabs">
+                <button class="ract-tab active" data-tab="edit" onclick="switchRactTab('edit')">编辑</button>
+                <button class="ract-tab" data-tab="enroll" onclick="switchRactTab('enroll')">报名</button>
+                <button class="ract-tab" data-tab="appointment" onclick="switchRactTab('appointment')">预约试听</button>
+                <button class="ract-tab" data-tab="comm" onclick="switchRactTab('comm')">沟通记录</button>
+                <button class="ract-tab ract-tab-danger" data-tab="delete" onclick="switchRactTab('delete')">删除</button>
+            </div>
+            <div class="modal-body" style="min-height:200px;">
+                <input type="hidden" id="ract-rid">
+                <input type="hidden" id="ract-name">
+                <input type="hidden" id="ract-phone">
+                <div class="ract-panel active" id="ract-panel-edit">
+                    <div class="form-group"><label>姓名 <span class="required">*</span></label><input type="text" id="ract-edit-name"></div>
+                    <div class="form-group"><label>电话 <span class="required">*</span></label><input type="text" id="ract-edit-phone"></div>
+                    <div class="form-group"><label>来源渠道</label><select id="ract-edit-source"><option value="">请选择</option></select></div>
+                    <div class="form-group"><label>意向等级</label><select id="ract-edit-intention"><option value="">请选择</option></select></div>
+                    <div class="form-group"><label>跟进状态</label><select id="ract-edit-follow"><option value="">请选择</option><option value="未沟通">未沟通</option><option value="沟通中">沟通中</option><option value="已邀约未试听">已邀约未试听</option><option value="已试听待转化">已试听待转化</option><option value="已转化—定金">已转化—定金</option><option value="已转化—全款">已转化—全款</option><option value="无效客户">无效客户</option></select></div>
+                    <div class="form-group"><label>归属人</label><select id="ract-edit-assigned"><option value="">请选择</option></select></div>
+                </div>
+                <div class="ract-panel" id="ract-panel-enroll" style="display:none;">
+                    <p style="padding:20px;text-align:center;color:#666;">为该资源创建学员并报名课程</p>
+                </div>
+                <div class="ract-panel" id="ract-panel-appointment" style="display:none;">
+                    <div class="form-group"><label>课程类型</label><select id="ract-apt-course-type"><option value="">请选择</option></select></div>
+                    <div class="form-group"><label>预约时间 <span class="required">*</span></label><input type="datetime-local" id="ract-apt-time"></div>
+                    <div class="form-group"><label>备注</label><input type="text" id="ract-apt-notes"></div>
+                </div>
+                <div class="ract-panel" id="ract-panel-comm" style="display:none;">
+                    <div class="form-group"><label>沟通方式</label><select id="ract-comm-type"><option value="">请选择</option></select></div>
+                    <div class="form-group"><label>沟通内容 <span class="required">*</span></label><textarea id="ract-comm-content" rows="3" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;"></textarea></div>
+                </div>
+                <div class="ract-panel" id="ract-panel-delete" style="display:none;">
+                    <div style="padding:20px;text-align:center;">
+                        <p style="color:#dc2626;font-size:14px;margin-bottom:8px;">确定要删除这条资源吗？</p>
+                        <p style="color:#999;font-size:12px;">相关的预约和沟通记录将一并删除，此操作不可撤销</p>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('modal-resource-actions')">取消</button>
+                <button class="btn btn-primary" id="ract-submit-btn" onclick="submitRactAction()">保存</button>
+            </div>
+        </div>
+    </div>
+
+
     <script src="static/js/main.js?v=20260701k"></script>
 </body>
 </html>
