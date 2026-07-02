@@ -4590,8 +4590,18 @@ if (intval($countBt) === 0) {
                         <select id="filter-assigned-dept-my" onchange="loadMyResources()">
                             <option value="">全部归属部门</option>
                         </select>
-                        <input type="date" id="filter-created-start-my" title="创建时间起">
-                        <input type="date" id="filter-created-end-my" title="创建时间止">
+                        <select id="filter-date-preset-my" onchange="applyDatePreset('my')" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                            <option value="">创建时间</option>
+                            <option value="today">今天</option>
+                            <option value="yesterday">昨天</option>
+                            <option value="7days">近7天</option>
+                            <option value="30days">近30天</option>
+                            <option value="thisMonth">本月</option>
+                            <option value="lastMonth">上月</option>
+                            <option value="custom">自定义范围</option>
+                        </select>
+                        <input type="date" id="filter-created-start-my" title="创建时间起" style="display:none;" onchange="onCustomDateChange('my')">
+                        <input type="date" id="filter-created-end-my" title="创建时间止" style="display:none;" onchange="onCustomDateChange('my')">
                     </div>
                     <div class="toolbar-right" style="margin-left:auto;">
                         <select id="filter-follow-status-my" onchange="loadMyResources()">
