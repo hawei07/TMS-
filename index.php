@@ -5485,11 +5485,15 @@ if (intval($countBt) === 0) {
                 </div>
                 <!-- 图表区域 -->
                 <div class="cf-charts" id="cf-charts" style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap;">
-                    <div class="cf-chart-container" style="flex:1;min-width:400px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                    <div class="cf-chart-container" style="flex:1;min-width:300px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
                         <h4 style="margin:0 0 12px;font-size:14px;color:#333;">总收入</h4>
                         <div style="position:relative;height:300px;"><canvas id="cf-bar-chart"></canvas></div>
                     </div>
-                    <div class="cf-chart-container" style="flex:1;min-width:400px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                    <div class="cf-chart-container" style="flex:1;min-width:300px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                        <h4 style="margin:0 0 12px;font-size:14px;color:#333;">总支出</h4>
+                        <div style="position:relative;height:300px;"><canvas id="cf-expense-chart"></canvas></div>
+                    </div>
+                    <div class="cf-chart-container" style="flex:1;min-width:300px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
                         <h4 style="margin:0 0 12px;font-size:14px;color:#333;">净现金流</h4>
                         <div style="position:relative;height:300px;"><canvas id="cf-line-chart"></canvas></div>
                     </div>
