@@ -7725,13 +7725,13 @@ function renderWeekView(d) {
                         const isConflict = conflictKeys.has(conflictKey);
                         let infoStr = '';
                         if (s.teacher) infoStr += '<span class="schedule-card-teacher">' + escHtml(s.teacher) + '</span>';
+                        if (s.class_name) infoStr += '<span class="schedule-card-name">' + escHtml(s.class_name) + '</span>';
                         if (s.classroom) infoStr += ' <span class="schedule-card-room">' + escHtml(s.classroom) + '</span>';
                         if (s.student_count > 0) infoStr += ' <span class="schedule-card-count">' + s.student_count + '人</span>';
 
                         tbodyHTML += '<div class="schedule-card' + (isConflict ? ' schedule-card-conflict' : '') + '" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')">';
                         if (isConflict) tbodyHTML += '<span class="schedule-conflict-badge" title="教室冲突">' + '⚠️' + '</span>';
-                        tbodyHTML += '<div class="schedule-card-class" style="font-weight:700;font-size:13px;color:#333;">' + escHtml(s.class_name) + '</div>';
-                        tbodyHTML += '<div class="schedule-card-info" style="margin-top:2px;">' + infoStr + '</div>';
+                        tbodyHTML += '<div class="schedule-card-info" style="line-height:1.5;">' + infoStr + '</div>';
                         tbodyHTML += '</div>';
                     });
                 }

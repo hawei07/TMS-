@@ -3343,28 +3343,33 @@ span.flatpickr-weekday {
 }
 
 .schedule-card-teacher {
-    font-size: 12px;
+    display: block;
+    font-size: 13px;
     font-weight: 700;
     color: #1a1a1a;
-    background: rgba(255,255,255,0.7);
-    padding: 1px 6px;
+    background: rgba(255,255,255,0.6);
+    padding: 2px 6px;
     border-radius: 3px;
+    margin-bottom: 2px;
 }
-
+.schedule-card-name {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: #555;
+}
 .schedule-card-room {
     font-size: 11px;
     color: #888;
 }
-
 .schedule-card-count {
     font-size: 10px;
     color: #aaa;
 }
-
 .schedule-card-info {
     font-size: 11px;
     color: #888;
-    line-height: 1.4;
+    line-height: 1.5;
 }
 
 @media (max-width: 768px) {
