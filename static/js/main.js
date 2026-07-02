@@ -6568,15 +6568,15 @@ function renderCashflowRankChart(data) {
                 {
                     label: '总收入',
                     data: incomeData,
-                    backgroundColor: 'rgba(75,192,192,0.7)',
-                    borderColor: 'rgba(75,192,192,1)',
+                    backgroundColor: 'rgba(56,161,105,0.7)',
+                    borderColor: 'rgba(56,161,105,1)',
                     borderWidth: 1,
                     barPercentage: 0.7,
                 },
                 {
                     label: '总支出',
                     data: expenseData,
-                    backgroundColor: 'rgba(255,99,132,0.7)',
+                    backgroundColor: 'rgba(229,62,62,0.7)',
                     borderColor: 'rgba(229,62,62,1)',
                     borderWidth: 1,
                     barPercentage: 0.7,
@@ -6584,8 +6584,8 @@ function renderCashflowRankChart(data) {
                 {
                     label: '净现金流',
                     data: netData,
-                    backgroundColor: netData.map(v => v >= 0 ? 'rgba(54,162,235,0.7)' : 'rgba(255,159,64,0.7)'),
-                    borderColor: netData.map(v => v >= 0 ? 'rgba(54,162,235,1)' : 'rgba(255,159,64,1)'),
+                    backgroundColor: netData.map(v => v >= 0 ? 'rgba(124,58,237,0.7)' : 'rgba(167,139,250,0.7)'),
+                    borderColor: netData.map(v => v >= 0 ? 'rgba(124,58,237,1)' : 'rgba(167,139,250,1)'),
                     borderWidth: 1,
                     barPercentage: 0.7,
                 }
