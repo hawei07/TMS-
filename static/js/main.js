@@ -6582,7 +6582,7 @@ function renderCashflowRankChart(data) {
     const canvas = document.getElementById('cf-rank-chart');
     if (!wrapper || !canvas) return;
 
-    const selectedList = (typeof getSelectedCampuses === 'function') ? getSelectedCampuses() : [];
+    const selectedList = (typeof getSelectedCashflowCampuses === 'function') ? getSelectedCashflowCampuses() : [];
     const totalCampus = document.querySelectorAll('.cf-campus-cb').length;
     const hasFilter = selectedList.length > 0 && selectedList.length < totalCampus;
     const rankings = data.rankings || [];
@@ -7185,7 +7185,7 @@ function updateCampusText() {
     }
 }
 
-function getSelectedCampuses() {
+function getSelectedCashflowCampuses() {
     const checked = document.querySelectorAll('.cf-campus-cb:checked');
     return Array.from(checked).map(c => c.parentElement.textContent.trim());
 }
@@ -7208,7 +7208,7 @@ async function loadCashflow() {
         const dateTo = document.getElementById('cf-date-to')?.value || '';
         const params = new URLSearchParams({ granularity: granularity });
         // Multi-campus: collect from tree-select checkboxes
-        const selectedCampuses = (typeof getSelectedCampuses === 'function') ? getSelectedCampuses() : [];
+        const selectedCampuses = (typeof getSelectedCashflowCampuses === 'function') ? getSelectedCashflowCampuses() : [];
         const totalCampuses = document.querySelectorAll('.cf-campus-cb').length;
         if (selectedCampuses.length > 0 && selectedCampuses.length < totalCampuses) {
             params.set('campuses', selectedCampuses.join(','));
