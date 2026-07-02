@@ -6577,7 +6577,7 @@ function renderCashflowRankChart(data) {
                     label: '总支出',
                     data: expenseData,
                     backgroundColor: 'rgba(255,99,132,0.7)',
-                    borderColor: 'rgba(255,99,132,1)',
+                    borderColor: 'rgba(229,62,62,1)',
                     borderWidth: 1,
                     barPercentage: 0.7,
                 },
@@ -7246,15 +7246,15 @@ function renderCashflowCharts(data, campusFilter) {
         const incomeData = dates.map(d => dateAgg[d].income);
         const netData = dates.map(d => dateAgg[d].net);
 
-        const singleColor = 'rgba(54,162,235,0.8)';
-        const singleBorder = 'rgba(54,162,235,1)';
+        const singleColor = 'rgba(124,58,237,0.8)';
+        const singleBorder = 'rgba(124,58,237,1)';
 
         // 按订单类型堆叠柱状图
         const incomeByType = data.income_by_type || [];
         const typeColors = {
-            '新报': 'rgba(54,162,235,0.8)',
-            '续费': 'rgba(255,99,132,0.8)',
-            '小课包': 'rgba(75,192,192,0.8)'
+            '新报': 'rgba(56,161,105,0.85)',
+            '续费': 'rgba(72,187,120,0.75)',
+            '小课包': 'rgba(104,211,145,0.65)'
         };
         const typeDateMap = {};
         const allTypeDates = new Set();
@@ -7346,8 +7346,8 @@ function renderCashflowCharts(data, campusFilter) {
                     datasets: [{
                         label: '全部校区',
                         data: expenseData,
-                        backgroundColor: 'rgba(255,99,132,0.8)',
-                        borderColor: 'rgba(255,99,132,1)',
+                        backgroundColor: 'rgba(229,62,62,0.8)',
+                        borderColor: 'rgba(229,62,62,1)',
                         borderWidth: 1
                     }]
                 },
@@ -7389,19 +7389,19 @@ function renderCashflowCharts(data, campusFilter) {
     });
 
     const colors = [
-        'rgba(54,162,235,0.8)', 'rgba(255,99,132,0.8)', 'rgba(75,192,192,0.8)',
-        'rgba(255,159,64,0.8)', 'rgba(153,102,255,0.8)', 'rgba(255,205,86,0.8)',
-        'rgba(201,203,207,0.8)', 'rgba(100,200,100,0.8)', 'rgba(220,80,150,0.8)',
-        'rgba(80,180,220,0.8)'
+        'rgba(124,58,237,0.85)', 'rgba(147,112,219,0.75)', 'rgba(167,139,250,0.65)',
+        'rgba(139,92,246,0.8)', 'rgba(157,118,245,0.7)', 'rgba(109,40,217,0.9)',
+        'rgba(181,158,252,0.6)', 'rgba(99,24,196,0.9)', 'rgba(196,181,253,0.55)',
+        'rgba(157,133,245,0.7)'
     ];
     const borderColors = colors.map(c => c.replace('0.8', '1'));
 
     // 按订单类型堆叠柱状图
     const incomeByTypeSingle = data.income_by_type || [];
     const typeColorsSingle = {
-        '新报': 'rgba(54,162,235,0.8)',
-        '续费': 'rgba(255,99,132,0.8)',
-        '小课包': 'rgba(75,192,192,0.8)'
+        '新报': 'rgba(56,161,105,0.85)',
+        '续费': 'rgba(72,187,120,0.75)',
+        '小课包': 'rgba(104,211,145,0.65)'
     };
     const typeDateMapSingle = {};
     const allTypeDatesSingle = new Set();
@@ -7481,14 +7481,16 @@ function renderCashflowCharts(data, campusFilter) {
     const expenseCtx2 = document.getElementById('cf-expense-chart');
     if (expenseCtx2) {
         if (cfExpenseChart) cfExpenseChart.destroy();
+        const expenseRedColors = ['rgba(229,62,62,0.85)', 'rgba(252,129,129,0.75)', 'rgba(254,178,178,0.65)', 'rgba(245,101,101,0.8)', 'rgba(220,38,38,0.9)', 'rgba(239,89,89,0.7)', 'rgba(210,20,20,0.9)', 'rgba(248,150,150,0.6)', 'rgba(200,10,10,0.85)', 'rgba(235,72,72,0.75)'];
+        const expenseRedBorders = ['rgba(229,62,62,1)', 'rgba(252,129,129,1)', 'rgba(254,178,178,1)', 'rgba(245,101,101,1)', 'rgba(220,38,38,1)', 'rgba(239,89,89,1)', 'rgba(210,20,20,1)', 'rgba(248,150,150,1)', 'rgba(200,10,10,1)', 'rgba(235,72,72,1)'];
         const expenseByCampus = campuses.map((campus, i) => ({
             label: campus,
             data: dates.map(d => {
                 const row = (lookup[d] && lookup[d][campus]) ? (lookup[d][campus].income - lookup[d][campus].net) : null;
                 return row !== null ? Math.max(0, row) : null;
             }),
-            backgroundColor: colors[i % colors.length],
-            borderColor: borderColors[i % colors.length],
+            backgroundColor: expenseRedColors[i % expenseRedColors.length],
+            borderColor: expenseRedBorders[i % expenseRedColors.length],
             borderWidth: 1
         }));
         cfExpenseChart = new Chart(expenseCtx2, {
