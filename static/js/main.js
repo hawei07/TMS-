@@ -7724,15 +7724,14 @@ function renderWeekView(d) {
                         const conflictKey = dayLabel + '|' + s.classroom + '|' + s.start + '-' + s.end;
                         const isConflict = conflictKeys.has(conflictKey);
                         let infoStr = '';
-                        if (s.teacher) infoStr += '老师：' + escHtml(s.teacher) + '<br>';
-                        if (s.classroom) infoStr += '教室：' + escHtml(s.classroom) + '<br>';
-                        if (s.student_count > 0) infoStr += '学员：' + s.student_count + '人<br>';
+                        if (s.teacher) infoStr += '<span class="schedule-card-teacher">' + escHtml(s.teacher) + '</span>';
+                        if (s.classroom) infoStr += ' <span class="schedule-card-room">' + escHtml(s.classroom) + '</span>';
+                        if (s.student_count > 0) infoStr += ' <span class="schedule-card-count">' + s.student_count + '人</span>';
 
                         tbodyHTML += '<div class="schedule-card' + (isConflict ? ' schedule-card-conflict' : '') + '" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')">';
-                        if (isConflict) tbodyHTML += '<span class="schedule-conflict-badge" title="教室冲突">⚠️</span>';
-                        tbodyHTML += '<div class="schedule-card-course" style="color:' + clr.text + '">' + escHtml(s.course_name) + '</div>';
-                        tbodyHTML += '<div class="schedule-card-class">' + escHtml(s.class_name) + '</div>';
-                        tbodyHTML += '<div class="schedule-card-info">' + infoStr + '</div>';
+                        if (isConflict) tbodyHTML += '<span class="schedule-conflict-badge" title="教室冲突">' + '⚠️' + '</span>';
+                        tbodyHTML += '<div class="schedule-card-class" style="font-weight:700;font-size:13px;color:#333;">' + escHtml(s.class_name) + '</div>';
+                        tbodyHTML += '<div class="schedule-card-info" style="margin-top:2px;">' + infoStr + '</div>';
                         tbodyHTML += '</div>';
                     });
                 }
