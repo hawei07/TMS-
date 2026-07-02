@@ -7795,21 +7795,39 @@ function renderMonthView(d) {
 }
 
 // ===== 排课详情弹窗（增强版） =====
+function takeAttendanceFromSchedule(scheduleId, classId, className, campus, courseName, teacher, classroom) {
+    document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+    switchPanel('panel-classes');
+    showToast('请在班级列表中点击「考勤」进行操作', 'info');
+}
+
+function deleteScheduleEntry(scheduleId, className) {
+    if (!confirm('确定删除课次「' + className + '」吗？此操作不可恢复。')) return;
+    api('delete_schedule', { id: scheduleId }, 'POST').then(function(res) {
+        if (res.error) { showToast(res.error, 'error'); return; }
+        document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+        showToast('课次已删除', 'success');
+        loadScheduleView();
+    });
+}
+
 function showScheduleDetail(s) {
     let html = '<div style="line-height:2;">';
-    html += '<p><strong>课程：</strong>' + escHtml(s.course_name) + '</p>';
     html += '<p><strong>班级：</strong>' + escHtml(s.class_name) + '</p>';
     html += '<p><strong>老师：</strong>' + escHtml(s.teacher || '未设置') + '</p>';
     html += '<p><strong>教室：</strong>' + escHtml(s.classroom || '未设置') + '</p>';
+    html += '<p><strong>课程：</strong>' + escHtml(s.course_name) + '</p>';
     html += '<p><strong>校区：</strong>' + escHtml(s.campus || '未设置') + '</p>';
     html += '<p><strong>时间段：</strong>' + s.start + ' - ' + s.end + '</p>';
     html += '</div>';
 
-    let actions = '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">';
+    let actions = '<div style="display:flex;gap:8px;margin-top:16px;">';
     if (s.class_id) {
-        actions += '<button class="btn btn-sm" onclick="this.closest(\'.modal-overlay\').remove(); switchPanel(\'panel-classes\');" style="padding:6px 14px;">查看班级</button>';
+        actions += '<button class="btn btn-sm" onclick="this.closest(\'.modal-overlay\').remove(); switchPanel(\'panel-classes\');" style="padding:6px 12px;">查看班级</button>';
+        actions += '<button class="btn btn-sm" onclick="takeAttendanceFromSchedule(' + s.schedule_id + ',' + s.class_id + ',\'' + escAttr(s.class_name) + '\',\'' + escAttr(s.campus || '') + '\',\'' + escAttr(s.course_name) + '\',\'' + escAttr(s.teacher || '') + '\',\'' + escAttr(s.classroom || '') + '\');" style="padding:6px 12px;background:#1890ff;color:#fff;border:none;border-radius:4px;">📋 考勤</button>';
     }
-    actions += '<button class="btn btn-primary btn-sm" onclick="this.closest(\'.modal-overlay\').remove()" style="padding:6px 14px;">关闭</button>';
+    actions += '<button class="btn btn-sm btn-danger" onclick="deleteScheduleEntry(' + s.schedule_id + ',\'' + escAttr(s.class_name) + '\');" style="padding:6px 12px;">删除课次</button>';
+    actions += '<button class="btn btn-primary btn-sm" onclick="this.closest(\'.modal-overlay\').remove()" style="padding:6px 14px;margin-left:auto;">关闭</button>';
     actions += '</div>';
 
     const overlay = document.createElement('div');
