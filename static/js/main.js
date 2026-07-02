@@ -541,6 +541,189 @@ function onCustomDateChange(prefix) {
     }
 }
 
+
+let ractActiveTab = 'edit';
+
+function openResourceActions(id, name, phone) {
+    document.getElementById('ract-rid').value = id;
+    document.getElementById('ract-name').value = name;
+    document.getElementById('ract-phone').value = phone;
+    // Pre-fill edit form
+    document.getElementById('ract-edit-name').value = name;
+    document.getElementById('ract-edit-phone').value = phone;
+    // Load edit form dropdowns if not loaded
+    if (document.getElementById('ract-edit-source').options.length <= 1) {
+        loadRactDropdowns();
+    }
+    // Fetch resource detail for edit pre-fill
+    fetchResourceDetailForRact(id);
+    // Reset to edit tab
+    switchRactTab('edit');
+    document.getElementById('modal-resource-actions').style.display = 'flex';
+}
+
+async function fetchResourceDetailForRact(id) {
+    try {
+        const res = await fetch(API_BASE + 'list_resources&page=1&page_size=1&keyword=' + encodeURIComponent(document.getElementById('ract-edit-phone').value));
+        const data = await res.json();
+        const rows = data.data || [];
+        if (rows.length > 0) {
+            const r = rows.find(row => row.id == id);
+            if (r) {
+                document.getElementById('ract-edit-source').value = r.source || '';
+                document.getElementById('ract-edit-intention').value = r.intention_level || '';
+                document.getElementById('ract-edit-follow').value = r.follow_status || '';
+                document.getElementById('ract-edit-assigned').value = r.assigned_to || '';
+                document.getElementById('ract-apt-course-type').value = '';
+                document.getElementById('ract-apt-notes').value = '';
+            }
+        }
+    } catch(e) {}
+}
+
+async function loadRactDropdowns() {
+    try {
+        // Load sources
+        const srcRes = await fetch(API_BASE + 'list_channels');
+        const srcData = await srcRes.json();
+        const srcSel = document.getElementById('ract-edit-source');
+        (srcData.data || []).forEach(c => {
+            const o = document.createElement('option');
+            o.value = c.name; o.textContent = c.name;
+            srcSel.appendChild(o);
+        });
+        // Load intention levels
+        const intRes = await fetch(API_BASE + 'list_intention_levels');
+        const intData = await intRes.json();
+        const intSel = document.getElementById('ract-edit-intention');
+        (intData.data || []).forEach(l => {
+            const o = document.createElement('option');
+            o.value = l.name; o.textContent = l.name;
+            intSel.appendChild(o);
+        });
+        // Load employees (assigned to)
+        const empRes = await fetch(API_BASE + 'list_employees');
+        const empData = await empRes.json();
+        const empSel = document.getElementById('ract-edit-assigned');
+        (empData.data || []).forEach(e => {
+            const o = document.createElement('option');
+            o.value = e.name; o.textContent = e.name;
+            empSel.appendChild(o);
+        });
+        // Load course types
+        const ctRes = await fetch(API_BASE + 'list_basic_types&category=course_type');
+        const ctData = await ctRes.json();
+        const ctSel = document.getElementById('ract-apt-course-type');
+        (ctData.data || []).forEach(t => {
+            const o = document.createElement('option');
+            o.value = t.name; o.textContent = t.name;
+            ctSel.appendChild(o);
+        });
+        // Load comm types
+        const cmRes = await fetch(API_BASE + 'list_basic_types&category=comm_type');
+        const cmData = await cmRes.json();
+        const cmSel = document.getElementById('ract-comm-type');
+        (cmData.data || []).forEach(t => {
+            const o = document.createElement('option');
+            o.value = t.name; o.textContent = t.name;
+            cmSel.appendChild(o);
+        });
+    } catch(e) {
+        console.error('loadRactDropdowns error:', e);
+    }
+}
+
+function switchRactTab(tab) {
+    ractActiveTab = tab;
+    document.querySelectorAll('.ract-tab').forEach(b => b.classList.toggle('active', b.dataset.tab === tab));
+    document.querySelectorAll('.ract-panel').forEach(p => p.style.display = 'none');
+    const panel = document.getElementById('ract-panel-' + tab);
+    if (panel) panel.style.display = '';
+    const submitBtn = document.getElementById('ract-submit-btn');
+    const titles = {edit:'编辑资源', enroll:'确认报名', appointment:'预约试听', comm:'添加沟通记录', delete:'删除资源'};
+    document.getElementById('ract-title').textContent = titles[tab] || '资源操作';
+    if (tab === 'delete') {
+        submitBtn.textContent = '确认删除';
+        submitBtn.className = 'btn btn-danger btn-sm';
+    } else {
+        submitBtn.textContent = tab === 'enroll' ? '确认报名' : '保存';
+        submitBtn.className = 'btn btn-primary btn-sm';
+    }
+}
+
+async function submitRactAction() {
+    const id = document.getElementById('ract-rid').value;
+    if (ractActiveTab === 'edit') {
+        const name = document.getElementById('ract-edit-name').value.trim();
+        const phone = document.getElementById('ract-edit-phone').value.trim();
+        if (!name || !phone) { showToast('姓名和电话不能为空', 'error'); return; }
+        const body = JSON.stringify({
+            id: id, name, phone,
+            source: document.getElementById('ract-edit-source').value,
+            intention_level: document.getElementById('ract-edit-intention').value,
+            follow_status: document.getElementById('ract-edit-follow').value,
+            assigned_to: document.getElementById('ract-edit-assigned').value
+        });
+        try {
+            const res = await fetch(API_BASE + 'update_resource', {method:'POST',headers:{'Content-Type':'application/json'},body});
+            const d = await res.json();
+            if (d.error) { showToast(d.error, 'error'); return; }
+            showToast('保存成功', 'success');
+            closeModal('modal-resource-actions');
+            loadMyResources();
+        } catch(e) { showToast('保存失败: ' + e.message, 'error'); }
+    } else if (ractActiveTab === 'enroll') {
+        closeModal('modal-resource-actions');
+        goEnrollFromResource(id);
+    } else if (ractActiveTab === 'appointment') {
+        const aptTime = document.getElementById('ract-apt-time').value;
+        if (!aptTime) { showToast('请选择预约时间', 'error'); return; }
+        const body = JSON.stringify({
+            resource_id: id,
+            resource_name: document.getElementById('ract-name').value,
+            phone: document.getElementById('ract-phone').value,
+            course_type: document.getElementById('ract-apt-course-type').value,
+            appointment_time: aptTime.replace('T', ' ') + ':00',
+            notes: document.getElementById('ract-apt-notes').value,
+            status: '已预约'
+        });
+        try {
+            const res = await fetch(API_BASE + 'add_appointment', {method:'POST',headers:{'Content-Type':'application/json'},body});
+            const d = await res.json();
+            if (d.error) { showToast(d.error, 'error'); return; }
+            showToast('预约成功', 'success');
+            closeModal('modal-resource-actions');
+            loadMyResources();
+        } catch(e) { showToast('预约失败: ' + e.message, 'error'); }
+    } else if (ractActiveTab === 'comm') {
+        const content = document.getElementById('ract-comm-content').value.trim();
+        if (!content) { showToast('请输入沟通内容', 'error'); return; }
+        const body = JSON.stringify({
+            resource_id: id,
+            resource_name: document.getElementById('ract-name').value,
+            content: content,
+            comm_type: document.getElementById('ract-comm-type').value
+        });
+        try {
+            const res = await fetch(API_BASE + 'add_communication', {method:'POST',headers:{'Content-Type':'application/json'},body});
+            const d = await res.json();
+            if (d.error) { showToast(d.error, 'error'); return; }
+            showToast('沟通记录已添加', 'success');
+            closeModal('modal-resource-actions');
+            loadMyResources();
+        } catch(e) { showToast('添加失败: ' + e.message, 'error'); }
+    } else if (ractActiveTab === 'delete') {
+        if (!confirm('确定要删除该资源？相关预约和沟通记录将一并删除。')) return;
+        try {
+            const res = await fetch(API_BASE + 'delete_resource', {method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:'id=' + id});
+            const d = await res.json();
+            if (d.error) { showToast(d.error, 'error'); return; }
+            showToast('已删除', 'success');
+            closeModal('modal-resource-actions');
+            loadMyResources();
+        } catch(e) { showToast('删除失败: ' + e.message, 'error'); }
+    }
+}
 async function loadMyResources() {
     const keyword = document.getElementById('search-my').value;
     const name = document.getElementById('filter-name-my').value;
@@ -598,11 +781,10 @@ function renderMyTable(rows) {
             <td>${r.converted === '已转化' ? '<span class="tag-converted">已转化</span>' : '<span class="tag-unconverted">未转化</span>'}</td>
             <td>
                 <div class="action-btns">
-                    <button class="btn-link" onclick="editResource(${r.id})">编辑</button>
-                    <button class="btn-link" onclick="goEnrollFromResource(${r.id})">报名</button>
-                    <button class="btn-link" onclick="openAppointmentForResource(${r.id},'${esc(r.name)}','${esc(r.phone)}')">预约试听</button>
-                    <button class="btn-link" onclick="openCommunication(${r.id},'${esc(r.name)}')">沟通记录</button>
-                    <button class="btn-link-danger" onclick="deleteResource(${r.id})">删除</button>
+                    <button class="ract-trigger" onclick="openResourceActions(${r.id},'${esc(r.name)}','${esc(r.phone)}')" title="操作">
+                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                        操作
+                    </button>
                 </div>
             </td>
         </tr>
