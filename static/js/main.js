@@ -7719,7 +7719,7 @@ function renderWeekView(d) {
                 const cellSlots = (grid[dayLabel].slots || []).filter(s => s.start === start && s.end === end);
                 const date = grid[dayLabel].date;
                 const isToday = date === today;
-                tbodyHTML += '<td class="' + (isToday ? 'schedule-today-col' : '') + '">';
+                tbodyHTML += '<td class="' + (isToday ? 'schedule-today-col' : '') + '" data-day="' + dayLabel + '" data-start="' + start + '" data-end="' + end + '">';
                 if (cellSlots.length > 0) {
                     cellSlots.forEach(s => {
                         if (!courseColorMap[s.course_name]) {
@@ -7748,6 +7748,13 @@ function renderWeekView(d) {
         });
     }
     document.getElementById('schedule-tbody').innerHTML = tbodyHTML;
+
+    // 拖拽模式：给所有数据单元格绑定 drop 事件
+    if (dragMode) {
+        document.querySelectorAll('#schedule-tbody td[data-day]').forEach(td => {
+            makeCellDropTarget(td, td.dataset.day, td.dataset.start, td.dataset.end);
+        });
+    }
 }
 
 // ===== 月视图渲染 =====
@@ -7838,3 +7845,156 @@ document.addEventListener('keydown', function(e) {
 
 function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
 function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
+
+// ===== 拖拽排课 =====
+let dragMode = false;
+let pendingCells = {}; // key: "周一|10:40-10:41" -> { course, teacher, classroom, course_id, course_campus }
+
+function initDragResources() {
+    api('list_courses').then(res => {
+        const list = document.getElementById('drag-course-list');
+        if (!list) return;
+        const courses = res.data || [];
+        list.innerHTML = courses.length ? courses.map(c => 
+            '<div class="drag-item" draggable="true" data-type="course" data-id="' + c.id + '" data-name="' + escHtml(c.name) + '" data-campus="' + escHtml(c.campus_permission || '') + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(c.name) + '</div>'
+        ).join('') : '<div class="resource-empty">暂无课程</div>';
+    });
+    api('get_teachers').then(res => {
+        const list = document.getElementById('drag-teacher-list');
+        if (!list) return;
+        const teachers = res.data || [];
+        list.innerHTML = teachers.length ? teachers.map(t =>
+            '<div class="drag-item" draggable="true" data-type="teacher" data-name="' + escHtml(t.name) + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(t.name) + '</div>'
+        ).join('') : '<div class="resource-empty">暂无教师</div>';
+    });
+    api('list_classrooms').then(res => {
+        const list = document.getElementById('drag-classroom-list');
+        if (!list) return;
+        const classrooms = res.data || [];
+        list.innerHTML = classrooms.length ? classrooms.map(cr =>
+            '<div class="drag-item" draggable="true" data-type="classroom" data-name="' + escHtml(cr.name) + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(cr.name) + '</div>'
+        ).join('') : '<div class="resource-empty">暂无教室</div>';
+    });
+}
+
+function toggleDragMode() {
+    dragMode = !dragMode;
+    const panel = document.getElementById('schedule-resource-panel');
+    const toggle = document.getElementById('schedule-drag-toggle');
+    if (dragMode) {
+        panel.classList.add('schedule-resource-panel--open');
+        toggle.innerHTML = '✅ 完成排课';
+        toggle.style.background = '#52c41a'; toggle.style.color = '#fff'; toggle.style.borderColor = '#52c41a';
+        initDragResources();
+    } else {
+        panel.classList.remove('schedule-resource-panel--open');
+        toggle.innerHTML = '📋 排课模式';
+        toggle.style.background = '#f0f0f0'; toggle.style.color = '#333'; toggle.style.borderColor = '#ddd';
+        pendingCells = {};
+    }
+    loadScheduleView();
+}
+
+function onDragStart(e) {
+    if (!dragMode) { e.preventDefault(); return; }
+    const item = e.target.closest('.drag-item');
+    if (!item) return;
+    e.dataTransfer.setData('text/plain', JSON.stringify({
+        type: item.dataset.type, id: item.dataset.id || '', name: item.dataset.name, campus: item.dataset.campus || ''
+    }));
+    e.dataTransfer.effectAllowed = 'copy';
+    item.classList.add('drag-item--dragging');
+}
+
+function onDragEnd(e) {
+    const item = e.target.closest('.drag-item');
+    if (item) item.classList.remove('drag-item--dragging');
+    document.querySelectorAll('.schedule-drop-cell--over').forEach(c => c.classList.remove('schedule-drop-cell--over'));
+}
+
+function makeCellDropTarget(td, dayLabel, start, end) {
+    if (!dragMode) return;
+    td.classList.add('schedule-drop-cell');
+    const id = dayLabel + '|' + start + '-' + end;
+    td.dataset.dropId = id;
+    td.addEventListener('dragover', function(e) { e.preventDefault(); e.dataTransfer.dropEffect = 'copy'; td.classList.add('schedule-drop-cell--over'); });
+    td.addEventListener('dragleave', function() { td.classList.remove('schedule-drop-cell--over'); });
+    td.addEventListener('drop', function(e) {
+        e.preventDefault(); td.classList.remove('schedule-drop-cell--over');
+        const raw = e.dataTransfer.getData('text/plain');
+        if (!raw) return;
+        let data; try { data = JSON.parse(raw); } catch(_) { return; }
+        if (!data.type || !data.name) return;
+        if (!pendingCells[id]) pendingCells[id] = {};
+        pendingCells[id][data.type] = data.name;
+        if (data.type === 'course') { pendingCells[id].course_id = data.id; pendingCells[id].course_campus = data.campus; }
+        updatePendingCellUI(td, id);
+    });
+}
+
+function updatePendingCellUI(td, id) {
+    const p = pendingCells[id] || {};
+    const parts = [p.course ? '📘' + p.course : '', p.teacher ? '👨‍🏫' + p.teacher : '', p.classroom ? '🏫' + p.classroom : ''].filter(Boolean);
+    let el = td.querySelector('.schedule-drop-pending');
+    if (parts.length === 0) { if (el) el.remove(); return; }
+    if (!el) { el = document.createElement('div'); el.className = 'schedule-drop-pending'; td.appendChild(el); }
+    el.innerHTML = parts.join('<br>');
+    if (p.course && p.teacher && p.classroom && !el.querySelector('.schedule-drop-confirm')) {
+        const btn = document.createElement('button');
+        btn.className = 'schedule-drop-confirm';
+        btn.textContent = '✓ 创建';
+        btn.onclick = function(e) { e.stopPropagation(); showScheduleCreateModal(id, td); };
+        el.appendChild(btn);
+    }
+}
+
+function showScheduleCreateModal(cellId, td) {
+    const p = pendingCells[cellId];
+    if (!p || !p.course || !p.teacher || !p.classroom) return;
+    const parts = cellId.split('|'), dayLabel = parts[0], timeSlot = parts.slice(1).join('|');
+    const [timeStart, timeEnd] = timeSlot.split('-');
+    const dayMap = {'周一':1,'周二':2,'周三':3,'周四':4,'周五':5,'周六':6,'周日':7};
+    const dayOfWeek = dayMap[dayLabel] || 1;
+    document.getElementById('schedule-create-modal').style.display = 'flex';
+    document.getElementById('schedule-create-summary').innerHTML =
+        '<strong>课程：</strong>' + escHtml(p.course) + '<br>' +
+        '<strong>教师：</strong>' + escHtml(p.teacher) + '<br>' +
+        '<strong>教室：</strong>' + escHtml(p.classroom) + '<br>' +
+        '<strong>时间：</strong>' + dayLabel + ' ' + timeStart + '-' + timeEnd;
+    document.getElementById('sc-class-name').value = p.course + '班';
+    const campus = document.getElementById('filter-schedule-campus').value || p.course_campus || '';
+    const today = new Date();
+    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + ((dayOfWeek - today.getDay() + 7) % 7 || 7));
+    document.getElementById('sc-start-date').value = formatDate(nextWeek);
+    const endDate = new Date(nextWeek); endDate.setMonth(endDate.getMonth() + 6);
+    document.getElementById('sc-end-date').value = formatDate(endDate);
+    window._scPending = { cellId, dayLabel, dayOfWeek, timeStart, timeEnd, campus, courseId: p.course_id, courseName: p.course, teacher: p.teacher, classroom: p.classroom };
+}
+
+function closeScheduleCreateModal() {
+    document.getElementById('schedule-create-modal').style.display = 'none';
+    window._scPending = null;
+}
+
+function confirmScheduleCreate() {
+    const sc = window._scPending; if (!sc) return;
+    const className = document.getElementById('sc-class-name').value.trim() || (sc.courseName + '班');
+    const startDate = document.getElementById('sc-start-date').value;
+    const endDate = document.getElementById('sc-end-date').value;
+    const maxStudents = parseInt(document.getElementById('sc-max-students').value) || 15;
+    const lessonHours = parseInt(document.getElementById('sc-lesson-hours').value) || 0;
+    if (!startDate) { alert('请选择开课日期'); return; }
+    if (!endDate) { alert('请选择结课日期'); return; }
+    if (new Date(endDate) <= new Date(startDate)) { alert('结课日期必须晚于开课日期'); return; }
+    api('create_schedule_from_grid', {
+        course_id: sc.courseId, teacher: sc.teacher, classroom: sc.classroom, campus: sc.campus,
+        day_of_week: sc.dayOfWeek, time_start: sc.timeStart, time_end: sc.timeEnd,
+        start_date: startDate, end_date: endDate, class_name: className, max_students: maxStudents, lesson_hours: lessonHours
+    }, 'POST').then(res => {
+        if (res.error) { alert(res.error); return; }
+        closeScheduleCreateModal();
+        delete pendingCells[sc.cellId];
+        loadScheduleView();
+        alert('排课创建成功！班级：' + res.class_name);
+    }).catch(e => { alert('创建失败: ' + e.message); });
+}
