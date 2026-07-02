@@ -92,6 +92,7 @@ function refreshPanel(panelId) {
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
+        case 'panel-schedule-view': initScheduleCampusFilter(); loadScheduleView(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
     }
 }
@@ -7552,3 +7553,145 @@ function renderCashflowCharts(data, campusFilter) {
         });
     }
 }
+
+// ==================== 课表视图 ====================
+let scheduleWeekOffset = 0;  // 当前周偏移量（0=本周）
+
+function getMonday(offset) {
+    const d = new Date();
+    const day = d.getDay();
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff + offset * 7);
+    return d;
+}
+
+function formatDate(d) {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return y + '-' + m + '-' + day;
+}
+
+function initScheduleCampusFilter() {
+    api('list_organizations').then(res => {
+        const sel = document.getElementById('filter-schedule-campus');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">全部校区</option>';
+        const orgs = (res.data && res.data.flat) ? res.data.flat : [];
+        orgs.filter(o => o.type === '校区').forEach(o => {
+            const opt = document.createElement('option');
+            opt.value = o.name;
+            opt.textContent = o.name;
+            sel.appendChild(opt);
+        });
+    });
+}
+
+function navigateWeek(dir) {
+    scheduleWeekOffset += dir;
+    loadScheduleView();
+}
+
+function loadScheduleView() {
+    const campus = document.getElementById('filter-schedule-campus').value;
+    const monday = getMonday(scheduleWeekOffset);
+    const weekStart = formatDate(monday);
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+    const weekEnd = formatDate(sunday);
+
+    document.getElementById('schedule-week-range').textContent = weekStart + ' ~ ' + weekEnd;
+
+    let url = 'get_schedule_view&week_start=' + weekStart;
+    if (campus) url += '&campus=' + encodeURIComponent(campus);
+
+    api(url, null, 'GET').then(res => {
+        if (res.error) { alert(res.error); return; }
+        const d = res.data;
+        const grid = d.grid;
+        const allSlots = d.all_slots;
+        const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+        const colors = [
+            { bg: '#e8f4fd', border: '#1890ff', text: '#096dd9' },
+            { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
+            { bg: '#fff7e6', border: '#fa8c16', text: '#d46b08' },
+            { bg: '#f9f0ff', border: '#722ed1', text: '#531dab' },
+            { bg: '#fff0f6', border: '#eb2f96', text: '#c41d7f' },
+        ];
+        const courseColorMap = {};
+        let colorIdx = 0;
+
+        // Build thead
+        let theadHTML = '<tr>';
+        theadHTML += '<th width="90">时间段</th>';
+        days.forEach((d, i) => {
+            const dateParts = grid[d].date.split('-');
+            theadHTML += '<th width="' + (i >= 5 ? '100' : '120') + '">' + d + '<br><small style="font-weight:400;color:#888;">' + (parseInt(dateParts[1]) + '/' + parseInt(dateParts[2])) + '</small></th>';
+        });
+        theadHTML += '</tr>';
+        document.getElementById('schedule-thead').innerHTML = theadHTML;
+
+        // Build tbody
+        let tbodyHTML = '';
+        if (allSlots.length === 0) {
+            tbodyHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:60px;">本周暂无排课数据</td></tr>';
+        } else {
+            allSlots.forEach(slotKey => {
+                const [start, end] = slotKey.split('-');
+                tbodyHTML += '<tr>';
+                tbodyHTML += '<td class="schedule-time-cell">' + start + '<br>至<br>' + end + '</td>';
+                days.forEach(d => {
+                    const cellSlots = (grid[d].slots || []).filter(s => s.start === start && s.end === end);
+                    tbodyHTML += '<td>';
+                    if (cellSlots.length > 0) {
+                        cellSlots.forEach(s => {
+                            if (!courseColorMap[s.course_name]) {
+                                courseColorMap[s.course_name] = colors[colorIdx % colors.length];
+                                colorIdx++;
+                            }
+                            const clr = courseColorMap[s.course_name];
+                            tbodyHTML += '<div class="schedule-card" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';" onclick="showScheduleDetail(' + JSON.stringify(s).replace(/"/g, '&quot;') + ')">';
+                            tbodyHTML += '<div class="schedule-card-course" style="color:' + clr.text + '">' + escHtml(s.course_name) + '</div>';
+                            tbodyHTML += '<div class="schedule-card-class">' + escHtml(s.class_name) + '</div>';
+                            if (s.teacher) tbodyHTML += '<div class="schedule-card-info">老师：' + escHtml(s.teacher) + '</div>';
+                            if (s.classroom) tbodyHTML += '<div class="schedule-card-info">教室：' + escHtml(s.classroom) + '</div>';
+                            tbodyHTML += '</div>';
+                        });
+                    }
+                    tbodyHTML += '</td>';
+                });
+                tbodyHTML += '</tr>';
+            });
+        }
+        document.getElementById('schedule-tbody').innerHTML = tbodyHTML;
+    }).catch(e => {
+        console.error('加载课表失败:', e);
+    });
+}
+
+function showScheduleDetail(s) {
+    let html = '<div style="line-height:2;">';
+    html += '<p><strong>课程：</strong>' + escHtml(s.course_name) + '</p>';
+    html += '<p><strong>班级：</strong>' + escHtml(s.class_name) + '</p>';
+    html += '<p><strong>老师：</strong>' + escHtml(s.teacher || '未设置') + '</p>';
+    html += '<p><strong>教室：</strong>' + escHtml(s.classroom || '未设置') + '</p>';
+    html += '<p><strong>校区：</strong>' + escHtml(s.campus || '未设置') + '</p>';
+    html += '<p><strong>时间段：</strong>' + s.start + ' - ' + s.end + '</p>';
+    html += '</div>';
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = '<div class="modal-content" style="background:#fff;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">'
+        + '<h3 style="margin:0 0 16px;">排课详情</h3>'
+        + html
+        + '<div style="text-align:right;margin-top:16px;"><button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">关闭</button></div>'
+        + '</div>';
+    document.body.appendChild(overlay);
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) overlay.remove();
+    });
+}
+
+function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
