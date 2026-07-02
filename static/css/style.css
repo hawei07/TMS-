@@ -3275,25 +3275,3 @@ span.flatpickr-weekday {
 .cf-tree-child { padding-left: 36px; color: #555; }
 .cf-tree-region { border-bottom: 1px solid #f5f5f5; }
 .cf-tree-region:last-child { border-bottom: none; }
-
-/* ==================== 资源操作弹窗 ==================== */
-.ract-tabs { display: flex; gap: 0; border-bottom: 2px solid #e5e7eb; padding: 0 20px; background: #f9fafb; }
-.ract-tab {
-    padding: 10px 18px; border: none; background: none;
-    font-size: 13px; font-weight: 500; color: #6b7280; cursor: pointer;
-    border-bottom: 2px solid transparent; margin-bottom: -2px;
-    transition: all .15s;
-}
-.ract-tab:hover { color: #374151; }
-.ract-tab.active { color: var(--color-primary); border-bottom-color: var(--color-primary); }
-.ract-tab-danger.active { color: var(--color-danger); border-bottom-color: var(--color-danger); }
-.ract-panel { padding: 4px 0; }
-.ract-trigger {
-    display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px; border-radius: 12px; border: 1px solid #d4d4f7;
-    background: #f5f5ff; color: #5b5bd6; font-size: 12px;
-    font-weight: 500; cursor: pointer; line-height: 1.5;
-    transition: all .15s;
-}
-.ract-trigger:hover { background: #e8e8ff; border-color: #b8b8f0; }
-.ract-trigger svg { flex-shrink: 0; }
