@@ -92,7 +92,6 @@ function refreshPanel(panelId) {
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
-        case 'panel-schedule-view': scheduleWeekOffset = 0; initScheduleCampusFilter(); loadScheduleView(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
     }
 }
@@ -5595,6 +5594,10 @@ function switchAttendanceTab(tabId) {
         loadStudentConsumption();
     } else if (tabId === 'tab-absence-records') {
         loadAbsenceRecords();
+    } else if (tabId === 'tab-schedule-view') {
+        scheduleWeekOffset = 0;
+        initScheduleCampusFilter();
+        loadScheduleView();
     }
 }
 
@@ -7846,8 +7849,11 @@ function showScheduleDetail(s) {
 
 // ===== 键盘导航 =====
 document.addEventListener('keydown', function(e) {
-    const panel = document.getElementById('panel-schedule-view');
-    if (!panel || panel.style.display === 'none') return;
+    // 课表键盘导航：考勤面板可见且课表标签激活时才生效
+    const attPanel = document.getElementById('panel-attendance');
+    const scheduleTab = document.getElementById('tab-schedule-view');
+    if (!attPanel || attPanel.style.display === 'none') return;
+    if (!scheduleTab || !scheduleTab.classList.contains('active')) return;
     if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
     if (e.key === 'ArrowLeft') { e.preventDefault(); navigateWeek(-1); }
     if (e.key === 'ArrowRight') { e.preventDefault(); navigateWeek(1); }

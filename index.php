@@ -4797,12 +4797,6 @@ if (intval($countBt) === 0) {
                                     <span class="tree-label">工作记录</span>
                                 </div>
                             </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-schedule-view">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
-                                    <span class="tree-label">课表</span>
-                                </div>
-                            </li>
                             <li class="tree-node expanded">
                                 <div class="tree-parent sub-parent">
                                     <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
@@ -5357,6 +5351,7 @@ if (intval($countBt) === 0) {
                     <button class="att-tab active" data-tab="tab-attendance-operations">操作考勤</button>
                     <button class="att-tab" data-tab="tab-student-consumption">学员课耗</button>
                     <button class="att-tab" data-tab="tab-absence-records">缺勤记录</button>
+                    <button class="att-tab" data-tab="tab-schedule-view">课表</button>
                 </div>
                 <div class="attendance-tab-content">
                     <!-- 操作考勤页签 -->
@@ -5429,6 +5424,101 @@ if (intval($countBt) === 0) {
                             </table>
                         </div>
                         <div class="pagination" id="pagination-absence-records"></div>
+                    </div>
+                    <!-- 课表页签 -->
+                    <div class="att-panel" id="tab-schedule-view">
+                        <div class="schedule-layout" id="schedule-layout">
+                            <!-- 左侧资源面板 -->
+                            <div class="schedule-resource-panel" id="schedule-resource-panel">
+                                <div class="resource-section">
+                                    <div class="resource-section-title">📚 课程</div>
+                                    <div class="resource-list" id="drag-course-list"><div class="resource-empty">加载中...</div></div>
+                                </div>
+                                <div class="resource-section">
+                                    <div class="resource-section-title">👨‍🏫 教师</div>
+                                    <div class="resource-list" id="drag-teacher-list"><div class="resource-empty">加载中...</div></div>
+                                </div>
+                                <div class="resource-section">
+                                    <div class="resource-section-title">🏫 教室</div>
+                                    <div class="resource-list" id="drag-classroom-list"><div class="resource-empty">加载中...</div></div>
+                                </div>
+                            </div>
+                            <!-- 右侧课表区域 -->
+                            <div class="schedule-main" id="schedule-main">
+                                <div class="toolbar">
+                                    <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                                        <label style="font-size:13px;white-space:nowrap;">校区：</label>
+                                        <select id="filter-schedule-campus" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                                            <option value="">全部校区</option>
+                                        </select>
+                                        <label style="font-size:13px;white-space:nowrap;">教师：</label>
+                                        <select id="filter-schedule-teacher" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                                            <option value="">全部教师</option>
+                                        </select>
+                                        <label style="font-size:13px;white-space:nowrap;">教室：</label>
+                                        <select id="filter-schedule-classroom" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                                            <option value="">全部教室</option>
+                                        </select>
+                                        <button class="btn btn-sm" onclick="navigateWeek(-1)" style="padding:4px 10px;" title="上一周/月">&lt;</button>
+                                        <span id="schedule-week-range" style="font-size:14px;font-weight:600;color:#333;margin:0 4px;"></span>
+                                        <button class="btn btn-sm" onclick="navigateWeek(1)" style="padding:4px 10px;" title="下一周/月">&gt;</button>
+                                        <button class="btn btn-sm" onclick="navigateToday()" style="padding:4px 10px;background:#1890ff;color:#fff;border:none;border-radius:4px;" title="回到今天">📍 今天</button>
+                                        <div style="display:flex;border:1px solid #ddd;border-radius:4px;overflow:hidden;margin-left:8px;">
+                                            <button id="view-week-btn" class="schedule-view-toggle active" onclick="switchScheduleView('week')" style="padding:4px 12px;border:none;cursor:pointer;font-size:13px;background:#1890ff;color:#fff;">周</button>
+                                            <button id="view-month-btn" class="schedule-view-toggle" onclick="switchScheduleView('month')" style="padding:4px 12px;border:none;cursor:pointer;font-size:13px;background:#fff;color:#333;">月</button>
+                                        </div>
+                                        <button class="btn btn-sm" id="schedule-drag-toggle" onclick="toggleDragMode()" style="background:#f0f0f0;border:1px solid #ddd;border-radius:4px;padding:4px 12px;font-size:13px;">📋 排课模式</button>
+                                    </div>
+                                </div>
+                                <div class="schedule-table-wrap" id="schedule-week-view">
+                                    <table class="schedule-table" id="schedule-table">
+                                        <thead id="schedule-thead"></thead>
+                                        <tbody id="schedule-tbody"></tbody>
+                                    </table>
+                                </div>
+                                <div class="schedule-month-wrap" id="schedule-month-view" style="display:none;">
+                                    <div class="schedule-month-header">
+                                        <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span class="schedule-month-weekend">周六</span><span class="schedule-month-weekend">周日</span>
+                                    </div>
+                                    <div class="schedule-month-grid" id="schedule-month-grid"></div>
+                                </div>
+                            </div>
+                        </div>
+                        <!-- 排课确认弹窗 -->
+                        <div class="modal-overlay" id="schedule-create-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;align-items:center;justify-content:center;">
+                            <div class="modal-content" style="background:#fff;border-radius:8px;padding:24px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
+                                <h3 style="margin:0 0 16px;">确认排课</h3>
+                                <div id="schedule-create-summary" style="margin-bottom:12px;line-height:2;font-size:14px;color:#555;"></div>
+                                <div style="margin-bottom:12px;">
+                                    <label style="font-size:13px;display:block;margin-bottom:4px;">班级名称</label>
+                                    <input type="text" id="sc-class-name" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;" placeholder="自动生成">
+                                </div>
+                                <div style="display:flex;gap:12px;margin-bottom:12px;">
+                                    <div style="flex:1;">
+                                        <label style="font-size:13px;display:block;margin-bottom:4px;">开课日期</label>
+                                        <input type="date" id="sc-start-date" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="font-size:13px;display:block;margin-bottom:4px;">结课日期</label>
+                                        <input type="date" id="sc-end-date" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
+                                    </div>
+                                </div>
+                                <div style="display:flex;gap:12px;margin-bottom:12px;">
+                                    <div style="flex:1;">
+                                        <label style="font-size:13px;display:block;margin-bottom:4px;">招生人数</label>
+                                        <input type="number" id="sc-max-students" value="15" min="1" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
+                                    </div>
+                                    <div style="flex:1;">
+                                        <label style="font-size:13px;display:block;margin-bottom:4px;">授课课时</label>
+                                        <input type="number" id="sc-lesson-hours" value="0" min="0" step="2" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
+                                    </div>
+                                </div>
+                                <div style="text-align:right;display:flex;gap:8px;justify-content:flex-end;">
+                                    <button class="btn btn-sm" onclick="closeScheduleCreateModal()" style="padding:6px 14px;">取消</button>
+                                    <button class="btn btn-primary btn-sm" onclick="confirmScheduleCreate()" style="padding:6px 14px;">确认创建</button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </section>
@@ -5780,104 +5870,6 @@ if (intval($countBt) === 0) {
             </section>
 
             <!-- 面板：课表视图 -->
-            <section class="content-panel" id="panel-schedule-view">
-                <div class="panel-header" style="display:flex;align-items:center;justify-content:space-between;">
-                    <h3>课表</h3>
-                    <button class="btn btn-sm" id="schedule-drag-toggle" onclick="toggleDragMode()" style="background:#f0f0f0;border:1px solid #ddd;border-radius:4px;padding:4px 12px;font-size:13px;">📋 排课模式</button>
-                </div>
-                <div class="schedule-layout" id="schedule-layout">
-                    <!-- 左侧资源面板 -->
-                    <div class="schedule-resource-panel" id="schedule-resource-panel">
-                        <div class="resource-section">
-                            <div class="resource-section-title">📚 课程</div>
-                            <div class="resource-list" id="drag-course-list"><div class="resource-empty">加载中...</div></div>
-                        </div>
-                        <div class="resource-section">
-                            <div class="resource-section-title">👨‍🏫 教师</div>
-                            <div class="resource-list" id="drag-teacher-list"><div class="resource-empty">加载中...</div></div>
-                        </div>
-                        <div class="resource-section">
-                            <div class="resource-section-title">🏫 教室</div>
-                            <div class="resource-list" id="drag-classroom-list"><div class="resource-empty">加载中...</div></div>
-                        </div>
-                    </div>
-                    <!-- 右侧课表区域 -->
-                    <div class="schedule-main" id="schedule-main">
-                        <div class="toolbar">
-                            <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                                <label style="font-size:13px;white-space:nowrap;">校区：</label>
-                                <select id="filter-schedule-campus" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
-                                    <option value="">全部校区</option>
-                                </select>
-                                <label style="font-size:13px;white-space:nowrap;">教师：</label>
-                                <select id="filter-schedule-teacher" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
-                                    <option value="">全部教师</option>
-                                </select>
-                                <label style="font-size:13px;white-space:nowrap;">教室：</label>
-                                <select id="filter-schedule-classroom" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
-                                    <option value="">全部教室</option>
-                                </select>
-                                <button class="btn btn-sm" onclick="navigateWeek(-1)" style="padding:4px 10px;" title="上一周/月">&lt;</button>
-                                <span id="schedule-week-range" style="font-size:14px;font-weight:600;color:#333;margin:0 4px;"></span>
-                                <button class="btn btn-sm" onclick="navigateWeek(1)" style="padding:4px 10px;" title="下一周/月">&gt;</button>
-                                <button class="btn btn-sm" onclick="navigateToday()" style="padding:4px 10px;background:#1890ff;color:#fff;border:none;border-radius:4px;" title="回到今天">📍 今天</button>
-                                <div style="display:flex;border:1px solid #ddd;border-radius:4px;overflow:hidden;margin-left:8px;">
-                                    <button id="view-week-btn" class="schedule-view-toggle active" onclick="switchScheduleView('week')" style="padding:4px 12px;border:none;cursor:pointer;font-size:13px;background:#1890ff;color:#fff;">周</button>
-                                    <button id="view-month-btn" class="schedule-view-toggle" onclick="switchScheduleView('month')" style="padding:4px 12px;border:none;cursor:pointer;font-size:13px;background:#fff;color:#333;">月</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div class="schedule-table-wrap" id="schedule-week-view">
-                            <table class="schedule-table" id="schedule-table">
-                                <thead id="schedule-thead"></thead>
-                                <tbody id="schedule-tbody"></tbody>
-                            </table>
-                        </div>
-                        <div class="schedule-month-wrap" id="schedule-month-view" style="display:none;">
-                            <div class="schedule-month-header">
-                                <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span class="schedule-month-weekend">周六</span><span class="schedule-month-weekend">周日</span>
-                            </div>
-                            <div class="schedule-month-grid" id="schedule-month-grid"></div>
-                        </div>
-                    </div>
-                </div>
-                <!-- 排课确认弹窗 -->
-                <div class="modal-overlay" id="schedule-create-modal" style="display:none;position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;align-items:center;justify-content:center;">
-                    <div class="modal-content" style="background:#fff;border-radius:8px;padding:24px;max-width:480px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">
-                        <h3 style="margin:0 0 16px;">确认排课</h3>
-                        <div id="schedule-create-summary" style="margin-bottom:12px;line-height:2;font-size:14px;color:#555;"></div>
-                        <div style="margin-bottom:12px;">
-                            <label style="font-size:13px;display:block;margin-bottom:4px;">班级名称</label>
-                            <input type="text" id="sc-class-name" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;" placeholder="自动生成">
-                        </div>
-                        <div style="display:flex;gap:12px;margin-bottom:12px;">
-                            <div style="flex:1;">
-                                <label style="font-size:13px;display:block;margin-bottom:4px;">开课日期</label>
-                                <input type="date" id="sc-start-date" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
-                            </div>
-                            <div style="flex:1;">
-                                <label style="font-size:13px;display:block;margin-bottom:4px;">结课日期</label>
-                                <input type="date" id="sc-end-date" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
-                            </div>
-                        </div>
-                        <div style="display:flex;gap:12px;margin-bottom:12px;">
-                            <div style="flex:1;">
-                                <label style="font-size:13px;display:block;margin-bottom:4px;">招生人数</label>
-                                <input type="number" id="sc-max-students" value="15" min="1" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
-                            </div>
-                            <div style="flex:1;">
-                                <label style="font-size:13px;display:block;margin-bottom:4px;">授课课时</label>
-                                <input type="number" id="sc-lesson-hours" value="0" min="0" step="2" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
-                            </div>
-                        </div>
-                        <div style="text-align:right;display:flex;gap:8px;justify-content:flex-end;">
-                            <button class="btn btn-sm" onclick="closeScheduleCreateModal()" style="padding:6px 14px;">取消</button>
-                            <button class="btn btn-primary btn-sm" onclick="confirmScheduleCreate()" style="padding:6px 14px;">确认创建</button>
-                        </div>
-                    </div>
-                </div>
-            </section>
-
             <!-- 面板：学科设置 -->
             <section class="content-panel" id="panel-subjects">
                 <div class="panel-header">
@@ -7143,6 +7135,6 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260701k"></script>
+    <script src="static/js/main.js?v=20260702a"></script>
 </body>
 </html>

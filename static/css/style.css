@@ -2212,11 +2212,15 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 }
 
 .att-panel.active {
-    display: block;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
 }
 
 .attendance-tab-content {
     min-height: 200px;
+    display: flex;
+    flex-direction: column;
 }
 
 /* ==================== Flatpickr 日期选择器主题覆盖 ==================== */
@@ -3512,10 +3516,10 @@ span.flatpickr-weekday {
     body * {
         visibility: hidden;
     }
-    #panel-schedule-view, #panel-schedule-view * {
+    #tab-schedule-view, #tab-schedule-view * {
         visibility: visible;
     }
-    #panel-schedule-view {
+    #tab-schedule-view {
         position: absolute;
         left: 0;
         top: 0;
@@ -3579,7 +3583,7 @@ span.flatpickr-weekday {
 .schedule-layout {
     display: flex;
     gap: 0;
-    height: calc(100vh - 140px);
+    flex: 1;
     overflow: hidden;
 }
 

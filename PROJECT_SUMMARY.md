@@ -1322,6 +1322,15 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | revert | **撤销操作弹窗 tab 导航**：去除资源操作单按钮→弹窗融合 5 操作功能的修改，恢复 5 个独立药丸按钮 | index.php main.js style.css | 9a41ad4 |
 | feat | **新增课表页面（panel-schedule-view）**：周视图展示排课数据，支持校区筛选和前后周切换；后端新增 get_schedule_view API（展开 weekdays + time_slots 按天按时段分组，JOIN classes/courses）；左侧导航"教务管理"模块新增"课表"菜单项（工作记录之后、基础设置之前）；前端新增周视图课表渲染、校区筛选、课程卡片5色循环、排课详情弹窗；课表表格样式、响应式横向滚动 | index.php static/js/main.js static/css/style.css | — |
 
+### 2026-07-02 (第三阶段 — 课表整合到考勤页面)
+
+| 类型 | 内容 | 涉及文件 | 版本 |
+|------|------|----------|------|
+| refactor | **课表整合到考勤页面作为标签页**：将独立的课表页面（panel-schedule-view）整合到考勤管理页面（panel-attendance）作为第二个标签页，用户可在"上课记录"和"课表视图"两个标签页间切换，减少页面跳转，提升用户体验 | index.php static/js/main.js static/css/style.css | — |
+| feat | **考勤页面标签页导航**：在考勤管理页面顶部添加标签页导航栏，包含"上课记录"和"课表视图"两个标签页，当前选中标签高亮显示，点击切换内容区域 | static/js/main.js static/css/style.css | — |
+| feat | **课表视图保持原有功能**：整合后的课表视图保持原有所有功能，包括周视图展示、校区筛选、前后周切换、课程卡片展示、详情弹窗等 | index.php static/js/main.js | — |
+| style | **标签页样式优化**：新增标签页导航样式，当前选中标签底部边框高亮，hover效果，响应式适配 | static/css/style.css | — |
+
 ### 2026-06-30
 
 | 类型 | 描述 | 涉及文件 | 提交 |
