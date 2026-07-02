@@ -7860,11 +7860,11 @@ function initDragResources() {
             '<div class="drag-item" draggable="true" data-type="course" data-id="' + c.id + '" data-name="' + escHtml(c.name) + '" data-campus="' + escHtml(c.campus_permission || '') + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(c.name) + '</div>'
         ).join('') : '<div class="resource-empty">该校区暂无可用课程</div>';
     });
-    // 教师
+    // 教师：按部门（校区）筛选
     api('get_teachers').then(res => {
         const list = document.getElementById('drag-teacher-list');
         if (!list) return;
-        const teachers = res.teachers || [];
+        const teachers = (res.teachers || []).filter(t => !campus || t.department === campus);
         list.innerHTML = teachers.length ? teachers.map(t =>
             '<div class="drag-item" draggable="true" data-type="teacher" data-name="' + escHtml(t.name) + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(t.name) + (t.department ? ' <small style="color:#999;font-size:10px;">' + escHtml(t.department) + '</small>' : '') + '</div>'
         ).join('') : '<div class="resource-empty">暂无教师</div>';
