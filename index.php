@@ -3486,6 +3486,18 @@ $stmt->execute();
                     }
                 }
 
+                // 月视图去重
+                foreach ($dateSlots as $date => &$slots) {
+                    $seen = [];
+                    $slots = array_values(array_filter($slots, function($s) use (&$seen) {
+                        $key = $s['schedule_id'] . '|' . $s['start'] . '|' . $s['end'];
+                        if (isset($seen[$key])) return false;
+                        $seen[$key] = true;
+                        return true;
+                    }));
+                }
+                unset($slots);
+
                 // 教室冲突检测
                 $conflicts = [];
                 foreach ($dateSlots as $date => $slots) {
@@ -3557,6 +3569,18 @@ $stmt->execute();
                     }
                 }
             }
+
+            // 去重：同一schedule在同一天同一时段只保留一条
+            foreach ($grid as $dayLabel => &$dayData) {
+                $seen = [];
+                $dayData['slots'] = array_values(array_filter($dayData['slots'], function($s) use (&$seen) {
+                    $key = $s['schedule_id'] . '|' . $s['start'] . '|' . $s['end'];
+                    if (isset($seen[$key])) return false;
+                    $seen[$key] = true;
+                    return true;
+                }));
+            }
+            unset($dayData);
 
             // 每天按时段排序
             foreach ($grid as $dayLabel => &$dayData) {
