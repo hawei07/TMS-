@@ -501,6 +501,46 @@ async function populateAssignedToSelect(selectedValue) {
 }
 
 // ==================== 我的资源 ====================
+
+function applyDatePreset(prefix) {
+    const sel = document.getElementById('filter-date-preset-' + prefix);
+    const startEl = document.getElementById('filter-created-start-' + prefix);
+    const endEl = document.getElementById('filter-created-end-' + prefix);
+    if (!sel || !startEl || !endEl) return;
+    const val = sel.value;
+    if (val === 'custom') {
+        startEl.style.display = '';
+        endEl.style.display = '';
+        return;
+    }
+    startEl.style.display = 'none';
+    endEl.style.display = 'none';
+    if (!val) { startEl.value = ''; endEl.value = ''; }
+    const today = new Date();
+    const fmt = d => d.toISOString().slice(0, 10);
+    let start, end;
+    switch (val) {
+        case 'today': start = end = today; break;
+        case 'yesterday': start = end = new Date(today - 86400000); break;
+        case '7days': start = new Date(today - 6 * 86400000); end = today; break;
+        case '30days': start = new Date(today - 29 * 86400000); end = today; break;
+        case 'thisMonth': start = new Date(today.getFullYear(), today.getMonth(), 1); end = today; break;
+        case 'lastMonth': start = new Date(today.getFullYear(), today.getMonth() - 1, 1);
+                         end = new Date(today.getFullYear(), today.getMonth(), 0); break;
+        default: startEl.value = ''; endEl.value = ''; return;
+    }
+    startEl.value = fmt(start);
+    if (end) endEl.value = fmt(end);
+    loadMyResources();
+}
+
+function onCustomDateChange(prefix) {
+    const sel = document.getElementById('filter-date-preset-' + prefix);
+    if (sel && sel.value === 'custom') {
+        loadMyResources();
+    }
+}
+
 async function loadMyResources() {
     const keyword = document.getElementById('search-my').value;
     const name = document.getElementById('filter-name-my').value;
