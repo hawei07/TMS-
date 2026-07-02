@@ -7116,12 +7116,6 @@ function renderCampusTree() {
     tree.innerHTML = html;
 }
 
-function escHtml(s) {
-    const d = document.createElement('div');
-    d.textContent = s;
-    return d.innerHTML;
-}
-
 function toggleCampusTree() {
     const dd = document.getElementById('cf-campus-dropdown');
     if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
@@ -7152,9 +7146,9 @@ function updateRegionCheckbox(ri) {
     regionCb.indeterminate = !allChecked && !noneChecked;
 }
 
-function toggleAllCampuses() {
+function toggleAllCashflowCampuses() {
     const allCb = document.getElementById('cf-campus-all');
-    const checked = allCb.checked;
+    if (!allCb) return;
     document.querySelectorAll('.cf-region-cb').forEach(c => { c.checked = checked; c.indeterminate = false; });
     document.querySelectorAll('.cf-campus-cb').forEach(c => { c.checked = checked; });
     updateCampusText();
@@ -7568,13 +7562,6 @@ function getMonday(offset) {
     const diff = day === 0 ? -6 : 1 - day;
     d.setDate(d.getDate() + diff + offset * 7);
     return d;
-}
-
-function formatDate(d) {
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return y + '-' + m + '-' + day;
 }
 
 function initScheduleCampusFilter() {

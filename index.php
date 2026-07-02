@@ -5906,7 +5906,7 @@ if (intval($countBt) === 0) {
                             </button>
                             <div class="cf-tree-dropdown" id="cf-campus-dropdown" style="display:none;">
                                 <div class="cf-tree-actions">
-                                    <label class="cf-tree-check"><input type="checkbox" id="cf-campus-all" onchange="toggleAllCampuses()"> 全选</label>
+                                    <label class="cf-tree-check"><input type="checkbox" id="cf-campus-all" onchange="toggleAllCashflowCampuses()"> 全选</label>
                                 </div>
                                 <div class="cf-tree-list" id="cf-campus-tree"></div>
                             </div>
