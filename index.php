@@ -3459,6 +3459,9 @@ $stmt->execute();
                         $dow = (int)date('N', $cur); // 1=周一
                         if ($cur >= $schStart && $cur <= $schEnd && in_array($dow, $weekdaysArr)) {
                             foreach ($timeSlots as $slotKey => $slotVal) {
+                        // 若 key 是星期编号（如 "4"="周四"），只匹配对应星期
+                        $slotWeekday = intval($slotKey);
+                        if ($slotWeekday >= 1 && $slotWeekday <= 7 && $slotWeekday != $dow) continue;
                                 $start = '';
                                 $end = '';
                                 if (is_array($slotVal) && isset($slotVal['start'])) {
@@ -3545,6 +3548,9 @@ $stmt->execute();
                     $dayIdx = $wd - 1;
                     $dayLabel = $days[$dayIdx];
                     foreach ($timeSlots as $slotKey => $slotVal) {
+                        // 若 key 是星期编号（如 "4"="周四"），只匹配对应星期
+                        $slotWeekday = intval($slotKey);
+                        if ($slotWeekday >= 1 && $slotWeekday <= 7 && $slotWeekday != $wd) continue;
                         $start = '';
                         $end = '';
                         if (is_array($slotVal) && isset($slotVal['start'])) {
