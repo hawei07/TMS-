@@ -3259,7 +3259,7 @@ span.flatpickr-weekday {
 .cf-card-label { font-size: 13px; opacity: 0.9; margin-bottom: 6px; }
 .cf-card-value { font-size: 28px; font-weight: 700; letter-spacing: 0.5px; }
 
-/* �ֽ���У�����ζ�ѡ */
+/* �ֽ���У�����ζ�ѡ */
 .cf-tree-select { position: relative; display: inline-block; }
 .cf-tree-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; background: #fff; cursor: pointer; font-size: 13px; min-width: 140px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .cf-tree-btn:hover { border-color: var(--color-primary); }
@@ -3373,5 +3373,191 @@ span.flatpickr-weekday {
     }
     .schedule-card-course {
         font-size: 11px;
+    }
+}
+
+/* ===== 课表优化新增样式 ===== */
+
+/* 今天列高亮 */
+.schedule-today-col {
+    background: #e6f7ff !important;
+}
+.schedule-table thead th.schedule-today-col {
+    background: #bae7ff !important;
+    color: #096dd9;
+}
+
+/* 冲突卡片 */
+.schedule-card-conflict {
+    border-left: 3px solid #e74c3c !important;
+    position: relative;
+}
+.schedule-conflict-badge {
+    position: absolute;
+    top: 2px;
+    right: 4px;
+    font-size: 10px;
+}
+.schedule-month-item.schedule-card-conflict {
+    background: #fff2f0 !important;
+    border: 1px solid #e74c3c !important;
+    color: #e74c3c;
+}
+
+/* ===== 月视图 ===== */
+.schedule-month-wrap {
+    margin-top: 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+    overflow: hidden;
+}
+.schedule-month-header {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    background: #fafafa;
+    border-bottom: 2px solid #e0e0e0;
+}
+.schedule-month-header span {
+    padding: 8px 4px;
+    text-align: center;
+    font-size: 13px;
+    font-weight: 600;
+    color: #333;
+}
+.schedule-month-weekend {
+    color: #e74c3c !important;
+}
+.schedule-month-grid {
+    display: grid;
+    grid-template-columns: repeat(7, 1fr);
+    min-height: 400px;
+}
+.schedule-month-row {
+    display: contents;
+}
+.schedule-month-cell {
+    border: 1px solid #f0f0f0;
+    min-height: 80px;
+    padding: 4px;
+    vertical-align: top;
+    overflow: hidden;
+}
+.schedule-month-cell-empty {
+    background: #fafafa;
+    color: #ccc;
+}
+.schedule-month-today {
+    background: #e6f7ff;
+}
+.schedule-month-today .schedule-month-day {
+    background: #1890ff;
+    color: #fff;
+    border-radius: 50%;
+    width: 22px;
+    height: 22px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.schedule-month-day {
+    font-size: 12px;
+    font-weight: 600;
+    color: #333;
+    margin-bottom: 2px;
+    padding: 2px 4px;
+}
+.schedule-month-weekend .schedule-month-day {
+    color: #e74c3c;
+}
+.schedule-month-today.schedule-month-weekend .schedule-month-day {
+    color: #fff;
+}
+.schedule-month-item {
+    font-size: 10px;
+    padding: 2px 4px;
+    margin-bottom: 2px;
+    border-radius: 3px;
+    cursor: pointer;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    background: #e8f4fd;
+    border-left: 2px solid #1890ff;
+    line-height: 1.5;
+}
+.schedule-month-item:hover {
+    filter: brightness(0.95);
+}
+
+/* 周/月切换按钮 */
+.schedule-view-toggle {
+    transition: background 0.2s, color 0.2s;
+}
+
+/* ===== 打印样式 ===== */
+@media print {
+    body * {
+        visibility: hidden;
+    }
+    #panel-schedule-view, #panel-schedule-view * {
+        visibility: visible;
+    }
+    #panel-schedule-view {
+        position: absolute;
+        left: 0;
+        top: 0;
+        width: 100%;
+    }
+    .sidebar, .toolbar, .panel-header, .schedule-view-toggle,
+    #schedule-month-view .schedule-month-header,
+    .schedule-conflict-badge, button {
+        display: none !important;
+    }
+    .schedule-table-wrap {
+        overflow-x: visible;
+        border: none;
+    }
+    .schedule-table {
+        border: 1px solid #000;
+        font-size: 10px;
+    }
+    .schedule-table thead th, .schedule-table tbody td {
+        border: 1px solid #000;
+        color: #000;
+        background: #fff !important;
+    }
+    .schedule-card {
+        border-left: 2px solid #000 !important;
+        background: #fff !important;
+        color: #000 !important;
+        box-shadow: none;
+    }
+    .schedule-card-course {
+        color: #000 !important;
+    }
+    .schedule-card-info {
+        color: #333 !important;
+    }
+    .schedule-today-col {
+        background: #fff !important;
+    }
+    .schedule-table thead th.schedule-today-col {
+        background: #fff !important;
+        color: #000 !important;
+    }
+    .schedule-month-wrap {
+        border: 1px solid #000;
+    }
+    .schedule-month-cell {
+        border: 1px solid #ddd;
+    }
+    .schedule-month-item {
+        background: #f5f5f5 !important;
+        border-left: 2px solid #000 !important;
+        color: #000 !important;
+    }
+    .schedule-month-today .schedule-month-day {
+        background: #000;
+        color: #fff;
     }
 }

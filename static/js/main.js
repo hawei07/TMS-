@@ -92,7 +92,7 @@ function refreshPanel(panelId) {
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
-        case 'panel-schedule-view': initScheduleCampusFilter(); loadScheduleView(); break;
+        case 'panel-schedule-view': scheduleWeekOffset = 0; initScheduleCampusFilter(); loadScheduleView(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
     }
 }
@@ -7587,89 +7587,214 @@ function initScheduleCampusFilter() {
     });
 }
 
+function initScheduleTeacherFilter() {
+    // Teacher list comes from API response now; populated in loadScheduleView
+}
+
 function navigateWeek(dir) {
     scheduleWeekOffset += dir;
     loadScheduleView();
 }
 
+function navigateToday() {
+    scheduleWeekOffset = 0;
+    loadScheduleView();
+}
+
+let scheduleViewType = 'week';
+function switchScheduleView(type) {
+    scheduleViewType = type;
+    scheduleWeekOffset = 0;
+    document.getElementById('view-week-btn').style.background = type === 'week' ? '#1890ff' : '#fff';
+    document.getElementById('view-week-btn').style.color = type === 'week' ? '#fff' : '#333';
+    document.getElementById('view-month-btn').style.background = type === 'month' ? '#1890ff' : '#fff';
+    document.getElementById('view-month-btn').style.color = type === 'month' ? '#fff' : '#333';
+    document.getElementById('schedule-week-view').style.display = type === 'week' ? '' : 'none';
+    document.getElementById('schedule-month-view').style.display = type === 'month' ? '' : 'none';
+    loadScheduleView();
+}
+
 function loadScheduleView() {
     const campus = document.getElementById('filter-schedule-campus').value;
-    const monday = getMonday(scheduleWeekOffset);
-    const weekStart = formatDate(monday);
-    const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    const weekEnd = formatDate(sunday);
+    const teacher = document.getElementById('filter-schedule-teacher') ? document.getElementById('filter-schedule-teacher').value : '';
+    const classroom = document.getElementById('filter-schedule-classroom') ? document.getElementById('filter-schedule-classroom').value : '';
 
-    document.getElementById('schedule-week-range').textContent = weekStart + ' ~ ' + weekEnd;
+    let weekStart;
+    if (scheduleViewType === 'month') {
+        const now = new Date();
+        now.setMonth(now.getMonth() + scheduleWeekOffset);
+        weekStart = formatDate(new Date(now.getFullYear(), now.getMonth(), 1));
+    } else {
+        const monday = getMonday(scheduleWeekOffset);
+        weekStart = formatDate(monday);
+    }
 
-    let url = 'get_schedule_view&week_start=' + weekStart;
+    let url = 'get_schedule_view&view_type=' + scheduleViewType + '&week_start=' + weekStart;
     if (campus) url += '&campus=' + encodeURIComponent(campus);
+    if (teacher) url += '&teacher=' + encodeURIComponent(teacher);
+    if (classroom) url += '&classroom=' + encodeURIComponent(classroom);
 
     api(url, null, 'GET').then(res => {
         if (res.error) { alert(res.error); return; }
         const d = res.data;
-        const grid = d.grid;
-        const allSlots = d.all_slots;
-        const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
-        const colors = [
-            { bg: '#e8f4fd', border: '#1890ff', text: '#096dd9' },
-            { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
-            { bg: '#fff7e6', border: '#fa8c16', text: '#d46b08' },
-            { bg: '#f9f0ff', border: '#722ed1', text: '#531dab' },
-            { bg: '#fff0f6', border: '#eb2f96', text: '#c41d7f' },
-        ];
-        const courseColorMap = {};
-        let colorIdx = 0;
-
-        // Build thead
-        let theadHTML = '<tr>';
-        theadHTML += '<th width="90">时间段</th>';
-        days.forEach((d, i) => {
-            const dateParts = grid[d].date.split('-');
-            theadHTML += '<th width="' + (i >= 5 ? '100' : '120') + '">' + d + '<br><small style="font-weight:400;color:#888;">' + (parseInt(dateParts[1]) + '/' + parseInt(dateParts[2])) + '</small></th>';
-        });
-        theadHTML += '</tr>';
-        document.getElementById('schedule-thead').innerHTML = theadHTML;
-
-        // Build tbody
-        let tbodyHTML = '';
-        if (allSlots.length === 0) {
-            tbodyHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:60px;">本周暂无排课数据</td></tr>';
-        } else {
-            allSlots.forEach(slotKey => {
-                const [start, end] = slotKey.split('-');
-                tbodyHTML += '<tr>';
-                tbodyHTML += '<td class="schedule-time-cell">' + start + '<br>至<br>' + end + '</td>';
-                days.forEach(d => {
-                    const cellSlots = (grid[d].slots || []).filter(s => s.start === start && s.end === end);
-                    tbodyHTML += '<td>';
-                    if (cellSlots.length > 0) {
-                        cellSlots.forEach(s => {
-                            if (!courseColorMap[s.course_name]) {
-                                courseColorMap[s.course_name] = colors[colorIdx % colors.length];
-                                colorIdx++;
-                            }
-                            const clr = courseColorMap[s.course_name];
-                            tbodyHTML += '<div class="schedule-card" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';" onclick="showScheduleDetail(' + JSON.stringify(s).replace(/"/g, '&quot;') + ')">';
-                            tbodyHTML += '<div class="schedule-card-course" style="color:' + clr.text + '">' + escHtml(s.course_name) + '</div>';
-                            tbodyHTML += '<div class="schedule-card-class">' + escHtml(s.class_name) + '</div>';
-                            if (s.teacher) tbodyHTML += '<div class="schedule-card-info">老师：' + escHtml(s.teacher) + '</div>';
-                            if (s.classroom) tbodyHTML += '<div class="schedule-card-info">教室：' + escHtml(s.classroom) + '</div>';
-                            tbodyHTML += '</div>';
-                        });
-                    }
-                    tbodyHTML += '</td>';
+        // Populate teacher & classroom filters from API response
+        if (d.teachers && document.getElementById('filter-schedule-teacher')) {
+            const tSel = document.getElementById('filter-schedule-teacher');
+            if (tSel.dataset.loaded !== '1') {
+                tSel.innerHTML = '<option value="">全部教师</option>';
+                d.teachers.forEach(t => {
+                    const opt = document.createElement('option');
+                    opt.value = t; opt.textContent = t;
+                    tSel.appendChild(opt);
                 });
-                tbodyHTML += '</tr>';
-            });
+                tSel.dataset.loaded = '1';
+            }
         }
-        document.getElementById('schedule-tbody').innerHTML = tbodyHTML;
+        if (d.classrooms && document.getElementById('filter-schedule-classroom')) {
+            const cSel = document.getElementById('filter-schedule-classroom');
+            if (cSel.dataset.loaded !== '1') {
+                cSel.innerHTML = '<option value="">全部教室</option>';
+                d.classrooms.forEach(c => {
+                    const opt = document.createElement('option');
+                    opt.value = c; opt.textContent = c;
+                    cSel.appendChild(opt);
+                });
+                cSel.dataset.loaded = '1';
+            }
+        }
+
+        document.getElementById('schedule-week-range').textContent = d.week_start + ' ~ ' + d.week_end;
+
+        if (d.view_type === 'month') {
+            renderMonthView(d);
+        } else {
+            renderWeekView(d);
+        }
     }).catch(e => {
         console.error('加载课表失败:', e);
     });
 }
 
+// ===== 周视图渲染 =====
+function renderWeekView(d) {
+    const grid = d.grid;
+    const allSlots = d.all_slots;
+    const today = d.today;
+    const conflictKeys = new Set(d.conflicts || []);
+    const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+
+    const colors = [
+        { bg: '#e8f4fd', border: '#1890ff', text: '#096dd9' },
+        { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
+        { bg: '#fff7e6', border: '#fa8c16', text: '#d46b08' },
+        { bg: '#f9f0ff', border: '#722ed1', text: '#531dab' },
+        { bg: '#fff0f6', border: '#eb2f96', text: '#c41d7f' },
+    ];
+    const courseColorMap = {};
+    let colorIdx = 0;
+
+    // Build thead
+    let theadHTML = '<tr>';
+    theadHTML += '<th width="90">时间段</th>';
+    days.forEach((dayLabel, i) => {
+        const date = grid[dayLabel].date;
+        const isToday = date === today;
+        const dateParts = date.split('-');
+        theadHTML += '<th width="' + (i >= 5 ? '100' : '120') + '" class="' + (isToday ? 'schedule-today-col' : '') + '">' + dayLabel + '<br><small style="font-weight:400;color:#888;">' + (parseInt(dateParts[1]) + '/' + parseInt(dateParts[2])) + '</small></th>';
+    });
+    theadHTML += '</tr>';
+    document.getElementById('schedule-thead').innerHTML = theadHTML;
+
+    // Build tbody
+    let tbodyHTML = '';
+    if (allSlots.length === 0) {
+        tbodyHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:60px;">本周暂无排课数据</td></tr>';
+    } else {
+        allSlots.forEach(slotKey => {
+            const [start, end] = slotKey.split('-');
+            tbodyHTML += '<tr>';
+            tbodyHTML += '<td class="schedule-time-cell">' + start + '<br>至<br>' + end + '</td>';
+            days.forEach(dayLabel => {
+                const cellSlots = (grid[dayLabel].slots || []).filter(s => s.start === start && s.end === end);
+                const date = grid[dayLabel].date;
+                const isToday = date === today;
+                tbodyHTML += '<td class="' + (isToday ? 'schedule-today-col' : '') + '">';
+                if (cellSlots.length > 0) {
+                    cellSlots.forEach(s => {
+                        if (!courseColorMap[s.course_name]) {
+                            courseColorMap[s.course_name] = colors[colorIdx % colors.length];
+                            colorIdx++;
+                        }
+                        const clr = courseColorMap[s.course_name];
+                        const conflictKey = dayLabel + '|' + s.classroom + '|' + s.start + '-' + s.end;
+                        const isConflict = conflictKeys.has(conflictKey);
+                        let infoStr = '';
+                        if (s.teacher) infoStr += '老师：' + escHtml(s.teacher) + '<br>';
+                        if (s.classroom) infoStr += '教室：' + escHtml(s.classroom) + '<br>';
+                        if (s.student_count > 0) infoStr += '学员：' + s.student_count + '人<br>';
+
+                        tbodyHTML += '<div class="schedule-card' + (isConflict ? ' schedule-card-conflict' : '') + '" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')">';
+                        if (isConflict) tbodyHTML += '<span class="schedule-conflict-badge" title="教室冲突">⚠️</span>';
+                        tbodyHTML += '<div class="schedule-card-course" style="color:' + clr.text + '">' + escHtml(s.course_name) + '</div>';
+                        tbodyHTML += '<div class="schedule-card-class">' + escHtml(s.class_name) + '</div>';
+                        tbodyHTML += '<div class="schedule-card-info">' + infoStr + '</div>';
+                        tbodyHTML += '</div>';
+                    });
+                }
+                tbodyHTML += '</td>';
+            });
+            tbodyHTML += '</tr>';
+        });
+    }
+    document.getElementById('schedule-tbody').innerHTML = tbodyHTML;
+}
+
+// ===== 月视图渲染 =====
+function renderMonthView(d) {
+    const monthGrid = d.month_grid;
+    const dateSlots = d.date_slots || {};
+    const today = d.today;
+    const conflictKeys = new Set(d.conflicts || []);
+
+    const colors = [
+        { bg: '#e8f4fd', border: '#1890ff', text: '#096dd9' },
+        { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
+        { bg: '#fff7e6', border: '#fa8c16', text: '#d46b08' },
+        { bg: '#f9f0ff', border: '#722ed1', text: '#531dab' },
+        { bg: '#fff0f6', border: '#eb2f96', text: '#c41d7f' },
+    ];
+
+    let html = '';
+    for (let i = 0; i < monthGrid.length; i++) {
+        if (i % 7 === 0) html += '<div class="schedule-month-row">';
+        const cell = monthGrid[i];
+        if (cell === null) {
+            html += '<div class="schedule-month-cell schedule-month-cell-empty"></div>';
+        } else {
+            const isToday = cell.date === today;
+            const isWeekend = cell.dayOfWeek >= 6;
+            const slots = dateSlots[cell.date] || [];
+            html += '<div class="schedule-month-cell' + (isToday ? ' schedule-month-today' : '') + (isWeekend ? ' schedule-month-weekend' : '') + '">';
+            html += '<div class="schedule-month-day">' + cell.day + '</div>';
+            if (slots.length > 0) {
+                slots.forEach(s => {
+                    const conflictKey = cell.date + '|' + s.classroom + '|' + s.start + '-' + s.end;
+                    const isConflict = conflictKeys.has(conflictKey);
+                    html += '<div class="schedule-month-item' + (isConflict ? ' schedule-card-conflict' : '') + '" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')" title="' + escHtml(s.course_name + ' ' + s.start + '-' + s.end) + '">';
+                    if (isConflict) html += '⚠️';
+                    html += escHtml(s.course_name.substring(0, 8)) + (s.course_name.length > 8 ? '..' : '');
+                    html += '</div>';
+                });
+            }
+            html += '</div>';
+        }
+        if (i % 7 === 6) html += '</div>';
+    }
+    document.getElementById('schedule-month-grid').innerHTML = html;
+}
+
+// ===== 排课详情弹窗（增强版） =====
 function showScheduleDetail(s) {
     let html = '<div style="line-height:2;">';
     html += '<p><strong>课程：</strong>' + escHtml(s.course_name) + '</p>';
@@ -7680,13 +7805,20 @@ function showScheduleDetail(s) {
     html += '<p><strong>时间段：</strong>' + s.start + ' - ' + s.end + '</p>';
     html += '</div>';
 
+    let actions = '<div style="display:flex;gap:8px;margin-top:16px;justify-content:flex-end;">';
+    if (s.class_id) {
+        actions += '<button class="btn btn-sm" onclick="this.closest(\'.modal-overlay\').remove(); switchPanel(\'panel-classes\');" style="padding:6px 14px;">查看班级</button>';
+    }
+    actions += '<button class="btn btn-primary btn-sm" onclick="this.closest(\'.modal-overlay\').remove()" style="padding:6px 14px;">关闭</button>';
+    actions += '</div>';
+
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
     overlay.innerHTML = '<div class="modal-content" style="background:#fff;border-radius:8px;padding:24px;max-width:420px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">'
         + '<h3 style="margin:0 0 16px;">排课详情</h3>'
         + html
-        + '<div style="text-align:right;margin-top:16px;"><button class="btn btn-primary" onclick="this.closest(\'.modal-overlay\').remove()">关闭</button></div>'
+        + actions
         + '</div>';
     document.body.appendChild(overlay);
     overlay.addEventListener('click', function(e) {
@@ -7694,4 +7826,15 @@ function showScheduleDetail(s) {
     });
 }
 
+// ===== 键盘导航 =====
+document.addEventListener('keydown', function(e) {
+    const panel = document.getElementById('panel-schedule-view');
+    if (!panel || panel.style.display === 'none') return;
+    if (e.target.tagName === 'INPUT' || e.target.tagName === 'SELECT' || e.target.tagName === 'TEXTAREA') return;
+    if (e.key === 'ArrowLeft') { e.preventDefault(); navigateWeek(-1); }
+    if (e.key === 'ArrowRight') { e.preventDefault(); navigateWeek(1); }
+    if (e.key === 't' || e.key === 'T') { e.preventDefault(); navigateToday(); }
+});
+
 function escHtml(s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;'); }
+function escAttr(s) { return String(s).replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/'/g, '&#39;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }

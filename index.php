@@ -3293,20 +3293,44 @@ $stmt->execute();
         case 'get_schedule_view':
             $campus = trim($_GET['campus'] ?? '');
             $weekStart = trim($_GET['week_start'] ?? '');
+            $viewType = trim($_GET['view_type'] ?? 'week'); // week | month
+            $teacher = trim($_GET['teacher'] ?? '');
+            $classroom = trim($_GET['classroom'] ?? '');
             if (!$weekStart) {
                 $weekStart = date('Y-m-d', strtotime('monday this week'));
             }
-            $weekEnd = date('Y-m-d', strtotime($weekStart . ' +6 days'));
 
-            $sql = "SELECT s.*, c.name AS class_name, c.course_id, c.campus AS class_campus, co.name AS course_name
+            $sql = "SELECT s.*, c.name AS class_name, c.id AS class_id, c.course_id, c.campus AS class_campus, co.name AS course_name,
+                    (SELECT COUNT(*) FROM class_students cs WHERE cs.class_id = c.id AND cs.left_at = '') AS student_count
                     FROM schedules s
                     JOIN classes c ON s.class_id = c.id
                     JOIN courses co ON c.course_id = co.id
-                    WHERE s.start_date <= :we AND s.end_date >= :ws";
-            $params = [':ws' => $weekStart, ':we' => $weekEnd];
+                    WHERE 1=1";
+            $params = [];
+
+            if ($viewType === 'month') {
+                $monthStart = date('Y-m-01', strtotime($weekStart));
+                $monthEnd = date('Y-m-t', strtotime($weekStart));
+                $sql .= " AND s.start_date <= :me AND s.end_date >= :ms";
+                $params[':ms'] = $monthStart;
+                $params[':me'] = $monthEnd;
+            } else {
+                $weekEnd = date('Y-m-d', strtotime($weekStart . ' +6 days'));
+                $sql .= " AND s.start_date <= :we AND s.end_date >= :ws";
+                $params[':ws'] = $weekStart;
+                $params[':we'] = $weekEnd;
+            }
             if ($campus) {
                 $sql .= " AND c.campus = :campus";
                 $params[':campus'] = $campus;
+            }
+            if ($teacher) {
+                $sql .= " AND s.teacher = :teacher";
+                $params[':teacher'] = $teacher;
+            }
+            if ($classroom) {
+                $sql .= " AND s.classroom = :classroom";
+                $params[':classroom'] = $classroom;
             }
             $sql .= " ORDER BY c.campus, co.name, s.id";
             $stmt = $db->prepare($sql);
@@ -3317,10 +3341,113 @@ $stmt->execute();
                 $schedules[] = $row;
             }
 
+            // 教师列表和教室列表（供前端筛选下拉）
+            $teachersStmt = $db->query("SELECT DISTINCT s.teacher FROM schedules s JOIN classes c ON s.class_id = c.id WHERE s.teacher != '' ORDER BY s.teacher");
+            $allTeachers = [];
+            while ($t = $teachersStmt->fetch(PDO::FETCH_ASSOC)) { $allTeachers[] = $t['teacher']; }
+            $classroomsStmt = $db->query("SELECT DISTINCT s.classroom FROM schedules s JOIN classes c ON s.class_id = c.id WHERE s.classroom != '' ORDER BY s.classroom");
+            $allClassrooms = [];
+            while ($cr = $classroomsStmt->fetch(PDO::FETCH_ASSOC)) { $allClassrooms[] = $cr['classroom']; }
+
+            if ($viewType === 'month') {
+                // 月视图：按日期分组
+                $monthStart = date('Y-m-01', strtotime($weekStart));
+                $monthEnd = date('Y-m-t', strtotime($weekStart));
+                $firstDayOfWeek = (int)date('N', strtotime($monthStart));
+                $totalDays = (int)date('t', strtotime($monthStart));
+
+                // 构建月视图网格（6周 x 7天），前面补空白
+                $monthGrid = [];
+                $dayIdx = 0;
+                $monthDays = [];
+
+                // 填充前面的空白格
+                for ($i = 1; $i < $firstDayOfWeek; $i++) {
+                    $monthDays[] = null;
+                }
+
+                // 填充当月日期
+                for ($d = 1; $d <= $totalDays; $d++) {
+                    $dateStr = date('Y-m-d', strtotime($monthStart . ' +' . ($d - 1) . ' days'));
+                    $monthDays[] = ['date' => $dateStr, 'day' => $d, 'dayOfWeek' => (int)date('N', strtotime($dateStr))];
+                }
+
+                // 收集各日期下的排课
+                $dateSlots = [];
+                foreach ($schedules as $sch) {
+                    $weekdaysArr = array_filter(array_map('intval', explode(',', $sch['weekdays'])));
+                    $timeSlots = json_decode($sch['time_slots'] ?? '{}', true) ?: [];
+                    $schStart = strtotime($sch['start_date']);
+                    $schEnd = strtotime($sch['end_date']);
+                    $cur = strtotime($monthStart);
+                    $endTs = strtotime($monthEnd);
+                    while ($cur <= $endTs) {
+                        $curDate = date('Y-m-d', $cur);
+                        $dow = (int)date('N', $cur); // 1=周一
+                        if ($cur >= $schStart && $cur <= $schEnd && in_array($dow, $weekdaysArr)) {
+                            foreach ($timeSlots as $slotKey => $slotVal) {
+                                $start = '';
+                                $end = '';
+                                if (is_array($slotVal) && isset($slotVal['start'])) {
+                                    $start = $slotVal['start'];
+                                    $end = $slotVal['end'] ?? '';
+                                } elseif (is_string($slotVal) && strpos($slotVal, '-') !== false) {
+                                    list($start, $end) = explode('-', $slotVal, 2);
+                                }
+                                if (!isset($dateSlots[$curDate])) $dateSlots[$curDate] = [];
+                                $dateSlots[$curDate][] = [
+                                    'schedule_id' => $sch['id'],
+                                    'class_name' => $sch['class_name'],
+                                    'course_name' => $sch['course_name'],
+                                    'teacher' => $sch['teacher'],
+                                    'classroom' => $sch['classroom'],
+                                    'campus' => $sch['class_campus'],
+                                    'start' => trim($start),
+                                    'end' => trim($end),
+                                    'course_id' => $sch['course_id'],
+                                    'student_count' => intval($sch['student_count']),
+                                ];
+                            }
+                        }
+                        $cur = strtotime('+1 day', $cur);
+                    }
+                }
+
+                // 教室冲突检测
+                $conflicts = [];
+                foreach ($dateSlots as $date => $slots) {
+                    $count = count($slots);
+                    for ($i = 0; $i < $count; $i++) {
+                        for ($j = $i + 1; $j < $count; $j++) {
+                            if ($slots[$i]['classroom'] && $slots[$i]['classroom'] === $slots[$j]['classroom']
+                                && $slots[$i]['start'] === $slots[$j]['start'] && $slots[$i]['end'] === $slots[$j]['end']) {
+                                $conflicts[$date . '|' . $slots[$i]['classroom'] . '|' . $slots[$i]['start'] . '-' . $slots[$i]['end']] = true;
+                            }
+                        }
+                    }
+                }
+
+                json([
+                    'data' => [
+                        'view_type' => 'month',
+                        'month_grid' => $monthDays,
+                        'date_slots' => $dateSlots,
+                        'conflicts' => array_keys($conflicts),
+                        'week_start' => $monthStart,
+                        'week_end' => $monthEnd,
+                        'today' => date('Y-m-d'),
+                        'teachers' => $allTeachers,
+                        'classrooms' => $allClassrooms,
+                    ]
+                ]);
+                break;
+            }
+
+            // 周视图
+            $weekEnd = date('Y-m-d', strtotime($weekStart . ' +6 days'));
             $days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
             $grid = [];
             foreach ($days as $idx => $label) {
-                $dayNum = $idx + 1;
                 $dayDate = date('Y-m-d', strtotime($weekStart . ' +' . $idx . ' days'));
                 $grid[$label] = ['date' => $dayDate, 'slots' => []];
             }
@@ -3343,6 +3470,7 @@ $stmt->execute();
                         }
                         $grid[$dayLabel]['slots'][] = [
                             'schedule_id' => $sch['id'],
+                            'class_id' => $sch['class_id'],
                             'class_name' => $sch['class_name'],
                             'course_name' => $sch['course_name'],
                             'teacher' => $sch['teacher'],
@@ -3351,6 +3479,7 @@ $stmt->execute();
                             'start' => trim($start),
                             'end' => trim($end),
                             'course_id' => $sch['course_id'],
+                            'student_count' => intval($sch['student_count']),
                         ];
                     }
                 }
@@ -3376,12 +3505,33 @@ $stmt->execute();
                 return strcmp(explode('-', $a)[0], explode('-', $b)[0]);
             });
 
+            // 教室冲突检测
+            $conflicts = [];
+            foreach ($grid as $dayLabel => $dayData) {
+                foreach ($dayData['slots'] as $s) {
+                    $conflictKey = $dayLabel . '|' . $s['classroom'] . '|' . $s['start'] . '-' . $s['end'];
+                    if (!isset($conflicts[$conflictKey])) {
+                        $conflicts[$conflictKey] = 0;
+                    }
+                    $conflicts[$conflictKey]++;
+                }
+            }
+            $conflictKeys = [];
+            foreach ($conflicts as $k => $cnt) {
+                if ($cnt > 1) $conflictKeys[] = $k;
+            }
+
             json([
                 'data' => [
+                    'view_type' => 'week',
                     'grid' => $grid,
                     'all_slots' => $allSlots,
                     'week_start' => $weekStart,
                     'week_end' => $weekEnd,
+                    'today' => date('Y-m-d'),
+                    'conflicts' => $conflictKeys,
+                    'teachers' => $allTeachers,
+                    'classrooms' => $allClassrooms,
                 ]
             ]);
             break;
@@ -5537,16 +5687,35 @@ if (intval($countBt) === 0) {
                         <select id="filter-schedule-campus" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
                             <option value="">全部校区</option>
                         </select>
-                        <button class="btn btn-sm" onclick="navigateWeek(-1)" style="padding:4px 10px;" title="上一周">&lt; 上一周</button>
-                        <button class="btn btn-sm" onclick="navigateWeek(1)" style="padding:4px 10px;" title="下一周">下一周 &gt;</button>
-                        <span id="schedule-week-range" style="font-size:14px;font-weight:600;color:#333;margin-left:8px;"></span>
+                        <label style="font-size:13px;white-space:nowrap;">教师：</label>
+                        <select id="filter-schedule-teacher" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                            <option value="">全部教师</option>
+                        </select>
+                        <label style="font-size:13px;white-space:nowrap;">教室：</label>
+                        <select id="filter-schedule-classroom" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                            <option value="">全部教室</option>
+                        </select>
+                        <button class="btn btn-sm" onclick="navigateWeek(-1)" style="padding:4px 10px;" title="上一周/月">&lt;</button>
+                        <span id="schedule-week-range" style="font-size:14px;font-weight:600;color:#333;margin:0 4px;"></span>
+                        <button class="btn btn-sm" onclick="navigateWeek(1)" style="padding:4px 10px;" title="下一周/月">&gt;</button>
+                        <button class="btn btn-sm" onclick="navigateToday()" style="padding:4px 10px;background:#1890ff;color:#fff;border:none;border-radius:4px;" title="回到今天">📍 今天</button>
+                        <div style="display:flex;border:1px solid #ddd;border-radius:4px;overflow:hidden;margin-left:8px;">
+                            <button id="view-week-btn" class="schedule-view-toggle active" onclick="switchScheduleView('week')" style="padding:4px 12px;border:none;cursor:pointer;font-size:13px;background:#1890ff;color:#fff;">周</button>
+                            <button id="view-month-btn" class="schedule-view-toggle" onclick="switchScheduleView('month')" style="padding:4px 12px;border:none;cursor:pointer;font-size:13px;background:#fff;color:#333;">月</button>
+                        </div>
                     </div>
                 </div>
-                <div class="schedule-table-wrap">
+                <div class="schedule-table-wrap" id="schedule-week-view">
                     <table class="schedule-table" id="schedule-table">
                         <thead id="schedule-thead"></thead>
                         <tbody id="schedule-tbody"></tbody>
                     </table>
+                </div>
+                <div class="schedule-month-wrap" id="schedule-month-view" style="display:none;">
+                    <div class="schedule-month-header">
+                        <span>周一</span><span>周二</span><span>周三</span><span>周四</span><span>周五</span><span class="schedule-month-weekend">周六</span><span class="schedule-month-weekend">周日</span>
+                    </div>
+                    <div class="schedule-month-grid" id="schedule-month-grid"></div>
                 </div>
             </section>
 
