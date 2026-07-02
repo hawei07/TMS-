@@ -4209,45 +4209,50 @@ $stmt->execute();
             // 校区排名：仅当未筛选单个校区时（campus为空），按校区汇总排名
             $rankings = [];
             if ($campus === '') {
-                $rankIncomeSql = "SELECT o.campus, o.order_type, COALESCE(SUM(o.actual_price), 0) AS amount
+                // 各校区收入汇总（不分订单类型）
+                $rankIncomeSql = "SELECT o.campus, COALESCE(SUM(o.actual_price), 0) AS amount
                     FROM orders o
                     WHERE o.pay_status = '已支付' AND o.is_voided = '否'
                       AND o.paid_at >= :from AND o.paid_at <= :to2
-                    GROUP BY o.campus, o.order_type
-                    ORDER BY o.campus, o.order_type";
+                    GROUP BY o.campus
+                    ORDER BY amount DESC";
                 $stmt = $db->prepare($rankIncomeSql);
                 $stmt->bindValue(':from', $from . ' 00:00:00');
                 $stmt->bindValue(':to2', $to . ' 23:59:59');
                 $stmt->execute();
                 $rankRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
-                // 按校区汇总总收入用于排序
-                $campusTotal = [];
+                // 各校区支出汇总
+                $rankExpenseSql = "SELECT rr.campus, COALESCE(SUM(rr.actual_refund), 0) AS amount
+                    FROM refund_records rr
+                    WHERE rr.status = '已退费'
+                      AND rr.updated_at >= :from_e AND rr.updated_at <= :to_e
+                    GROUP BY rr.campus";
+                $stmt = $db->prepare($rankExpenseSql);
+                $stmt->bindValue(':from_e', $from . ' 00:00:00');
+                $stmt->bindValue(':to_e', $to . ' 23:59:59');
+                $stmt->execute();
+                $expenseRankRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+                $expenseMap = [];
+                foreach ($expenseRankRows as $er) {
+                    $c = $er['campus'] ?: '未指定校区';
+                    $expenseMap[$c] = round(floatval($er['amount']), 2);
+                }
+
                 foreach ($rankRows as $r) {
                     $c = $r['campus'] ?: '未指定校区';
-                    if (!isset($campusTotal[$c])) $campusTotal[$c] = 0;
-                    $campusTotal[$c] += floatval($r['amount']);
-                }
-                arsort($campusTotal);
-                $campusOrder = array_keys($campusTotal);
-                $orderMap = array_flip($campusOrder);
-
-                $rankings = [];
-                foreach ($rankRows as $r) {
+                    $income = round(floatval($r['amount']), 2);
+                    $expense = $expenseMap[$c] ?? 0;
                     $rankings[] = [
-                        'campus' => $r['campus'] ?: '未指定校区',
-                        'order_type' => $r['order_type'] ?: '其他',
-                        'income' => round(floatval($r['amount']), 2),
+                        'campus' => $c,
+                        'income' => $income,
+                        'expense' => $expense,
+                        'net' => round($income - $expense, 2),
                     ];
                 }
-                usort($rankings, function($a, $b) use ($orderMap) {
-                    $cmp = ($orderMap[$a['campus']] ?? 999) - ($orderMap[$b['campus']] ?? 999);
-                    if ($cmp !== 0) return $cmp;
-                    return strcmp($a['order_type'], $b['order_type']);
-                });
             }
-
-            json([
+json([
                 'data' => $rows,
                 'income_by_type' => $incomeByTypeRows,
                 'rankings' => $rankings,
