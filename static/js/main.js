@@ -7570,11 +7570,13 @@ function initScheduleCampusFilter() {
         if (!sel) return;
         sel.innerHTML = '<option value="">全部校区</option>';
         const orgs = (res.data && res.data.flat) ? res.data.flat : [];
+        window._campusMap = {}; // name → id 映射
         orgs.filter(o => o.type === '校区').forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.name;
             opt.textContent = o.name;
             sel.appendChild(opt);
+            window._campusMap[o.name] = String(o.id);
         });
     });
 }
@@ -7844,11 +7846,16 @@ let pendingCells = {}; // key: "周一|10:40-10:41" -> { course, teacher, classr
 
 function initDragResources() {
     const campus = document.getElementById('filter-schedule-campus').value;
-    // 课程：全量加载后按 campus_permission 前端过滤
+    const campusId = campus ? (window._campusMap && window._campusMap[campus] ? window._campusMap[campus] : null) : null;
+    // 课程：全量加载后按 campus_permission（ID 逗号分隔）前端过滤
     api('list_courses').then(res => {
         const list = document.getElementById('drag-course-list');
         if (!list) return;
-        const courses = (res.data || []).filter(c => !campus || !c.campus_permission || c.campus_permission.indexOf(campus) !== -1);
+        const courses = (res.data || []).filter(c => {
+            if (!campus) return true;                       // 无校区筛选 → 全显示
+            if (!c.campus_permission) return false;          // 未设置适用校区 → 不显示
+            return c.campus_permission.split(',').includes(campusId);  // ID 匹配
+        });
         list.innerHTML = courses.length ? courses.map(c =>
             '<div class="drag-item" draggable="true" data-type="course" data-id="' + c.id + '" data-name="' + escHtml(c.name) + '" data-campus="' + escHtml(c.campus_permission || '') + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(c.name) + '</div>'
         ).join('') : '<div class="resource-empty">该校区暂无可用课程</div>';
