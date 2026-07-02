@@ -72,8 +72,8 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 - **系统名称**：TMS管理系统
 - **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
-- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 3033 行）+ CSS3（CSS Variables 设计令牌体系，约 1305 行）
-- **架构模式**：单体 PHP 单文件应用（`index.php`，约 3200+ 行），前端内嵌于同一文件，API 通过 `?action=` 路由分发，所有 API 统一返回 JSON
+- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 7550 行）+ CSS3（CSS Variables 设计令牌体系，约 3280 行）
+- **架构模式**：单体 PHP 单文件应用（`index.php`，约 6700 行），前端内嵌于同一文件，API 通过 `?action=` 路由分发，所有 API 统一返回 JSON
 
 ---
 
@@ -103,7 +103,7 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 |------|----------|
 | PHP 内嵌 HTML | 单文件部署，`php -S` 零配置启动 |
 | MySQL 8.4 (PDO) | 关系型数据库，支持并发读写，外键约束，UTF-8 字符集 |
-| Vanilla JS | 无框架依赖，约 3033 行完成完整 SPA 交互 |
+| Vanilla JS | 无框架依赖，约 7550 行完成完整 SPA 交互 |
 | CSS Variables | 统一设计令牌（`--color-primary`/`--shadow-md` 等），便于主题定制 |
 | ZipArchive + XML | 纯 PHP 解析 .xlsx 文件，零第三方依赖 |
 
@@ -111,13 +111,13 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 ```
 market-system-php/
-├── index.php              # 主程序（后端 API + 前端 HTML，约 3200+ 行）
+├── index.php              # 主程序（后端 API + 前端 HTML，约 6700 行）
 ├── .gitignore             # Git 忽略规则（php_errors.log / temp/）
 ├── static/
 │   ├── js/
-│   │   └── main.js        # 前端逻辑（约 3033 行）
+│   │   └── main.js        # 前端逻辑（约 7550 行）
 │   └── css/
-│       └── style.css      # 样式表（约 1305 行）
+│       └── style.css      # 样式表（约 3280 行）
 └── PROJECT_SUMMARY.md     # 本文档
 ```
 
@@ -1306,6 +1306,21 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | feat | **现金流统计图表优化（全部校区模式）**：`renderCashflowCharts` 新增 `campusFilter` 参数，全部校区模式下按日期对各校区数据求和，堆叠柱状图改为普通柱状图（单色"全部校区"柱），折线图仅显示一条汇总折线；单校区模式保持原有堆叠+多折线行为 | `static/js/main.js` | — |
 | feat | **净现金流图表类型改为柱状图**：第二个图表从 `type: 'line'` 改为 `type: 'bar'`，标题从"各校区净现金流趋势"改为"各校区净现金流" | `static/js/main.js`、`index.php` | — |
 | style | **图表标题重命名**：第一个图表标题从"各订单类型收入堆叠柱状图"改为"总收入"，净现金流图表标题从"各校区净现金流"改为"净现金流" | `index.php` | — |
+
+
+### 2026-07-02
+
+| 类型 | 内容 | 涉及文件 | 版本 |
+|------|------|----------|------|
+| feat | **现金流新增总支出图表**：在总收入与净现金流图表之间插入总支出柱状图，三图表宽度与三个色块对齐 | index.php static/js/main.js | 3b27c40 |
+| fix | **校区排名图表去重**：rankings SQL 从 GROUP BY campus, order_type 改为 GROUP BY campus，同时补充支出数据，每个校区只出现一次 | index.php | 7064e4a |
+| feat | **校区筛选改为树形多选**：替换下拉为自定义树形面板，支持按大区全选/单选校区/多选组合，后端 campus 参数改为逗号分隔多值 | index.php main.js style.css | 788683a |
+| style | **三图表颜色对齐色块**：总收入→绿系(#38A169)、总支出→红系(#E53E3E)、净现金流→紫系(#7C3AED)，堆积用同色深浅区分 | main.js | 19d57b7 |
+| style | **排名图表颜色统一**：校区排名图的总收入/总支出/净现金流指标颜色与上方色块对齐 | main.js | 85d06fb |
+| style | **我的资源去按钮+日期预设**：去掉编辑和预约试听大按钮(8→6,4列→3列)；日期筛选改为预设下拉(今天/昨天/近7天/近30天/本月/上月/自定义) | index.php main.js | ab271c9 |
+| style | **操作按钮改为药丸风格**：btn-link 从裸文字链接改为圆角药丸按钮，浅紫底+边框+hover 加深，删除为浅红底 | style.css | 752cc13 |
+| revert | **撤销操作弹窗 tab 导航**：去除资源操作单按钮→弹窗融合 5 操作功能的修改，恢复 5 个独立药丸按钮 | index.php main.js style.css | 9a41ad4 |
+| feat | **新增课表页面（panel-schedule-view）**：周视图展示排课数据，支持校区筛选和前后周切换；后端新增 get_schedule_view API（展开 weekdays + time_slots 按天按时段分组，JOIN classes/courses）；左侧导航"教务管理"模块新增"课表"菜单项（工作记录之后、基础设置之前）；前端新增周视图课表渲染、校区筛选、课程卡片5色循环、排课详情弹窗；课表表格样式、响应式横向滚动 | index.php static/js/main.js static/css/style.css | — |
 
 ### 2026-06-30
 

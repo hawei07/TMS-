@@ -3290,6 +3290,102 @@ $stmt->execute();
             json(['message' => '排课删除成功']);
             break;
 
+        case 'get_schedule_view':
+            $campus = trim($_GET['campus'] ?? '');
+            $weekStart = trim($_GET['week_start'] ?? '');
+            if (!$weekStart) {
+                $weekStart = date('Y-m-d', strtotime('monday this week'));
+            }
+            $weekEnd = date('Y-m-d', strtotime($weekStart . ' +6 days'));
+
+            $sql = "SELECT s.*, c.name AS class_name, c.course_id, c.campus AS class_campus, co.name AS course_name
+                    FROM schedules s
+                    JOIN classes c ON s.class_id = c.id
+                    JOIN courses co ON c.course_id = co.id
+                    WHERE s.start_date <= :we AND s.end_date >= :ws";
+            $params = [':ws' => $weekStart, ':we' => $weekEnd];
+            if ($campus) {
+                $sql .= " AND c.campus = :campus";
+                $params[':campus'] = $campus;
+            }
+            $sql .= " ORDER BY c.campus, co.name, s.id";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) { $stmt->bindValue($k, $v, PDO::PARAM_STR); }
+            $stmt->execute();
+            $schedules = [];
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $schedules[] = $row;
+            }
+
+            $days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
+            $grid = [];
+            foreach ($days as $idx => $label) {
+                $dayNum = $idx + 1;
+                $dayDate = date('Y-m-d', strtotime($weekStart . ' +' . $idx . ' days'));
+                $grid[$label] = ['date' => $dayDate, 'slots' => []];
+            }
+
+            foreach ($schedules as $sch) {
+                $weekdaysArr = array_filter(array_map('intval', explode(',', $sch['weekdays'])));
+                $timeSlots = json_decode($sch['time_slots'] ?? '{}', true) ?: [];
+                foreach ($weekdaysArr as $wd) {
+                    if ($wd < 1 || $wd > 7) continue;
+                    $dayIdx = $wd - 1;
+                    $dayLabel = $days[$dayIdx];
+                    foreach ($timeSlots as $slotKey => $slotVal) {
+                        $start = '';
+                        $end = '';
+                        if (is_array($slotVal) && isset($slotVal['start'])) {
+                            $start = $slotVal['start'];
+                            $end = $slotVal['end'] ?? '';
+                        } elseif (is_string($slotVal) && strpos($slotVal, '-') !== false) {
+                            list($start, $end) = explode('-', $slotVal, 2);
+                        }
+                        $grid[$dayLabel]['slots'][] = [
+                            'schedule_id' => $sch['id'],
+                            'class_name' => $sch['class_name'],
+                            'course_name' => $sch['course_name'],
+                            'teacher' => $sch['teacher'],
+                            'classroom' => $sch['classroom'],
+                            'campus' => $sch['class_campus'],
+                            'start' => trim($start),
+                            'end' => trim($end),
+                            'course_id' => $sch['course_id'],
+                        ];
+                    }
+                }
+            }
+
+            // 每天按时段排序
+            foreach ($grid as $dayLabel => &$dayData) {
+                usort($dayData['slots'], function($a, $b) {
+                    return strcmp($a['start'], $b['start']);
+                });
+            }
+            unset($dayData);
+
+            // 收集所有时间段并去重排序
+            $allSlots = [];
+            foreach ($grid as $dayData) {
+                foreach ($dayData['slots'] as $s) {
+                    $key = $s['start'] . '-' . $s['end'];
+                    if (!in_array($key, $allSlots)) $allSlots[] = $key;
+                }
+            }
+            usort($allSlots, function($a, $b) {
+                return strcmp(explode('-', $a)[0], explode('-', $b)[0]);
+            });
+
+            json([
+                'data' => [
+                    'grid' => $grid,
+                    'all_slots' => $allSlots,
+                    'week_start' => $weekStart,
+                    'week_end' => $weekEnd,
+                ]
+            ]);
+            break;
+
 
 // ==================== 教室管理 API ====================
         case 'list_classrooms':
@@ -4448,6 +4544,12 @@ if (intval($countBt) === 0) {
                                     <span class="tree-label">工作记录</span>
                                 </div>
                             </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-schedule-view">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
+                                    <span class="tree-label">课表</span>
+                                </div>
+                            </li>
                             <li class="tree-node expanded">
                                 <div class="tree-parent sub-parent">
                                     <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
@@ -5421,6 +5523,30 @@ if (intval($countBt) === 0) {
                     <div class="sec-panel" id="tab-course-records">
                         <div style="text-align:center;color:#999;padding:40px;">课程记录功能开发中...</div>
                     </div>
+                </div>
+            </section>
+
+            <!-- 面板：课表视图 -->
+            <section class="content-panel" id="panel-schedule-view">
+                <div class="panel-header">
+                    <h3>课表</h3>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                        <label style="font-size:13px;white-space:nowrap;">校区：</label>
+                        <select id="filter-schedule-campus" onchange="loadScheduleView()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                            <option value="">全部校区</option>
+                        </select>
+                        <button class="btn btn-sm" onclick="navigateWeek(-1)" style="padding:4px 10px;" title="上一周">&lt; 上一周</button>
+                        <button class="btn btn-sm" onclick="navigateWeek(1)" style="padding:4px 10px;" title="下一周">下一周 &gt;</button>
+                        <span id="schedule-week-range" style="font-size:14px;font-weight:600;color:#333;margin-left:8px;"></span>
+                    </div>
+                </div>
+                <div class="schedule-table-wrap">
+                    <table class="schedule-table" id="schedule-table">
+                        <thead id="schedule-thead"></thead>
+                        <tbody id="schedule-tbody"></tbody>
+                    </table>
                 </div>
             </section>
 

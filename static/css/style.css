@@ -3275,3 +3275,103 @@ span.flatpickr-weekday {
 .cf-tree-child { padding-left: 36px; color: #555; }
 .cf-tree-region { border-bottom: 1px solid #f5f5f5; }
 .cf-tree-region:last-child { border-bottom: none; }
+
+/* ===== 课表视图 ===== */
+.schedule-table-wrap {
+    overflow-x: auto;
+    margin-top: 12px;
+    border: 1px solid #e0e0e0;
+    border-radius: 8px;
+}
+
+.schedule-table {
+    width: 100%;
+    border-collapse: collapse;
+    table-layout: fixed;
+    min-width: 800px;
+}
+
+.schedule-table thead th {
+    background: #fafafa;
+    padding: 10px 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    border-bottom: 2px solid #e0e0e0;
+    text-align: center;
+    vertical-align: middle;
+}
+
+.schedule-table thead th:first-child {
+    background: #f5f5f5;
+    color: #666;
+}
+
+.schedule-table tbody td {
+    border: 1px solid #f0f0f0;
+    padding: 4px;
+    vertical-align: top;
+    min-height: 60px;
+}
+
+.schedule-time-cell {
+    font-size: 12px;
+    color: #666;
+    text-align: center;
+    vertical-align: middle !important;
+    background: #fafafa;
+    line-height: 1.5;
+    font-weight: 500;
+}
+
+.schedule-card {
+    padding: 6px 8px;
+    border-radius: 6px;
+    margin-bottom: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: box-shadow 0.15s;
+}
+
+.schedule-card:hover {
+    box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+}
+
+.schedule-card:last-child {
+    margin-bottom: 0;
+}
+
+.schedule-card-course {
+    font-size: 13px;
+    font-weight: 600;
+    margin-bottom: 2px;
+}
+
+.schedule-card-class {
+    font-size: 11px;
+    color: #555;
+    margin-bottom: 1px;
+}
+
+.schedule-card-info {
+    font-size: 11px;
+    color: #888;
+    line-height: 1.4;
+}
+
+@media (max-width: 768px) {
+    .schedule-table {
+        min-width: 700px;
+    }
+    .schedule-table thead th {
+        font-size: 12px;
+        padding: 8px 4px;
+    }
+    .schedule-card {
+        font-size: 10px;
+        padding: 4px 5px;
+    }
+    .schedule-card-course {
+        font-size: 11px;
+    }
+}
