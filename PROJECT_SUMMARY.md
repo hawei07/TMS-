@@ -1365,3 +1365,22 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | docs | **纳入 LLM 编码规范**：将 Andrej Karpathy 的 LLM 编码四原则（先思考再编码、简洁优先、外科手术式修改、目标驱动执行）纳入 `PROJECT_SUMMARY.md` 作为项目强制性代码约束 | `PROJECT_SUMMARY.md` | 2616bf5 |
 
 *（内容由AI生成，仅供参考）*
+
+### 2026-07-02 (第二阶段 — 课表模块优化与拖拽排课)
+
+| 类型 | 内容 | 涉及文件 | 版本 |
+|------|------|----------|------|
+| feat | **课表模块全面优化**：今天列高亮（蓝色标记）；卡片显示在班学员数（JOIN class_students）；教室冲突检测（同时段同教室红色边框+⚠️）；教师/教室下拉筛选；月视图切换（日历网格）；详情弹窗跳转班级列表；键盘导航（←→翻周，T回今天）；@media print 打印样式 | index.php static/js/main.js static/css/style.css | a01b6b8 |
+| feat | **拖拽排课**：左侧资源面板（课程/教师/教室三组可拖拽列表）→ 拖拽至右侧课表单元格 → 三元素齐备后 ✓创建按钮 → 弹窗确认班级名/日期/人数 → 事务创建班级+排课记录。新增 create_schedule_from_grid API | index.php static/js/main.js static/css/style.css | 1c1ee87 |
+| fix | **拖拽排课教师列表空白**：get_teachers API 返回 `{teachers:[...]}`，JS 取 `res.data` 改为 `res.teachers` | static/js/main.js | 9e9ea9c |
+| fix | **排课模式校区前置校验**：未选校区点击排课模式时 toast 提示，必须先选校区 | static/js/main.js | 9e9ea9c |
+| feat | **自定义 toast 通知**：替换浏览器 alert()，顶部居中圆角卡片 + 滑入动画，支持 success/error/warn/info 四种类型。统一旧版 `.toast` CSS 为 `.hermes-toast` | static/js/main.js static/css/style.css | 05d19ab |
+| fix | **排课模式课程不展示**：courses.campus_permission 存的是校区 ID（如 `'7,14,13'`），下拉选的是名称，indexOf 匹配失败。改为构建 name→id 映射后用 `split(',').includes(campusId)` 精确匹配 | static/js/main.js | b8dd0ee |
+| fix | **showToast 重复定义**：新增的 showToast（hermes-toast）与旧版 showToast（.toast）冲突，导致教室编辑保存异常。删除重复版，升级旧版支持 4 种类型，统一 CSS | static/js/main.js static/css/style.css | e122778 |
+| fix | **getSelectedCampuses 重复定义**：课程表单版（返回逗号 ID）被现金流版（返回名称数组）覆盖，导致课程保存时 campus_permission 传入数组，PHP trim() 报 TypeError。现金流版重命名为 getSelectedCashflowCampuses | static/js/main.js index.php | 5cb394d |
+| fix | **消除所有 JS 函数重复定义**：toggleAllCampuses（课程表单/现金流两版不同实现）、formatDate（两版相同删除一个）、escHtml（DOM 版/正则版，保留正则版）全部去重 | static/js/main.js index.php | 5f6e5f0 |
+| fix | **课表 time_slots 重复展示**：同一 schedule 在同一天同时段重复 3 次。根因：time_slots JSON 的 key 是星期编号（如 `{"5":...,"6":...,"7":...}`），展开时 weekdays×timeSlots 产生 3×3 条目。周视图+月视图加 schedule_id+start+end 去重 | index.php | 72980bc |
+| fix | **课表不同时段混入同一天**：schedule id=4 的 time_slots 每个星期有不同时段（key=4→11:48, key=5→11:49, key=6→11:49），但代码把全部 3 个时段都塞到每一天。修复：time_slots key 为数字（1-7）时只匹配对应星期 | index.php | 92c0b5e |
+| fix | **排课模式教师按校区筛选**：教师列表按 department 字段匹配校区名，只展示本校区教师 | static/js/main.js | 7d28cb3 |
+| style | **课表卡片重新设计**：去掉课程名，班级名粗体置顶 → 教师名白色底粗体突出 → 教室+人数为副信息 | static/js/main.js static/css/style.css | 191aa03 / 4437d60 |
+| feat | **课表弹窗增加「考勤」和「删除课次」按钮**：考勤 → 跳转班级管理面板；删除课次 → 调用 delete_schedule API | static/js/main.js | 7280983 |
