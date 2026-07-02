@@ -416,18 +416,26 @@ body {
     text-decoration: none;
 }
 
-/* 文字链接风格操作按钮 */
+/* 表格操作按钮 */
 .btn-link {
-    background: none; border: none;
-    color: var(--color-primary); font-size: 12px;
-    font-weight: 500; cursor: pointer; padding: 3px 6px;
-    transition: all var(--transition);
-    text-decoration: none;
+    display: inline-block;
+    padding: 3px 10px; border-radius: 12px; border: 1px solid #d4d4f7;
+    background: #f5f5ff; color: #5b5bd6; font-size: 12px;
+    font-weight: 500; cursor: pointer; line-height: 1.5;
+    transition: all .15s; text-decoration: none;
+    margin: 1px 2px;
 }
-.btn-link:hover { text-decoration: underline; color: var(--color-primary-dark); }
+.btn-link:hover { background: #e8e8ff; border-color: #b8b8f0; color: #4545c0; }
 
-.btn-link-danger { color: var(--color-danger); }
-.btn-link-danger:hover { color: var(--color-danger-hover); text-decoration: underline; }
+.btn-link-danger {
+    display: inline-block;
+    padding: 3px 10px; border-radius: 12px; border: 1px solid #fecaca;
+    background: #fff5f5; color: #dc2626; font-size: 12px;
+    font-weight: 500; cursor: pointer; line-height: 1.5;
+    transition: all .15s; text-decoration: none;
+    margin: 1px 2px;
+}
+.btn-link-danger:hover { background: #fee2e2; border-color: #fca5a5; color: #b91c1c; }
 
 /* ==================== 表格 ==================== */
 .table-wrap {
