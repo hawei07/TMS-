@@ -393,11 +393,16 @@ async function deleteIntentionLevel(lid) {
 
 // ==================== Toast ====================
 function showToast(msg, type = 'success') {
+    const cssMap = { success: 'hermes-toast--success', error: 'hermes-toast--error', warn: 'hermes-toast--warn', info: 'hermes-toast--info' };
+    const cssClass = cssMap[type] || 'hermes-toast--info';
+    const existing = document.querySelector('.hermes-toast');
+    if (existing) existing.remove();
     const toast = document.createElement('div');
-    toast.className = 'toast toast-' + type;
+    toast.className = 'hermes-toast ' + cssClass;
     toast.textContent = msg;
     document.body.appendChild(toast);
-    setTimeout(() => toast.remove(), 2500);
+    setTimeout(function() { toast.classList.add('hermes-toast--out'); }, 2000);
+    setTimeout(function() { if (toast.parentNode) toast.remove(); }, 2500);
 }
 
 // ==================== 自定义弹窗（替换 alert/confirm/prompt） ====================
@@ -7880,18 +7885,6 @@ function initDragResources() {
             '<div class="drag-item" draggable="true" data-type="classroom" data-name="' + escHtml(cr.name) + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(cr.name) + '</div>'
         ).join('') : '<div class="resource-empty">该校区暂无可用教室</div>';
     });
-}
-
-function showToast(msg, type) {
-    type = type || 'info';
-    const existing = document.querySelector('.hermes-toast');
-    if (existing) existing.remove();
-    const el = document.createElement('div');
-    el.className = 'hermes-toast hermes-toast--' + type;
-    el.textContent = msg;
-    document.body.appendChild(el);
-    setTimeout(function() { el.classList.add('hermes-toast--out'); }, 2000);
-    setTimeout(function() { if (el.parentNode) el.remove(); }, 2500);
 }
 
 function toggleDragMode() {
