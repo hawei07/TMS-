@@ -6536,11 +6536,13 @@ function renderCashflowRankChart(data) {
     const canvas = document.getElementById('cf-rank-chart');
     if (!wrapper || !canvas) return;
 
-    const campus = document.getElementById('cf-campus')?.value || '';
+    const selectedList = (typeof getSelectedCampuses === 'function') ? getSelectedCampuses() : [];
+    const totalCampus = document.querySelectorAll('.cf-campus-cb').length;
+    const hasFilter = selectedList.length > 0 && selectedList.length < totalCampus;
     const rankings = data.rankings || [];
 
-    // 筛选了单个校区时隐藏排名图
-    if (campus !== '' || rankings.length === 0) {
+    // 筛选了校区时隐藏排名图
+    if (hasFilter || rankings.length === 0) {
         wrapper.style.display = 'none';
         if (cfRankChart) { cfRankChart.destroy(); cfRankChart = null; }
         return;
@@ -7021,24 +7023,136 @@ async function initCashflowCampusFilter() {
     try {
         const res = await fetch(API_BASE + 'list_organizations');
         const data = await res.json();
-        const sel = document.getElementById('cf-campus');
-        if (!sel) return;
         const orgs = (data.data && data.data.flat) || [];
-        // 优先加载"校区"类型，若为空则加载所有组织作为备选
-        let campuses = orgs.filter(o => o.type === '校区');
-        if (campuses.length === 0) {
-            campuses = orgs; // 兜底：显示所有组织
-        }
-        campuses.forEach(c => {
-            const opt = document.createElement('option');
-            opt.value = c.name;
-            opt.textContent = c.name;
-            sel.appendChild(opt);
+        // Build tree: regions (type=部门) as parents, campuses (type=校区) as children
+        const regionMap = {};
+        const orphanCampuses = [];
+        orgs.forEach(o => {
+            if (o.type === '部门') {
+                if (!regionMap[o.id]) regionMap[o.id] = { name: o.name, campuses: [] };
+            } else if (o.type === '校区') {
+                if (o.parent_id && regionMap[o.parent_id]) {
+                    regionMap[o.parent_id].campuses.push(o.name);
+                } else {
+                    orphanCampuses.push(o.name);
+                }
+            }
         });
+        // Build tree data
+        window._cfCampusTree = [];
+        const regionList = Object.values(regionMap).filter(r => r.campuses.length > 0);
+        regionList.forEach(r => {
+            window._cfCampusTree.push({ type: 'region', name: r.name, children: r.campuses });
+        });
+        if (orphanCampuses.length > 0) {
+            window._cfCampusTree.push({ type: 'region', name: '其他校区', children: orphanCampuses });
+        }
+        renderCampusTree();
     } catch (e) {
         console.error('initCashflowCampusFilter error:', e);
     }
 }
+
+function renderCampusTree() {
+    const tree = document.getElementById('cf-campus-tree');
+    if (!tree) return;
+    const data = window._cfCampusTree || [];
+    let html = '';
+    data.forEach((region, ri) => {
+        html += '<div class="cf-tree-region">';
+        html += '<label class="cf-tree-check cf-tree-parent"><input type="checkbox" class="cf-region-cb" data-ri="' + ri + '" onchange="toggleRegion(' + ri + ')"> ' + escHtml(region.name) + '</label>';
+        html += '<div class="cf-tree-children">';
+        region.children.forEach((campus, ci) => {
+            html += '<label class="cf-tree-check cf-tree-child"><input type="checkbox" class="cf-campus-cb" data-ri="' + ri + '" data-ci="' + ci + '" onchange="toggleCampus(' + ri + ',' + ci + ')"> ' + escHtml(campus) + '</label>';
+        });
+        html += '</div></div>';
+    });
+    tree.innerHTML = html;
+}
+
+function escHtml(s) {
+    const d = document.createElement('div');
+    d.textContent = s;
+    return d.innerHTML;
+}
+
+function toggleCampusTree() {
+    const dd = document.getElementById('cf-campus-dropdown');
+    if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleRegion(ri) {
+    const cb = document.querySelector('.cf-region-cb[data-ri="' + ri + '"]');
+    if (!cb) return;
+    const checked = cb.checked;
+    document.querySelectorAll('.cf-campus-cb[data-ri="' + ri + '"]').forEach(c => { c.checked = checked; });
+    updateCampusText();
+    updateAllCheckbox();
+}
+
+function toggleCampus(ri, ci) {
+    updateRegionCheckbox(ri);
+    updateCampusText();
+    updateAllCheckbox();
+}
+
+function updateRegionCheckbox(ri) {
+    const children = document.querySelectorAll('.cf-campus-cb[data-ri="' + ri + '"]');
+    const regionCb = document.querySelector('.cf-region-cb[data-ri="' + ri + '"]');
+    if (!regionCb || children.length === 0) return;
+    const allChecked = Array.from(children).every(c => c.checked);
+    const noneChecked = Array.from(children).every(c => !c.checked);
+    regionCb.checked = allChecked;
+    regionCb.indeterminate = !allChecked && !noneChecked;
+}
+
+function toggleAllCampuses() {
+    const allCb = document.getElementById('cf-campus-all');
+    const checked = allCb.checked;
+    document.querySelectorAll('.cf-region-cb').forEach(c => { c.checked = checked; c.indeterminate = false; });
+    document.querySelectorAll('.cf-campus-cb').forEach(c => { c.checked = checked; });
+    updateCampusText();
+}
+
+function updateAllCheckbox() {
+    const allCampus = document.querySelectorAll('.cf-campus-cb');
+    if (allCampus.length === 0) return;
+    const allCb = document.getElementById('cf-campus-all');
+    const allChecked = Array.from(allCampus).every(c => c.checked);
+    const noneChecked = Array.from(allCampus).every(c => !c.checked);
+    allCb.checked = allChecked;
+    allCb.indeterminate = !allChecked && !noneChecked;
+}
+
+function updateCampusText() {
+    const checked = document.querySelectorAll('.cf-campus-cb:checked');
+    const textEl = document.getElementById('cf-campus-text');
+    if (!textEl) return;
+    const total = document.querySelectorAll('.cf-campus-cb').length;
+    if (checked.length === 0 || checked.length === total) {
+        textEl.textContent = '全部校区';
+    } else if (checked.length <= 3) {
+        const names = Array.from(checked).map(c => c.parentElement.textContent.trim());
+        textEl.textContent = names.join(', ');
+    } else {
+        textEl.textContent = '已选 ' + checked.length + ' 个校区';
+    }
+}
+
+function getSelectedCampuses() {
+    const checked = document.querySelectorAll('.cf-campus-cb:checked');
+    return Array.from(checked).map(c => c.parentElement.textContent.trim());
+}
+
+// Close dropdown when clicking outside
+document.addEventListener('click', function(e) {
+    const wrap = document.getElementById('cf-campus-wrap');
+    const dd = document.getElementById('cf-campus-dropdown');
+    if (wrap && dd && !wrap.contains(e.target)) {
+        dd.style.display = 'none';
+    }
+});
+
 
 async function loadCashflow() {
     try {
@@ -7047,6 +7161,13 @@ async function loadCashflow() {
         const dateFrom = document.getElementById('cf-date-from')?.value || '';
         const dateTo = document.getElementById('cf-date-to')?.value || '';
         const params = new URLSearchParams({ granularity: granularity });
+        // Multi-campus: collect from tree-select checkboxes
+        const selectedCampuses = (typeof getSelectedCampuses === 'function') ? getSelectedCampuses() : [];
+        const totalCampuses = document.querySelectorAll('.cf-campus-cb').length;
+        if (selectedCampuses.length > 0 && selectedCampuses.length < totalCampuses) {
+            params.set('campuses', selectedCampuses.join(','));
+        }
+        // Backward compat: single select fallback
         if (campus) params.set('campus', campus);
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo) params.set('date_to', dateTo);
