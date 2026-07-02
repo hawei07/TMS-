@@ -3250,3 +3250,20 @@ span.flatpickr-weekday {
 .cf-card-net { background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light)); }
 .cf-card-label { font-size: 13px; opacity: 0.9; margin-bottom: 6px; }
 .cf-card-value { font-size: 28px; font-weight: 700; letter-spacing: 0.5px; }
+
+/* 现金流校区树形多选 */
+.cf-tree-select { position: relative; display: inline-block; }
+.cf-tree-btn { display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border: 1px solid #ddd; border-radius: 4px; background: #fff; cursor: pointer; font-size: 13px; min-width: 140px; text-align: left; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.cf-tree-btn:hover { border-color: var(--color-primary); }
+.cf-tree-arrow { font-size: 10px; color: #999; margin-left: auto; }
+.cf-tree-dropdown { position: absolute; top: 100%; left: 0; z-index: 1000; background: #fff; border: 1px solid #e0e0e0; border-radius: 6px; box-shadow: 0 4px 16px rgba(0,0,0,.12); min-width: 240px; max-height: 360px; overflow: hidden; display: flex; flex-direction: column; margin-top: 4px; }
+.cf-tree-actions { padding: 8px 12px; border-bottom: 1px solid #f0f0f0; }
+.cf-tree-list { overflow-y: auto; max-height: 300px; padding: 4px 0; }
+.cf-tree-check { display: flex; align-items: center; gap: 6px; padding: 4px 12px; cursor: pointer; font-size: 13px; user-select: none; }
+.cf-tree-check:hover { background: #f5f7fa; }
+.cf-tree-check input[type="checkbox"] { margin: 0; accent-color: var(--color-primary); }
+.cf-tree-parent { font-weight: 600; color: #333; padding: 6px 12px; }
+.cf-tree-children { padding-left: 8px; }
+.cf-tree-child { padding-left: 36px; color: #555; }
+.cf-tree-region { border-bottom: 1px solid #f5f5f5; }
+.cf-tree-region:last-child { border-bottom: none; }

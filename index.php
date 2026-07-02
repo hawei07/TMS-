@@ -4089,9 +4089,10 @@ $stmt->execute();
 
         case 'get_cashflow_stats':
             $granularity = $_GET['granularity'] ?? 'monthly';
-            $campus = $_GET['campus'] ?? '';
+            $campusRaw = $_GET['campus'] ?? $_GET['campuses'] ?? '';
             $dateFrom = $_GET['date_from'] ?? '';
             $dateTo = $_GET['date_to'] ?? '';
+            $campuses = $campusRaw !== '' ? array_filter(array_map('trim', explode(',', $campusRaw))) : [];
             // 默认近12个月
             if (!$dateFrom) $dateFrom = date('Y-m', strtotime('-11 months'));
             if (!$dateTo) $dateTo = date('Y-m');
@@ -4113,10 +4114,22 @@ $stmt->execute();
             }
 
             $campusWhere = '';
+            $campusParams = [];
             $campusWhereE = '';
-            if ($campus !== '') {
-                $campusWhere = "AND o.campus = :campus";
-                $campusWhereE = "AND rr.campus = :campus_e";
+            $campusParamsE = [];
+            if (!empty($campuses)) {
+                $placeholders = [];
+                $placeholdersE = [];
+                foreach ($campuses as $i => $c) {
+                    $pk = ':c' . $i;
+                    $pkE = ':ce' . $i;
+                    $placeholders[] = $pk;
+                    $placeholdersE[] = $pkE;
+                    $campusParams[$pk] = $c;
+                    $campusParamsE[$pkE] = $c;
+                }
+                $campusWhere = "AND o.campus IN (" . implode(',', $placeholders) . ")";
+                $campusWhereE = "AND rr.campus IN (" . implode(',', $placeholdersE) . ")";
             }
 
             // 收入：已支付且未作废且非已退费的订单，按校区+日期统计
@@ -4129,7 +4142,7 @@ $stmt->execute();
             $stmt = $db->prepare($incomeSql);
             $stmt->bindValue(':from', $from . ' 00:00:00');
             $stmt->bindValue(':to2', $to . ' 23:59:59');
-            if ($campus !== '') $stmt->bindValue(':campus', $campus);
+            foreach ($campusParams as $k => $v) $stmt->bindValue($k, $v);
             $stmt->execute();
             $incomeRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -4144,7 +4157,7 @@ $stmt->execute();
             $stmt = $db->prepare($expenseSql);
             $stmt->bindValue(':from', $from . ' 00:00:00');
             $stmt->bindValue(':to2', $to . ' 23:59:59');
-            if ($campus !== '') $stmt->bindValue(':campus_e', $campus);
+            foreach ($campusParamsE as $k => $v) $stmt->bindValue($k, $v);
             $stmt->execute();
             $expenseRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
@@ -4158,7 +4171,7 @@ $stmt->execute();
             $stmt = $db->prepare($incomeByTypeSql);
             $stmt->bindValue(':from', $from . ' 00:00:00');
             $stmt->bindValue(':to2', $to . ' 23:59:59');
-            if ($campus !== '') $stmt->bindValue(':campus', $campus);
+            foreach ($campusParams as $k => $v) $stmt->bindValue($k, $v);
             $stmt->execute();
             $incomeByTypeRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
@@ -4208,7 +4221,7 @@ $stmt->execute();
 
             // 校区排名：仅当未筛选单个校区时（campus为空），按校区汇总排名
             $rankings = [];
-            if ($campus === '') {
+            if (empty($campuses)) {
                 // 各校区收入汇总（不分订单类型）
                 $rankIncomeSql = "SELECT o.campus, COALESCE(SUM(o.actual_price), 0) AS amount
                     FROM orders o
@@ -5464,9 +5477,18 @@ if (intval($countBt) === 0) {
                 <div class="toolbar">
                     <div class="toolbar-left">
                         <label style="font-size:13px;margin-right:6px;">校区：</label>
-                        <select id="cf-campus" onchange="loadCashflow()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:120px;">
-                            <option value="">全部校区</option>
-                        </select>
+                        <div class="cf-tree-select" id="cf-campus-wrap">
+                            <button type="button" class="cf-tree-btn" id="cf-campus-btn" onclick="toggleCampusTree()">
+                                <span id="cf-campus-text">全部校区</span>
+                                <span class="cf-tree-arrow">▾</span>
+                            </button>
+                            <div class="cf-tree-dropdown" id="cf-campus-dropdown" style="display:none;">
+                                <div class="cf-tree-actions">
+                                    <label class="cf-tree-check"><input type="checkbox" id="cf-campus-all" onchange="toggleAllCampuses()"> 全选</label>
+                                </div>
+                                <div class="cf-tree-list" id="cf-campus-tree"></div>
+                            </div>
+                        </div>
                         <label style="font-size:13px;margin:0 6px;">日期范围：</label>
                         <input type="month" id="cf-date-from" style="width:150px;padding:5px 8px;border:1px solid #ddd;border-radius:4px;" onchange="loadCashflow()">
                         <span style="margin:0 4px;color:#999;">至</span>
