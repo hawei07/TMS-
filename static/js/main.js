@@ -6913,6 +6913,7 @@ async function cancelRefund(id) {
 // ==================== 现金流统计 ====================
 let cfBarChart = null;
 let cfLineChart = null;
+let cfExpenseChart = null;
 let cfRankChart = null;
 
 function initCashflowDateRange() {
@@ -7100,6 +7101,7 @@ function renderCashflowCharts(data, campusFilter) {
     if (rows.length === 0) {
         if (cfBarChart) { cfBarChart.destroy(); cfBarChart = null; }
         if (cfLineChart) { cfLineChart.destroy(); cfLineChart = null; }
+        if (cfExpenseChart) { cfExpenseChart.destroy(); cfExpenseChart = null; }
         return;
     }
 
@@ -7188,6 +7190,43 @@ function renderCashflowCharts(data, campusFilter) {
                         data: netData,
                         backgroundColor: singleColor,
                         borderColor: singleBorder,
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: { ticks: { maxRotation: 45, font: { size: 10 } } },
+                        y: { ticks: { callback: v => '¥' + (v / 10000).toFixed(1) + '万' } }
+                    },
+                    plugins: {
+                        legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                        tooltip: { callbacks: { label: ctx => '全部校区: ¥' + ctx.raw.toLocaleString('zh-CN', { minimumFractionDigits: 2 }) } }
+                    },
+                    interaction: { mode: 'index' }
+                }
+            });
+        }
+
+        // 总支出柱状图（全部校区模式）
+        const expenseCtx = document.getElementById('cf-expense-chart');
+        if (expenseCtx) {
+            if (cfExpenseChart) cfExpenseChart.destroy();
+            // expense = income - net
+            const expenseData = dates.map((d, i) => {
+                const exp = incomeData[i] - netData[i];
+                return Math.max(0, exp);
+            });
+            cfExpenseChart = new Chart(expenseCtx, {
+                type: 'bar',
+                data: {
+                    labels: dates,
+                    datasets: [{
+                        label: '全部校区',
+                        data: expenseData,
+                        backgroundColor: 'rgba(255,99,132,0.8)',
+                        borderColor: 'rgba(255,99,132,1)',
                         borderWidth: 1
                     }]
                 },
@@ -7311,6 +7350,39 @@ function renderCashflowCharts(data, campusFilter) {
                 plugins: {
                     legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
                     tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ¥' + ctx.raw.toLocaleString('zh-CN', { minimumFractionDigits: 2 }) } }
+                },
+                interaction: { mode: 'index' }
+            }
+        });
+    }
+
+    // 总支出柱状图（单校区模式）
+    const expenseCtx2 = document.getElementById('cf-expense-chart');
+    if (expenseCtx2) {
+        if (cfExpenseChart) cfExpenseChart.destroy();
+        const expenseByCampus = campuses.map((campus, i) => ({
+            label: campus,
+            data: dates.map(d => {
+                const row = (lookup[d] && lookup[d][campus]) ? (lookup[d][campus].income - lookup[d][campus].net) : null;
+                return row !== null ? Math.max(0, row) : null;
+            }),
+            backgroundColor: colors[i % colors.length],
+            borderColor: borderColors[i % colors.length],
+            borderWidth: 1
+        }));
+        cfExpenseChart = new Chart(expenseCtx2, {
+            type: 'bar',
+            data: { labels: dates, datasets: expenseByCampus },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                scales: {
+                    x: { ticks: { maxRotation: 45, font: { size: 10 } } },
+                    y: { ticks: { callback: v => '¥' + (v / 10000).toFixed(1) + '万' } }
+                },
+                plugins: {
+                    legend: { position: 'top', labels: { boxWidth: 12, font: { size: 11 } } },
+                    tooltip: { callbacks: { label: ctx => ctx.dataset.label + ': ¥' + (ctx.raw || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 }) } }
                 },
                 interaction: { mode: 'index' }
             }
