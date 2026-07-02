@@ -7852,20 +7852,17 @@ let pendingCells = {}; // key: "周一|10:40-10:41" -> { course, teacher, classr
 
 function initDragResources() {
     const campus = document.getElementById('filter-schedule-campus').value;
-    // 课程：按校区筛选 campus_permission
-    let courseUrl = 'list_courses';
-    if (campus) courseUrl += '&keyword=' + encodeURIComponent(campus); // 用 keyword 匹配 campus_permission 字段
-    api(courseUrl).then(res => {
+    // 课程：全量加载后按 campus_permission 前端过滤
+    api('list_courses').then(res => {
         const list = document.getElementById('drag-course-list');
         if (!list) return;
-        const courses = (res.data || []).filter(c => !campus || (c.campus_permission && c.campus_permission.indexOf(campus) !== -1));
+        const courses = (res.data || []).filter(c => !campus || !c.campus_permission || c.campus_permission.indexOf(campus) !== -1);
         list.innerHTML = courses.length ? courses.map(c =>
             '<div class="drag-item" draggable="true" data-type="course" data-id="' + c.id + '" data-name="' + escHtml(c.name) + '" data-campus="' + escHtml(c.campus_permission || '') + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(c.name) + '</div>'
-        ).join('') : '<div class="resource-empty">暂无课程</div>';
+        ).join('') : '<div class="resource-empty">该校区暂无可用课程</div>';
     });
     // 教师
-    let teacherUrl = 'get_teachers';
-    api(teacherUrl).then(res => {
+    api('get_teachers').then(res => {
         const list = document.getElementById('drag-teacher-list');
         if (!list) return;
         const teachers = res.teachers || [];
@@ -7875,22 +7872,32 @@ function initDragResources() {
     });
     // 教室：按校区筛选
     let crUrl = 'list_classrooms';
-    if (campus) crUrl += '&keyword=' + encodeURIComponent(campus);
     api(crUrl).then(res => {
         const list = document.getElementById('drag-classroom-list');
         if (!list) return;
-        const classrooms = (res.data || []).filter(cr => !campus || (cr.campus && cr.campus.indexOf(campus) !== -1));
+        const classrooms = (res.data || []).filter(cr => !campus || !cr.campus || cr.campus.indexOf(campus) !== -1);
         list.innerHTML = classrooms.length ? classrooms.map(cr =>
             '<div class="drag-item" draggable="true" data-type="classroom" data-name="' + escHtml(cr.name) + '" ondragstart="onDragStart(event)" ondragend="onDragEnd(event)">' + escHtml(cr.name) + '</div>'
-        ).join('') : '<div class="resource-empty">暂无教室</div>';
+        ).join('') : '<div class="resource-empty">该校区暂无可用教室</div>';
     });
+}
+
+function showToast(msg, type) {
+    type = type || 'info';
+    const existing = document.querySelector('.hermes-toast');
+    if (existing) existing.remove();
+    const el = document.createElement('div');
+    el.className = 'hermes-toast hermes-toast--' + type;
+    el.textContent = msg;
+    document.body.appendChild(el);
+    setTimeout(function() { el.classList.add('hermes-toast--out'); }, 2000);
+    setTimeout(function() { if (el.parentNode) el.remove(); }, 2500);
 }
 
 function toggleDragMode() {
     const campus = document.getElementById('filter-schedule-campus').value;
-    // 必须先选校区才能进入排课模式
     if (!dragMode && !campus) {
-        alert('请先在上方筛选栏选择校区，再进入排课模式');
+        showToast('请先选择校区，再进入排课模式', 'warn');
         return;
     }
     dragMode = !dragMode;

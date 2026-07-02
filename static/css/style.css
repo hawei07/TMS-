@@ -3684,3 +3684,29 @@ span.flatpickr-weekday {
 #schedule-drag-toggle {
     transition: background 0.25s, color 0.25s, border-color 0.25s;
 }
+
+/* ===== Toast 通知 ===== */
+.hermes-toast {
+    position: fixed;
+    top: 24px;
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 10px 24px;
+    border-radius: 8px;
+    font-size: 14px;
+    font-weight: 500;
+    z-index: 99999;
+    box-shadow: 0 4px 16px rgba(0,0,0,0.15);
+    animation: toastIn 0.25s ease;
+    pointer-events: none;
+}
+.hermes-toast--info  { background: #e6f7ff; color: #096dd9; border: 1px solid #91d5ff; }
+.hermes-toast--warn  { background: #fff7e6; color: #d46b08; border: 1px solid #ffd591; }
+.hermes-toast--error { background: #fff2f0; color: #cf1322; border: 1px solid #ffccc7; }
+.hermes-toast--success { background: #f6ffed; color: #389e0d; border: 1px solid #b7eb8f; }
+.hermes-toast--out { opacity: 0; transition: opacity 0.3s ease; }
+
+@keyframes toastIn {
+    from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
+    to   { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
