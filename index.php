@@ -56,6 +56,21 @@ $db->exec("CREATE TABLE IF NOT EXISTS resources (
     notes VARCHAR(500) DEFAULT '',
     created_at VARCHAR(500) DEFAULT ''
 )");
+// 预约试听重构
+foreach ([
+    ["campus", "VARCHAR(500) DEFAULT ''"],
+    ["subject_level1", "VARCHAR(500) DEFAULT ''"],
+    ["course_id", "INT DEFAULT 0"],
+    ["class_id", "INT DEFAULT 0"],
+    ["schedule_id", "INT DEFAULT 0"],
+] as $col) {
+    $existing = [];
+    $r = $db->query("SHOW COLUMNS FROM appointments");
+    while ($c = $r->fetch(PDO::FETCH_ASSOC)) $existing[] = $c["Field"];
+    if (!in_array($col[0], $existing)) {
+        $db->exec("ALTER TABLE appointments ADD COLUMN {$col[0]} {$col[1]}");
+    }
+}
 $db->exec("CREATE TABLE IF NOT EXISTS communication_records (
     id INT PRIMARY KEY AUTO_INCREMENT,
     resource_id INT NOT NULL DEFAULT 0,
