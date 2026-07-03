@@ -3352,7 +3352,7 @@ async function showClassForm(classId) {
     document.querySelector('input[name="class_type"][value="标准班"]').checked = true;
     document.getElementById('class-name').value = '';
     document.getElementById('class-max-students').value = '';
-    document.getElementById('class-lesson-hours').value = '';
+    document.getElementById('class-lesson-hours').value = '2';
     document.querySelector('input[name="can_trial"][value="是"]').checked = true;
     updateClassCount('class-name', 'class-name-count');
     
@@ -3404,7 +3404,7 @@ async function saveClass() {
     const name = document.getElementById('class-name').value.trim();
     const classType = document.querySelector('input[name="class_type"]:checked').value;
     const maxStudents = parseInt(document.getElementById('class-max-students').value) || 0;
-    const lessonHours = parseInt(document.getElementById('class-lesson-hours').value) || 0;
+    const lessonHours = parseInt(document.getElementById('class-lesson-hours').value) || 2;
     const canTrial = document.querySelector('input[name="can_trial"]:checked').value;
     const campusRadio = document.querySelector('input[name="class-campus-radio"]:checked');
     const campus = campusRadio ? campusRadio.value : '';
@@ -8001,10 +8001,18 @@ function showScheduleCreateModal(cellId, td) {
         '<strong>时间：</strong>' + dayLabel + ' ' + timeStart + '-' + timeEnd;
     document.getElementById('sc-class-name').value = p.course + '班';
     const campus = document.getElementById('filter-schedule-campus').value || p.course_campus || '';
-    const today = new Date();
-    const nextWeek = new Date(today); nextWeek.setDate(today.getDate() + ((dayOfWeek - today.getDay() + 7) % 7 || 7));
-    document.getElementById('sc-start-date').value = formatDate(nextWeek);
-    const endDate = new Date(nextWeek); endDate.setMonth(endDate.getMonth() + 6);
+    var today = new Date(); today.setHours(0,0,0,0);
+    // 计算拖动单元格的实际日期
+    var monday = getMonday(scheduleWeekOffset);
+    var cellDate = new Date(monday);
+    cellDate.setDate(monday.getDate() + (dayOfWeek - 1));
+    cellDate.setHours(0,0,0,0);
+    // 如果单元格日期 < 今天 → 下周；>= 今天 → 本周
+    if (cellDate < today) {
+        cellDate.setDate(cellDate.getDate() + 7);
+    }
+    document.getElementById('sc-start-date').value = formatDate(cellDate);
+    var endDate = new Date(cellDate); endDate.setMonth(endDate.getMonth() + 6);
     document.getElementById('sc-end-date').value = formatDate(endDate);
     window._scPending = { cellId, dayLabel, dayOfWeek, timeStart, timeEnd, campus, courseId: p.course_id, courseName: p.course, teacher: p.teacher, classroom: p.classroom };
 }
@@ -8020,7 +8028,7 @@ function confirmScheduleCreate() {
     const startDate = document.getElementById('sc-start-date').value;
     const endDate = document.getElementById('sc-end-date').value;
     const maxStudents = parseInt(document.getElementById('sc-max-students').value) || 15;
-    const lessonHours = parseInt(document.getElementById('sc-lesson-hours').value) || 0;
+    const lessonHours = parseInt(document.getElementById('sc-lesson-hours').value) || 2;
     if (!startDate) { showToast('请选择开课日期', 'warn'); return; }
     if (!endDate) { showToast('请选择结课日期', 'warn'); return; }
     if (new Date(endDate) <= new Date(startDate)) { showToast('结课日期必须晚于开课日期', 'warn'); return; }
