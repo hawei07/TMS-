@@ -6488,12 +6488,12 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：预约试听 -->
     <div class="modal-overlay" id="modal-appointment">
-        <div class="modal" style="max-width:960px;border-radius:12px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal" style="max-width:1100px;width:95vw;border-radius:12px;max-height:90vh;display:flex;flex-direction:column;">
             <div class="modal-header" style="padding:14px 20px;border-bottom:1px solid #f0f0f0;">
                 <h3 id="modal-appointment-title" style="font-size:16px;margin:0;">预约试听</h3>
                 <button class="modal-close" onclick="closeModal('modal-appointment')" style="font-size:20px;">&times;</button>
             </div>
-            <div class="modal-body" style="padding:16px 20px;overflow-y:auto;flex:1;">
+            <div class="modal-body" style="padding:16px 20px;flex:1;">
                 <input type="hidden" id="trial-resource-id"><input type="hidden" id="trial-resource-name"><input type="hidden" id="trial-phone">
                 <p style="margin:0 0 12px;font-size:13px;color:#555;background:#f5f7fa;padding:8px 14px;border-radius:8px;"><span id="trial-info-text" style="font-weight:600;"></span></p>
                 <!-- 筛选行 -->
@@ -6506,7 +6506,7 @@ if (intval($countBt) === 0) {
                     <button class="btn btn-primary btn-sm" onclick="loadTrialTable()" style="height:34px;">查询</button>
                 </div>
                 <!-- 结果表格 -->
-                <div style="max-height:400px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
+                <div style="border:1px solid #f0f0f0;border-radius:8px;">
                     <table style="width:100%;font-size:13px;border-collapse:collapse;white-space:nowrap;">
                         <thead><tr style="background:#fafafa;position:sticky;top:0;">
                             <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">班级名称</th>
