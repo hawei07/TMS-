@@ -3432,7 +3432,9 @@ async function saveClass() {
     if (result.error) { showToast(result.error, 'error'); return; }
     showToast(result.message);
     closeModal('modal-class-form');
-    loadClasses();
+    // 检测当前活跃的班级表单：考勤tab用att-前缀，独立面板用无前缀
+    var prefix = document.getElementById('tab-classes') && document.getElementById('tab-classes').classList.contains('active') ? 'att-' : '';
+    loadClasses(1, prefix);
     loadStats();
 }
 
@@ -3441,7 +3443,8 @@ async function deleteClass(id, name) {
         const result = await api('delete_class', { id: id });
         if (result.error) { showToast(result.error, 'error'); return; }
         showToast(result.message);
-        loadClasses();
+        var prefix = document.getElementById('tab-classes') && document.getElementById('tab-classes').classList.contains('active') ? 'att-' : '';
+        loadClasses(1, prefix);
         loadStats();
     });
 }
