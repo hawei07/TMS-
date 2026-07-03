@@ -8243,7 +8243,7 @@ function showTrialAppointment(resourceId, resourceName, phone) {
         var sel = document.getElementById('trial-campus');
         sel.innerHTML = '<option value="">请选择校区</option>';
         (d.data || []).forEach(function(c) {
-            sel.innerHTML += '<option value="' + c.name + '">' + c.name + '</option>';
+            sel.innerHTML += '<option value="' + c.id + '">' + c.name + '</option>';
         });
         sel.disabled = false;
     });
