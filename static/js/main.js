@@ -698,7 +698,8 @@ async function editResource(rid) {
         await populateIntentionLevelSelect('res-intention', item.intention_level);
         openModal('modal-resource');
     } catch(e) {
-        showToast('编辑失败：' + e.message, 'error');
+        console.error('editResource error:', e);
+        showToast('编辑失败：' + (e.message || String(e)), 'error');
     }
 }
 
