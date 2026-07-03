@@ -56,6 +56,21 @@ $db->exec("CREATE TABLE IF NOT EXISTS resources (
     notes VARCHAR(500) DEFAULT '',
     created_at VARCHAR(500) DEFAULT ''
 )");
+// 预约试听重构
+foreach ([
+    ["campus", "VARCHAR(500) DEFAULT ''"],
+    ["subject_level1", "VARCHAR(500) DEFAULT ''"],
+    ["course_id", "INT DEFAULT 0"],
+    ["class_id", "INT DEFAULT 0"],
+    ["schedule_id", "INT DEFAULT 0"],
+] as $col) {
+    $existing = [];
+    $r = $db->query("SHOW COLUMNS FROM appointments");
+    while ($c = $r->fetch(PDO::FETCH_ASSOC)) $existing[] = $c["Field"];
+    if (!in_array($col[0], $existing)) {
+        $db->exec("ALTER TABLE appointments ADD COLUMN {$col[0]} {$col[1]}");
+    }
+}
 $db->exec("CREATE TABLE IF NOT EXISTS communication_records (
     id INT PRIMARY KEY AUTO_INCREMENT,
     resource_id INT NOT NULL DEFAULT 0,
@@ -1080,6 +1095,88 @@ $stmt->execute();
             }
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+
+        // === 预约试听级联查询 ===
+        case 'get_trial_campuses':
+            $campusRows = $db->query("SELECT DISTINCT o.name, o.id FROM organizations o WHERE o.type='校区' ORDER BY o.name")->fetchAll(PDO::FETCH_ASSOC);
+            json(['data' => array_values($campusRows)]);
+            break;
+        case 'get_trial_subjects':
+            $campusName = trim($_GET['campus'] ?? '');
+            $subjs = [];
+            if ($campusName) {
+                $stmt = $db->prepare("SELECT DISTINCT s.id, s.name FROM subjects s WHERE s.parent_id=0 AND EXISTS (SELECT 1 FROM courses c WHERE c.campus_permission LIKE CONCAT('%', ?, '%')) ORDER BY s.name");
+                $stmt->execute([$campusName]);
+                $subjs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            json(['data' => $subjs]);
+            break;
+        case 'get_trial_courses':
+            $campusName = trim($_GET['campus'] ?? '');
+            $subjectName = trim($_GET['subject'] ?? '');
+            $courses = [];
+            if ($campusName && $subjectName) {
+                $stmt = $db->prepare("SELECT id, name FROM courses WHERE campus_permission LIKE CONCAT('%', ?, '%') AND subject LIKE CONCAT(?, '%') ORDER BY name");
+                $stmt->execute([$campusName, $subjectName . ' >%']);
+                $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            json(['data' => $courses]);
+            break;
+        case 'get_trial_classes':
+            $courseId = intval($_GET['course_id'] ?? 0);
+            $campusName = trim($_GET['campus'] ?? '');
+            $classes = [];
+            if ($courseId && $campusName) {
+                $stmt = $db->prepare("SELECT id, name FROM classes WHERE course_id=? AND can_trial=1 AND campus=? ORDER BY name");
+                $stmt->execute([$courseId, $campusName]);
+                $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            json(['data' => $classes]);
+            break;
+        case 'get_trial_sessions':
+            $classId = intval($_GET['class_id'] ?? 0);
+            $sessions = [];
+            if ($classId) {
+                $stmt = $db->prepare("SELECT id, start_date, end_date, weekdays, time_slots, teacher, classroom FROM schedules WHERE class_id=? ORDER BY start_date");
+                $stmt->execute([$classId]);
+                $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($sessions as &$s) {
+                    $s['time_slots'] = json_decode($s['time_slots'] ?? '{}', true) ?: [];
+                    $s['weekdays'] = array_map('intval', array_filter(explode(',', $s['weekdays'] ?? '')));
+                }
+            }
+            json(['data' => $sessions]);
+            break;
+
+        case 'book_trial':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $resourceId = intval($input['resource_id'] ?? 0);
+            $courseId = intval($input['course_id'] ?? 0);
+            $classId = intval($input['class_id'] ?? 0);
+            $scheduleId = intval($input['schedule_id'] ?? 0);
+            $campus = trim($input['campus'] ?? '');
+            $subjectLevel1 = trim($input['subject_level1'] ?? '');
+            $resourceName = trim($input['resource_name'] ?? '');
+            $phone = trim($input['phone'] ?? '');
+            if (!$resourceId || !$courseId || !$classId || !$scheduleId) json(['error' => '请完成所有选择']);
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO appointments (resource_id,resource_name,student_name,phone,course_type,appointment_time,status,notes,campus,subject_level1,course_id,class_id,schedule_id,created_at) VALUES (:ri,:rn,:sn,:p,:ct,:at,:st,:no,:cp,:sj,:ci,:cli,:si,:c)");
+            $stmt->bindValue(':ri', $resourceId, PDO::PARAM_INT);
+            $stmt->bindValue(':rn', $resourceName);
+            $stmt->bindValue(':sn', $resourceName);
+            $stmt->bindValue(':p', $phone);
+            $stmt->bindValue(':ct', '试听');
+            $stmt->bindValue(':at', $n);
+            $stmt->bindValue(':st', '已预约待试听');
+            $stmt->bindValue(':no', '');
+            $stmt->bindValue(':cp', $campus);
+            $stmt->bindValue(':sj', $subjectLevel1);
+            $stmt->bindValue(':ci', $courseId, PDO::PARAM_INT);
+            $stmt->bindValue(':cli', $classId, PDO::PARAM_INT);
+            $stmt->bindValue(':si', $scheduleId, PDO::PARAM_INT);
+            $stmt->bindValue(':c', $n);
+            $stmt->execute();
+            json(['id' => $db->lastInsertId(), 'message' => '预约成功，状态：已预约待试听']);
 
         case 'add_appointment':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -6307,18 +6404,51 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：预约试听 -->
     <div class="modal-overlay" id="modal-appointment">
-        <div class="modal"><div class="modal-header"><h3 id="modal-appointment-title">新增预约试听</h3><button class="modal-close" onclick="closeModal('modal-appointment')">&times;</button></div>
-        <div class="modal-body">
-            <input type="hidden" id="edit-aid"><input type="hidden" id="apt-resource-id">
-            <div class="form-group"><label>关联资源</label><select id="apt-resource-select"><option value="">不关联（手动填写）</option></select></div>
-            <div class="form-group"><label>学员姓名 <span class="required">*</span></label><input type="text" id="apt-student-name"></div>
-            <div class="form-group"><label>电话</label><input type="text" id="apt-phone"></div>
-            <div class="form-group"><label>课程类型</label><select id="apt-course-type"><option value="">请选择</option><option value="试听课">试听课</option><option value="正式课体验">正式课体验</option><option value="测评课">测评课</option><option value="其他">其他</option></select></div>
-            <div class="form-group"><label>预约时间 <span class="required">*</span></label><input type="datetime-local" id="apt-time"></div>
-            <div class="form-group"><label>状态</label><select id="apt-status"><option value="已预约">已预约</option><option value="已试听">已试听</option><option value="已取消">已取消</option></select></div>
-            <div class="form-group"><label>备注</label><textarea id="apt-notes" rows="3"></textarea></div>
+        <div class="modal" style="max-width:480px;border-radius:12px;">
+            <div class="modal-header" style="padding:16px 20px;border-bottom:1px solid #f0f0f0;">
+                <h3 id="modal-appointment-title" style="font-size:16px;margin:0;">预约试听</h3>
+                <button class="modal-close" onclick="closeModal('modal-appointment')" style="font-size:20px;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <input type="hidden" id="trial-resource-id">
+                <input type="hidden" id="trial-resource-name">
+                <input type="hidden" id="trial-phone">
+                <p style="margin:0 0 16px;font-size:13px;color:#555;background:#f5f7fa;padding:10px 14px;border-radius:8px;">
+                    <span id="trial-info-text" style="font-weight:600;"></span>
+                </p>
+                <!-- 校区 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">校区 <span class="required">*</span></label>
+                    <select id="trial-campus" onchange="onTrialCampusChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请选择校区</option></select>
+                </div>
+                <!-- 学科 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">一级学科 <span class="required">*</span></label>
+                    <select id="trial-subject" onchange="onTrialSubjectChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择校区</option></select>
+                </div>
+                <!-- 课程 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">课程 <span class="required">*</span></label>
+                    <select id="trial-course" onchange="onTrialCourseChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择学科</option></select>
+                </div>
+                <!-- 支持试听班级 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">试听班级 <span class="required">*</span></label>
+                    <select id="trial-class" onchange="onTrialClassChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择课程</option></select>
+                </div>
+                <!-- 可用课次 -->
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">试听课次 <span class="required">*</span></label>
+                    <div id="trial-sessions-list" style="display:flex;flex-direction:column;gap:8px;">
+                        <span style="color:#bbb;font-size:13px;">请先选择班级</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:12px 20px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:8px;">
+                <button class="btn btn-outline" onclick="closeModal('modal-appointment')">取消</button>
+                <button class="btn btn-primary" id="trial-submit-btn" onclick="bookTrial()" disabled>确认预约</button>
+            </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-appointment')">取消</button><button class="btn btn-primary" onclick="saveAppointment()">保存</button></div></div>
     </div>
 
     <!-- 弹窗：沟通记录 -->
