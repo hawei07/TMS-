@@ -3587,35 +3587,76 @@ async function showScheduleForm(classId, scheduleId) {
     document.querySelectorAll('#weekday-buttons .weekday-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('schedule-time-slots').innerHTML = '<div class="schedule-time-hint">请先选择上课周期</div>';
 
-    // Load teacher dropdown
+    // Load teacher dropdown — campus teachers first, then all others for search
     const teacherSel = document.getElementById('schedule-teacher');
-    teacherSel.innerHTML = '<option value="">搜索授课老师</option>';
+    teacherSel.innerHTML = '<option value="">搜索老师</option>';
+    var campusFilter = '';
+    try {
+        // Get class campus
+        if (classId) {
+            const cr = await fetch(API_BASE + 'list_classes&page=1&page_size=100');
+            const cd = await cr.json();
+            const cls = (cd.data || []).find(c => c.id == classId);
+            if (cls) campusFilter = cls.campus || '';
+        }
+    } catch(e) {}
     try {
         const res = await fetch(API_BASE + 'get_employees&page=1&page_size=200');
         const data = await res.json();
         if (data.data) {
-            data.data.filter(emp => emp.is_teacher === '是').forEach(emp => {
-                const opt = document.createElement('option');
-                opt.value = emp.name;
-                opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
-                teacherSel.appendChild(opt);
-            });
+            const teachers = data.data.filter(emp => emp.is_teacher === '是');
+            if (campusFilter) {
+                // 本校区教师优先
+                const campusTeachers = teachers.filter(t => t.department === campusFilter);
+                const otherTeachers = teachers.filter(t => t.department !== campusFilter);
+                if (campusTeachers.length) {
+                    const og = document.createElement('optgroup');
+                    og.label = '🏫 ' + campusFilter;
+                    campusTeachers.forEach(emp => {
+                        const opt = document.createElement('option');
+                        opt.value = emp.name;
+                        opt.textContent = emp.name;
+                        og.appendChild(opt);
+                    });
+                    teacherSel.appendChild(og);
+                }
+                if (otherTeachers.length) {
+                    const og2 = document.createElement('optgroup');
+                    og2.label = '🔍 其他教师（可搜索）';
+                    otherTeachers.forEach(emp => {
+                        const opt = document.createElement('option');
+                        opt.value = emp.name;
+                        opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
+                        og2.appendChild(opt);
+                    });
+                    teacherSel.appendChild(og2);
+                }
+            } else {
+                teachers.forEach(emp => {
+                    const opt = document.createElement('option');
+                    opt.value = emp.name;
+                    opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
+                    teacherSel.appendChild(opt);
+                });
+            }
         }
     } catch (e) { /* ignore */ }
 
-    // Load classroom dropdown
+    // Load classroom dropdown — filtered by campus
     const classroomSel = document.getElementById('schedule-classroom');
-    classroomSel.innerHTML = '<option value="">请选择上课教室</option>';
+    classroomSel.innerHTML = '<option value="">选择教室</option>';
     try {
         const res2 = await fetch(API_BASE + 'list_classrooms');
         const data2 = await res2.json();
         if (data2.data) {
-            data2.data.forEach(cr => {
-                const opt = document.createElement('option');
-                opt.value = cr.name;
-                opt.textContent = cr.name + (cr.capacity ? ' (' + cr.capacity + '人)' : '');
-                classroomSel.appendChild(opt);
-            });
+            data2.data
+                .filter(cr => !campusFilter || !cr.campus || cr.campus.indexOf(campusFilter) !== -1)
+                .forEach(cr => {
+                    const opt = document.createElement('option');
+                    opt.value = cr.name;
+                    opt.textContent = cr.name + (cr.capacity ? ' (' + cr.capacity + '人)' : '');
+                    classroomSel.appendChild(opt);
+                });
         }
     } catch (e) { /* ignore */ }
 
