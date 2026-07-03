@@ -3379,7 +3379,7 @@ async function showClassForm(classId) {
     } catch (e) { /* ignore */ }
     
     // Load campus tree
-    loadCampusTree('class-campus-tree');
+    await loadCampusTree('class-campus-tree');
     
     // If editing, populate fields
     if (classId) {
@@ -3394,7 +3394,7 @@ async function showClassForm(classId) {
                 document.getElementById('class-max-students').value = cls.max_students;
                 document.getElementById('class-lesson-hours').value = cls.lesson_hours;
                 document.querySelector('input[name="can_trial"][value="' + esc(cls.can_trial) + '"]').checked = true;
-                var campusRadio = document.querySelector('input[name="class-campus-radio"][value="' + escAttr(cls.campus) + '"]');
+                var campusRadio = document.querySelector('input[name="class-campus-radio"][value="' + esc(cls.campus) + '"]');
                 if (campusRadio) campusRadio.checked = true;
                 updateClassCount('class-name', 'class-name-count');
             }
