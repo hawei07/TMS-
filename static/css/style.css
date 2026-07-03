@@ -3768,9 +3768,13 @@ span.flatpickr-weekday {
     gap: 2px;
 }
 .seg-item {
-    padding: 6px 20px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    padding: 7px 20px;
     border-radius: 6px;
     font-size: 13px;
+    line-height: 1;
     cursor: pointer;
     color: #777;
     transition: all .15s;
