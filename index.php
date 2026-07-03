@@ -2718,8 +2718,8 @@ $stmt->execute();
                 $fields[] = "status=" . $db->quote($st) . "";
                 $newStatus = $st;
             }
-            if (isset($input['class_name'])) $fields[] = "class_name='" . $db->quote(trim($input['class_name'])) . "'";
-            if (isset($input['campus'])) $fields[] = "campus='" . $db->quote(trim($input['campus'])) . "'";
+            if (isset($input['class_name'])) $fields[] = "class_name=" . $db->quote(trim($input['class_name']));
+            if (isset($input['campus'])) $fields[] = "campus=" . $db->quote(trim($input['campus']));
             if (isset($input['teacher'])) $fields[] = "teacher='" . $db->quote(trim($input['teacher'])) . "'";
             if (isset($input['subject_level1'])) $fields[] = "subject_level1='" . $db->quote(trim($input['subject_level1'])) . "'";
             if (isset($input['subject_level2'])) $fields[] = "subject_level2='" . $db->quote(trim($input['subject_level2'])) . "'";
