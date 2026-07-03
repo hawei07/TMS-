@@ -1103,22 +1103,29 @@ $stmt->execute();
             break;
         case 'get_trial_subjects':
             $campusId = intval($_GET['campus'] ?? 0);
-            $subjs = [];
             if ($campusId) {
                 $stmt = $db->prepare("SELECT DISTINCT s.id, s.name FROM subjects s WHERE s.parent_id=0 AND EXISTS (SELECT 1 FROM courses c WHERE FIND_IN_SET(?, c.campus_permission)) ORDER BY s.name");
                 $stmt->execute([$campusId]);
                 $subjs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $subjs = $db->query("SELECT DISTINCT id, name FROM subjects WHERE parent_id=0 ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
             }
             json(['data' => $subjs]);
             break;
         case 'get_trial_courses':
             $campusId = intval($_GET['campus'] ?? 0);
             $subjectName = trim($_GET['subject'] ?? '');
-            $courses = [];
-            if ($campusId && $subjectName) {
-                $stmt = $db->prepare("SELECT id, name FROM courses WHERE FIND_IN_SET(?, campus_permission) AND subject LIKE CONCAT(?, '%') ORDER BY name");
-                $stmt->execute([$campusId, $subjectName . ' >%']);
+            if ($campusId || $subjectName) {
+                $sql = "SELECT id, name FROM courses WHERE 1=1";
+                $params = [];
+                if ($campusId) { $sql .= " AND FIND_IN_SET(?, campus_permission)"; $params[] = $campusId; }
+                if ($subjectName) { $sql .= " AND subject LIKE ?"; $params[] = $subjectName . ' %'; }
+                $sql .= " ORDER BY name";
+                $stmt = $db->prepare($sql);
+                $stmt->execute($params);
                 $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            } else {
+                $courses = $db->query("SELECT id, name FROM courses ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
             }
             json(['data' => $courses]);
             break;
