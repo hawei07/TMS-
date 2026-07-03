@@ -1096,6 +1096,58 @@ $stmt->execute();
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
+        // === 预约试听级联查询 ===
+        case 'get_trial_campuses':
+            $campusRows = $db->query("SELECT DISTINCT o.name, o.id FROM organizations o WHERE o.type='校区' ORDER BY o.name")->fetchAll(PDO::FETCH_ASSOC);
+            json(['data' => array_values($campusRows)]);
+            break;
+        case 'get_trial_subjects':
+            $campusName = trim($_GET['campus'] ?? '');
+            $subjs = [];
+            if ($campusName) {
+                $stmt = $db->prepare("SELECT DISTINCT s.id, s.name FROM subjects s WHERE s.parent_id=0 AND EXISTS (SELECT 1 FROM courses c WHERE c.campus_permission LIKE CONCAT('%', ?, '%')) ORDER BY s.name");
+                $stmt->execute([$campusName]);
+                $subjs = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            json(['data' => $subjs]);
+            break;
+        case 'get_trial_courses':
+            $campusName = trim($_GET['campus'] ?? '');
+            $subjectName = trim($_GET['subject'] ?? '');
+            $courses = [];
+            if ($campusName && $subjectName) {
+                $stmt = $db->prepare("SELECT id, name FROM courses WHERE campus_permission LIKE CONCAT('%', ?, '%') AND subject LIKE CONCAT(?, '%') ORDER BY name");
+                $stmt->execute([$campusName, $subjectName . ' >%']);
+                $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            json(['data' => $courses]);
+            break;
+        case 'get_trial_classes':
+            $courseId = intval($_GET['course_id'] ?? 0);
+            $campusName = trim($_GET['campus'] ?? '');
+            $classes = [];
+            if ($courseId && $campusName) {
+                $stmt = $db->prepare("SELECT id, name FROM classes WHERE course_id=? AND can_trial=1 AND campus=? ORDER BY name");
+                $stmt->execute([$courseId, $campusName]);
+                $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            }
+            json(['data' => $classes]);
+            break;
+        case 'get_trial_sessions':
+            $classId = intval($_GET['class_id'] ?? 0);
+            $sessions = [];
+            if ($classId) {
+                $stmt = $db->prepare("SELECT id, start_date, end_date, weekdays, time_slots, teacher, classroom FROM schedules WHERE class_id=? ORDER BY start_date");
+                $stmt->execute([$classId]);
+                $sessions = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                foreach ($sessions as &$s) {
+                    $s['time_slots'] = json_decode($s['time_slots'] ?? '{}', true) ?: [];
+                    $s['weekdays'] = array_map('intval', array_filter(explode(',', $s['weekdays'] ?? '')));
+                }
+            }
+            json(['data' => $sessions]);
+            break;
+
         case 'add_appointment':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $n = now();
