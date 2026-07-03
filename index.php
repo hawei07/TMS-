@@ -71,6 +71,11 @@ foreach ([
         $db->exec("ALTER TABLE appointments ADD COLUMN {$col[0]} {$col[1]}");
     }
 }
+// 预约试听: class_attendance needs student_name
+$caCols = [];
+$caRes = $db->query("SHOW COLUMNS FROM class_attendance");
+while ($c = $caRes->fetch(PDO::FETCH_ASSOC)) $caCols[] = $c['Field'];
+if (!in_array('student_name', $caCols)) $db->exec("ALTER TABLE class_attendance ADD COLUMN student_name VARCHAR(500) DEFAULT ''");
 $db->exec("CREATE TABLE IF NOT EXISTS communication_records (
     id INT PRIMARY KEY AUTO_INCREMENT,
     resource_id INT NOT NULL DEFAULT 0,
@@ -1265,33 +1270,12 @@ $stmt->execute();
             $stmt->bindValue(':c', $n);
             $stmt->execute();
             $aptId = $db->lastInsertId();
-            // 查找或创建学员，加入班级
-            $studentId = 0;
-            if ($phone) {
-                $cs = $db->prepare("SELECT id FROM students WHERE phone=? LIMIT 1");
-                $cs->execute([$phone]);
-                $srow = $cs->fetch(PDO::FETCH_ASSOC);
-                if ($srow) {
-                    $studentId = $srow['id'];
-                } else {
-                    $sno = 'T' . substr(time(), -8) . str_pad(rand(0,99), 2, '0', STR_PAD_LEFT);
-                    $db->prepare("INSERT INTO students (student_no, resource_id, name, phone, student_type, created_at) VALUES (?,?,?,?,'试听',?)")->execute([$sno, $resourceId, $resourceName, $phone, $n]);
-                    $studentId = $db->lastInsertId();
-                }
-            }
-            if ($studentId) {
-                $db->prepare("INSERT IGNORE INTO class_students (class_id, student_id, joined_at) VALUES (?,?,?)")->execute([$classId, $studentId, $trialDate ?: date('Y-m-d')]);
-            }
-            // 记录考勤
-            $clsInfo = $db->query("SELECT c.course_id, c.name AS class_name, co.name AS course_name, co.subject AS subject, c.campus FROM classes c LEFT JOIN courses co ON co.id=c.course_id WHERE c.id=$classId")->fetch(PDO::FETCH_ASSOC);
-            if ($clsInfo) {
-                $subjParts = explode(' > ', $clsInfo['subject'] ?? '');
-                $db->prepare("INSERT INTO attendance_records (student_id, course_id, campus, class_name, subject_level1, subject_level2, lesson_date, status, deducted_lessons, consumed_amount, created_at) VALUES (?,?,?,?,?,?,?,?,0,0,?)")->execute([
-                    $studentId, $clsInfo['course_id'], $clsInfo['campus'], $clsInfo['class_name'],
-                    $subjParts[0] ?? '', $subjParts[1] ?? '',
-                    $trialDate ?: date('Y-m-d'), '出勤', $n
-                ]);
-            }
+            // 资源作为临时试听学员加入考勤表
+            $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, created_at) VALUES (?,?,?,0,?,?,1,0,?)")->execute([
+                $classId, $scheduleId, $trialDate ?: date('Y-m-d'),
+                $resourceName . ($phone ? ' ' . $phone : ''),
+                '出勤', $n
+            ]);
             json(['id' => $aptId, 'message' => '预约成功，状态：已预约待试听']);
 
         case 'add_appointment':
@@ -4174,8 +4158,17 @@ $stmt->execute();
                 $existingIds = array_keys($studentIdsInClass);
                 $newTempIds = array_filter($extraStudentIds, function($sid) use ($existingIds) { return !in_array($sid, $existingIds); });
                 if (count($newTempIds) > 0) {
-                    $extraRes2 = $db->query("SELECT id, student_no, name FROM students WHERE id IN (" . implode(',', $newTempIds) . ")");
-                    while ($r = $extraRes2->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = false; }
+                    // 从 students 表查正常临时学员
+                    $validIds = array_filter($newTempIds, function($id) { return $id > 0; });
+                    if (count($validIds) > 0) {
+                        $extraRes2 = $db->query("SELECT id, student_no, name FROM students WHERE id IN (" . implode(',', $validIds) . ")");
+                        while ($r = $extraRes2->fetch(PDO::FETCH_ASSOC)) { $students[] = $r; $studentIdsInClass[$r['id']] = false; }
+                    }
+                    // student_id=0 的试听资源：直接从 class_attendance 取名
+                    if (in_array(0, $newTempIds)) {
+                        $students[] = ['id' => 0, 'student_no' => '试听', 'name' => ($attMap[0]['student_name'] ?? '试听学员')];
+                        $studentIdsInClass[0] = false;
+                    }
                 }
             }
             // 预取一级学科下所有课程ID（用于计算 max_deductible）
