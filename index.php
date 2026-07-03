@@ -6505,8 +6505,8 @@ if (intval($countBt) === 0) {
                 <p style="margin:0 0 12px;font-size:13px;color:#555;background:#f5f7fa;padding:8px 14px;border-radius:8px;"><span id="trial-info-text" style="font-weight:600;"></span></p>
                 <!-- 筛选行 -->
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:flex-end;">
-                    <select id="trial-campus" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部校区</option></select>
-                    <select id="trial-subject" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部学科</option></select>
+                    <select id="trial-campus" onchange="onTrialFilterChange()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部校区</option></select>
+                    <select id="trial-subject" onchange="onTrialSubjectFilterChange()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部学科</option></select>
                     <select id="trial-course" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部课程</option></select>
                     <select id="trial-teacher" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部老师</option></select>
                     <input type="date" id="trial-date-filter" onchange="loadTrialTable()" style="width:140px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;" placeholder="日期">

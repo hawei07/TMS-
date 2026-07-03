@@ -8228,24 +8228,74 @@ function showTrialAppointment(resourceId, resourceName, phone) {
     document.getElementById('trial-resource-name').value = resourceName;
     document.getElementById('trial-phone').value = phone || '';
     document.getElementById('trial-info-text').textContent = '客户：' + resourceName + (phone ? ' ' + phone : '');
-    // Load filter options
+    loadTrialCampuses();
+    loadTrialSubjects();
+    loadTrialCourses();
+    loadTrialTeachers();
+    document.getElementById('trial-table-body').innerHTML = '<tr><td colspan="6" style="text-align:center;color:#bbb;padding:40px;">选择筛选条件后点击查询</td></tr>';
+    openModal('modal-appointment');
+}
+function loadTrialCampuses() {
     api('get_trial_campuses', null, 'GET').then(function(d) {
         var s = document.getElementById('trial-campus');
         s.innerHTML = '<option value="">全部校区</option>';
         (d.data||[]).forEach(function(c){s.innerHTML+='<option value="'+c.id+'">'+c.name+'</option>';});
     });
-    api('get_trial_subjects', {campus:''}, 'GET').then(function(d){
-        var s=document.getElementById('trial-subject');
-        s.innerHTML='<option value="">全部学科</option>';
+}
+function loadTrialSubjects() {
+    var cid = document.getElementById('trial-campus').value;
+    api('get_trial_subjects', {campus: cid}, 'GET').then(function(d){
+        var s = document.getElementById('trial-subject');
+        var cur = s.value;
+        s.innerHTML = '<option value="">全部学科</option>';
         (d.data||[]).forEach(function(x){s.innerHTML+='<option value="'+x.name+'">'+x.name+'</option>';});
+        s.value = cur;
     });
-    api('get_trial_courses', {campus:'',subject:''}, 'GET').then(function(d){
-        var s=document.getElementById('trial-course');
-        s.innerHTML='<option value="">全部课程</option>';
+}
+function loadTrialCourses() {
+    var cid = document.getElementById('trial-campus').value;
+    var subj = document.getElementById('trial-subject').value;
+    api('get_trial_courses', {campus: cid, subject: subj}, 'GET').then(function(d){
+        var s = document.getElementById('trial-course');
+        var cur = s.value;
+        s.innerHTML = '<option value="">全部课程</option>';
         (d.data||[]).forEach(function(x){s.innerHTML+='<option value="'+x.id+'">'+x.name+'</option>';});
+        s.value = cur;
     });
-    document.getElementById('trial-table-body').innerHTML = '<tr><td colspan="6" style="text-align:center;color:#bbb;padding:40px;">选择筛选条件后点击查询</td></tr>';
-    openModal('modal-appointment');
+}
+function loadTrialTeachers() {
+    var cid = document.getElementById('trial-campus').value;
+    // Load teachers from employees filtered by campus
+    api('get_employees', null, 'GET').then(function(d) {
+        var teachers = (d.data||[]).filter(function(e){return e.is_teacher==='是';});
+        if (cid) {
+            // Look up campus name
+            var campusName = document.getElementById('trial-campus').selectedOptions[0].text;
+            teachers = teachers.filter(function(t){return t.department === campusName;});
+        }
+        var s = document.getElementById('trial-teacher');
+        var cur = s.value;
+        s.innerHTML = '<option value="">全部老师</option>';
+        teachers.forEach(function(t){s.innerHTML+='<option value="'+t.name+'">'+t.name+'</option>';});
+        s.value = cur;
+    });
+}
+// Filter cascading: campus/subject change → reload dropdowns only
+function onTrialFilterChange() {
+    var cid = document.getElementById('trial-campus').value;
+    if (cid) {
+        loadTrialSubjects();
+        loadTrialCourses();
+        loadTrialTeachers();
+    } else {
+        loadTrialSubjects();
+        loadTrialCourses();
+        loadTrialTeachers();
+    }
+}
+function onTrialSubjectFilterChange() {
+    var subj = document.getElementById('trial-subject').value;
+    if (subj) { loadTrialCourses(); } else { loadTrialCourses(); }
 }
 function loadTrialTable() {
     var params = {
@@ -8262,13 +8312,6 @@ function loadTrialTable() {
         tbody.innerHTML = rows.map(function(r) {
             return '<tr><td>'+escHtml(r.class_name)+'</td><td>'+r.date+' '+r.day+' '+r.start+'-'+r.end+'</td><td>'+escHtml(r.campus)+'</td><td>'+escHtml(r.teacher||'')+'</td><td>'+escHtml(r.classroom||'')+'</td><td style="text-align:center;"><a href="javascript:void(0)" onclick="bookTrialInline('+r.class_id+','+r.schedule_id+',\''+r.date+'\',\''+escAttr(r.start)+'\')" style="color:var(--color-primary);font-size:12px;">预约试听</a></td></tr>';
         }).join('');
-        // Update teacher dropdown from results
-        var teachers = [...new Set(rows.map(function(r){return r.teacher;}).filter(Boolean))];
-        var tSel = document.getElementById('trial-teacher');
-        var curT = tSel.value;
-        tSel.innerHTML = '<option value="">全部老师</option>';
-        teachers.forEach(function(t){tSel.innerHTML+='<option value="'+t+'">'+t+'</option>';});
-        tSel.value = curT;
     });
 }
 function bookTrialInline(classId, scheduleId, trialDate, startTime) {
