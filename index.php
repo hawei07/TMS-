@@ -5542,7 +5542,7 @@ if (intval($countBt) === 0) {
                                     </div>
                                     <div style="flex:1;">
                                         <label style="font-size:13px;display:block;margin-bottom:4px;">授课课时</label>
-                                        <input type="number" id="sc-lesson-hours" value="2" min="2" step="2" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
+                                        <input type="number" id="sc-lesson-hours" value="2" min="2" step="2" oninput="this.value=Math.max(2,parseInt(this.value)||2);if(this.value%2!==0)this.value=parseInt(this.value)+1" style="width:100%;padding:6px 10px;border:1px solid #ddd;border-radius:4px;">
                                     </div>
                                 </div>
                                 <div style="text-align:right;display:flex;gap:8px;justify-content:flex-end;">
@@ -6469,7 +6469,7 @@ if (intval($countBt) === 0) {
             <div class="form-group">
                 <label>授课课时</label>
                 <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="number" id="class-lesson-hours" value="2" min="2" step="2" placeholder="请输入授课课时" style="flex:1;">
+                    <input type="number" id="class-lesson-hours" value="2" min="2" step="2" oninput="this.value=Math.max(2,parseInt(this.value)||2);if(this.value%2!==0)this.value=parseInt(this.value)+1" placeholder="请输入授课课时" style="flex:1;">
                     <span style="color:#999;font-size:12px;white-space:nowrap;">班级每次点名消耗的课时 <span style="cursor:help;" title="班级每次点名消耗的课时">ⓘ</span></span>
                 </div>
             </div>
