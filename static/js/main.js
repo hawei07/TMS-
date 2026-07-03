@@ -1477,12 +1477,11 @@ async function loadAppointments() {
 function renderAptTable(rows) {
     const tbody = document.querySelector('#table-appointments tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无预约记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无预约记录</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `
         <tr>
-            <td>${esc(r.student_name)}</td>
             <td>${esc(r.resource_name)}</td>
             <td>${esc(r.phone)}</td>
             <td>${esc(r.course_type)}</td>

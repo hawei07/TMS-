@@ -5222,7 +5222,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-appointments">
                         <thead><tr>
-                            <th>学员姓名</th><th>关联资源</th><th>电话</th><th>课程类型</th><th>预约时间</th><th>状态</th><th>备注</th><th width="160">操作</th>
+                            <th>资源</th><th>电话</th><th>课程类型</th><th>预约时间</th><th>状态</th><th>备注</th><th width="160">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
