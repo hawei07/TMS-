@@ -6404,18 +6404,51 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：预约试听 -->
     <div class="modal-overlay" id="modal-appointment">
-        <div class="modal"><div class="modal-header"><h3 id="modal-appointment-title">新增预约试听</h3><button class="modal-close" onclick="closeModal('modal-appointment')">&times;</button></div>
-        <div class="modal-body">
-            <input type="hidden" id="edit-aid"><input type="hidden" id="apt-resource-id">
-            <div class="form-group"><label>关联资源</label><select id="apt-resource-select"><option value="">不关联（手动填写）</option></select></div>
-            <div class="form-group"><label>学员姓名 <span class="required">*</span></label><input type="text" id="apt-student-name"></div>
-            <div class="form-group"><label>电话</label><input type="text" id="apt-phone"></div>
-            <div class="form-group"><label>课程类型</label><select id="apt-course-type"><option value="">请选择</option><option value="试听课">试听课</option><option value="正式课体验">正式课体验</option><option value="测评课">测评课</option><option value="其他">其他</option></select></div>
-            <div class="form-group"><label>预约时间 <span class="required">*</span></label><input type="datetime-local" id="apt-time"></div>
-            <div class="form-group"><label>状态</label><select id="apt-status"><option value="已预约">已预约</option><option value="已试听">已试听</option><option value="已取消">已取消</option></select></div>
-            <div class="form-group"><label>备注</label><textarea id="apt-notes" rows="3"></textarea></div>
+        <div class="modal" style="max-width:480px;border-radius:12px;">
+            <div class="modal-header" style="padding:16px 20px;border-bottom:1px solid #f0f0f0;">
+                <h3 id="modal-appointment-title" style="font-size:16px;margin:0;">预约试听</h3>
+                <button class="modal-close" onclick="closeModal('modal-appointment')" style="font-size:20px;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <input type="hidden" id="trial-resource-id">
+                <input type="hidden" id="trial-resource-name">
+                <input type="hidden" id="trial-phone">
+                <p style="margin:0 0 16px;font-size:13px;color:#555;background:#f5f7fa;padding:10px 14px;border-radius:8px;">
+                    <span id="trial-info-text" style="font-weight:600;"></span>
+                </p>
+                <!-- 校区 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">校区 <span class="required">*</span></label>
+                    <select id="trial-campus" onchange="onTrialCampusChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请选择校区</option></select>
+                </div>
+                <!-- 学科 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">一级学科 <span class="required">*</span></label>
+                    <select id="trial-subject" onchange="onTrialSubjectChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择校区</option></select>
+                </div>
+                <!-- 课程 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">课程 <span class="required">*</span></label>
+                    <select id="trial-course" onchange="onTrialCourseChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择学科</option></select>
+                </div>
+                <!-- 支持试听班级 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">试听班级 <span class="required">*</span></label>
+                    <select id="trial-class" onchange="onTrialClassChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择课程</option></select>
+                </div>
+                <!-- 可用课次 -->
+                <div class="form-group" style="margin-bottom:0;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">试听课次 <span class="required">*</span></label>
+                    <div id="trial-sessions-list" style="display:flex;flex-direction:column;gap:8px;">
+                        <span style="color:#bbb;font-size:13px;">请先选择班级</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer" style="padding:12px 20px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:8px;">
+                <button class="btn btn-outline" onclick="closeModal('modal-appointment')">取消</button>
+                <button class="btn btn-primary" id="trial-submit-btn" onclick="bookTrial()" disabled>确认预约</button>
+            </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-appointment')">取消</button><button class="btn btn-primary" onclick="saveAppointment()">保存</button></div></div>
     </div>
 
     <!-- 弹窗：沟通记录 -->
