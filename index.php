@@ -1236,12 +1236,17 @@ $stmt->execute();
             $courseId = intval($input['course_id'] ?? 0);
             $classId = intval($input['class_id'] ?? 0);
             $scheduleId = intval($input['schedule_id'] ?? 0);
+            if (!$resourceId || !$classId || !$scheduleId) json(['error' => '请先选择校区并点击查询']);
+            // 如果未选课程，从班级反查
+            if (!$courseId) {
+                $cInfo = $db->query("SELECT course_id FROM classes WHERE id=$classId")->fetch(PDO::FETCH_ASSOC);
+                $courseId = $cInfo ? intval($cInfo['course_id']) : 0;
+            }
             $campus = trim($input['campus'] ?? '');
             $subjectLevel1 = trim($input['subject_level1'] ?? '');
             $resourceName = trim($input['resource_name'] ?? '');
             $phone = trim($input['phone'] ?? '');
             $trialDate = trim($input['trial_date'] ?? '');
-            if (!$resourceId || !$courseId || !$classId || !$scheduleId) json(['error' => '请完成所有选择']);
             $n = now();
             $stmt = $db->prepare("INSERT INTO appointments (resource_id,resource_name,student_name,phone,course_type,appointment_time,status,notes,campus,subject_level1,course_id,class_id,schedule_id,created_at) VALUES (:ri,:rn,:sn,:p,:ct,:at,:st,:no,:cp,:sj,:ci,:cli,:si,:c)");
             $stmt->bindValue(':ri', $resourceId, PDO::PARAM_INT);
