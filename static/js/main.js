@@ -2062,8 +2062,10 @@ async function loadCourses() {
 // 校区权限辅助函数（树形结构）
 let campusCheckboxData = []; // [{id, name, type, parent_id}]
 
-async function loadCampusTree() {
-    const container = document.getElementById('course-campus-tree');
+async function loadCampusTree(containerId) {
+    containerId = containerId || 'course-campus-tree';
+    var isSingle = (containerId === 'class-campus-tree');
+    const container = document.getElementById(containerId);
     if (!container) return;
     container.innerHTML = '<span style="color:#999;font-size:13px;">加载中...</span>';
     try {
@@ -2087,29 +2089,42 @@ async function loadCampusTree() {
             container.innerHTML = '<span style="color:#999;font-size:13px;">暂无校区数据，请先在组织管理中创建校区</span>';
             return;
         }
-        container.innerHTML = filteredTree.map(node => renderCampusTreeNode(node, 0)).join('');
-        updateCampusToggleLabel();
+        container.innerHTML = filteredTree.map(node => renderCampusTreeNode(node, 0, isSingle)).join('');
+        if (!isSingle) updateCampusToggleLabel();
     } catch (e) {
         container.innerHTML = '<span style="color:#e6a23c;font-size:13px;">加载校区失败</span>';
     }
 }
 
-function renderCampusTreeNode(node, level) {
+function renderCampusTreeNode(node, level, isSingle) {
     const hasChildren = node.children && node.children.length > 0;
     const expanded = level === 0;
+    var isCampus = (node.type === '校区');
     let html = '<div class="campus-tree-node" data-id="' + node.id + '" data-type="' + (node.type || '') + '" data-has-children="' + hasChildren + '" data-expanded="' + expanded + '">';
     html += '<div class="campus-tree-row" style="padding-left:' + (level * 20 + 12) + 'px">';
-    html += '<span class="campus-tree-arrow" onclick="toggleCampusTreeExpand(this)">' + (expanded ? '▾' : '▸') + '</span>';
-    html += '<input type="checkbox" class="campus-tree-check" onclick="toggleCampusTreeNode(this)">';
+    if (hasChildren) {
+        html += '<span class="campus-tree-arrow" onclick="toggleCampusTreeExpand(this)">' + (expanded ? '▾' : '▸') + '</span>';
+    } else {
+        html += '<span class="campus-tree-arrow" style="visibility:hidden;">▸</span>';
+    }
+    if (isSingle && isCampus) {
+        html += '<input type="radio" name="class-campus-radio" class="campus-tree-check" value="' + node.name + '" onclick="onClassCampusRadio(this)">';
+    } else if (!isSingle) {
+        html += '<input type="checkbox" class="campus-tree-check" onclick="toggleCampusTreeNode(this)">';
+    }
     html += '<span class="campus-tree-label">' + esc(node.name) + '</span>';
     html += '</div>';
     if (hasChildren) {
-        html += '<div class="campus-tree-children"' + (expanded ? '' : ' style="display:none"') + '>';
-        node.children.forEach(function(child) { html += renderCampusTreeNode(child, level + 1); });
+        html += '<div class="campus-tree-children" style="display:' + (expanded ? 'block' : 'none') + '">';
+        html += node.children.map(function(child) { return renderCampusTreeNode(child, level + 1, isSingle); }).join('');
         html += '</div>';
     }
     html += '</div>';
     return html;
+}
+
+function onClassCampusRadio(el) {
+    // Single-select radio — no special handling needed
 }
 
 function toggleCampusTreeExpand(el) {
@@ -3338,9 +3353,7 @@ async function showClassForm(classId) {
     document.getElementById('class-max-students').value = '';
     document.getElementById('class-lesson-hours').value = '';
     document.querySelector('input[name="can_trial"][value="是"]').checked = true;
-    document.getElementById('class-remark').value = '';
     updateClassCount('class-name', 'class-name-count');
-    updateClassCount('class-remark', 'class-remark-count');
     
     // Load course dropdown
     const courseSel = document.getElementById('class-course');
@@ -3358,22 +3371,8 @@ async function showClassForm(classId) {
         }
     } catch (e) { /* ignore */ }
     
-    // Load campus dropdown (organizations WHERE type='校区')
-    const campusSel = document.getElementById('class-campus');
-    campusSel.innerHTML = '<option value="">请选择当前校区</option>';
-    try {
-        const res2 = await fetch(API_BASE + 'list_organizations');
-        const data2 = await res2.json();
-        const flat = (data2.data && data2.data.flat) ? data2.data.flat : [];
-        flat.forEach(org => {
-            if (org.type === '校区') {
-                const opt = document.createElement('option');
-                opt.value = org.name;
-                opt.textContent = org.name;
-                campusSel.appendChild(opt);
-            }
-        });
-    } catch (e) { /* ignore */ }
+    // Load campus tree
+    loadCampusTree('class-campus-tree');
     
     // If editing, populate fields
     if (classId) {
@@ -3388,10 +3387,9 @@ async function showClassForm(classId) {
                 document.getElementById('class-max-students').value = cls.max_students;
                 document.getElementById('class-lesson-hours').value = cls.lesson_hours;
                 document.querySelector('input[name="can_trial"][value="' + esc(cls.can_trial) + '"]').checked = true;
-                document.getElementById('class-campus').value = cls.campus;
-                document.getElementById('class-remark').value = cls.remark;
+                var campusRadio = document.querySelector('input[name="class-campus-radio"][value="' + esc(cls.campus).replace(/"/g, '\\"') + '"]');
+                if (campusRadio) campusRadio.checked = true;
                 updateClassCount('class-name', 'class-name-count');
-                updateClassCount('class-remark', 'class-remark-count');
             }
         } catch (e) { /* ignore */ }
     }
@@ -3407,8 +3405,8 @@ async function saveClass() {
     const maxStudents = parseInt(document.getElementById('class-max-students').value) || 0;
     const lessonHours = parseInt(document.getElementById('class-lesson-hours').value) || 0;
     const canTrial = document.querySelector('input[name="can_trial"]:checked').value;
-    const campus = document.getElementById('class-campus').value;
-    const remark = document.getElementById('class-remark').value.trim();
+    const campusRadio = document.querySelector('input[name="class-campus-radio"]:checked');
+    const campus = campusRadio ? campusRadio.value : '';
     
     if (!courseId) return showToast('请选择关联课程', 'error');
     if (!name) return showToast('班级名称不能为空', 'error');
@@ -3416,9 +3414,8 @@ async function saveClass() {
     if (maxStudents <= 0) return showToast('招生人数必须大于0', 'error');
     if (lessonHours % 2 !== 0) return showToast('授课课时必须为偶数', 'error');
     if (!campus) return showToast('请选择当前校区', 'error');
-    if (remark.length > 200) return showToast('备注最长200字', 'error');
     
-    const data = { course_id: courseId, name, class_type: classType, max_students: maxStudents, lesson_hours: lessonHours, can_trial: canTrial, campus, remark };
+    const data = { course_id: courseId, name, class_type: classType, max_students: maxStudents, lesson_hours: lessonHours, can_trial: canTrial, campus };
     let result;
     try {
         if (id) {
