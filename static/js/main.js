@@ -7637,7 +7637,7 @@ function loadScheduleView() {
     if (classroom) url += '&classroom=' + encodeURIComponent(classroom);
 
     api(url, null, 'GET').then(res => {
-        if (res.error) { alert(res.error); return; }
+        if (res.error) { showToast(res.error, 'error'); return; }
         const d = res.data;
 
         // Populate teacher & classroom filters from API response
@@ -7810,12 +7810,13 @@ function takeAttendanceFromSchedule(scheduleId, classId, className, campus, cour
 }
 
 function deleteScheduleEntry(scheduleId, className) {
-    if (!confirm('确定删除课次「' + className + '」吗？此操作不可恢复。')) return;
-    api('delete_schedule', { id: scheduleId }, 'POST').then(function(res) {
-        if (res.error) { showToast(res.error, 'error'); return; }
-        document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
-        showToast('课次已删除', 'success');
-        loadScheduleView();
+    showCustomConfirm('确定删除课次「' + className + '」吗？此操作不可恢复。', function() {
+        api('delete_schedule', { id: scheduleId }, 'POST').then(function(res) {
+            if (res.error) { showToast(res.error, 'error'); return; }
+            document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
+            showToast('课次已删除', 'success');
+            loadScheduleView();
+        });
     });
 }
 
