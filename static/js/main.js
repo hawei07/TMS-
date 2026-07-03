@@ -3423,20 +3423,23 @@ async function saveClass() {
     const id = document.getElementById('edit-class-id').value;
     const courseId = parseInt(document.getElementById('class-course').value) || 0;
     const name = document.getElementById('class-name').value.trim();
-    const classType = document.querySelector('input[name="class_type"]:checked').value;
     const maxStudents = parseInt(document.getElementById('class-max-students').value) || 0;
     const lessonHours = parseInt(document.getElementById('class-lesson-hours').value) || 2;
     const canTrial = document.querySelector('input[name="can_trial"]:checked').value;
-    const campus = document.getElementById('class-campus').value;
     
     if (!courseId) return showToast('请选择关联课程', 'error');
     if (!name) return showToast('班级名称不能为空', 'error');
     if (name.length > 20) return showToast('班级名称最长20字', 'error');
     if (maxStudents <= 0) return showToast('招生人数必须大于0', 'error');
     if (lessonHours % 2 !== 0) return showToast('授课课时必须为偶数', 'error');
-    if (!campus) return showToast('请选择当前校区', 'error');
-    
-    const data = { course_id: courseId, name, class_type: classType, max_students: maxStudents, lesson_hours: lessonHours, can_trial: canTrial, campus };
+
+    const data = { course_id: courseId, name, max_students: maxStudents, lesson_hours: lessonHours, can_trial: canTrial };
+    if (!id) {
+        const campus = document.getElementById('class-campus').value;
+        if (!campus) return showToast('请选择当前校区', 'error');
+        data.class_type = document.querySelector('input[name="class_type"]:checked').value;
+        data.campus = campus;
+    }
     let result;
     try {
         if (id) {
