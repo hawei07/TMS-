@@ -1102,34 +1102,42 @@ $stmt->execute();
             json(['data' => array_values($campusRows)]);
             break;
         case 'get_trial_subjects':
-            $campusName = trim($_GET['campus'] ?? '');
+            $campusId = intval($_GET['campus'] ?? 0);
             $subjs = [];
-            if ($campusName) {
-                $stmt = $db->prepare("SELECT DISTINCT s.id, s.name FROM subjects s WHERE s.parent_id=0 AND EXISTS (SELECT 1 FROM courses c WHERE c.campus_permission LIKE CONCAT('%', ?, '%')) ORDER BY s.name");
-                $stmt->execute([$campusName]);
+            if ($campusId) {
+                $stmt = $db->prepare("SELECT DISTINCT s.id, s.name FROM subjects s WHERE s.parent_id=0 AND EXISTS (SELECT 1 FROM courses c WHERE FIND_IN_SET(?, c.campus_permission)) ORDER BY s.name");
+                $stmt->execute([$campusId]);
                 $subjs = $stmt->fetchAll(PDO::FETCH_ASSOC);
             }
             json(['data' => $subjs]);
             break;
         case 'get_trial_courses':
-            $campusName = trim($_GET['campus'] ?? '');
+            $campusId = intval($_GET['campus'] ?? 0);
             $subjectName = trim($_GET['subject'] ?? '');
             $courses = [];
-            if ($campusName && $subjectName) {
-                $stmt = $db->prepare("SELECT id, name FROM courses WHERE campus_permission LIKE CONCAT('%', ?, '%') AND subject LIKE CONCAT(?, '%') ORDER BY name");
-                $stmt->execute([$campusName, $subjectName . ' >%']);
+            if ($campusId && $subjectName) {
+                $stmt = $db->prepare("SELECT id, name FROM courses WHERE FIND_IN_SET(?, campus_permission) AND subject LIKE CONCAT(?, '%') ORDER BY name");
+                $stmt->execute([$campusId, $subjectName . ' >%']);
                 $courses = $stmt->fetchAll(PDO::FETCH_ASSOC);
             }
             json(['data' => $courses]);
             break;
         case 'get_trial_classes':
             $courseId = intval($_GET['course_id'] ?? 0);
-            $campusName = trim($_GET['campus'] ?? '');
+            $campusId = intval($_GET['campus'] ?? 0);
             $classes = [];
-            if ($courseId && $campusName) {
-                $stmt = $db->prepare("SELECT id, name FROM classes WHERE course_id=? AND can_trial=1 AND campus=? ORDER BY name");
-                $stmt->execute([$courseId, $campusName]);
-                $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            if ($courseId && $campusId) {
+                // Look up campus name from ID
+                $campusName = '';
+                $cnStmt = $db->prepare("SELECT name FROM organizations WHERE id=? AND type='校区'");
+                $cnStmt->execute([$campusId]);
+                $cnRow = $cnStmt->fetch(PDO::FETCH_ASSOC);
+                $campusName = $cnRow ? $cnRow['name'] : '';
+                if ($campusName) {
+                    $stmt = $db->prepare("SELECT id, name FROM classes WHERE course_id=? AND can_trial=1 AND campus=? ORDER BY name");
+                    $stmt->execute([$courseId, $campusName]);
+                    $classes = $stmt->fetchAll(PDO::FETCH_ASSOC);
+                }
             }
             json(['data' => $classes]);
             break;
