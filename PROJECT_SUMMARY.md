@@ -1393,3 +1393,51 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | fix | **排课模式教师按校区筛选**：教师列表按 department 字段匹配校区名，只展示本校区教师 | static/js/main.js | 7d28cb3 |
 | style | **课表卡片重新设计**：去掉课程名，班级名粗体置顶 → 教师名白色底粗体突出 → 教室+人数为副信息 | static/js/main.js static/css/style.css | 191aa03 / 4437d60 |
 | feat | **课表弹窗增加「考勤」和「删除课次」按钮**：考勤 → 跳转班级管理面板；删除课次 → 调用 delete_schedule API | static/js/main.js | 7280983 |
+
+### 2026-07-03 — 预约试听重构 + UI 优化
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **HTML 表单 UI 重设计**：班级新增/编辑表单改为分段控件（pill 按钮）、圆角输入框、招生人数+授课课时并排 | index.php style.css main.js | 88b6a8b |
+| fix | **分段控件文字居中**：seg-item 加 `display:inline-flex;align-items:center;line-height:1` | style.css | d4fd4f0 |
+| fix | **按钮文字居中**：.btn 加 `justify-content:center;text-align:center` | style.css | c8dacca |
+| fix | **排课确认改用 toast 提示** + campus 兜底校验 | main.js | 929f936 |
+| fix | **课表删除课次 confirm 改自定义弹窗** + scheduleView alert 改 toast | main.js | 0468b7a |
+| feat | **授课课时默认 2 最小 2 步进 2** + 排课起始日期根据单元格日期智能计算 | index.php main.js | f76e28f |
+| refactor | **排课弹窗去按日期排课** + UI 重设计（时间安排 + 资源配置两段式） | index.php main.js | acc9738 |
+| feat | **排课弹窗教师按校区分组** + 搜索所有教师（input+datalist→自定义下拉）、教室按校区过滤 | index.php main.js style.css | f5e9289 |
+| fix | **教师搜索改自定义下拉**：白底浅色 hover，本校教师绿色标识 | index.php main.js style.css | 495a689 |
+| feat | **新增资源编辑 try/catch** + 错误详细提示 | main.js | 198fd9b |
+| fix | **loadChannels 返回 res.data**：修复资源编辑 channels.map 报 TypeError | main.js | d3f0a67 |
+| fix | **班级校区编辑回填**：loadCampusTree 加 await 确保树渲染后再回填 + esc→escAttr | main.js | 7fb5047 |
+| fix | **班级校区从树状改回下拉 select** | index.php main.js | 68ffd9d |
+| fix | **全量消除 \$db->quote 双引号包装**：update_class/update_classroom/update_attendance 共 5 处 SQL 语法错误 | index.php | b466e7c / 10e4ad3 |
+| feat | **编辑班级隐藏班级类型和校区**（仅新增时显示和发送） | index.php main.js | 2dce6e2 / 0ccd237 |
+| style | **编辑班级弹窗去备注字段** | index.php | 9073c02 |
+| fix | **新增/删除班级后刷新正确 att-前缀表格** | main.js | fa82ec3 |
+| fix | **授课课时强制偶数**：单数自动 +1，最小保持 2 | index.php | f75c8d4 |
+
+### 2026-07-03 — 预约试听重构（核心功能）
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **appointments 表扩展**：新增 campus/subject_level1/course_id/class_id/schedule_id 字段 | index.php | 5bd6af9 |
+| feat | **5 个级联查询 API**：get_trial_campuses/subjects/courses/classes/sessions | index.php | 21b346a |
+| feat | **book_trial API**：级联创建预约记录，state=已预约待试听 | index.php | a8747be |
+| feat | **预约试听弹窗重构**：校区→学科→课程→班级→课次 5 级级联 | index.php | 2ea52e2 |
+| feat | **search_trial_sessions API**：独立筛选查询，展开为具体日期+时段 | index.php | 9cab794 |
+| feat | **预约试听改为筛选+表格模式**：横向独立筛选器 + 查询按钮 + 结果表格每行「预约试听」链接 | index.php main.js | 9cab794 |
+| fix | **预约试听独立筛选**：各筛选器不限顺序，查询按钮一次性搜索 | main.js | — |
+| feat | **教师筛选**：选校区后教师列表缩为该校区的 | main.js | — |
+| fix | **get_trial_subjects/courses 空筛选时返回全部** | index.php | 5d61eb0 |
+| fix | **search_trial_sessions 日期计算修复**：next 跳过当天 → today+N days | index.php | adfaa01 |
+| fix | **search_trial_sessions 按 weekday 过滤 time_slot**：避免跨天时段混入 | index.php | f45d089 |
+| fix | **book_trial 不强制 course_id**：空时从班级反查 | index.php | 66a7c6c |
+| fix | **attendance_records 无 notes 列**：移除，改用 class_attendance 表 | index.php | a9bd52e |
+| fix | **class_attendance 加 student_name 列** + 零 ID 试听学员考勤可见 | index.php | c9edd70 |
+| fix | **get_class_attendance student_id=0**：不从 students 表查，直接用 class_attendance.student_name | index.php | c9edd70 |
+| fix | **预约名单去学员列**：改展示资源+电话，去掉 student_name | index.php main.js | 5d5732f |
+| fix | **预约成功后刷新记录列表**：bookTrialInline 补 loadAppointments() | main.js | 2c99a01 |
+| fix | **get_appointments 无筛选时 \$result→\$stmt**：修复预约列表始终为空 | index.php | 9e265f7 |
+| style | **弹窗宽度放宽 + 去滚动条**：820→960→1100px + 95vw，white-space:nowrap | index.php | 3260c31 / 3582ab5 |
+| style | **校区/学科联动 filter**：选校区缩课/师，选学科缩课 | index.php main.js | 64b9b34 |
