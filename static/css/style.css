@@ -3788,3 +3788,16 @@ span.flatpickr-weekday {
     font-weight: 600;
     box-shadow: 0 1px 3px rgba(0,0,0,.08);
 }
+
+/* ===== 试听课次卡片 ===== */
+.trial-session-card {
+    display:flex;gap:10px;align-items:center;
+    padding:10px 14px;border:1px solid #e8e8e8;border-radius:8px;
+    cursor:pointer;transition:all .15s;font-size:12px;
+}
+.trial-session-card:hover { border-color:#bbb; background:#fafafa; }
+.trial-session-card.active { border-color:var(--color-primary); background:var(--color-primary-bg); }
+.ts-days { font-weight:600;color:#555;min-width:40px; }
+.ts-time { color:#888; }
+.ts-teacher { color:var(--color-primary);margin-left:auto; }
+.ts-room { color:#999; }

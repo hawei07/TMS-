@@ -1215,17 +1215,7 @@ async function showAppointmentModal() {
 }
 
 async function openAppointmentForResource(rid, name, phone) {
-    document.getElementById('modal-appointment-title').textContent = '新增预约试听';
-    document.getElementById('edit-aid').value = '';
-    document.getElementById('apt-resource-id').value = rid;
-    document.getElementById('apt-student-name').value = name;
-    document.getElementById('apt-phone').value = phone;
-    document.getElementById('apt-time').value = '';
-    document.getElementById('apt-notes').value = '';
-    document.getElementById('apt-status').value = '已预约';
-    await populateCourseTypeSelect('apt-course-type', '');
-    document.getElementById('apt-resource-select').innerHTML = `<option value="${rid}" selected>${name} ${phone}</option>`;
-    openModal('modal-appointment');
+    showTrialAppointment(rid, name, phone);
 }
 
 async function editAppointment(aid) {
@@ -8231,3 +8221,139 @@ document.addEventListener('change', function(e) {
     rb.parentElement.classList.add('active');
     if (rb.name === 'class_type') onClassTypeChange();
 });
+
+// ===== 预约试听级联 =====
+function showTrialAppointment(resourceId, resourceName, phone) {
+    document.getElementById('trial-resource-id').value = resourceId;
+    document.getElementById('trial-resource-name').value = resourceName;
+    document.getElementById('trial-phone').value = phone || '';
+    document.getElementById('trial-info-text').textContent = '客户：' + resourceName + (phone ? ' ' + phone : '');
+    // Reset cascade
+    document.getElementById('trial-campus').innerHTML = '<option value="">加载中...</option>';
+    document.getElementById('trial-subject').innerHTML = '<option value="">请先选择校区</option>';
+    document.getElementById('trial-subject').disabled = true;
+    document.getElementById('trial-course').innerHTML = '<option value="">请先选择学科</option>';
+    document.getElementById('trial-course').disabled = true;
+    document.getElementById('trial-class').innerHTML = '<option value="">请先选择课程</option>';
+    document.getElementById('trial-class').disabled = true;
+    document.getElementById('trial-sessions-list').innerHTML = '<span style="color:#bbb;">请先选择班级</span>';
+    document.getElementById('trial-submit-btn').disabled = true;
+    // Load campuses
+    api('get_trial_campuses', null, 'GET').then(function(d) {
+        var sel = document.getElementById('trial-campus');
+        sel.innerHTML = '<option value="">请选择校区</option>';
+        (d.data || []).forEach(function(c) {
+            sel.innerHTML += '<option value="' + c.name + '">' + c.name + '</option>';
+        });
+        sel.disabled = false;
+    });
+    openModal('modal-appointment');
+}
+
+function onTrialCampusChange() {
+    var campus = document.getElementById('trial-campus').value;
+    var subj = document.getElementById('trial-subject');
+    subj.disabled = true; subj.innerHTML = '<option value="">加载中...</option>';
+    document.getElementById('trial-course').innerHTML = '<option value="">请先选择学科</option>';
+    document.getElementById('trial-course').disabled = true;
+    document.getElementById('trial-class').innerHTML = '<option value="">请先选择课程</option>';
+    document.getElementById('trial-class').disabled = true;
+    document.getElementById('trial-sessions-list').innerHTML = '<span style="color:#bbb;">请先选择班级</span>';
+    document.getElementById('trial-submit-btn').disabled = true;
+    if (!campus) { subj.innerHTML = '<option value="">请先选择校区</option>'; return; }
+    api('get_trial_subjects', {campus: campus}, 'GET').then(function(d) {
+        subj.innerHTML = '<option value="">请选择学科</option>';
+        (d.data || []).forEach(function(s) {
+            subj.innerHTML += '<option value="' + s.name + '">' + s.name + '</option>';
+        });
+        subj.disabled = false;
+    });
+}
+
+function onTrialSubjectChange() {
+    var campus = document.getElementById('trial-campus').value;
+    var subject = document.getElementById('trial-subject').value;
+    var course = document.getElementById('trial-course');
+    course.disabled = true; course.innerHTML = '<option value="">加载中...</option>';
+    document.getElementById('trial-class').innerHTML = '<option value="">请先选择课程</option>';
+    document.getElementById('trial-class').disabled = true;
+    document.getElementById('trial-sessions-list').innerHTML = '<span style="color:#bbb;">请先选择班级</span>';
+    document.getElementById('trial-submit-btn').disabled = true;
+    if (!subject) { course.innerHTML = '<option value="">请先选择学科</option>'; return; }
+    api('get_trial_courses', {campus: campus, subject: subject}, 'GET').then(function(d) {
+        course.innerHTML = '<option value="">请选择课程</option>';
+        (d.data || []).forEach(function(c) {
+            course.innerHTML += '<option value="' + c.id + '">' + c.name + '</option>';
+        });
+        course.disabled = false;
+    });
+}
+
+function onTrialCourseChange() {
+    var campus = document.getElementById('trial-campus').value;
+    var courseId = document.getElementById('trial-course').value;
+    var cls = document.getElementById('trial-class');
+    cls.disabled = true; cls.innerHTML = '<option value="">加载中...</option>';
+    document.getElementById('trial-sessions-list').innerHTML = '<span style="color:#bbb;">请先选择班级</span>';
+    document.getElementById('trial-submit-btn').disabled = true;
+    if (!courseId) { cls.innerHTML = '<option value="">请先选择课程</option>'; return; }
+    api('get_trial_classes', {course_id: courseId, campus: campus}, 'GET').then(function(d) {
+        cls.innerHTML = '<option value="">请选择班级</option>';
+        (d.data || []).forEach(function(c) {
+            cls.innerHTML += '<option value="' + c.id + '">' + c.name + '</option>';
+        });
+        cls.disabled = false;
+    });
+}
+
+function onTrialClassChange() {
+    var classId = document.getElementById('trial-class').value;
+    var list = document.getElementById('trial-sessions-list');
+    document.getElementById('trial-submit-btn').disabled = true;
+    window._selectedTrialSchedule = null;
+    if (!classId) { list.innerHTML = '<span style="color:#bbb;">请先选择班级</span>'; return; }
+    api('get_trial_sessions', {class_id: classId}, 'GET').then(function(d) {
+        var scheds = d.data || [];
+        if (!scheds.length) { list.innerHTML = '<span style="color:#999;font-size:13px;">该班级暂无排课</span>'; return; }
+        list.innerHTML = scheds.map(function(s) {
+            var days = ['','一','二','三','四','五','六','日'];
+            var dayStr = (s.weekdays || []).map(function(dd) { return days[dd]; }).join(',');
+            var slots = Object.values(s.time_slots || {}).map(function(sl) { return sl.start + '-' + sl.end; }).join(' ');
+            var label = '周' + dayStr + ' ' + slots + (s.teacher ? ' | ' + s.teacher : '') + (s.classroom ? ' | ' + s.classroom : '');
+            return '<label class="trial-session-card" onclick="selectTrialSession(' + s.id + ', this)" data-sid="' + s.id + '">' +
+                '<span class="ts-days">周' + dayStr + '</span>' +
+                '<span class="ts-time">' + slots + '</span>' +
+                (s.teacher ? '<span class="ts-teacher">' + s.teacher + '</span>' : '') +
+                (s.classroom ? '<span class="ts-room">' + s.classroom + '</span>' : '') +
+                '</label>';
+        }).join('');
+    });
+}
+
+function selectTrialSession(scheduleId, el) {
+    document.querySelectorAll('.trial-session-card').forEach(function(c) { c.classList.remove('active'); });
+    el.classList.add('active');
+    window._selectedTrialSchedule = scheduleId;
+    document.getElementById('trial-submit-btn').disabled = false;
+}
+
+function bookTrial() {
+    var scheduleId = window._selectedTrialSchedule;
+    if (!scheduleId) { showToast('请选择试听课次', 'warn'); return; }
+    var data = {
+        resource_id: parseInt(document.getElementById('trial-resource-id').value) || 0,
+        course_id: parseInt(document.getElementById('trial-course').value) || 0,
+        class_id: parseInt(document.getElementById('trial-class').value) || 0,
+        schedule_id: scheduleId,
+        campus: document.getElementById('trial-campus').value,
+        subject_level1: document.getElementById('trial-subject').value,
+        resource_name: document.getElementById('trial-resource-name').value,
+        phone: document.getElementById('trial-phone').value
+    };
+    api('book_trial', data, 'POST').then(function(res) {
+        if (res.error) { showToast(res.error, 'error'); return; }
+        showToast(res.message, 'success');
+        closeModal('modal-appointment');
+        loadAppointments();
+    }).catch(function(e) { showToast('预约失败: ' + (e.message || String(e)), 'error'); });
+}
