@@ -1156,6 +1156,69 @@ $stmt->execute();
             json(['data' => $sessions]);
             break;
 
+        case 'search_trial_sessions':
+            $campusId = intval($_GET['campus'] ?? 0);
+            $subject = trim($_GET['subject'] ?? '');
+            $courseId = intval($_GET['course'] ?? 0);
+            $teacher = trim($_GET['teacher'] ?? '');
+            $dateFilter = trim($_GET['date'] ?? '');
+            // 查出所有 can_trial=1 的班级及其排课，展开为具体日期
+            $sql = "SELECT c.id AS class_id, c.name AS class_name, c.campus, c.course_id, co.name AS course_name, co.subject,
+                    s.id AS schedule_id, s.weekdays, s.time_slots, s.start_date, s.end_date, s.teacher, s.classroom
+                    FROM classes c
+                    LEFT JOIN courses co ON co.id=c.course_id
+                    INNER JOIN schedules s ON s.class_id=c.id
+                    WHERE c.can_trial=1";
+            $params = [];
+            if ($campusId) {
+                $cn = $db->prepare("SELECT name FROM organizations WHERE id=? AND type='校区'");
+                $cn->execute([$campusId]);
+                $cnRow = $cn->fetch(PDO::FETCH_ASSOC);
+                if ($cnRow) { $sql .= " AND c.campus=?"; $params[] = $cnRow['name']; }
+            }
+            if ($subject) { $sql .= " AND co.subject LIKE ?"; $params[] = $subject . ' %'; }
+            if ($courseId) { $sql .= " AND c.course_id=?"; $params[] = $courseId; }
+            if ($teacher) { $sql .= " AND s.teacher=?"; $params[] = $teacher; }
+            $sql .= " ORDER BY c.campus, c.name, s.start_date";
+            $stmt = $db->prepare($sql);
+            $stmt->execute($params);
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            // 展开为日期+时段
+            $results = [];
+            $days = ['','一','二','三','四','五','六','日'];
+            $today = new DateTime();
+            foreach ($rows as $r) {
+                $weekdays = array_map('intval', array_filter(explode(',', $r['weekdays'] ?? '')));
+                $ts = json_decode($r['time_slots'] ?? '{}', true) ?: [];
+                $start = new DateTime($r['start_date']);
+                $end = new DateTime($r['end_date']);
+                foreach ($weekdays as $wd) {
+                    $d = clone $today;
+                    $d->modify('next ' . ['','monday','tuesday','wednesday','thursday','friday','saturday','sunday'][$wd]);
+                    for ($w = 0; $w < 8; $w++) {
+                        $dt = clone $d; $dt->modify('+' . ($w*7) . ' days');
+                        if ($dt >= $start && $dt <= $end) {
+                            foreach ($ts as $slot) {
+                                $dateStr = $dt->format('Y-m-d');
+                                if ($dateFilter && $dateStr !== $dateFilter) continue;
+                                $results[] = [
+                                    'class_id' => $r['class_id'], 'class_name' => $r['class_name'],
+                                    'campus' => $r['campus'], 'course_name' => $r['course_name'],
+                                    'subject' => $r['subject'],
+                                    'schedule_id' => $r['schedule_id'],
+                                    'date' => $dateStr, 'day' => '周' . $days[$wd],
+                                    'start' => $slot['start'], 'end' => $slot['end'],
+                                    'teacher' => $r['teacher'], 'classroom' => $r['classroom'],
+                                ];
+                            }
+                        }
+                    }
+                }
+            }
+            usort($results, function($a,$b) { return $a['date'] <=> $b['date'] ?: $a['start'] <=> $b['start']; });
+            json(['data' => $results]);
+            break;
+
         case 'book_trial':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $resourceId = intval($input['resource_id'] ?? 0);
@@ -6425,54 +6488,42 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：预约试听 -->
     <div class="modal-overlay" id="modal-appointment">
-        <div class="modal" style="max-width:480px;border-radius:12px;">
-            <div class="modal-header" style="padding:16px 20px;border-bottom:1px solid #f0f0f0;">
+        <div class="modal" style="max-width:820px;border-radius:12px;max-height:90vh;display:flex;flex-direction:column;">
+            <div class="modal-header" style="padding:14px 20px;border-bottom:1px solid #f0f0f0;">
                 <h3 id="modal-appointment-title" style="font-size:16px;margin:0;">预约试听</h3>
                 <button class="modal-close" onclick="closeModal('modal-appointment')" style="font-size:20px;">&times;</button>
             </div>
-            <div class="modal-body" style="padding:20px;">
-                <input type="hidden" id="trial-resource-id">
-                <input type="hidden" id="trial-resource-name">
-                <input type="hidden" id="trial-phone">
-                <p style="margin:0 0 16px;font-size:13px;color:#555;background:#f5f7fa;padding:10px 14px;border-radius:8px;">
-                    <span id="trial-info-text" style="font-weight:600;"></span>
-                </p>
-                <!-- 校区 -->
-                <div class="form-group" style="margin-bottom:14px;">
-                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">校区 <span class="required">*</span></label>
-                    <select id="trial-campus" onchange="onTrialCampusChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请选择校区</option></select>
+            <div class="modal-body" style="padding:16px 20px;overflow-y:auto;flex:1;">
+                <input type="hidden" id="trial-resource-id"><input type="hidden" id="trial-resource-name"><input type="hidden" id="trial-phone">
+                <p style="margin:0 0 12px;font-size:13px;color:#555;background:#f5f7fa;padding:8px 14px;border-radius:8px;"><span id="trial-info-text" style="font-weight:600;"></span></p>
+                <!-- 筛选行 -->
+                <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:flex-end;">
+                    <select id="trial-campus" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部校区</option></select>
+                    <select id="trial-subject" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部学科</option></select>
+                    <select id="trial-course" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部课程</option></select>
+                    <select id="trial-teacher" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部老师</option></select>
+                    <input type="date" id="trial-date-filter" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;" placeholder="日期">
+                    <button class="btn btn-primary btn-sm" onclick="loadTrialTable()" style="height:34px;">查询</button>
                 </div>
-                <!-- 学科 -->
-                <div class="form-group" style="margin-bottom:14px;">
-                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">一级学科 <span class="required">*</span></label>
-                    <select id="trial-subject" onchange="onTrialSubjectChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部学科</option></select>
-                </div>
-                <!-- 课程 -->
-                <div class="form-group" style="margin-bottom:14px;">
-                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">课程 <span class="required">*</span></label>
-                    <select id="trial-course" onchange="onTrialCourseChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部课程</option></select>
-                </div>
-                <!-- 支持试听班级 -->
-                <div class="form-group" style="margin-bottom:14px;">
-                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">试听班级 <span class="required">*</span></label>
-                    <select id="trial-class" onchange="onTrialClassChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部班级</option></select>
-                </div>
-                <!-- 老师筛选 -->
-                <div class="form-group" style="margin-bottom:14px;">
-                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">授课老师</label>
-                    <select id="trial-teacher" onchange="onTrialTeacherChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部老师</option></select>
-                </div>
-                <!-- 可用课次 -->
-                <div class="form-group" style="margin-bottom:0;">
-                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">试听课次 <span class="required">*</span></label>
-                    <div id="trial-sessions-list" style="display:flex;flex-direction:column;gap:8px;">
-                        <span style="color:#bbb;font-size:13px;">请先选择班级</span>
-                    </div>
+                <!-- 结果表格 -->
+                <div style="max-height:400px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
+                    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                        <thead><tr style="background:#fafafa;position:sticky;top:0;">
+                            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">班级名称</th>
+                            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">时间</th>
+                            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">校区</th>
+                            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">教师</th>
+                            <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">教室</th>
+                            <th style="padding:8px 10px;text-align:center;border-bottom:1px solid #eee;width:80px;">操作</th>
+                        </tr></thead>
+                        <tbody id="trial-table-body">
+                            <tr><td colspan="6" style="text-align:center;color:#bbb;padding:40px;">选择筛选条件后点击查询</td></tr>
+                        </tbody>
+                    </table>
                 </div>
             </div>
-            <div class="modal-footer" style="padding:12px 20px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:8px;">
-                <button class="btn btn-outline" onclick="closeModal('modal-appointment')">取消</button>
-                <button class="btn btn-primary" id="trial-submit-btn" onclick="bookTrial()" disabled>确认预约</button>
+            <div class="modal-footer" style="padding:10px 20px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:8px;">
+                <button class="btn btn-outline" onclick="closeModal('modal-appointment')">关闭</button>
             </div>
         </div>
     </div>
