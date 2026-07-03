@@ -1148,6 +1148,36 @@ $stmt->execute();
             json(['data' => $sessions]);
             break;
 
+        case 'book_trial':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $resourceId = intval($input['resource_id'] ?? 0);
+            $courseId = intval($input['course_id'] ?? 0);
+            $classId = intval($input['class_id'] ?? 0);
+            $scheduleId = intval($input['schedule_id'] ?? 0);
+            $campus = trim($input['campus'] ?? '');
+            $subjectLevel1 = trim($input['subject_level1'] ?? '');
+            $resourceName = trim($input['resource_name'] ?? '');
+            $phone = trim($input['phone'] ?? '');
+            if (!$resourceId || !$courseId || !$classId || !$scheduleId) json(['error' => '请完成所有选择']);
+            $n = now();
+            $stmt = $db->prepare("INSERT INTO appointments (resource_id,resource_name,student_name,phone,course_type,appointment_time,status,notes,campus,subject_level1,course_id,class_id,schedule_id,created_at) VALUES (:ri,:rn,:sn,:p,:ct,:at,:st,:no,:cp,:sj,:ci,:cli,:si,:c)");
+            $stmt->bindValue(':ri', $resourceId, PDO::PARAM_INT);
+            $stmt->bindValue(':rn', $resourceName);
+            $stmt->bindValue(':sn', $resourceName);
+            $stmt->bindValue(':p', $phone);
+            $stmt->bindValue(':ct', '试听');
+            $stmt->bindValue(':at', $n);
+            $stmt->bindValue(':st', '已预约待试听');
+            $stmt->bindValue(':no', '');
+            $stmt->bindValue(':cp', $campus);
+            $stmt->bindValue(':sj', $subjectLevel1);
+            $stmt->bindValue(':ci', $courseId, PDO::PARAM_INT);
+            $stmt->bindValue(':cli', $classId, PDO::PARAM_INT);
+            $stmt->bindValue(':si', $scheduleId, PDO::PARAM_INT);
+            $stmt->bindValue(':c', $n);
+            $stmt->execute();
+            json(['id' => $db->lastInsertId(), 'message' => '预约成功，状态：已预约待试听']);
+
         case 'add_appointment':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $n = now();
