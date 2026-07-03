@@ -1166,6 +1166,7 @@ $stmt->execute();
             $subjectLevel1 = trim($input['subject_level1'] ?? '');
             $resourceName = trim($input['resource_name'] ?? '');
             $phone = trim($input['phone'] ?? '');
+            $trialDate = trim($input['trial_date'] ?? '');
             if (!$resourceId || !$courseId || !$classId || !$scheduleId) json(['error' => '请完成所有选择']);
             $n = now();
             $stmt = $db->prepare("INSERT INTO appointments (resource_id,resource_name,student_name,phone,course_type,appointment_time,status,notes,campus,subject_level1,course_id,class_id,schedule_id,created_at) VALUES (:ri,:rn,:sn,:p,:ct,:at,:st,:no,:cp,:sj,:ci,:cli,:si,:c)");
@@ -1174,7 +1175,7 @@ $stmt->execute();
             $stmt->bindValue(':sn', $resourceName);
             $stmt->bindValue(':p', $phone);
             $stmt->bindValue(':ct', '试听');
-            $stmt->bindValue(':at', $n);
+            $stmt->bindValue(':at', $trialDate ?: $n);
             $stmt->bindValue(':st', '已预约待试听');
             $stmt->bindValue(':no', '');
             $stmt->bindValue(':cp', $campus);
@@ -1184,7 +1185,25 @@ $stmt->execute();
             $stmt->bindValue(':si', $scheduleId, PDO::PARAM_INT);
             $stmt->bindValue(':c', $n);
             $stmt->execute();
-            json(['id' => $db->lastInsertId(), 'message' => '预约成功，状态：已预约待试听']);
+            $aptId = $db->lastInsertId();
+            // 自动创建学员并加入班级
+            $studentId = 0;
+            if ($phone) {
+                $cs = $db->prepare("SELECT id FROM students WHERE phone=? LIMIT 1");
+                $cs->execute([$phone]);
+                $srow = $cs->fetch(PDO::FETCH_ASSOC);
+                if ($srow) {
+                    $studentId = $srow['id'];
+                } else {
+                    $sno = substr(time(), -8) . str_pad(rand(0,99), 2, '0', STR_PAD_LEFT);
+                    $db->prepare("INSERT INTO students (student_no, resource_id, name, phone, student_type, created_at) VALUES (?,?,?,?,'小课包',?)")->execute([$sno, $resourceId, $resourceName, $phone, $n]);
+                    $studentId = $db->lastInsertId();
+                }
+            }
+            if ($studentId) {
+                $db->prepare("INSERT IGNORE INTO class_students (class_id, student_id, joined_at) VALUES (?,?,?)")->execute([$classId, $studentId, $trialDate ?: date('Y-m-d')]);
+            }
+            json(['id' => $aptId, 'message' => '预约成功，状态：已预约待试听']);
 
         case 'add_appointment':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -6432,17 +6451,22 @@ if (intval($countBt) === 0) {
                 <!-- 学科 -->
                 <div class="form-group" style="margin-bottom:14px;">
                     <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">一级学科 <span class="required">*</span></label>
-                    <select id="trial-subject" onchange="onTrialSubjectChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择校区</option></select>
+                    <select id="trial-subject" onchange="onTrialSubjectChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部学科</option></select>
                 </div>
                 <!-- 课程 -->
                 <div class="form-group" style="margin-bottom:14px;">
                     <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">课程 <span class="required">*</span></label>
-                    <select id="trial-course" onchange="onTrialCourseChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择学科</option></select>
+                    <select id="trial-course" onchange="onTrialCourseChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部课程</option></select>
                 </div>
                 <!-- 支持试听班级 -->
                 <div class="form-group" style="margin-bottom:14px;">
                     <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">试听班级 <span class="required">*</span></label>
-                    <select id="trial-class" onchange="onTrialClassChange()" disabled style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">请先选择课程</option></select>
+                    <select id="trial-class" onchange="onTrialClassChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部班级</option></select>
+                </div>
+                <!-- 老师筛选 -->
+                <div class="form-group" style="margin-bottom:14px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">授课老师</label>
+                    <select id="trial-teacher" onchange="onTrialTeacherChange()" style="width:100%;height:40px;border:1px solid #e0e0e0;border-radius:8px;padding:0 12px;"><option value="">全部老师</option></select>
                 </div>
                 <!-- 可用课次 -->
                 <div class="form-group" style="margin-bottom:0;">
