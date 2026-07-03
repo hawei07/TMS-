@@ -6488,7 +6488,7 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：预约试听 -->
     <div class="modal-overlay" id="modal-appointment">
-        <div class="modal" style="max-width:820px;border-radius:12px;max-height:90vh;display:flex;flex-direction:column;">
+        <div class="modal" style="max-width:960px;border-radius:12px;max-height:90vh;display:flex;flex-direction:column;">
             <div class="modal-header" style="padding:14px 20px;border-bottom:1px solid #f0f0f0;">
                 <h3 id="modal-appointment-title" style="font-size:16px;margin:0;">预约试听</h3>
                 <button class="modal-close" onclick="closeModal('modal-appointment')" style="font-size:20px;">&times;</button>
@@ -6498,16 +6498,16 @@ if (intval($countBt) === 0) {
                 <p style="margin:0 0 12px;font-size:13px;color:#555;background:#f5f7fa;padding:8px 14px;border-radius:8px;"><span id="trial-info-text" style="font-weight:600;"></span></p>
                 <!-- 筛选行 -->
                 <div style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:12px;align-items:flex-end;">
-                    <select id="trial-campus" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部校区</option></select>
-                    <select id="trial-subject" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部学科</option></select>
-                    <select id="trial-course" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部课程</option></select>
-                    <select id="trial-teacher" onchange="loadTrialTable()" style="width:110px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部老师</option></select>
-                    <input type="date" id="trial-date-filter" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;" placeholder="日期">
+                    <select id="trial-campus" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部校区</option></select>
+                    <select id="trial-subject" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部学科</option></select>
+                    <select id="trial-course" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部课程</option></select>
+                    <select id="trial-teacher" onchange="loadTrialTable()" style="width:130px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;"><option value="">全部老师</option></select>
+                    <input type="date" id="trial-date-filter" onchange="loadTrialTable()" style="width:140px;height:34px;border:1px solid #e0e0e0;border-radius:6px;font-size:12px;padding:0 6px;" placeholder="日期">
                     <button class="btn btn-primary btn-sm" onclick="loadTrialTable()" style="height:34px;">查询</button>
                 </div>
                 <!-- 结果表格 -->
                 <div style="max-height:400px;overflow-y:auto;border:1px solid #f0f0f0;border-radius:8px;">
-                    <table style="width:100%;font-size:13px;border-collapse:collapse;">
+                    <table style="width:100%;font-size:13px;border-collapse:collapse;white-space:nowrap;">
                         <thead><tr style="background:#fafafa;position:sticky;top:0;">
                             <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">班级名称</th>
                             <th style="padding:8px 10px;text-align:left;border-bottom:1px solid #eee;">时间</th>
