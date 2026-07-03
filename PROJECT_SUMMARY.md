@@ -31,6 +31,7 @@ AIGC:
 | 项目 | 值 |
 |------|-----|
 | Git 路径 | `D:\Git\bin\git.exe`（Git 2.54.0） |
+| GitHub | https://github.com/hawei07/TMS-.git |
 | 分支策略 | `feature/xxx` → `develop` → `master`（no-ff 合并） |
 | 稳定分支 | `master` |
 | 开发分支 | `develop` |
