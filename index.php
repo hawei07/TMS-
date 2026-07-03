@@ -1208,7 +1208,8 @@ $stmt->execute();
                     for ($w = 0; $w < 8; $w++) {
                         $dt = clone $d; $dt->modify('+' . ($w*7) . ' days');
                         if ($dt >= $start && $dt <= $end) {
-                            foreach ($ts as $slot) {
+                            foreach ($ts as $slotKey => $slot) {
+                                if ((int)$slotKey !== $wd) continue; // 只取匹配该星期的时段
                                 $dateStr = $dt->format('Y-m-d');
                                 if ($dateFilter && $dateStr !== $dateFilter) continue;
                                 $results[] = [
