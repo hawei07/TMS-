@@ -1096,7 +1096,7 @@ $stmt->execute();
                 foreach ($params as $i => $v) $stmt->bindValue($i+1, $v, PDO::PARAM_STR);
 $stmt->execute();
             } else {
-                $result = $db->query($query);
+                $stmt = $db->query($query);
             }
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
