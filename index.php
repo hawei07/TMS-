@@ -6541,7 +6541,8 @@ if (intval($countBt) === 0) {
                 <div class="form-row" style="display:flex;gap:12px;">
                     <div class="form-group" style="flex:1;">
                         <label>授课老师 <span class="required">*</span></label>
-                        <select id="schedule-teacher"><option value="">搜索老师</option></select>
+                        <input type="text" id="schedule-teacher" list="teacher-datalist" placeholder="搜索或选择老师" autocomplete="off">
+                        <datalist id="teacher-datalist"></datalist>
                     </div>
                     <div class="form-group" style="flex:1;">
                         <label>上课教室</label>

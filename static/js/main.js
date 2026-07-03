@@ -3588,8 +3588,8 @@ async function showScheduleForm(classId, scheduleId) {
     document.getElementById('schedule-time-slots').innerHTML = '<div class="schedule-time-hint">请先选择上课周期</div>';
 
     // Load teacher dropdown — campus teachers first, then all others for search
-    const teacherSel = document.getElementById('schedule-teacher');
-    teacherSel.innerHTML = '<option value="">搜索老师</option>';
+    const teacherDL = document.getElementById('teacher-datalist');
+    teacherDL.innerHTML = '';
     var campusFilter = '';
     try {
         // Get class campus
@@ -3606,37 +3606,26 @@ async function showScheduleForm(classId, scheduleId) {
         if (data.data) {
             const teachers = data.data.filter(emp => emp.is_teacher === '是');
             if (campusFilter) {
-                // 本校区教师优先
                 const campusTeachers = teachers.filter(t => t.department === campusFilter);
                 const otherTeachers = teachers.filter(t => t.department !== campusFilter);
-                if (campusTeachers.length) {
-                    const og = document.createElement('optgroup');
-                    og.label = '🏫 ' + campusFilter;
-                    campusTeachers.forEach(emp => {
-                        const opt = document.createElement('option');
-                        opt.value = emp.name;
-                        opt.textContent = emp.name;
-                        og.appendChild(opt);
-                    });
-                    teacherSel.appendChild(og);
-                }
-                if (otherTeachers.length) {
-                    const og2 = document.createElement('optgroup');
-                    og2.label = '🔍 其他教师（可搜索）';
-                    otherTeachers.forEach(emp => {
-                        const opt = document.createElement('option');
-                        opt.value = emp.name;
-                        opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
-                        og2.appendChild(opt);
-                    });
-                    teacherSel.appendChild(og2);
-                }
+                campusTeachers.forEach(emp => {
+                    const opt = document.createElement('option');
+                    opt.value = emp.name;
+                    opt.textContent = emp.name;
+                    teacherDL.appendChild(opt);
+                });
+                otherTeachers.forEach(emp => {
+                    const opt = document.createElement('option');
+                    opt.value = emp.name;
+                    opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
+                    teacherDL.appendChild(opt);
+                });
             } else {
                 teachers.forEach(emp => {
                     const opt = document.createElement('option');
                     opt.value = emp.name;
                     opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
-                    teacherSel.appendChild(opt);
+                    teacherDL.appendChild(opt);
                 });
             }
         }
