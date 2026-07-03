@@ -8330,5 +8330,6 @@ function bookTrialInline(classId, scheduleId, trialDate, startTime) {
         if (res.error) { showToast(res.error,'error'); return; }
         showToast('预约成功！试听日期：'+trialDate+' '+startTime, 'success');
         loadTrialTable();
+        if (typeof loadAppointments === 'function') loadAppointments();
     }).catch(function(e) { showToast('预约失败: '+(e.message||String(e)),'error'); });
 }
