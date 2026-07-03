@@ -681,21 +681,25 @@ function showAddModal() {
 }
 
 async function editResource(rid) {
-    const res = await fetch(API_BASE + 'get_resources&page=1&page_size=500&pool_type=我的资源');
-    const all = await res.json();
-    const item = (all.data || []).find(r => r.id === rid);
-    if (!item) return showToast('未找到该资源', 'error');
-    document.getElementById('modal-resource-title').textContent = '编辑资源';
-    document.getElementById('edit-rid').value = item.id;
-    document.getElementById('res-name').value = item.name;
-    document.getElementById('res-phone').value = item.phone;
-    document.getElementById('res-gender').value = item.gender || '';
-    document.getElementById('res-birth-date').value = item.birth_date || '';
-    document.getElementById('res-follow-status').value = item.follow_status || '';
-    await populateAssignedToSelect(item.assigned_to);
-    await populateChannelSelect('res-source', item.source);
-    await populateIntentionLevelSelect('res-intention', item.intention_level);
-    openModal('modal-resource');
+    try {
+        const res = await fetch(API_BASE + 'get_resources&page=1&page_size=500&pool_type=我的资源');
+        const all = await res.json();
+        const item = (all.data || []).find(r => r.id === rid);
+        if (!item) return showToast('未找到该资源', 'error');
+        document.getElementById('modal-resource-title').textContent = '编辑资源';
+        document.getElementById('edit-rid').value = item.id;
+        document.getElementById('res-name').value = item.name;
+        document.getElementById('res-phone').value = item.phone;
+        document.getElementById('res-gender').value = item.gender || '';
+        document.getElementById('res-birth-date').value = item.birth_date || '';
+        document.getElementById('res-follow-status').value = item.follow_status || '';
+        await populateAssignedToSelect(item.assigned_to);
+        await populateChannelSelect('res-source', item.source);
+        await populateIntentionLevelSelect('res-intention', item.intention_level);
+        openModal('modal-resource');
+    } catch(e) {
+        showToast('编辑失败：' + e.message, 'error');
+    }
 }
 
 async function saveResource() {
