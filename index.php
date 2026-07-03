@@ -3183,7 +3183,7 @@ $stmt->execute();
             if (isset($input['max_students'])) { $updates[] = "max_students=" . intval($input['max_students']); }
             if (isset($input['lesson_hours'])) { $lh = intval($input['lesson_hours']); if ($lh % 2 !== 0) json(['error' => '授课课时必须为偶数']); $updates[] = "lesson_hours=" . $lh; }
             if (isset($input['can_trial'])) { $updates[] = "can_trial=" . ((trim($input['can_trial']) === '否') ? 0 : 1); }
-            if (isset($input['campus'])) { $updates[] = "campus='" . $db->quote(trim($input['campus'])) . "'"; }
+            if (isset($input['campus'])) { $updates[] = "campus=" . $db->quote(trim($input['campus'])); }
             if (isset($input['remark'])) {
                 $rm = trim($input['remark']);
                 if (utf8_strlen($rm) > 200) json(['error' => '备注最长200字']);
@@ -3691,8 +3691,8 @@ $stmt->execute();
                 $updates[] = "name=" . $db->quote($nm) . "";
             }
             if (isset($input['capacity'])) { $updates[] = "capacity=" . intval($input['capacity']); }
-            if (isset($input['campus'])) { $updates[] = "campus='" . $db->quote(trim($input['campus'])) . "'"; }
-            if (isset($input['remark'])) { $updates[] = "remark='" . $db->quote(trim($input['remark'])) . "'"; }
+            if (isset($input['campus'])) { $updates[] = "campus=" . $db->quote(trim($input['campus'])); }
+            if (isset($input['remark'])) { $updates[] = "remark=" . $db->quote(trim($input['remark'])); }
             if (empty($updates)) json(['message' => '无变更']);
             $db->exec("UPDATE classrooms SET " . implode(', ', $updates) . " WHERE id=$id");
             json(['message' => '教室更新成功']);
