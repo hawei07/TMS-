@@ -1265,12 +1265,29 @@ $stmt->execute();
             $stmt->bindValue(':c', $n);
             $stmt->execute();
             $aptId = $db->lastInsertId();
-            // 将资源加入该班级该课次的考勤（不创建学员）
+            // 查找或创建学员，加入班级
+            $studentId = 0;
+            if ($phone) {
+                $cs = $db->prepare("SELECT id FROM students WHERE phone=? LIMIT 1");
+                $cs->execute([$phone]);
+                $srow = $cs->fetch(PDO::FETCH_ASSOC);
+                if ($srow) {
+                    $studentId = $srow['id'];
+                } else {
+                    $sno = 'T' . substr(time(), -8) . str_pad(rand(0,99), 2, '0', STR_PAD_LEFT);
+                    $db->prepare("INSERT INTO students (student_no, resource_id, name, phone, student_type, created_at) VALUES (?,?,?,?,'试听',?)")->execute([$sno, $resourceId, $resourceName, $phone, $n]);
+                    $studentId = $db->lastInsertId();
+                }
+            }
+            if ($studentId) {
+                $db->prepare("INSERT IGNORE INTO class_students (class_id, student_id, joined_at) VALUES (?,?,?)")->execute([$classId, $studentId, $trialDate ?: date('Y-m-d')]);
+            }
+            // 记录考勤
             $clsInfo = $db->query("SELECT c.course_id, c.name AS class_name, co.name AS course_name, co.subject AS subject, c.campus FROM classes c LEFT JOIN courses co ON co.id=c.course_id WHERE c.id=$classId")->fetch(PDO::FETCH_ASSOC);
             if ($clsInfo) {
                 $subjParts = explode(' > ', $clsInfo['subject'] ?? '');
-                $db->prepare("INSERT INTO attendance_records (student_id, course_id, campus, class_name, subject_level1, subject_level2, lesson_date, status, deducted_lessons, consumed_amount, created_at) VALUES (0,?,?,?,?,?,?,?,0,0,?)")->execute([
-                    $clsInfo['course_id'], $clsInfo['campus'], $clsInfo['class_name'],
+                $db->prepare("INSERT INTO attendance_records (student_id, course_id, campus, class_name, subject_level1, subject_level2, lesson_date, status, deducted_lessons, consumed_amount, created_at) VALUES (?,?,?,?,?,?,?,?,0,0,?)")->execute([
+                    $studentId, $clsInfo['course_id'], $clsInfo['campus'], $clsInfo['class_name'],
                     $subjParts[0] ?? '', $subjParts[1] ?? '',
                     $trialDate ?: date('Y-m-d'), '出勤', $n
                 ]);
