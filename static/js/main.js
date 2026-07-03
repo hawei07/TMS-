@@ -93,6 +93,7 @@ function refreshPanel(panelId) {
         case 'panel-attendance': switchAttendanceTab('tab-classes'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
+        case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
     }
 }
 
@@ -8034,3 +8035,183 @@ function confirmScheduleCreate() {
         alert('排课创建成功！班级：' + res.class_name);
     }).catch(e => { alert('创建失败: ' + e.message); });
 }
+
+// ===== 确收统计（复用现金流统计逻辑） =====
+function initRevenueDateRange() {
+    var now = new Date();
+    document.getElementById('rv-date-from').value = new Date(now.getFullYear(), now.getMonth() - 11, 1).toISOString().slice(0, 7);
+    document.getElementById('rv-date-to').value = now.toISOString().slice(0, 7);
+    initRevenueCampusTree();
+}
+
+async function initRevenueCampusTree() {
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const flat = (data.data && data.data.flat) ? data.data.flat : [];
+        const regions = flat.filter(o => o.type === '部门' && o.parent_id === '0');
+        const campuses = flat.filter(o => o.type === '校区');
+        var regionMap = {};
+        regions.forEach(r => { regionMap[r.id] = { name: r.name, campuses: [] }; });
+        campuses.forEach(c => {
+            var pid = String(c.parent_id);
+            if (regionMap[pid]) regionMap[pid].campuses.push(c);
+        });
+        var html = '';
+        for (var rid in regionMap) {
+            var reg = regionMap[rid];
+            html += '<div class="cf-tree-region">';
+            html += '<label class="cf-tree-check"><input type="checkbox" class="cf-region-cb rv-region-cb" onchange="updateRevenueRegion(this)" checked> ' + esc(reg.name) + '</label>';
+            html += '<div class="cf-tree-child">';
+            reg.campuses.forEach(c => {
+                html += '<label class="cf-tree-check"><input type="checkbox" class="cf-campus-cb rv-campus-cb" value="' + esc(c.name) + '" checked onchange="updateRevenueAllCheckbox()"> ' + esc(c.name) + '</label>';
+            });
+            html += '</div></div>';
+        }
+        document.getElementById('rv-campus-tree').innerHTML = html || '<span style="color:#999;font-size:13px;">暂无校区</span>';
+    } catch(e) { /* ignore */ }
+}
+
+function toggleRevenueCampusTree() {
+    var dd = document.getElementById('rv-campus-dropdown');
+    if (dd) dd.style.display = dd.style.display === 'none' ? 'block' : 'none';
+}
+
+function toggleAllRevenueCampuses() {
+    var allCb = document.getElementById('rv-campus-all');
+    if (!allCb) return;
+    var checked = allCb.checked;
+    document.querySelectorAll('.rv-region-cb').forEach(c => { c.checked = checked; c.indeterminate = false; });
+    document.querySelectorAll('.rv-campus-cb').forEach(c => { c.checked = checked; });
+    updateRevenueCampusText();
+}
+
+function updateRevenueRegion(el) {
+    var allChecked = true, noneChecked = true;
+    el.closest('.cf-tree-region').querySelectorAll('.rv-campus-cb').forEach(c => {
+        c.checked = el.checked;
+        if (el.checked) noneChecked = false; else allChecked = false;
+    });
+    if (el.checked) { el.indeterminate = false; }
+    updateRevenueAllCheckbox();
+    updateRevenueCampusText();
+}
+
+function updateRevenueAllCheckbox() {
+    var allCampus = document.querySelectorAll('.rv-campus-cb');
+    if (allCampus.length === 0) return;
+    var allCb = document.getElementById('rv-campus-all');
+    var allChecked = Array.from(allCampus).every(c => c.checked);
+    var noneChecked = Array.from(allCampus).every(c => !c.checked);
+    allCb.checked = allChecked;
+    allCb.indeterminate = !allChecked && !noneChecked;
+    updateRevenueCampusText();
+}
+
+function updateRevenueCampusText() {
+    var checked = document.querySelectorAll('.rv-campus-cb:checked');
+    var total = document.querySelectorAll('.rv-campus-cb').length;
+    var text = checked.length === total ? '全部校区' : checked.length + '个校区';
+    document.getElementById('rv-campus-text').textContent = text;
+}
+
+function getSelectedRevenueCampuses() {
+    var checked = document.querySelectorAll('.rv-campus-cb:checked');
+    return Array.from(checked).map(c => c.parentElement.textContent.trim());
+}
+
+async function loadRevenue() {
+    try {
+        var granularity = document.getElementById('rv-granularity')?.value || 'monthly';
+        var dateFrom = document.getElementById('rv-date-from')?.value || '';
+        var dateTo = document.getElementById('rv-date-to')?.value || '';
+        var params = new URLSearchParams({ granularity: granularity });
+        var selectedCampuses = getSelectedRevenueCampuses();
+        var totalCampuses = document.querySelectorAll('.rv-campus-cb').length;
+        if (selectedCampuses.length > 0 && selectedCampuses.length < totalCampuses) {
+            params.set('campuses', selectedCampuses.join(','));
+        }
+        if (dateFrom) params.set('date_from', dateFrom);
+        if (dateTo) params.set('date_to', dateTo);
+        var res = await fetch(API_BASE + 'get_revenue_stats&' + params);
+        var data = await res.json();
+        // Reuse cashflow rendering with rv- prefixed IDs
+        var s = data.summary || {};
+        document.getElementById('rv-total-income').textContent = '¥' + (parseFloat(s.total_income) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+        document.getElementById('rv-total-expense').textContent = '¥' + (parseFloat(s.total_expense) || 0).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+        var net = parseFloat(s.net_cashflow) || 0;
+        var netEl = document.getElementById('rv-net-cashflow');
+        netEl.textContent = (net >= 0 ? '¥' : '-¥') + Math.abs(net).toLocaleString('zh-CN', { minimumFractionDigits: 2 });
+        netEl.style.color = net >= 0 ? 'var(--color-success)' : 'var(--color-danger)';
+        // Table
+        var rows = data.data || [];
+        var tbody = document.querySelector('#table-revenue tbody');
+        if (!rows.length) { tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无数据</td></tr>'; return; }
+        tbody.innerHTML = rows.map(function(r) {
+            var incAmt = parseFloat(r.income_amount) || 0, expAmt = parseFloat(r.expense_amount) || 0;
+            var netR = parseFloat(r.net) || 0;
+            var cls = netR >= 0 ? 'color:var(--color-success);' : 'color:var(--color-danger);';
+            return '<tr><td>' + esc(r.campus) + '</td><td>' + esc(r.date) + '</td><td>' + r.income_cnt + '</td><td>¥' + incAmt.toLocaleString('zh-CN', {minimumFractionDigits:2}) + '</td><td>' + r.expense_cnt + '</td><td>¥' + expAmt.toLocaleString('zh-CN', {minimumFractionDigits:2}) + '</td><td style="font-weight:bold;' + cls + '">' + (netR>=0?'¥':'-¥') + Math.abs(netR).toLocaleString('zh-CN', {minimumFractionDigits:2}) + '</td></tr>';
+        }).join('');
+        // Charts (simplified — single color columns)
+        renderRevenueCharts(data);
+    } catch(e) {
+        console.error('loadRevenue error:', e);
+    }
+}
+
+var rvBarChart = null, rvExpenseChart = null, rvLineChart = null, rvRankChart = null;
+function renderRevenueCharts(data) {
+    var rows = data.data || [];
+    if (!rows.length) return;
+    var dateAgg = {}, dateOrder = [];
+    rows.forEach(function(r) {
+        if (!dateAgg[r.date]) { dateAgg[r.date] = { income:0, expense:0, net:0 }; dateOrder.push(r.date); }
+        dateAgg[r.date].income += parseFloat(r.income_amount) || 0;
+        dateAgg[r.date].expense += parseFloat(r.expense_amount) || 0;
+        dateAgg[r.date].net += parseFloat(r.net) || 0;
+    });
+    dateOrder.sort();
+    var dates = dateOrder;
+    var incomeData = dates.map(function(d) { return dateAgg[d].income; });
+    var expenseData = dates.map(function(d) { return dateAgg[d].expense; });
+    var netData = dates.map(function(d) { return dateAgg[d].net; });
+
+    var green = 'rgba(56,161,105,0.85)', red = 'rgba(229,62,62,0.85)', purple = 'rgba(124,58,237,0.85)';
+    var chartOpts = function(label, color) { return { type:'bar', data:{ labels:dates, datasets:[{ label:label, data:null, backgroundColor:color, borderColor:color, borderWidth:1 }] }, options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{ display:false } }, scales:{ y:{ beginAtZero:true } } } }; };
+
+    if (rvBarChart) rvBarChart.destroy();
+    var ctx1 = document.getElementById('rv-bar-chart');
+    if (ctx1) { rvBarChart = new Chart(ctx1, chartOpts('总收入', green)); rvBarChart.data.datasets[0].data = incomeData; rvBarChart.update(); }
+
+    if (rvExpenseChart) rvExpenseChart.destroy();
+    var ctx2 = document.getElementById('rv-expense-chart');
+    if (ctx2) { rvExpenseChart = new Chart(ctx2, chartOpts('总支出', red)); rvExpenseChart.data.datasets[0].data = expenseData; rvExpenseChart.update(); }
+
+    if (rvLineChart) rvLineChart.destroy();
+    var ctx3 = document.getElementById('rv-line-chart');
+    if (ctx3) { rvLineChart = new Chart(ctx3, chartOpts('净现金流', purple)); rvLineChart.data.datasets[0].data = netData; rvLineChart.config.type = 'bar'; rvLineChart.update(); }
+
+    // Rankings chart
+    if (rvRankChart) rvRankChart.destroy();
+    var ctx4 = document.getElementById('rv-rank-chart');
+    var rankings = data.rankings || [];
+    if (ctx4 && rankings.length > 0) {
+        var rankCampus = rankings.map(function(r) { return r.campus; });
+        rvRankChart = new Chart(ctx4, {
+            type: 'bar', data: { labels: rankCampus, datasets: [
+                { label:'总收入', data: rankings.map(function(r){return r.income;}), backgroundColor: green },
+                { label:'总支出', data: rankings.map(function(r){return r.expense;}), backgroundColor: red },
+                { label:'净现金流', data: rankings.map(function(r){return r.net;}), backgroundColor: purple }
+            ]}, options: { responsive:true, maintainAspectRatio:false, scales:{ y:{ beginAtZero:true } } }
+        });
+    }
+}
+
+function onRevenueGranularityChange() { loadRevenue(); }
+
+document.addEventListener('click', function(e) {
+    var wrap = document.getElementById('rv-campus-wrap');
+    var dd = document.getElementById('rv-campus-dropdown');
+    if (wrap && dd && !wrap.contains(e.target)) { dd.style.display = 'none'; }
+});

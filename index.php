@@ -4436,6 +4436,10 @@ $stmt->execute();
             json(['data' => $paged, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
+        case 'get_revenue_stats':
+            // 确收统计逻辑与现金流统计完全相同，复用同一实现
+            $_GET['action'] = 'get_cashflow_stats';
+            // fall through to get_cashflow_stats
         case 'get_cashflow_stats':
             $granularity = $_GET['granularity'] ?? 'monthly';
             $campusRaw = $_GET['campus'] ?? $_GET['campuses'] ?? '';
@@ -4749,6 +4753,12 @@ if (intval($countBt) === 0) {
                                 <div class="tree-leaf" data-panel="panel-cashflow">
                                     <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
                                     <span class="tree-label">现金流统计</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-revenue">
+                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                                    <span class="tree-label">确收统计</span>
                                 </div>
                             </li>
                         </ul>
@@ -5934,7 +5944,74 @@ if (intval($countBt) === 0) {
                 </div>
             </section>
 
-            <!-- 面板：现金流统计 -->
+            <!-- 面板：确收统计 -->
+            <section class="content-panel" id="panel-revenue">
+                <div class="panel-header">
+                    <h3>确收统计</h3>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <label style="font-size:13px;margin-right:6px;">校区：</label>
+                        <div class="cf-tree-select" id="rv-campus-wrap">
+                            <button type="button" class="cf-tree-btn" id="rv-campus-btn" onclick="toggleRevenueCampusTree()">
+                                <span id="rv-campus-text">全部校区</span>
+                                <span class="cf-tree-arrow">▾</span>
+                            </button>
+                            <div class="cf-tree-dropdown" id="rv-campus-dropdown" style="display:none;">
+                                <div class="cf-tree-actions">
+                                    <label class="cf-tree-check"><input type="checkbox" id="rv-campus-all" onchange="toggleAllRevenueCampuses()"> 全选</label>
+                                </div>
+                                <div class="cf-tree-list" id="rv-campus-tree"></div>
+                            </div>
+                        </div>
+                        <label style="font-size:13px;margin:0 6px;">日期范围：</label>
+                        <input type="month" id="rv-date-from" style="width:150px;padding:5px 8px;border:1px solid #ddd;border-radius:4px;" onchange="loadRevenue()">
+                        <span style="margin:0 4px;color:#999;">至</span>
+                        <input type="month" id="rv-date-to" style="width:150px;padding:5px 8px;border:1px solid #ddd;border-radius:4px;" onchange="loadRevenue()">
+                        <label style="font-size:13px;margin:0 6px;">粒度：</label>
+                        <select id="rv-granularity" onchange="onRevenueGranularityChange()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;">
+                            <option value="monthly">按月</option>
+                            <option value="daily">按日</option>
+                            <option value="yearly">按年</option>
+                        </select>
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <button class="btn btn-primary btn-sm" onclick="loadRevenue()" style="margin-left:6px;">查询</button>
+                    </div>
+                </div>
+                <div class="cashflow-summary" id="revenue-summary">
+                    <div class="cf-card cf-card-income"><div class="cf-card-label">总收入</div><div class="cf-card-value" id="rv-total-income">--</div></div>
+                    <div class="cf-card cf-card-expense"><div class="cf-card-label">总支出</div><div class="cf-card-value" id="rv-total-expense">--</div></div>
+                    <div class="cf-card cf-card-net"><div class="cf-card-label">净现金流</div><div class="cf-card-value" id="rv-net-cashflow">--</div></div>
+                </div>
+                <div class="cf-charts" id="rv-charts" style="display:flex;gap:20px;margin-bottom:16px;flex-wrap:wrap;">
+                    <div class="cf-chart-container" style="flex:1;min-width:300px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                        <h4 style="margin:0 0 12px;font-size:14px;color:#333;">总收入</h4>
+                        <div style="position:relative;height:300px;"><canvas id="rv-bar-chart"></canvas></div>
+                    </div>
+                    <div class="cf-chart-container" style="flex:1;min-width:300px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                        <h4 style="margin:0 0 12px;font-size:14px;color:#333;">总支出</h4>
+                        <div style="position:relative;height:300px;"><canvas id="rv-expense-chart"></canvas></div>
+                    </div>
+                    <div class="cf-chart-container" style="flex:1;min-width:300px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                        <h4 style="margin:0 0 12px;font-size:14px;color:#333;">净现金流</h4>
+                        <div style="position:relative;height:300px;"><canvas id="rv-line-chart"></canvas></div>
+                    </div>
+                </div>
+                <div id="rv-rank-chart-wrapper" style="margin-bottom:16px;background:#fff;border-radius:8px;padding:16px;box-shadow:0 1px 4px rgba(0,0,0,.08);">
+                    <h4 style="margin:0 0 12px;font-size:14px;color:#333;">校区现金流排名</h4>
+                    <div style="position:relative;height:300px;"><canvas id="rv-rank-chart"></canvas></div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-revenue">
+                        <thead><tr>
+                            <th>校区</th><th>日期</th><th>收入笔数</th><th>收入金额</th><th>支出笔数</th><th>支出金额</th><th>净现金流</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </section>
+
             <section class="content-panel" id="panel-cashflow">
                 <div class="panel-header">
                     <h3>现金流统计</h3>
