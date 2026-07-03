@@ -90,7 +90,7 @@ function refreshPanel(panelId) {
         case 'panel-classrooms': loadClassrooms(); break;
         case 'panel-students': initStudentCampusFilter(); loadStudents(); break;
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
-        case 'panel-attendance': switchAttendanceTab('tab-attendance-operations'); break;
+        case 'panel-attendance': switchAttendanceTab('tab-classes'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
     }
@@ -3280,20 +3280,25 @@ async function deleteSubject(sid, name) {
 // ==================== 班级管理 ====================
 let classPage = 1;
 
-async function loadClasses(page) {
+async function loadClasses(page, prefix) {
+    prefix = prefix || '';
     if (page) classPage = page;
-    const keyword = document.getElementById('search-class').value;
+    const searchId = prefix ? (prefix + 'search-class') : 'search-class';
+    const keyword = document.getElementById(searchId) ? document.getElementById(searchId).value : '';
     const params = new URLSearchParams({ page: classPage, page_size: 15 });
     if (keyword) params.set('keyword', keyword);
     const res = await fetch(API_BASE + 'list_classes&' + params);
     const data = await res.json();
-    renderClassTable(data.data);
-    renderPagination('pagination-class', data.total, classPage, 15, (p) => { classPage = p; loadClasses(); });
-    document.getElementById('stat-classes-inline').textContent = data.total || 0;
+    renderClassTable(data.data, prefix);
+    renderPagination(prefix + 'pagination-' + (prefix ? 'att-' : '') + 'class', data.total, classPage, 15, (p) => { classPage = p; loadClasses(null, prefix); });
+    var statEl = document.getElementById((prefix ? '' : 'stat-classes-inline'));
+    if (statEl) statEl.textContent = data.total || 0;
 }
 
-function renderClassTable(rows) {
-    const tbody = document.querySelector('#table-classes tbody');
+function renderClassTable(rows, prefix) {
+    prefix = prefix || '';
+    var tableId = prefix ? (prefix + 'table-classes') : 'table-classes';
+    const tbody = document.querySelector('#' + tableId + ' tbody');
     if (!rows || rows.length === 0) {
         tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:30px;">暂无班级数据</td></tr>';
         return;
@@ -5588,7 +5593,9 @@ document.addEventListener('click', function(e) {
 function switchAttendanceTab(tabId) {
     document.querySelectorAll('.att-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
     document.querySelectorAll('.att-panel').forEach(p => p.classList.toggle('active', p.id === tabId));
-    if (tabId === 'tab-attendance-operations') {
+    if (tabId === 'tab-classes') {
+        loadClasses(1, 'att-');
+    } else if (tabId === 'tab-attendance-operations') {
         loadAttendanceSessions();
     } else if (tabId === 'tab-student-consumption') {
         loadStudentConsumption();
