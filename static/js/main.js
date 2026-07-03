@@ -3378,8 +3378,22 @@ async function showClassForm(classId) {
         }
     } catch (e) { /* ignore */ }
     
-    // Load campus tree
-    await loadCampusTree('class-campus-tree');
+    // Load campus dropdown
+    const campusSel = document.getElementById('class-campus');
+    campusSel.innerHTML = '<option value="">请选择当前校区</option>';
+    try {
+        const res2 = await fetch(API_BASE + 'list_organizations');
+        const data2 = await res2.json();
+        const flat = (data2.data && data2.data.flat) ? data2.data.flat : [];
+        flat.forEach(org => {
+            if (org.type === '校区') {
+                const opt = document.createElement('option');
+                opt.value = org.name;
+                opt.textContent = org.name;
+                campusSel.appendChild(opt);
+            }
+        });
+    } catch (e) { /* ignore */ }
     
     // If editing, populate fields
     if (classId) {
@@ -3394,8 +3408,7 @@ async function showClassForm(classId) {
                 document.getElementById('class-max-students').value = cls.max_students;
                 document.getElementById('class-lesson-hours').value = cls.lesson_hours;
                 document.querySelector('input[name="can_trial"][value="' + esc(cls.can_trial) + '"]').checked = true;
-                var campusRadio = document.querySelector('input[name="class-campus-radio"][value="' + esc(cls.campus) + '"]');
-                if (campusRadio) campusRadio.checked = true;
+                document.getElementById('class-campus').value = cls.campus;
                 updateClassCount('class-name', 'class-name-count');
             }
         } catch (e) { /* ignore */ }
@@ -3412,8 +3425,7 @@ async function saveClass() {
     const maxStudents = parseInt(document.getElementById('class-max-students').value) || 0;
     const lessonHours = parseInt(document.getElementById('class-lesson-hours').value) || 2;
     const canTrial = document.querySelector('input[name="can_trial"]:checked').value;
-    const campusRadio = document.querySelector('input[name="class-campus-radio"]:checked');
-    const campus = campusRadio ? campusRadio.value : '';
+    const campus = document.getElementById('class-campus').value;
     
     if (!courseId) return showToast('请选择关联课程', 'error');
     if (!name) return showToast('班级名称不能为空', 'error');

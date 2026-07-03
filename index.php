@@ -6482,9 +6482,7 @@ if (intval($countBt) === 0) {
             </div>
             <div class="form-group">
                 <label>当前校区 <span class="required">*</span></label>
-                <div class="campus-tree" id="class-campus-tree">
-                    <span style="color:#999;font-size:13px;">加载中...</span>
-                </div>
+                <select id="class-campus"><option value="">请选择当前校区</option></select>
             </div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-form')">取消</button><button class="btn btn-primary" onclick="saveClass()">确认</button></div></div>
