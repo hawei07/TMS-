@@ -6405,13 +6405,8 @@ if (intval($countBt) === 0) {
             </div>
             <div class="form-group">
                 <label>当前校区 <span class="required">*</span></label>
-                <select id="class-campus"><option value="">请选择当前校区</option></select>
-            </div>
-            <div class="form-group">
-                <label>备注</label>
-                <div style="position:relative;">
-                    <textarea id="class-remark" rows="3" maxlength="200" placeholder="请输入内容" oninput="updateClassCount('class-remark', 'class-remark-count')" style="padding-bottom:20px;"></textarea>
-                    <span id="class-remark-count" style="position:absolute;right:10px;bottom:6px;color:#999;font-size:12px;">0/200</span>
+                <div class="campus-tree" id="class-campus-tree">
+                    <span style="color:#999;font-size:13px;">加载中...</span>
                 </div>
             </div>
         </div>
