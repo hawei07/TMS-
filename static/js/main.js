@@ -3462,9 +3462,7 @@ function esc(str) {
 
 // ==================== 排课管理 ====================
 function onScheduleRuleChange() {
-    const ruleType = document.querySelector('input[name="schedule_rule_type"]:checked').value;
-    document.getElementById('schedule-rule-section').style.display = ruleType === '按规则排课' ? '' : 'none';
-    document.getElementById('schedule-date-section').style.display = ruleType === '按日期排课' ? '' : 'none';
+    // 已移除按日期排课，仅保留按规则排课
 }
 
 // ==================== Flatpickr 日期选择器 ====================
@@ -3500,52 +3498,6 @@ function initScheduleDatePickers() {
                 document.getElementById('schedule-date-range').value = '';
             }
         }
-    });
-
-    // 多日期选择器
-    fpMulti = flatpickr('#schedule-custom-dates', {
-        mode: 'multiple',
-        locale: 'zh',
-        dateFormat: 'Y-m-d',
-        allowInput: false,
-        disableMobile: true,
-        defaultDate: [],
-        onChange: function(dates) {
-            renderCustomDateTags(dates);
-            if (dates.length > 0) {
-                document.getElementById('schedule-custom-dates').placeholder =
-                    '已选择 ' + dates.length + ' 个日期';
-            } else {
-                document.getElementById('schedule-custom-dates').placeholder = '点击选择多个日期';
-            }
-        }
-    });
-}
-
-function renderCustomDateTags(dates) {
-    const container = document.getElementById('schedule-custom-dates-tags');
-    if (!container) return;
-    if (dates.length === 0) { container.innerHTML = ''; return; }
-    container.innerHTML = dates.map((d, i) =>
-        '<span class="date-tag">' + formatDate(d) +
-        '<span class="date-tag-remove" data-idx="' + i + '">&times;</span></span>'
-    ).join('');
-
-    // 点击 × 移除该日期
-    container.querySelectorAll('.date-tag-remove').forEach(el => {
-        el.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const idx = parseInt(this.dataset.idx);
-            const updated = fpMulti.selectedDates.filter((_, i) => i !== idx);
-            fpMulti.setDate(updated);
-            renderCustomDateTags(updated);
-            if (updated.length > 0) {
-                document.getElementById('schedule-custom-dates').placeholder =
-                    '已选择 ' + updated.length + ' 个日期';
-            } else {
-                document.getElementById('schedule-custom-dates').placeholder = '点击选择多个日期';
-            }
-        });
     });
 }
 
@@ -3628,12 +3580,7 @@ async function showScheduleForm(classId, scheduleId) {
     document.getElementById('modal-schedule-title').textContent = scheduleId ? '编辑排课' : '排课设置';
 
     // Reset form
-    document.querySelector('input[name="schedule_rule_type"][value="按规则排课"]').checked = true;
     document.getElementById('schedule-date-range').value = '';
-    document.getElementById('schedule-holiday').checked = false;
-    document.getElementById('schedule-custom-dates').value = '';
-    document.getElementById('schedule-rule-section').style.display = '';
-    document.getElementById('schedule-date-section').style.display = 'none';
     document.querySelectorAll('#weekday-buttons .weekday-btn').forEach(b => b.classList.remove('active'));
     document.getElementById('schedule-time-slots').innerHTML = '<div class="schedule-time-hint">请先选择上课周期</div>';
 
@@ -3679,12 +3626,9 @@ async function showScheduleForm(classId, scheduleId) {
             const data3 = await res3.json();
             const sch = data3.data;
             if (sch) {
-                document.querySelector('input[name="schedule_rule_type"][value="' + esc(sch.rule_type) + '"]').checked = true;
-                onScheduleRuleChange();
-                if (sch.rule_type === '按规则排课' && sch.start_date && sch.end_date) {
+                if (sch.start_date && sch.end_date) {
                     fpRange.setDate([sch.start_date, sch.end_date], true);
                 }
-                document.getElementById('schedule-holiday').checked = sch.holiday_enabled == 1;
                 if (sch.weekdays) {
                     const days = sch.weekdays.split(',').map(d => parseInt(d.trim()));
                     document.querySelectorAll('#weekday-buttons .weekday-btn').forEach(b => {
@@ -3698,12 +3642,6 @@ async function showScheduleForm(classId, scheduleId) {
                 setTimeout(() => setScheduleTimeSlots(timeSlots), 100);
                 document.getElementById('schedule-teacher').value = sch.teacher || '';
                 document.getElementById('schedule-classroom').value = sch.classroom || '';
-                if (sch.rule_type === '按日期排课') {
-                    const dateList = sch.start_date ? sch.start_date.split(/[,，\s\n]+/).filter(d => d) : [];
-                    if (dateList.length > 0) {
-                        fpMulti.setDate(dateList, true);
-                    }
-                }
             }
         } catch (e) { /* ignore */ }
     }
@@ -3714,45 +3652,30 @@ async function showScheduleForm(classId, scheduleId) {
 async function saveSchedule() {
     const classId = parseInt(document.getElementById('schedule-class-id').value) || 0;
     const scheduleId = parseInt(document.getElementById('edit-schedule-id').value) || 0;
-    const ruleType = document.querySelector('input[name="schedule_rule_type"]:checked').value;
     if (!classId) return showToast('班级信息缺失', 'error');
+
+    const startDate = fpRange.selectedDates.length > 0 ? formatDate(fpRange.selectedDates[0]) : '';
+    const endDate = fpRange.selectedDates.length > 1 ? formatDate(fpRange.selectedDates[1]) : '';
+    const selectedWeekdays = getSelectedWeekdays();
+    const timeSlots = getScheduleTimeSlots();
+
+    if (!startDate) return showToast('请选择开课日期', 'error');
+    if (!endDate) return showToast('请选择结课日期', 'error');
+    if (startDate > endDate) return showToast('开课日期不能晚于结课日期', 'error');
+    if (selectedWeekdays.length === 0) return showToast('请选择上课周期', 'error');
+    if (Object.keys(timeSlots).length === 0) return showToast('请设置上课时段', 'error');
 
     let data = {
         class_id: classId,
-        rule_type: ruleType,
+        rule_type: '按规则排课',
         teacher: document.getElementById('schedule-teacher').value,
-        classroom: document.getElementById('schedule-classroom').value
+        classroom: document.getElementById('schedule-classroom').value,
+        start_date: startDate,
+        end_date: endDate,
+        weekdays: selectedWeekdays.join(','),
+        time_slots: JSON.stringify(timeSlots),
+        holiday_enabled: 0
     };
-
-    if (ruleType === '按规则排课') {
-        const startDate = fpRange.selectedDates.length > 0 ? formatDate(fpRange.selectedDates[0]) : '';
-        const endDate = fpRange.selectedDates.length > 1 ? formatDate(fpRange.selectedDates[1]) : '';
-        const selectedWeekdays = getSelectedWeekdays();
-        const timeSlots = getScheduleTimeSlots();
-        const holidayEnabled = document.getElementById('schedule-holiday').checked ? 1 : 0;
-
-        if (!startDate) return showToast('请选择开课日期', 'error');
-        if (!endDate) return showToast('请选择结课日期', 'error');
-        if (startDate > endDate) return showToast('开课日期不能晚于结课日期', 'error');
-        if (selectedWeekdays.length === 0) return showToast('请选择上课周期', 'error');
-        if (Object.keys(timeSlots).length === 0) return showToast('请设置上课时间', 'error');
-
-        data.start_date = startDate;
-        data.end_date = endDate;
-        data.weekdays = selectedWeekdays.join(',');
-        data.time_slots = JSON.stringify(timeSlots);
-        data.holiday_enabled = holidayEnabled;
-    } else {
-        const customDates = fpMulti.selectedDates.length > 0
-            ? fpMulti.selectedDates.map(d => formatDate(d)).join(',')
-            : '';
-        if (!customDates) return showToast('请选择上课日期', 'error');
-        data.start_date = customDates;
-        data.end_date = customDates;
-        data.weekdays = '';
-        data.time_slots = '{}';
-        data.holiday_enabled = 0;
-    }
 
     let result;
     if (scheduleId) {

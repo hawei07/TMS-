@@ -6505,21 +6505,16 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：排课设置 -->
     <div class="modal-overlay" id="modal-schedule-form">
-        <div class="modal"><div class="modal-header"><h3 id="modal-schedule-title">排课设置</h3><button class="modal-close" onclick="closeModal('modal-schedule-form')">&times;</button></div>
+        <div class="modal" style="max-width:540px;"><div class="modal-header"><h3 id="modal-schedule-title">排课设置</h3><button class="modal-close" onclick="closeModal('modal-schedule-form')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="schedule-class-id">
             <input type="hidden" id="edit-schedule-id">
-            <div class="form-group">
-                <label>排课规则 <span class="required">*</span></label>
-                <div class="radio-group">
-                    <label class="radio-label"><input type="radio" name="schedule_rule_type" value="按规则排课" checked onchange="onScheduleRuleChange()"> 按规则排课</label>
-                    <label class="radio-label"><input type="radio" name="schedule_rule_type" value="按日期排课" onchange="onScheduleRuleChange()"> 按日期排课</label>
-                </div>
-            </div>
-            <div id="schedule-rule-section">
+            <!-- 时间安排 -->
+            <div class="form-section">
+                <div class="form-section-header"><span class="form-section-title">🕐 时间安排</span></div>
                 <div class="form-group">
-                    <label>上课日期 <span class="required">*</span></label>
-                    <input type="text" id="schedule-date-range" placeholder="选择起止日期" readonly>
+                    <label>上课日期范围 <span class="required">*</span></label>
+                    <input type="text" id="schedule-date-range" placeholder="点击选择起止日期" readonly>
                 </div>
                 <div class="form-group">
                     <label>上课周期 <span class="required">*</span></label>
@@ -6534,38 +6529,28 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
                 <div class="form-group">
-                    <label>具体上课时间 <span class="required">*</span></label>
+                    <label>上课时段 <span class="required">*</span></label>
                     <div id="schedule-time-slots">
                         <div class="schedule-time-hint">请先选择上课周期</div>
                     </div>
                 </div>
-                <div class="form-group">
-                    <label>节假日排课 <span class="help-icon" title="开启后，节假日将自动跳过不排课">?</span></label>
-                    <label class="switch-label">
-                        <input type="checkbox" id="schedule-holiday" onchange="onHolidayToggle()">
-                        <span class="switch-slider"></span>
-                    </label>
-                </div>
             </div>
-            <div id="schedule-date-section" style="display:none;">
-                <div class="form-group">
-                    <label>选择日期 <span class="required">*</span></label>
-                    <input type="text" id="schedule-custom-dates" placeholder="点击选择多个日期" readonly>
-                    <div id="schedule-custom-dates-tags" class="date-tags"></div>
+            <!-- 资源配置 -->
+            <div class="form-section" style="margin-top:4px;">
+                <div class="form-section-header"><span class="form-section-title">👤 资源配置</span></div>
+                <div class="form-row" style="display:flex;gap:12px;">
+                    <div class="form-group" style="flex:1;">
+                        <label>授课老师 <span class="required">*</span></label>
+                        <select id="schedule-teacher"><option value="">搜索老师</option></select>
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label>上课教室</label>
+                        <select id="schedule-classroom"><option value="">选择教室</option></select>
+                    </div>
                 </div>
-            </div>
-            <div class="form-group">
-                <label>授课老师 <span class="required">*</span></label>
-                <div class="form-row">
-                    <select id="schedule-teacher"><option value="">搜索授课老师</option></select>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>上课教室</label>
-                <select id="schedule-classroom"><option value="">请选择上课教室</option></select>
             </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-schedule-form')">取消</button><button class="btn btn-primary" onclick="saveSchedule()">确认</button></div></div>
+        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-schedule-form')">取消</button><button class="btn btn-primary" onclick="saveSchedule()">确认排课</button></div></div>
     </div>
 
     <!-- 弹窗：新增/编辑上课记录 -->
