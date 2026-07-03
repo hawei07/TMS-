@@ -3727,3 +3727,34 @@ span.flatpickr-weekday {
     from { opacity: 0; transform: translateX(-50%) translateY(-12px); }
     to   { opacity: 1; transform: translateX(-50%) translateY(0); }
 }
+
+/* ===== 教师搜索下拉 ===== */
+.teacher-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0; right: 0;
+    max-height: 200px;
+    overflow-y: auto;
+    background: #fff;
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+    box-shadow: 0 4px 16px rgba(0,0,0,.08);
+    z-index: 1000;
+    margin-top: 2px;
+}
+.td-item {
+    padding: 8px 12px;
+    cursor: pointer;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+    border-bottom: 1px solid #f5f5f5;
+    transition: background .12s;
+}
+.td-item:last-child { border-bottom: none; }
+.td-item:hover { background: #f0f5ff; }
+.td-item-campus { background: #f6ffed; }
+.td-item-campus:hover { background: #e6ffe0; }
+.td-name { font-weight: 600; color: #333; }
+.td-dept { font-size: 11px; color: #999; }

@@ -3588,8 +3588,9 @@ async function showScheduleForm(classId, scheduleId) {
     document.getElementById('schedule-time-slots').innerHTML = '<div class="schedule-time-hint">请先选择上课周期</div>';
 
     // Load teacher dropdown — campus teachers first, then all others for search
-    const teacherDL = document.getElementById('teacher-datalist');
+    const teacherDL = document.getElementById('teacher-dropdown');
     teacherDL.innerHTML = '';
+    window._allScheduleTeachers = [];
     var campusFilter = '';
     try {
         // Get class campus
@@ -3608,25 +3609,9 @@ async function showScheduleForm(classId, scheduleId) {
             if (campusFilter) {
                 const campusTeachers = teachers.filter(t => t.department === campusFilter);
                 const otherTeachers = teachers.filter(t => t.department !== campusFilter);
-                campusTeachers.forEach(emp => {
-                    const opt = document.createElement('option');
-                    opt.value = emp.name;
-                    opt.textContent = emp.name;
-                    teacherDL.appendChild(opt);
-                });
-                otherTeachers.forEach(emp => {
-                    const opt = document.createElement('option');
-                    opt.value = emp.name;
-                    opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
-                    teacherDL.appendChild(opt);
-                });
+                window._allScheduleTeachers = campusTeachers.concat(otherTeachers).map(e => ({ name: e.name, dept: e.department, campus: e.department === campusFilter }));
             } else {
-                teachers.forEach(emp => {
-                    const opt = document.createElement('option');
-                    opt.value = emp.name;
-                    opt.textContent = emp.name + (emp.department ? ' - ' + emp.department : '');
-                    teacherDL.appendChild(opt);
-                });
+                window._allScheduleTeachers = teachers.map(e => ({ name: e.name, dept: e.department, campus: false }));
             }
         }
     } catch (e) { /* ignore */ }
@@ -3681,6 +3666,37 @@ async function showScheduleForm(classId, scheduleId) {
 
     openModal('modal-schedule-form');
 }
+
+function filterTeacherDropdown() {
+    var dd = document.getElementById('teacher-dropdown');
+    if (!dd) return;
+    var q = (document.getElementById('schedule-teacher').value || '').trim().toLowerCase();
+    var list = window._allScheduleTeachers || [];
+    if (list.length === 0) { dd.style.display = 'none'; return; }
+    var filtered = q ? list.filter(function(t) { return t.name.toLowerCase().indexOf(q) !== -1; }) : list;
+    if (filtered.length === 0) { dd.style.display = 'none'; return; }
+    dd.innerHTML = filtered.map(function(t) {
+        return '<div class="td-item' + (t.campus ? ' td-item-campus' : '') + '" onclick="selectTeacher(\'' + escAttr(t.name) + '\')">'
+            + '<span class="td-name">' + escHtml(t.name) + '</span>'
+            + (t.dept ? '<span class="td-dept">' + escHtml(t.dept) + '</span>' : '')
+            + '</div>';
+    }).join('');
+    dd.style.display = 'block';
+}
+
+function selectTeacher(name) {
+    document.getElementById('schedule-teacher').value = name;
+    document.getElementById('teacher-dropdown').style.display = 'none';
+}
+
+// Close teacher dropdown on outside click
+document.addEventListener('click', function(e) {
+    var dd = document.getElementById('teacher-dropdown');
+    var inp = document.getElementById('schedule-teacher');
+    if (dd && inp && !inp.contains(e.target) && !dd.contains(e.target)) {
+        dd.style.display = 'none';
+    }
+});
 
 async function saveSchedule() {
     const classId = parseInt(document.getElementById('schedule-class-id').value) || 0;
