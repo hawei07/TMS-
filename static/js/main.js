@@ -137,7 +137,8 @@ async function loadStats() {
 
 // ==================== 渠道管理 ====================
 async function loadChannels() {
-    return await api('list_channels', null, 'GET');
+    const res = await api('list_channels', null, 'GET');
+    return res.data || [];
 }
 
 async function populateFilterChannelSelect() {
