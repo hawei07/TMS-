@@ -1201,7 +1201,10 @@ $stmt->execute();
                 $end = new DateTime($r['end_date']);
                 foreach ($weekdays as $wd) {
                     $d = clone $today;
-                    $d->modify('next ' . ['','monday','tuesday','wednesday','thursday','friday','saturday','sunday'][$wd]);
+                    $currentWd = (int)$today->format('N');
+                    $diff = $wd - $currentWd;
+                    if ($diff < 0) $diff += 7;
+                    $d->modify('+' . $diff . ' days');
                     for ($w = 0; $w < 8; $w++) {
                         $dt = clone $d; $dt->modify('+' . ($w*7) . ' days');
                         if ($dt >= $start && $dt <= $end) {
