@@ -8020,20 +8020,22 @@ function confirmScheduleCreate() {
     const endDate = document.getElementById('sc-end-date').value;
     const maxStudents = parseInt(document.getElementById('sc-max-students').value) || 15;
     const lessonHours = parseInt(document.getElementById('sc-lesson-hours').value) || 0;
-    if (!startDate) { alert('请选择开课日期'); return; }
-    if (!endDate) { alert('请选择结课日期'); return; }
-    if (new Date(endDate) <= new Date(startDate)) { alert('结课日期必须晚于开课日期'); return; }
+    if (!startDate) { showToast('请选择开课日期', 'warn'); return; }
+    if (!endDate) { showToast('请选择结课日期', 'warn'); return; }
+    if (new Date(endDate) <= new Date(startDate)) { showToast('结课日期必须晚于开课日期', 'warn'); return; }
+    var campus = sc.campus || document.getElementById('filter-schedule-campus').value;
+    if (!campus) { showToast('请先在筛选栏选择校区', 'warn'); return; }
     api('create_schedule_from_grid', {
-        course_id: sc.courseId, teacher: sc.teacher, classroom: sc.classroom, campus: sc.campus,
+        course_id: sc.courseId, teacher: sc.teacher, classroom: sc.classroom, campus: campus,
         day_of_week: sc.dayOfWeek, time_start: sc.timeStart, time_end: sc.timeEnd,
         start_date: startDate, end_date: endDate, class_name: className, max_students: maxStudents, lesson_hours: lessonHours
     }, 'POST').then(res => {
-        if (res.error) { alert(res.error); return; }
+        if (res.error) { showToast(res.error, 'error'); return; }
         closeScheduleCreateModal();
         delete pendingCells[sc.cellId];
         loadScheduleView();
-        alert('排课创建成功！班级：' + res.class_name);
-    }).catch(e => { alert('创建失败: ' + e.message); });
+        showToast('排课创建成功！班级：' + res.class_name, 'success');
+    }).catch(e => { showToast('创建失败: ' + e.message, 'error'); });
 }
 
 // ===== 确收统计（复用现金流统计逻辑） =====
