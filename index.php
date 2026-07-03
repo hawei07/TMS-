@@ -6441,7 +6441,7 @@ if (intval($countBt) === 0) {
         <div class="modal modal-lg" style="max-width:560px;"><div class="modal-header"><h3 id="modal-class-title">新增班级</h3><button class="modal-close" onclick="closeModal('modal-class-form')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="edit-class-id">
-            <div class="form-group">
+            <div class="form-group" id="class-type-group">
                 <label>班级类型 <span class="required">*</span></label>
                 <div class="radio-group">
                     <label class="radio-label"><input type="radio" name="class_type" value="标准班" checked onchange="onClassTypeChange()"> 标准班</label>
@@ -6480,7 +6480,7 @@ if (intval($countBt) === 0) {
                     <label class="radio-label"><input type="radio" name="can_trial" value="否"> 否</label>
                 </div>
             </div>
-            <div class="form-group">
+            <div class="form-group" id="class-campus-group">
                 <label>当前校区 <span class="required">*</span></label>
                 <select id="class-campus"><option value="">请选择当前校区</option></select>
             </div>

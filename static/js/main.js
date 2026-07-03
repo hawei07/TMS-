@@ -3353,6 +3353,8 @@ function renderClassTable(rows, prefix) {
 async function showClassForm(classId) {
     document.getElementById('edit-class-id').value = classId || '';
     document.getElementById('modal-class-title').textContent = classId ? '编辑班级' : '新增班级';
+    document.getElementById('class-type-group').style.display = classId ? 'none' : '';
+    document.getElementById('class-campus-group').style.display = classId ? 'none' : '';
     
     // Reset form
     document.querySelector('input[name="class_type"][value="标准班"]').checked = true;
