@@ -8221,3 +8221,13 @@ document.addEventListener('click', function(e) {
     var dd = document.getElementById('rv-campus-dropdown');
     if (wrap && dd && !wrap.contains(e.target)) { dd.style.display = 'none'; }
 });
+
+// 分段控件 radio→pill 切换
+document.addEventListener('change', function(e) {
+    var rb = e.target;
+    if (rb.type !== 'radio' || !rb.closest('.segmented-control')) return;
+    var seg = rb.closest('.segmented-control');
+    seg.querySelectorAll('.seg-item').forEach(function(el) { el.classList.remove('active'); });
+    rb.parentElement.classList.add('active');
+    if (rb.name === 'class_type') onClassTypeChange();
+});

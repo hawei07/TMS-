@@ -6438,54 +6438,79 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：新增/编辑班级 -->
     <div class="modal-overlay" id="modal-class-form">
-        <div class="modal modal-lg" style="max-width:560px;"><div class="modal-header"><h3 id="modal-class-title">新增班级</h3><button class="modal-close" onclick="closeModal('modal-class-form')">&times;</button></div>
-        <div class="modal-body">
-            <input type="hidden" id="edit-class-id">
-            <div class="form-group" id="class-type-group">
-                <label>班级类型 <span class="required">*</span></label>
-                <div class="radio-group">
-                    <label class="radio-label"><input type="radio" name="class_type" value="标准班" checked onchange="onClassTypeChange()"> 标准班</label>
-                    <label class="radio-label"><input type="radio" name="class_type" value="活动班" onchange="onClassTypeChange()"> 活动班</label>
+        <div class="modal" style="max-width:480px;border-radius:12px;">
+            <div class="modal-header" style="padding:16px 20px;border-bottom:1px solid #f0f0f0;">
+                <h3 id="modal-class-title" style="font-size:16px;margin:0;">新增班级</h3>
+                <button class="modal-close" onclick="closeModal('modal-class-form')" style="font-size:20px;">&times;</button>
+            </div>
+            <div class="modal-body" style="padding:20px;">
+                <input type="hidden" id="edit-class-id">
+                <!-- 班级类型 -->
+                <div class="form-group" id="class-type-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">班级类型 <span class="required">*</span></label>
+                    <div class="segmented-control">
+                        <label class="seg-item active"><input type="radio" name="class_type" value="标准班" checked> 标准班</label>
+                        <label class="seg-item"><input type="radio" name="class_type" value="活动班"> 活动班</label>
+                    </div>
+                </div>
+                <!-- 关联课程 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">关联课程 <span class="required">*</span></label>
+                    <div style="position:relative;">
+                        <select id="class-course" style="width:100%;height:40px;padding:0 32px 0 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fff;appearance:none;cursor:pointer;color:#333;">
+                            <option value="">请选择关联课程</option>
+                        </select>
+                        <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:#aaa;">▾</span>
+                    </div>
+                    <span style="font-size:11px;color:#aaa;margin-top:4px;display:block;">购买关联课程的学员可以分到本班</span>
+                </div>
+                <!-- 班级名称 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">班级名称 <span class="required">*</span></label>
+                    <div style="position:relative;">
+                        <input type="text" id="class-name" maxlength="20" placeholder="请输入班级名称" oninput="updateClassCount('class-name','class-name-count')"
+                            style="width:100%;height:40px;padding:0 50px 0 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;color:#333;outline:none;box-sizing:border-box;">
+                        <span id="class-name-count" style="position:absolute;right:12px;top:50%;transform:translateY(-50%);color:#bbb;font-size:11px;">0/20</span>
+                    </div>
+                </div>
+                <!-- 招生人数 + 授课课时 并排 -->
+                <div style="display:flex;gap:12px;margin-bottom:16px;">
+                    <div class="form-group" style="flex:1;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">招生人数 <span class="required">*</span></label>
+                        <input type="number" id="class-max-students" min="1" placeholder="请输入"
+                            style="width:100%;height:40px;padding:0 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;color:#333;outline:none;box-sizing:border-box;">
+                    </div>
+                    <div class="form-group" style="flex:1;">
+                        <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">授课课时</label>
+                        <input type="number" id="class-lesson-hours" value="2" min="2" step="2"
+                            oninput="this.value=Math.max(2,parseInt(this.value)||2);if(this.value%2!==0)this.value=parseInt(this.value)+1" placeholder="2"
+                            style="width:100%;height:40px;padding:0 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;color:#333;outline:none;box-sizing:border-box;">
+                    </div>
+                </div>
+                <!-- 是否可试听 -->
+                <div class="form-group" style="margin-bottom:16px;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">是否可试听</label>
+                    <div class="segmented-control">
+                        <label class="seg-item active"><input type="radio" name="can_trial" value="是" checked> 是</label>
+                        <label class="seg-item"><input type="radio" name="can_trial" value="否"> 否</label>
+                    </div>
+                </div>
+                <!-- 当前校区 -->
+                <div class="form-group" id="class-campus-group" style="margin-bottom:0;">
+                    <label style="display:block;font-size:13px;font-weight:600;color:#555;margin-bottom:6px;">当前校区 <span class="required">*</span></label>
+                    <div style="position:relative;">
+                        <select id="class-campus" style="width:100%;height:40px;padding:0 32px 0 12px;border:1px solid #e0e0e0;border-radius:8px;font-size:13px;background:#fff;appearance:none;cursor:pointer;color:#333;">
+                            <option value="">请选择当前校区</option>
+                        </select>
+                        <span style="position:absolute;right:12px;top:50%;transform:translateY(-50%);pointer-events:none;color:#aaa;">▾</span>
+                    </div>
                 </div>
             </div>
-            <div class="form-group">
-                <label>关联课程 <span class="required">*</span></label>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <select id="class-course" style="flex:1;"><option value="">请选择关联课程</option></select>
-                    <span style="color:#999;font-size:12px;white-space:nowrap;">购买关联课程的学员可以分到本班 <span style="cursor:help;" title="购买关联课程的学员可以分到本班">ⓘ</span></span>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>班级名称 <span class="required">*</span></label>
-                <div style="position:relative;">
-                    <input type="text" id="class-name" maxlength="20" placeholder="请输入班级名称" oninput="updateClassCount('class-name', 'class-name-count')" style="padding-right:50px;">
-                    <span id="class-name-count" style="position:absolute;right:10px;top:50%;transform:translateY(-50%);color:#999;font-size:12px;">0/20</span>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>招生人数 <span class="required">*</span></label>
-                <input type="number" id="class-max-students" min="1" placeholder="请输入招生人数">
-            </div>
-            <div class="form-group">
-                <label>授课课时</label>
-                <div style="display:flex;align-items:center;gap:8px;">
-                    <input type="number" id="class-lesson-hours" value="2" min="2" step="2" oninput="this.value=Math.max(2,parseInt(this.value)||2);if(this.value%2!==0)this.value=parseInt(this.value)+1" placeholder="请输入授课课时" style="flex:1;">
-                    <span style="color:#999;font-size:12px;white-space:nowrap;">班级每次点名消耗的课时 <span style="cursor:help;" title="班级每次点名消耗的课时">ⓘ</span></span>
-                </div>
-            </div>
-            <div class="form-group">
-                <label>是否可试听</label>
-                <div class="radio-group">
-                    <label class="radio-label"><input type="radio" name="can_trial" value="是" checked> 是</label>
-                    <label class="radio-label"><input type="radio" name="can_trial" value="否"> 否</label>
-                </div>
-            </div>
-            <div class="form-group" id="class-campus-group">
-                <label>当前校区 <span class="required">*</span></label>
-                <select id="class-campus"><option value="">请选择当前校区</option></select>
+            <div class="modal-footer" style="padding:12px 20px;border-top:1px solid #f0f0f0;display:flex;justify-content:flex-end;gap:8px;">
+                <button class="btn btn-outline" onclick="closeModal('modal-class-form')">取消</button>
+                <button class="btn btn-primary" onclick="saveClass()" style="min-width:80px;">确认</button>
             </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-class-form')">取消</button><button class="btn btn-primary" onclick="saveClass()">确认</button></div></div>
     </div>
 
     <!-- 弹窗：新增/编辑教室 -->
