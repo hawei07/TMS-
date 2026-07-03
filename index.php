@@ -1269,11 +1269,10 @@ $stmt->execute();
             $clsInfo = $db->query("SELECT c.course_id, c.name AS class_name, co.name AS course_name, co.subject AS subject, c.campus FROM classes c LEFT JOIN courses co ON co.id=c.course_id WHERE c.id=$classId")->fetch(PDO::FETCH_ASSOC);
             if ($clsInfo) {
                 $subjParts = explode(' > ', $clsInfo['subject'] ?? '');
-                $db->prepare("INSERT INTO attendance_records (student_id, course_id, campus, class_name, subject_level1, subject_level2, lesson_date, status, notes, deducted_lessons, consumed_amount, created_at) VALUES (0,?,?,?,?,?,?,?,?,0,0,?)")->execute([
+                $db->prepare("INSERT INTO attendance_records (student_id, course_id, campus, class_name, subject_level1, subject_level2, lesson_date, status, deducted_lessons, consumed_amount, created_at) VALUES (0,?,?,?,?,?,?,?,0,0,?)")->execute([
                     $clsInfo['course_id'], $clsInfo['campus'], $clsInfo['class_name'],
                     $subjParts[0] ?? '', $subjParts[1] ?? '',
-                    $trialDate ?: date('Y-m-d'), '出勤',
-                    '试听学员: ' . $resourceName . ($phone ? ' ' . $phone : ''), $n
+                    $trialDate ?: date('Y-m-d'), '出勤', $n
                 ]);
             }
             json(['id' => $aptId, 'message' => '预约成功，状态：已预约待试听']);
