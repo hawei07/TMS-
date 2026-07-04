@@ -5993,15 +5993,27 @@ if (intval($countBt) === 0) {
 
                 <!-- 表单区域 -->
                 <div class="enroll-form">
-                    <!-- 校区/课程 -->
-                    <div class="enroll-form-row">
-                        <div class="form-group enroll-form-half">
+                    <!-- 校区/课程 — 上下布局 -->
+                    <div class="enroll-form-row" style="flex-direction: column; gap: 16px;">
+                        <div class="form-group" style="margin-bottom: 0;">
                             <label>校区 <span class="required">*</span></label>
                             <select id="enroll-campus-select"><option value="">请选择校区</option></select>
                         </div>
-                        <div class="form-group enroll-form-half">
+                        <div class="enroll-course-picker" id="enroll-course-picker">
                             <label>课程 <span class="required">*</span></label>
-                            <select id="enroll-course-select" disabled><option value="">请先选择校区</option></select>
+                            <div class="course-picker-body">
+                                <div class="course-picker-search">
+                                    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9895A8" stroke-width="2">
+                                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
+                                    </svg>
+                                    <input type="text" id="enroll-course-search" placeholder="请先选择校区" disabled autocomplete="off">
+                                </div>
+                                <div class="course-picker-chips" id="enroll-course-chips"></div>
+                                <div class="course-picker-list" id="enroll-course-list">
+                                    <div class="course-picker-empty">请先选择校区</div>
+                                </div>
+                            </div>
+                            <input type="hidden" id="enroll-course-id" value="">
                         </div>
                     </div>
 

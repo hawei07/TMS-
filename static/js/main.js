@@ -5359,10 +5359,8 @@ async function goEnroll(studentId) {
         document.getElementById('enroll-info-phone').textContent = data.student.phone || '-';
     } catch (e) { showToast('加载学员信息失败', 'error'); return; }
 
-    // Reset course dropdown
-    const courseSel = document.getElementById('enroll-course-select');
-    courseSel.innerHTML = '<option value="">请先选择校区</option>';
-    courseSel.disabled = true;
+    // Reset course picker
+    loadEnrollCoursePicker(null);
 
     // Load campus list
     await loadCampusOptions('enroll-campus-select');
@@ -5396,10 +5394,8 @@ async function goEnrollFromResource(resourceId) {
         document.getElementById('enroll-info-phone').textContent = resource.phone || '-';
     } catch (e) { showToast('加载资源信息失败', 'error'); return; }
 
-    // Reset course dropdown
-    const courseSel = document.getElementById('enroll-course-select');
-    courseSel.innerHTML = '<option value="">请先选择校区</option>';
-    courseSel.disabled = true;
+    // Reset course picker
+    loadEnrollCoursePicker(null);
 
     // Load campus list
     await loadCampusOptions('enroll-campus-select');
@@ -5416,7 +5412,7 @@ async function goEnrollFromResource(resourceId) {
     highlightLeafByPanel('panel-enroll');
 }
 
-// Campus select change → filter courses
+// Campus select change → load course picker
 document.addEventListener('DOMContentLoaded', function() {
     const campusSel = document.getElementById('enroll-campus-select');
     if (campusSel) {
@@ -5431,41 +5427,11 @@ document.addEventListener('DOMContentLoaded', function() {
             if (plansSection) plansSection.style.display = 'none';
             document.getElementById('enroll-plans-list').innerHTML = '';
             setEnrollProgress(1);
-            const courseSel = document.getElementById('enroll-course-select');
             if (!campusId) {
-                courseSel.innerHTML = '<option value="">请先选择校区</option>';
-                courseSel.disabled = true;
+                loadEnrollCoursePicker(null);
                 return;
             }
-            await loadCourseOptionsByCampus('enroll-course-select', campusId);
-            courseSel.disabled = false;
-        });
-    }
-
-    const courseSel = document.getElementById('enroll-course-select');
-    if (courseSel) {
-        courseSel.addEventListener('change', async function() {
-            const courseId = this.value;
-            currentEnrollCourseId = courseId ? parseInt(courseId) : null;
-            currentEnrollPlanId = null;
-            enrollTransitionHide(document.getElementById('enroll-items-section'));
-            if (!courseId) { setEnrollProgress(1); return; }
-
-            setEnrollProgress(2);
-            const plansSection = document.getElementById('enroll-plans-section');
-            plansSection.style.display = '';
-            const listDiv = document.getElementById('enroll-plans-list');
-            listDiv.innerHTML = '<div style="color:#999;padding:12px;">加载中...</div>';
-
-            try {
-                const res = await fetch(API_BASE + 'get_course_plans&course_id=' + courseId);
-                const data = await res.json();
-                currentEnrollPlans = data.data || [];
-                renderEnrollPlansList(currentEnrollPlans);
-                enrollTransitionShow(plansSection);
-            } catch (e) {
-                listDiv.innerHTML = '<div style="color:#e74c3c;padding:12px;">加载失败</div>';
-            }
+            await loadEnrollCoursePicker(campusId);
         });
     }
 
@@ -5803,6 +5769,153 @@ async function loadCourseOptionsByCampus(selectId, campusId) {
     } catch (e) {
         sel.innerHTML = '<option value="">加载失败</option>';
     }
+}
+
+// ==================== 课程搜索+筛选Picker ====================
+let enrollCoursePickerData = [];
+let enrollCoursePickerSelected = null;
+let pickerSearchEl, pickerChipsEl, pickerListEl, pickerHiddenEl, pickerBodyEl;
+
+function initEnrollCoursePickerRefs() {
+    pickerSearchEl = document.getElementById('enroll-course-search');
+    pickerChipsEl  = document.getElementById('enroll-course-chips');
+    pickerListEl   = document.getElementById('enroll-course-list');
+    pickerHiddenEl = document.getElementById('enroll-course-id');
+    pickerBodyEl   = document.querySelector('.course-picker-body');
+    if (pickerSearchEl) {
+        pickerSearchEl.addEventListener('input', function() {
+            clearTimeout(this._debounce);
+            this._debounce = setTimeout(applyCoursePickerFilters, 300);
+        });
+    }
+}
+
+async function loadEnrollCoursePicker(campusId) {
+    if (!pickerSearchEl) initEnrollCoursePickerRefs();
+
+    enrollCoursePickerData = [];
+    enrollCoursePickerSelected = null;
+    pickerHiddenEl.value = '';
+    pickerSearchEl.value = '';
+    pickerChipsEl.innerHTML = '';
+    pickerBodyEl.classList.remove('has-selection');
+
+    if (!campusId) {
+        pickerSearchEl.disabled = true;
+        pickerSearchEl.placeholder = '请先选择校区';
+        pickerListEl.innerHTML = '<div class="course-picker-empty">请先选择校区</div>';
+        return;
+    }
+
+    pickerSearchEl.disabled = true;
+    pickerSearchEl.placeholder = '加载中...';
+    pickerListEl.innerHTML = '<div class="course-picker-empty">加载课程中...</div>';
+
+    try {
+        const res = await fetch(API_BASE + 'list_courses&page=1&page_size=200&campus_id=' + campusId);
+        const data = await res.json();
+        enrollCoursePickerData = data.data || [];
+
+        pickerSearchEl.disabled = false;
+        pickerSearchEl.placeholder = '搜索课程名称...';
+
+        renderCoursePickerChips(enrollCoursePickerData);
+        renderCoursePickerCards(enrollCoursePickerData);
+    } catch (e) {
+        pickerSearchEl.disabled = true;
+        pickerSearchEl.placeholder = '加载失败';
+        pickerListEl.innerHTML = '<div class="course-picker-empty" style="color:#E53E3E;">加载失败，请重试</div>';
+    }
+}
+
+function renderCoursePickerChips(courses) {
+    const subjectMap = {};
+    courses.forEach(c => {
+        const s = c.subject_level1 || '未分类';
+        subjectMap[s] = (subjectMap[s] || 0) + 1;
+    });
+    const subjects = Object.keys(subjectMap).sort();
+
+    let html = '<span class="course-picker-chip active" data-subject="">全部（' + courses.length + '）</span>';
+    subjects.forEach(s => {
+        html += '<span class="course-picker-chip" data-subject="' + esc(s) + '">' + esc(s) + '<span class="chip-count">' + subjectMap[s] + '</span></span>';
+    });
+    pickerChipsEl.innerHTML = html;
+
+    pickerChipsEl.querySelectorAll('.course-picker-chip').forEach(chip => {
+        chip.addEventListener('click', () => {
+            pickerChipsEl.querySelectorAll('.course-picker-chip').forEach(c => c.classList.remove('active'));
+            chip.classList.add('active');
+            applyCoursePickerFilters();
+        });
+    });
+}
+
+function applyCoursePickerFilters() {
+    const keyword = (pickerSearchEl.value || '').trim().toLowerCase();
+    const activeChip = pickerChipsEl.querySelector('.course-picker-chip.active');
+    const subjectFilter = activeChip ? activeChip.dataset.subject : '';
+
+    let filtered = enrollCoursePickerData;
+    if (subjectFilter) {
+        filtered = filtered.filter(c => (c.subject_level1 || '未分类') === subjectFilter);
+    }
+    if (keyword) {
+        filtered = filtered.filter(c =>
+            (c.name || '').toLowerCase().includes(keyword) ||
+            (c.subject_level1 || '').toLowerCase().includes(keyword) ||
+            (c.subject_level2 || '').toLowerCase().includes(keyword)
+        );
+    }
+    renderCoursePickerCards(filtered);
+}
+
+function renderCoursePickerCards(courses) {
+    if (courses.length === 0) {
+        pickerListEl.innerHTML = '<div class="course-picker-empty">未找到匹配的课程</div>';
+        return;
+    }
+    pickerListEl.innerHTML = courses.map(c => {
+        const selected = enrollCoursePickerSelected === c.id;
+        const subjectText = [c.subject_level1, c.subject_level2].filter(Boolean).join(' / ') || '未分类';
+        return '<div class="course-picker-card' + (selected ? ' selected' : '') + '" data-course-id="' + c.id + '" data-course-name="' + esc(c.name) + '" onclick="selectEnrollCourse(' + c.id + ', \'' + esc(c.name) + '\')">' +
+            '<div class="course-card-info">' +
+                '<div class="course-card-name">' + esc(c.name) + '</div>' +
+                '<div class="course-card-subject">' + esc(subjectText) + '</div>' +
+            '</div>' +
+            '<div class="course-card-check">\u2713</div>' +
+        '</div>';
+    }).join('');
+}
+
+function selectEnrollCourse(courseId, courseName) {
+    enrollCoursePickerSelected = courseId;
+    currentEnrollCourseId = courseId;
+    currentEnrollPlanId = null;
+    pickerHiddenEl.value = courseId;
+    pickerBodyEl.classList.add('has-selection');
+
+    pickerListEl.querySelectorAll('.course-picker-card').forEach(card => {
+        card.classList.toggle('selected', parseInt(card.dataset.courseId) === courseId);
+    });
+
+    setEnrollProgress(2);
+    enrollTransitionHide(document.getElementById('enroll-items-section'));
+    const plansSection = document.getElementById('enroll-plans-section');
+    plansSection.style.display = '';
+    const listDiv = document.getElementById('enroll-plans-list');
+    listDiv.innerHTML = '<div style="color:#999;padding:12px;">加载中...</div>';
+
+    fetch(API_BASE + 'get_course_plans&course_id=' + courseId)
+        .then(res => res.json())
+        .then(data => {
+            currentEnrollPlans = data.data || [];
+            renderEnrollPlansList(currentEnrollPlans);
+            enrollTransitionShow(plansSection);
+        })
+        .catch(() => {
+            listDiv.innerHTML = '<div style="color:#e74c3c;padding:12px;">加载失败</div>';
+        });
 }
 
 // ==================== 报名课程（旧弹窗保留） ====================
