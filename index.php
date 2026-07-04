@@ -1085,11 +1085,24 @@ $stmt->execute();
             if ($status) { $where[] = "status = ?"; $params[] = $status; }
             $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
 
-            $stmt = $db->query("SELECT COUNT(*) FROM appointments $whereStr");
+            $stmt = $db->query("SELECT COUNT(*) FROM appointments apt $whereStr");
             $total = $stmt->fetchColumn();
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
-            $query = "SELECT * FROM appointments $whereStr ORDER BY appointment_time DESC LIMIT $pageSize OFFSET $offset";
+            $query = "SELECT apt.*,
+                    cl.name AS class_name,
+                    s.teacher AS session_teacher,
+                    co.subject AS course_subject,
+                    r.converted AS resource_converted,
+                    r.channel AS resource_channel,
+                    r.assigned_to AS resource_assigned_to
+                    FROM appointments apt
+                    LEFT JOIN classes cl ON cl.id=apt.class_id
+                    LEFT JOIN schedules s ON s.id=apt.schedule_id
+                    LEFT JOIN courses co ON co.id=apt.course_id
+                    LEFT JOIN resources r ON r.id=apt.resource_id
+                    $whereStr ORDER BY apt.appointment_time DESC LIMIT $pageSize OFFSET $offset";
+            $countQuery = "SELECT COUNT(*) FROM appointments apt $whereStr";
             $rows = [];
             if ($params) {
                 $stmt = $db->prepare($query);
@@ -1098,7 +1111,12 @@ $stmt->execute();
             } else {
                 $stmt = $db->query($query);
             }
-            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $subjParts = explode(' > ', $r['course_subject'] ?? '');
+                $r['subject_level1'] = $subjParts[0] ?? '';
+                $r['subject_level2'] = $subjParts[1] ?? '';
+                $rows[] = $r;
+            }
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
 
         // === 预约试听级联查询 ===
@@ -5222,7 +5240,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-appointments">
                         <thead><tr>
-                            <th>资源</th><th>电话</th><th>课程类型</th><th>预约时间</th><th>状态</th><th>备注</th><th width="160">操作</th>
+                            <th>资源</th><th>电话</th><th>课程类型</th><th>班级名称</th><th>授课老师</th><th>一级学科</th><th>二级学科</th><th>预约时间</th><th>状态</th><th>转化状态</th><th>渠道</th><th>归属人</th><th>备注</th><th width="80">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>

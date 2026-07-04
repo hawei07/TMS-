@@ -1477,7 +1477,7 @@ async function loadAppointments() {
 function renderAptTable(rows) {
     const tbody = document.querySelector('#table-appointments tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无预约记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#999;padding:30px;">暂无预约记录</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => `
@@ -1485,8 +1485,15 @@ function renderAptTable(rows) {
             <td>${esc(r.resource_name)}</td>
             <td>${esc(r.phone)}</td>
             <td>${esc(r.course_type)}</td>
+            <td>${esc(r.class_name)}</td>
+            <td>${esc(r.session_teacher)}</td>
+            <td>${esc(r.subject_level1)}</td>
+            <td>${esc(r.subject_level2)}</td>
             <td>${r.appointment_time ? r.appointment_time.slice(0,16) : ''}</td>
             <td><span class="status-tag status-${r.status}">${r.status}</span></td>
+            <td>${esc(r.resource_converted)}</td>
+            <td>${esc(r.resource_channel)}</td>
+            <td>${esc(r.resource_assigned_to)}</td>
             <td>${esc(r.notes)}</td>
             <td>
                 <div class="action-btns">
