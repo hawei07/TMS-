@@ -9155,3 +9155,46 @@ function bookTrialInline(classId, scheduleId, trialDate, startTime) {
         if (typeof loadAppointments === 'function') loadAppointments();
     }).catch(function(e) { showToast('预约失败: '+(e.message||String(e)),'error'); });
 }
+
+/* ==================== Flatpickr 统一初始化 ==================== */
+function initDatePickers(selector, overrides) {
+    selector = selector || 'input[type="date"]';
+    overrides = overrides || {};
+    var instances = [];
+    var defaults = {
+        locale: 'zh',
+        dateFormat: 'Y-m-d',
+        allowInput: false,
+        disableMobile: true,
+        static: false,
+        showMonths: 1,
+        monthSelectorType: 'static',
+        prevArrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="15 18 9 12 15 6"/></svg>',
+        nextArrow: '<svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="9 6 15 12 9 18"/></svg>',
+    };
+    var config = Object.assign({}, defaults, overrides);
+    var inputs = document.querySelectorAll(selector);
+    inputs.forEach(function(el) {
+        if (el.classList.contains('flatpickr-input')) return;
+        if (el.offsetParent === null && el.style.display === 'none') return;
+        if (el._flatpickr) { el._flatpickr.destroy(); }
+        var fp = flatpickr(el, config);
+        instances.push(fp);
+    });
+    window.__fpInstances = instances;
+    return instances;
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    initDatePickers('input[type="date"]');
+});
+
+function refreshDatePickers(containerSelector) {
+    var scope = containerSelector ? document.querySelector(containerSelector) : document;
+    if (!scope) scope = document;
+    var inputs = scope.querySelectorAll('input[type="date"]:not(.flatpickr-input)');
+    inputs.forEach(function(el) {
+        if (el.offsetParent === null && el.style.display === 'none') return;
+        flatpickr(el, { locale: 'zh', dateFormat: 'Y-m-d', allowInput: false, disableMobile: true });
+    });
+}

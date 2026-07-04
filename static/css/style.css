@@ -2409,89 +2409,99 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     padding-right: 40px;
 }
 
-/* flatpickr 弹层 z-index 高于遮罩 */
+/* ==================== Flatpickr 紫色主题覆写 ==================== */
+
 .flatpickr-calendar {
     z-index: 10001 !important;
     font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
-    border-radius: 12px;
-    box-shadow: 0 16px 48px rgba(0, 0, 0, 0.12), 0 4px 12px rgba(0, 0, 0, 0.06);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
     border: 1px solid var(--color-border);
-    width: 320px;
+    width: 312px;
+    overflow: hidden;
 }
+.flatpickr-calendar.arrowTop:before,
+.flatpickr-calendar.arrowTop:after { border-bottom-color: var(--color-border); }
+.flatpickr-calendar.arrowBottom:before,
+.flatpickr-calendar.arrowBottom:after { border-top-color: var(--color-border); }
 
-/* 月份导航 */
 .flatpickr-months {
-    padding: 8px 0;
+    padding: 0;
+    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+    border-radius: var(--radius-lg) var(--radius-lg) 0 0;
 }
+.flatpickr-months .flatpickr-month { background: transparent; height: 48px; }
 .flatpickr-months .flatpickr-prev-month,
 .flatpickr-months .flatpickr-next-month {
-    padding: 8px 10px;
+    padding: 8px 12px;
     border-radius: var(--radius-sm);
+    transition: background .15s;
 }
 .flatpickr-months .flatpickr-prev-month:hover,
-.flatpickr-months .flatpickr-next-month:hover {
-    background: var(--color-primary-bg);
-}
+.flatpickr-months .flatpickr-next-month:hover { background: rgba(255, 255, 255, 0.18); }
 .flatpickr-months .flatpickr-prev-month svg,
-.flatpickr-months .flatpickr-next-month svg {
-    fill: var(--color-primary);
-}
-.flatpickr-current-month {
-    font-size: 115%;
-    font-weight: 600;
-    color: var(--color-text);
-}
-.flatpickr-current-month .numInputWrapper span.arrowUp:after {
-    border-bottom-color: var(--color-primary);
-}
-.flatpickr-current-month .numInputWrapper span.arrowDown:after {
-    border-top-color: var(--color-primary);
-}
+.flatpickr-months .flatpickr-next-month svg { fill: #fff; width: 16px; height: 16px; }
 
-/* 星期标题行 */
-.flatpickr-weekdays {
-    padding: 8px 0 4px;
+.flatpickr-current-month {
+    font-size: 15px; font-weight: 600; color: #fff; padding: 0;
+}
+.flatpickr-current-month .numInputWrapper { width: 5ch; }
+.flatpickr-current-month .numInputWrapper .numInput {
+    color: #fff; font-weight: 600;
+    background: rgba(255, 255, 255, 0.12);
+    border-radius: var(--radius-sm);
+    padding: 2px 6px;
+}
+.flatpickr-current-month .numInputWrapper span.arrowUp:after { border-bottom-color: #fff; }
+.flatpickr-current-month .numInputWrapper span.arrowDown:after { border-top-color: #fff; }
+
+.flatpickr-weekdays { padding: 10px 0 6px; background: var(--color-surface); }
+.flatpickr-weekdaycontainer {
+    border-bottom: 1px solid var(--color-border-light);
+    padding-bottom: 4px;
 }
 span.flatpickr-weekday {
-    font-weight: 600;
-    color: var(--color-text-secondary);
-    font-size: 11px;
+    font-weight: 600; color: var(--color-text-secondary); font-size: 11px;
 }
 
-/* 日期格 */
-.flatpickr-days {
-    padding: 4px 8px 8px;
-}
+.flatpickr-days { padding: 6px 8px 10px; }
+
 .flatpickr-day {
     border-radius: var(--radius-sm);
-    height: 36px;
-    line-height: 36px;
-    font-size: 13px;
-    color: var(--color-text);
-    transition: background .15s, color .15s;
+    height: 36px; line-height: 36px;
+    font-size: 13px; color: var(--color-text);
+    border: 2px solid transparent;
+    transition: background .15s, color .15s, border-color .15s;
 }
 .flatpickr-day:hover {
     background: var(--color-primary-bg);
+    color: var(--color-primary);
+    border-color: transparent;
+}
+.flatpickr-day.prevMonthDay,
+.flatpickr-day.nextMonthDay { color: var(--color-text-muted); }
+.flatpickr-day.prevMonthDay:hover,
+.flatpickr-day.nextMonthDay:hover {
+    background: var(--color-border-light);
+    color: var(--color-text-secondary);
 }
 .flatpickr-day.today {
-    color: var(--color-primary);
-    font-weight: 700;
-    border: none;
+    color: var(--color-primary); font-weight: 700;
     background: var(--color-primary-bg);
+    border-color: var(--color-primary);
+}
+.flatpickr-day.today:hover { background: var(--color-primary); color: #fff; }
+.flatpickr-day.today.selected,
+.flatpickr-day.today.startRange,
+.flatpickr-day.today.endRange {
+    background: var(--color-primary); color: #fff;
+    border-color: var(--color-primary);
 }
 .flatpickr-day.selected,
 .flatpickr-day.startRange,
 .flatpickr-day.endRange {
-    background: var(--color-primary);
-    color: #fff;
-    border-color: var(--color-primary);
-    font-weight: 600;
-}
-.flatpickr-day.inRange {
-    background: var(--color-primary-hover);
-    border-color: var(--color-primary-hover);
-    color: var(--color-primary-dark);
-    box-shadow: none;
+    background: var(--color-primary); color: #fff;
+    border-color: var(--color-primary); font-weight: 600;
 }
 .flatpickr-day.selected:hover,
 .flatpickr-day.startRange:hover,
@@ -2499,26 +2509,41 @@ span.flatpickr-weekday {
     background: var(--color-primary-dark);
     border-color: var(--color-primary-dark);
 }
-.flatpickr-day.flatpickr-disabled {
-    color: var(--color-text-muted);
+.flatpickr-day.inRange {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-hover);
+    color: var(--color-primary-dark);
+    box-shadow: none;
+}
+.flatpickr-day.flatpickr-disabled { color: var(--color-text-muted); cursor: not-allowed; }
+.flatpickr-day.flatpickr-disabled:hover { background: transparent; color: var(--color-text-muted); }
+.flatpickr-day:focus {
+    outline: none;
+    box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.35);
+    background: var(--color-primary-bg);
 }
 
-/* 底部按钮区 */
+.flatpickr-time {
+    border-top: 1px solid var(--color-border-light);
+    border-radius: 0 0 var(--radius-lg) var(--radius-lg);
+    max-height: 44px;
+}
+.flatpickr-time .numInputWrapper span.arrowUp:after { border-bottom-color: var(--color-primary); }
+.flatpickr-time .numInputWrapper span.arrowDown:after { border-top-color: var(--color-primary); }
+.flatpickr-time input:focus { background: var(--color-primary-bg); }
+
 .flatpickr-confirm {
     height: 40px;
     background: var(--color-primary) !important;
     border-radius: var(--radius-sm);
-    color: #fff;
-    font-weight: 600;
-    font-size: 13px;
+    color: #fff; font-weight: 600; font-size: 13px;
     margin: 4px 8px 10px;
     border: none !important;
     cursor: pointer;
     transition: background .15s;
 }
-.flatpickr-confirm:hover {
-    background: var(--color-primary-dark) !important;
-}
+.flatpickr-confirm:hover { background: var(--color-primary-dark) !important; }
+.flatpickr-input[readonly] { cursor: pointer; background-color: var(--color-surface); }
 
 /* 多日期标签展示 */
 .date-tags {

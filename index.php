@@ -7470,7 +7470,7 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/airbnb.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/light.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
     <!-- 退费申请弹窗（学员详情页发起） -->
