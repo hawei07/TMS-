@@ -5138,28 +5138,7 @@ if (intval($countBt) === 0) {
                     </li>
                 </ul>
             </nav>
-            <div class="sidebar-stats">
-                <div class="sidebar-stat-item">
-                    <span class="sidebar-stat-val" id="stat-my">0</span>
-                    <span class="sidebar-stat-lbl">我的资源</span>
-                </div>
-                <div class="sidebar-stat-item">
-                    <span class="sidebar-stat-val" id="stat-sea">0</span>
-                    <span class="sidebar-stat-lbl">公海资源</span>
-                </div>
-                <div class="sidebar-stat-item">
-                    <span class="sidebar-stat-val" id="stat-apt">0</span>
-                    <span class="sidebar-stat-lbl">预约试听</span>
-                </div>
-                <div class="sidebar-stat-item">
-                    <span class="sidebar-stat-val" id="stat-emp">0</span>
-                    <span class="sidebar-stat-lbl">员工总数</span>
-                </div>
-                <div class="sidebar-stat-item">
-                    <span class="sidebar-stat-val" id="stat-courses">0</span>
-                    <span class="sidebar-stat-lbl">课程总数</span>
-                </div>
-            </div>
+
         </aside>
 
         <!-- 右侧内容区 -->
