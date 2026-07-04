@@ -1915,10 +1915,10 @@ function renderAptTable(rows) {
             <td>${esc(r.subject_level2)}</td>
             <td>${r.appointment_time ? r.appointment_time.slice(0,16) : ''}</td>
             <td><span class="status-tag status-${r.status}">${r.status}</span></td>
-            <td>${esc(r.resource_converted)}</td>
+            <td><span class="status-tag status-converted-${r.resource_converted === '已转化' ? 'yes' : 'no'}">${esc(r.resource_converted)}</span></td>
             <td>${esc(r.resource_channel)}</td>
             <td>${esc(r.resource_assigned_to)}</td>
-            <td>${esc(r.notes)}</td>
+            <td>${esc(r.notes) || '<span class="text-muted">—</span>'}</td>
             <td>
                 <div class="action-btns">
                     <button class="btn-link-danger" onclick="cancelTrial(${r.id},${r.class_id},${r.schedule_id},'${(r.appointment_time||'').slice(0,10)}')">取消试听</button>
@@ -1935,6 +1935,7 @@ async function cancelTrial(aptId, classId, scheduleId, trialDate) {
             if (res.error) { showToast(res.error, 'error'); return; }
             showToast('已取消试听', 'success');
             loadAppointments();
+            loadStats();
         } catch(e) { showToast('操作失败: ' + (e.message || String(e)), 'error'); }
     });
 }
