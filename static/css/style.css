@@ -1738,54 +1738,47 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     background: linear-gradient(90deg, var(--color-border-light), transparent);
 }
 
-/* --- 价格方案卡片 --- */
+/* --- 价格方案卡片（网格布局） --- */
+#enroll-plans-list {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 12px;
+}
 .enroll-plan-card {
     display: flex;
-    align-items: center;
-    justify-content: space-between;
-    padding: 16px 20px;
+    flex-direction: column;
+    justify-content: center;
+    padding: 14px 18px;
     border: 2px solid var(--color-border);
-    border-radius: 14px;
-    margin-bottom: 10px;
+    border-radius: 12px;
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.2s ease;
     background: var(--color-surface);
     position: relative;
     overflow: hidden;
-}
-.enroll-plan-card::before {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: linear-gradient(135deg, rgba(124, 58, 237, 0.03) 0%, transparent 100%);
-    opacity: 0;
-    transition: opacity 0.25s;
+    min-height: 72px;
 }
 .enroll-plan-card:hover {
     border-color: var(--color-primary-light);
     background: #faf8ff;
     transform: translateY(-2px);
-    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.10), 0 2px 6px rgba(0, 0, 0, 0.04);
-}
-.enroll-plan-card:hover::before {
-    opacity: 1;
+    box-shadow: 0 4px 16px rgba(124, 58, 237, 0.10);
 }
 .enroll-plan-card.active {
     border-color: var(--color-primary);
     background: linear-gradient(135deg, #f5f0ff 0%, #faf6ff 100%);
-    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.08), 0 6px 24px rgba(124, 58, 237, 0.14);
-    transform: translateY(-1px);
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.08);
 }
 .enroll-plan-card.active::after {
     content: '✓';
-    position: absolute; top: -10px; right: -10px;
-    width: 26px; height: 26px;
+    position: absolute; top: -8px; right: -8px;
+    width: 22px; height: 22px;
     background: linear-gradient(135deg, #7C3AED, #9F6FF0);
     color: #fff;
     border-radius: 50%;
-    font-size: 13px; font-weight: 700;
+    font-size: 12px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 3px 10px rgba(124, 58, 237, 0.35);
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.35);
     z-index: 1;
 }
 .enroll-plan-name {

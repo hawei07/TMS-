@@ -5489,15 +5489,14 @@ function renderEnrollPlansList(plans) {
         else if (pt === '续费') typeTag = '<span class="tag tag-renewal">续费</span>';
         else if (pt === '小课包') typeTag = '<span class="tag tag-small-pack">小课包</span>';
         const total = (p.items || []).reduce((s, i) => s + (parseFloat(i.actual_price) || 0), 0);
+        const totalLessons = (p.items || []).reduce((s, i) => s + (parseInt(i.lesson_count) || 0), 0);
         const itemCount = (p.items || []).length;
         return `<div class="enroll-plan-card" data-plan-id="${p.id}" onclick="selectEnrollPlan(${p.id})">
-            <div class="enroll-plan-main">
-                <div class="enroll-plan-top">
-                    <span class="enroll-plan-name">${esc(p.name)}${typeTag}</span>
-                    <span class="enroll-plan-price">¥${total.toFixed(2)}</span>
-                </div>
-                <div class="enroll-plan-meta">${itemCount} 个报价项</div>
+            <div class="enroll-plan-top">
+                <span class="enroll-plan-name">${esc(p.name)}${typeTag}</span>
+                <span class="enroll-plan-price">¥${total.toFixed(2)}</span>
             </div>
+            <div class="enroll-plan-meta">${itemCount} 个报价项 · ${totalLessons} 课时</div>
         </div>`;
     }).join('');
 }
@@ -5728,10 +5727,7 @@ async function confirmPayEnroll() {
 }
 .eps-conn.done { background: var(--color-primary, #7C3AED); }
 
-/* 方案卡片增强：价格预览 */
-.enroll-plan-main {
-    flex: 1; min-width: 0;
-}
+/* 方案卡片增强 */
 .enroll-plan-top {
     display: flex;
     align-items: center;
@@ -5739,20 +5735,16 @@ async function confirmPayEnroll() {
     gap: 12px;
 }
 .enroll-plan-price {
-    font-size: 18px;
-    font-weight: 800;
+    font-size: 16px;
+    font-weight: 700;
     color: var(--color-primary, #7C3AED);
     white-space: nowrap;
     font-variant-numeric: tabular-nums;
 }
 .enroll-plan-meta {
     font-size: 12px;
-    color: var(--color-text-muted, #aaa);
-    margin-top: 4px;
-}
-.enroll-plan-card {
-    flex-direction: column;
-    align-items: stretch;
+    color: var(--color-text-muted, #999);
+    margin-top: 6px;
 }
 `;
     document.head.appendChild(style);
