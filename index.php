@@ -1083,6 +1083,7 @@ $stmt->execute();
                 $params = ["%$keyword%", "%$keyword%", "%$keyword%"];
             }
             $innerWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+            $offset = ($page - 1) * $pageSize;
             
             // 外层过滤 effective_status（如果指定）
             $outerWhere = '';
@@ -1119,7 +1120,6 @@ $stmt->execute();
             $stmt = $db->query($countQuery);
             $total = $stmt->fetchColumn();
             $total = $total ? intval($total) : 0;
-            $offset = ($page - 1) * $pageSize;
             $rows = [];
             if ($params) {
                 $stmt = $db->prepare($query);
