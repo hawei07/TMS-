@@ -5472,8 +5472,17 @@ function renderEnrollPlansList(plans) {
         if (pt === '新报') typeTag = '<span class="tag tag-new-enroll">新报</span>';
         else if (pt === '续费') typeTag = '<span class="tag tag-renewal">续费</span>';
         else if (pt === '小课包') typeTag = '<span class="tag tag-small-pack">小课包</span>';
+        const total = (p.items || []).reduce((s, i) => s + (parseFloat(i.actual_price) || 0), 0);
+        const itemCount = (p.items || []).length;
         return `<div class="enroll-plan-card" data-plan-id="${p.id}" onclick="selectEnrollPlan(${p.id})">
-            <span class="enroll-plan-name">${esc(p.name)}${typeTag}</span>
+            <div class="enroll-plan-main">
+                <div class="enroll-plan-top">
+                    <span class="enroll-plan-name">${esc(p.name)}${typeTag}</span>
+                    <span class="enroll-plan-price">¥${total.toFixed(2)}</span>
+                </div>
+                <div class="enroll-plan-meta">${itemCount} 个报价项</div>
+            </div>
+            <div class="enroll-plan-detail" id="enroll-plan-detail-${p.id}"></div>
             <span class="enroll-plan-arrow">&gt;</span>
         </div>`;
     }).join('');
@@ -5482,19 +5491,83 @@ function renderEnrollPlansList(plans) {
 function selectEnrollPlan(planId) {
     currentEnrollPlanId = planId;
     currentEnrollPlanType = '';
-    // Highlight the selected card
+    setEnrollProgress(2);
+
+    const plan = currentEnrollPlans.find(p => p.id == planId);
+    currentEnrollPlanType = (plan && plan.plan_type) ? plan.plan_type : '';
+
+    // 折叠所有已展开的卡片明细
+    document.querySelectorAll('.enroll-plan-detail.expanded').forEach(d => {
+        d.style.maxHeight = d.scrollHeight + 'px';
+        d.offsetHeight;
+        d.style.maxHeight = '0px';
+        d.style.opacity = '0';
+        d.style.paddingTop = '0';
+        d.style.paddingBottom = '0';
+        d.style.marginTop = '0';
+        d.classList.remove('expanded');
+    });
+
+    // 高亮选中卡片
     document.querySelectorAll('.enroll-plan-card').forEach(c => c.classList.remove('active'));
     const card = document.querySelector(`.enroll-plan-card[data-plan-id="${planId}"]`);
     if (card) card.classList.add('active');
 
-    const plan = currentEnrollPlans.find(p => p.id == planId);
-    currentEnrollPlanType = (plan && plan.plan_type) ? plan.plan_type : '';
     if (!plan || !plan.items || plan.items.length === 0) {
-        document.getElementById('enroll-items-section').style.display = 'none';
+        enrollTransitionHide(document.getElementById('enroll-items-section'));
         return;
     }
 
-    // Render items table
+    // 在当前卡片内展开明细
+    const detailDiv = document.getElementById('enroll-plan-detail-' + planId);
+    if (detailDiv) {
+        let total = 0;
+        detailDiv.innerHTML = `
+            <div class="enroll-plan-detail-table-wrap">
+                <table class="enroll-plan-detail-table">
+                    <thead><tr>
+                        <th>报价项</th><th class="col-num">课时</th><th class="col-num">单价</th><th class="col-num">价格</th>
+                    </tr></thead>
+                    <tbody>${plan.items.map(item => {
+                        const up = item.lesson_count > 0 ? (item.actual_price / item.lesson_count) : 0;
+                        total += parseFloat(item.actual_price) || 0;
+                        return `<tr>
+                            <td>${esc(item.name)}</td>
+                            <td class="col-num">${item.lesson_count || 0}</td>
+                            <td class="col-num">¥${up.toFixed(2)}</td>
+                            <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
+                        </tr>`;
+                    }).join('')}</tbody>
+                </table>
+                <div class="enroll-plan-detail-total">
+                    <span>合计</span><span>¥${total.toFixed(2)}</span>
+                </div>
+            </div>`;
+        // 展开动画
+        detailDiv.classList.add('expanded');
+        detailDiv.style.display = '';
+        detailDiv.style.maxHeight = '0px';
+        detailDiv.style.opacity = '0';
+        detailDiv.style.paddingTop = '0';
+        detailDiv.style.paddingBottom = '0';
+        detailDiv.style.marginTop = '0';
+        detailDiv.style.transition = 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease, padding 0.35s ease, margin 0.35s ease';
+        detailDiv.offsetHeight;
+        const targetH = detailDiv.scrollHeight;
+        detailDiv.style.maxHeight = targetH + 'px';
+        detailDiv.style.opacity = '1';
+        detailDiv.style.paddingTop = '12px';
+        detailDiv.style.paddingBottom = '0';
+        detailDiv.style.marginTop = '10px';
+        const onEnd = function() {
+            detailDiv.style.maxHeight = 'none';
+            detailDiv.removeEventListener('transitionend', onEnd);
+        };
+        detailDiv.addEventListener('transitionend', onEnd);
+        setTimeout(() => { if (detailDiv.style.maxHeight !== 'none') { detailDiv.style.maxHeight = 'none'; } }, 500);
+    }
+
+    // 渲染下方报价明细表（支付相关使用）
     const tbody = document.getElementById('enroll-items-tbody');
     let total = 0;
     tbody.innerHTML = plan.items.map(item => {
@@ -5508,16 +5581,48 @@ function selectEnrollPlan(planId) {
         </tr>`;
     }).join('');
     document.getElementById('enroll-total-price').textContent = '¥' + total.toFixed(2);
-    document.getElementById('enroll-items-section').style.display = 'block';
 
-    // 初始化支付方式：现金默认显示总金额，美团显示0
+    // 平滑过渡显示报价明细区域 + 滚动
+    enrollTransitionShow(document.getElementById('enroll-items-section'));
+    setTimeout(() => {
+        document.getElementById('enroll-items-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 100);
+
+    // 初始化支付方式
     document.getElementById('enroll-payment-cash').value = total.toFixed(2);
     document.getElementById('enroll-payment-meituan').value = '0.00';
+    setEnrollProgress(3);
     updatePaymentHint();
 }
 
-// ==================== 支付方式交互 ====================
+// ==================== 支付方式交互（智能回填） ====================
 function onPaymentInput() {
+    const totalText = document.getElementById('enroll-total-price').textContent.replace('¥', '');
+    const total = parseFloat(totalText) || 0;
+    const cashEl = document.getElementById('enroll-payment-cash');
+    const meituanEl = document.getElementById('enroll-payment-meituan');
+    const cash = parseFloat(cashEl.value) || 0;
+    const meituan = parseFloat(meituanEl.value) || 0;
+    const activeEl = document.activeElement;
+
+    if (activeEl === cashEl) {
+        // 用户编辑现金 → 美团自动补足
+        const remaining = Math.max(0, total - cash);
+        meituanEl.value = remaining.toFixed(2);
+        if (cash > total) {
+            cashEl.value = total.toFixed(2);
+            meituanEl.value = '0.00';
+        }
+    } else if (activeEl === meituanEl) {
+        // 用户编辑美团 → 现金自动补足
+        const remaining = Math.max(0, total - meituan);
+        cashEl.value = remaining.toFixed(2);
+        if (meituan > total) {
+            meituanEl.value = total.toFixed(2);
+            cashEl.value = '0.00';
+        }
+    }
+
     updatePaymentHint();
 }
 
@@ -5608,6 +5713,165 @@ async function confirmPayEnroll() {
         loadOrders();
     });
 }
+
+// ==================== 报名样式注入 ====================
+(function injectEnrollStyles() {
+    if (document.getElementById('enroll-dynamic-styles')) return;
+    const style = document.createElement('style');
+    style.id = 'enroll-dynamic-styles';
+    style.textContent = `
+/* 步骤进度条 */
+.enroll-progress-bar {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0;
+    padding: 0 16px 20px 16px;
+    margin-bottom: 8px;
+}
+.eps {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    color: var(--color-text-muted, #999);
+    font-weight: 500;
+    transition: color 0.3s;
+    white-space: nowrap;
+}
+.eps-num {
+    width: 26px; height: 26px;
+    border-radius: 50%;
+    border: 2px solid var(--color-border, #ddd);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 12px; font-weight: 700;
+    background: var(--color-bg, #f9f9f9);
+    color: var(--color-text-muted, #999);
+    transition: all 0.35s cubic-bezier(0.4,0,0.2,1);
+    flex-shrink: 0;
+}
+.eps.active { color: var(--color-primary, #7C3AED); }
+.eps.active .eps-num {
+    border-color: var(--color-primary, #7C3AED);
+    background: var(--color-primary, #7C3AED);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.25);
+}
+.eps.done { color: var(--color-primary, #7C3AED); }
+.eps.done .eps-num {
+    border-color: var(--color-primary, #7C3AED);
+    background: var(--color-primary-bg, #f5f0ff);
+    color: var(--color-primary, #7C3AED);
+}
+.eps-conn {
+    flex: 1;
+    min-width: 24px; max-width: 60px;
+    height: 2px;
+    background: var(--color-border-light, #eee);
+    margin: 0 4px;
+    transition: background 0.35s;
+    position: relative;
+    overflow: hidden;
+}
+.eps-conn.done { background: var(--color-primary, #7C3AED); }
+
+/* 方案卡片增强：价格预览 */
+.enroll-plan-main {
+    flex: 1; min-width: 0;
+}
+.enroll-plan-top {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 12px;
+}
+.enroll-plan-price {
+    font-size: 18px;
+    font-weight: 800;
+    color: var(--color-primary, #7C3AED);
+    white-space: nowrap;
+    font-variant-numeric: tabular-nums;
+}
+.enroll-plan-meta {
+    font-size: 12px;
+    color: var(--color-text-muted, #aaa);
+    margin-top: 4px;
+}
+.enroll-plan-card {
+    flex-direction: column;
+    align-items: stretch;
+}
+.enroll-plan-card .enroll-plan-arrow {
+    position: absolute;
+    right: 18px;
+    top: 18px;
+    transition: transform 0.3s, color 0.2s;
+}
+.enroll-plan-card.active .enroll-plan-arrow {
+    transform: rotate(90deg);
+    color: var(--color-primary, #7C3AED);
+}
+
+/* 卡片内展开明细 */
+.enroll-plan-detail {
+    overflow: hidden;
+    max-height: 0;
+    opacity: 0;
+    padding: 0;
+    margin-top: 0;
+    border-top: 1px solid transparent;
+    transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease, padding 0.35s ease, margin 0.35s ease, border-color 0.3s;
+}
+.enroll-plan-card.active .enroll-plan-detail.expanded {
+    border-top-color: var(--color-border-light, #eee);
+}
+.enroll-plan-detail-table-wrap {
+    background: var(--color-bg, #f9f9f9);
+    border-radius: 8px;
+    overflow: hidden;
+}
+.enroll-plan-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 12px;
+}
+.enroll-plan-detail-table thead th {
+    background: rgba(124,58,237,0.04);
+    padding: 8px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 11px;
+    color: var(--color-text-muted, #999);
+    border-bottom: 1px solid var(--color-border-light, #eee);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+.enroll-plan-detail-table thead th.col-num { text-align: right; }
+.enroll-plan-detail-table tbody td {
+    padding: 8px 14px;
+    border-bottom: 1px solid var(--color-border-light, #f0f0f0);
+    color: var(--color-text, #333);
+    font-weight: 500;
+}
+.enroll-plan-detail-table tbody td.col-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.enroll-plan-detail-table tbody tr:last-child td { border-bottom: none; }
+.enroll-plan-detail-total {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
+    background: rgba(124,58,237,0.06);
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-primary, #7C3AED);
+    border-top: 1px solid var(--color-border-light, #eee);
+}
+`;
+    document.head.appendChild(style);
+})();
 
 // ==================== 校区/课程 通用加载 ====================
 async function loadCampusOptions(selectId) {
