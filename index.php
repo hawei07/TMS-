@@ -1120,6 +1120,15 @@ $stmt->execute();
             $stmt = $db->query($countQuery);
             $total = $stmt->fetchColumn();
             $total = $total ? intval($total) : 0;
+            // 状态分布统计（同筛选条件）
+            $statsQuery = "SELECT effective_status, COUNT(*) AS cnt FROM (" .
+                "SELECT CASE WHEN apt.status='已取消' THEN '已取消' WHEN ca.status='出勤' THEN '已试听' WHEN ca.status='缺勤' THEN '缺勤' ELSE '已预约待试听' END AS effective_status FROM appointments apt LEFT JOIN class_attendance ca ON ca.class_id=apt.class_id AND ca.schedule_id=apt.schedule_id AND ca.session_date COLLATE utf8mb4_unicode_ci=apt.appointment_time AND ca.is_temporary=1 $innerWhere" .
+                ") statsub $outerWhere GROUP BY effective_status";
+            $statsStmt = $db->query($statsQuery);
+            $stats = ['已预约待试听' => 0, '已试听' => 0, '缺勤' => 0];
+            while ($sr = $statsStmt->fetch(PDO::FETCH_ASSOC)) {
+                $stats[$sr['effective_status']] = intval($sr['cnt']);
+            }
             $rows = [];
             if ($params) {
                 $stmt = $db->prepare($query);
@@ -1135,7 +1144,7 @@ $stmt->execute();
                 $r['status'] = $r['effective_status'] ?? $r['status'];
                 $rows[] = $r;
             }
-            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows, 'stats' => $stats]);
 
         // === 预约试听级联查询 ===
         case 'get_trial_campuses':
@@ -5262,10 +5271,10 @@ if (intval($countBt) === 0) {
             <section class="content-panel" id="panel-appointments">
                 <div class="panel-header">
                     <h3>预约试听名单</h3>
-                    <div class="header-stats-inline">
-                        <span class="stat-badge stat-my">我的资源：<strong id="stat-my-inline2">0</strong></span>
-                        <span class="stat-badge stat-sea">公海资源：<strong id="stat-sea-inline2">0</strong></span>
-                        <span class="stat-badge stat-apt">预约试听：<strong id="stat-apt-inline2">0</strong></span>
+                    <div class="header-stats-inline" id="apt-stats-bar">
+                        <span class="stat-badge stat-pending">已预约待试听：<strong id="stat-pending">0</strong></span>
+                        <span class="stat-badge stat-trialed">已试听：<strong id="stat-trialed">0</strong></span>
+                        <span class="stat-badge stat-absent">缺勤：<strong id="stat-absent">0</strong></span>
                     </div>
                 </div>
                 <div class="toolbar">

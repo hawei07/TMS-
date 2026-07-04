@@ -1895,7 +1895,15 @@ async function loadAppointments() {
     const res = await fetch(API_BASE + 'get_appointments&' + params);
     const data = await res.json();
     renderAptTable(data.data);
+    renderAptStats(data.stats);
     renderPagination('pagination-apt', data.total, aptPage, 15, (p) => { aptPage = p; loadAppointments(); });
+}
+
+function renderAptStats(stats) {
+    if (!stats) return;
+    document.getElementById('stat-pending').textContent = stats['已预约待试听'] ?? 0;
+    document.getElementById('stat-trialed').textContent = stats['已试听'] ?? 0;
+    document.getElementById('stat-absent').textContent = stats['缺勤'] ?? 0;
 }
 
 function renderAptTable(rows) {

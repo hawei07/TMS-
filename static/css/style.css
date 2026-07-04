@@ -4737,17 +4737,17 @@ tbody td {
     box-shadow: var(--shadow-sm);
 }
 
-/* 我的资源 — 蓝色 */
-#panel-appointments .stat-my {
-    border-left: 3px solid #3B82F6;
-}
-/* 公海资源 — 灰色 */
-#panel-appointments .stat-sea {
-    border-left: 3px solid #9CA3AF;
-}
-/* 预约试听 — 紫色 */
-#panel-appointments .stat-apt {
+/* 已预约待试听 — 紫色 */
+#panel-appointments .stat-pending {
     border-left: 3px solid var(--color-primary);
+}
+/* 已试听 — 绿色 */
+#panel-appointments .stat-trialed {
+    border-left: 3px solid #10B981;
+}
+/* 缺勤 — 红色 */
+#panel-appointments .stat-absent {
+    border-left: 3px solid #EF4444;
 }
 
 #panel-appointments .stat-badge strong {
