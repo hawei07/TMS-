@@ -5407,7 +5407,6 @@ document.addEventListener('DOMContentLoaded', function() {
             currentEnrollCampusId = campusId ? parseInt(campusId) : null;
             currentEnrollCourseId = null;
             currentEnrollPlanId = null;
-            enrollTransitionHide(document.getElementById('enroll-plans-section'));
             enrollTransitionHide(document.getElementById('enroll-items-section'));
             setEnrollProgress(1);
             const courseSel = document.getElementById('enroll-course-select');
@@ -5427,7 +5426,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const courseId = this.value;
             currentEnrollCourseId = courseId ? parseInt(courseId) : null;
             currentEnrollPlanId = null;
-            enrollTransitionHide(document.getElementById('enroll-plans-section'));
             enrollTransitionHide(document.getElementById('enroll-items-section'));
             if (!courseId) { setEnrollProgress(1); return; }
 
