@@ -5433,8 +5433,7 @@ document.addEventListener('DOMContentLoaded', function() {
 
             setEnrollProgress(2);
             const plansSection = document.getElementById('enroll-plans-section');
-            plansSection.style.display = '';  // 先display再transition
-            enrollTransitionShow(plansSection);
+            plansSection.style.display = '';
             const listDiv = document.getElementById('enroll-plans-list');
             listDiv.innerHTML = '<div style="color:#999;padding:12px;">加载中...</div>';
 
@@ -5443,6 +5442,7 @@ document.addEventListener('DOMContentLoaded', function() {
                 const data = await res.json();
                 currentEnrollPlans = data.data || [];
                 renderEnrollPlansList(currentEnrollPlans);
+                enrollTransitionShow(plansSection);
             } catch (e) {
                 listDiv.innerHTML = '<div style="color:#e74c3c;padding:12px;">加载失败</div>';
             }
