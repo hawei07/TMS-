@@ -1497,12 +1497,22 @@ function renderAptTable(rows) {
             <td>${esc(r.notes)}</td>
             <td>
                 <div class="action-btns">
-                    <button class="btn-link" onclick="editAppointment(${r.id})">编辑</button>
-                    <button class="btn-link-danger" onclick="deleteAppointment(${r.id})">删除</button>
+                    <button class="btn-link-danger" onclick="cancelTrial(${r.id},${r.class_id},${r.schedule_id},'${esc(r.appointment_time)}')">取消试听</button>
                 </div>
             </td>
         </tr>
     `).join('');
+}
+
+async function cancelTrial(aptId, classId, scheduleId, trialDate) {
+    showCustomConfirm('确定取消该试听预约吗？考勤记录也将一并移除。', async function() {
+        try {
+            const res = await api('cancel_trial', {id: aptId, class_id: classId, schedule_id: scheduleId, trial_date: trialDate}, 'POST');
+            if (res.error) { showToast(res.error, 'error'); return; }
+            showToast('已取消试听', 'success');
+            loadAppointments();
+        } catch(e) { showToast('操作失败: ' + (e.message || String(e)), 'error'); }
+    });
 }
 
 // ==================== 分页 ====================
