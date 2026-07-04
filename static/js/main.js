@@ -740,6 +740,55 @@ async function deleteResource(rid) {
     });
 }
 
+// ---------- 行操作下拉菜单 ----------
+function openRowActionMenu(rid, name, phone, btnEl) {
+    closeRowActionMenu();
+    // 注入样式（仅一次）
+    if (!document.getElementById('row-action-dropdown-styles')) {
+        var style = document.createElement('style');
+        style.id = 'row-action-dropdown-styles';
+        style.textContent = '.row-action-dropdown{background:#fff;border-radius:8px;box-shadow:0 4px 16px rgba(0,0,0,0.12),0 2px 8px rgba(0,0,0,0.06);z-index:10000;overflow:hidden;min-width:120px;animation:fadeInDown 0.15s ease;}.row-action-dropdown-item{padding:10px 16px;font-size:13px;cursor:pointer;color:#333;white-space:nowrap;border-bottom:1px solid #f0f0f0;}.row-action-dropdown-item:last-child{border-bottom:none;}.row-action-dropdown-item:hover{background:#f5f0ff;color:#7C3AED;}.row-action-dropdown-item-danger{color:#e74c3c;}.row-action-dropdown-item-danger:hover{background:#fff0f0;color:#c0392b;}';
+        document.head.appendChild(style);
+    }
+    var dropdown = document.createElement('div');
+    dropdown.className = 'row-action-dropdown';
+    dropdown._rid = rid;
+    dropdown.innerHTML =
+        '<div class="row-action-dropdown-item" data-action="appointment">预约试听</div>' +
+        '<div class="row-action-dropdown-item" data-action="communication">沟通记录</div>' +
+        '<div class="row-action-dropdown-item row-action-dropdown-item-danger" data-action="delete">删除</div>';
+    dropdown.addEventListener('click', function(e) {
+        var item = e.target.closest('.row-action-dropdown-item');
+        if (!item) return;
+        var action = item.dataset.action;
+        dropdown.remove();
+        if (action === 'appointment') {
+            openAppointmentForResource(rid, name, phone);
+        } else if (action === 'communication') {
+            openCommunication(rid, name);
+        } else if (action === 'delete') {
+            deleteResource(rid);
+        }
+    });
+    document.body.appendChild(dropdown);
+    var rect = btnEl.getBoundingClientRect();
+    dropdown.style.position = 'fixed';
+    dropdown.style.top = (rect.bottom + 4) + 'px';
+    dropdown.style.left = rect.left + 'px';
+    var closeOnOutside = function(e) {
+        if (!dropdown.contains(e.target) && e.target !== btnEl) {
+            dropdown.remove();
+            document.removeEventListener('click', closeOnOutside);
+        }
+    };
+    setTimeout(function() { document.addEventListener('click', closeOnOutside); }, 0);
+}
+
+function closeRowActionMenu() {
+    var existing = document.querySelector('.row-action-dropdown');
+    if (existing) existing.remove();
+}
+
 // ==================== 我的资源：增强交互 ====================
 
 // ---------- 渲染单行 ----------
@@ -764,11 +813,9 @@ function renderMyResourceRow(r) {
         <td>${r.converted === '已转化' ? '<span class="tag-converted">已转化</span>' : '<span class="tag-unconverted">未转化</span>'}</td>
         <td>
             <div class="action-btns">
-                <button class="btn-link" onclick="editResource(${r.id})">编辑</button>
-                <button class="btn-link" onclick="goEnrollFromResource(${r.id})">报名</button>
-                <button class="btn-link" onclick="openAppointmentForResource(${r.id},'${esc(r.name)}','${esc(r.phone)}')">预约试听</button>
-                <button class="btn-link" onclick="openCommunication(${r.id},'${esc(r.name)}')">沟通记录</button>
-                <button class="btn-link-danger" onclick="deleteResource(${r.id})">删除</button>
+                <button class="btn-link btn-action-edit" data-rid="${r.id}">编辑</button>
+                <button class="btn-link btn-action-enroll" data-rid="${r.id}">报名</button>
+                <button class="btn-link btn-action-more" data-rid="${r.id}" data-name="${esc(r.name)}" data-phone="${esc(r.phone)}">更多 ▾</button>
             </div>
         </td>
     </tr>`;
@@ -1031,6 +1078,14 @@ function initMyResourcesPanel() {
     if (!table) return;
 
     table.addEventListener('click', function(e) {
+        // 操作按钮事件委托
+        var editBtn = e.target.closest('.btn-action-edit');
+        if (editBtn) { var rid = parseInt(editBtn.dataset.rid); if (rid) editResource(rid); return; }
+        var enrollBtn = e.target.closest('.btn-action-enroll');
+        if (enrollBtn) { var rid = parseInt(enrollBtn.dataset.rid); if (rid) goEnrollFromResource(rid); return; }
+        var moreBtn = e.target.closest('.btn-action-more');
+        if (moreBtn) { var rid = parseInt(moreBtn.dataset.rid); var name = moreBtn.dataset.name || ''; var phone = moreBtn.dataset.phone || ''; if (rid) openRowActionMenu(rid, name, phone, moreBtn); return; }
+        
         var row = e.target.closest('tr.my-resource-row');
         if (row && !e.target.closest('a, button, input, select, .follow-status-tag')) {
             var cb = row.querySelector('.cb-my');
