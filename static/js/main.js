@@ -5425,7 +5425,11 @@ document.addEventListener('DOMContentLoaded', function() {
             currentEnrollCampusId = campusId ? parseInt(campusId) : null;
             currentEnrollCourseId = null;
             currentEnrollPlanId = null;
+            // 隐藏价格方案和报价明细
             enrollTransitionHide(document.getElementById('enroll-items-section'));
+            const plansSection = document.getElementById('enroll-plans-section');
+            if (plansSection) plansSection.style.display = 'none';
+            document.getElementById('enroll-plans-list').innerHTML = '';
             setEnrollProgress(1);
             const courseSel = document.getElementById('enroll-course-select');
             if (!campusId) {
