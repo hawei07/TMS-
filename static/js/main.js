@@ -657,6 +657,18 @@ function toggleFollowStatusEdit(tagEl, rid) {
     setTimeout(() => document.addEventListener('click', closeOnOutside), 0);
 }
 
+// ---------- 资源弹窗双列布局改造 ----------
+// 将 #edit-rid 移出 .modal-body，避免干扰 CSS Grid nth-child 索引
+function ensureResourceModalLayout() {
+    var hidden = document.getElementById('edit-rid');
+    var body = document.querySelector('#modal-resource .modal-body');
+    if (!hidden || !body) return;
+    // 已在 .modal-body 外部则无需处理
+    if (hidden.parentElement !== body) return;
+    var modal = body.parentElement; // .modal
+    if (modal) modal.insertBefore(hidden, body);
+}
+
 function showAddModal() {
     document.getElementById('modal-resource-title').textContent = '新增资源';
     document.getElementById('edit-rid').value = '';
@@ -667,6 +679,7 @@ function showAddModal() {
     populateChannelSelect('res-source', '');
     populateIntentionLevelSelect('res-intention', '');
     populateAssignedToSelect('');
+    ensureResourceModalLayout();
     openModal('modal-resource');
 }
 
@@ -686,6 +699,7 @@ async function editResource(rid) {
         await populateAssignedToSelect(item.assigned_to);
         await populateChannelSelect('res-source', item.source);
         await populateIntentionLevelSelect('res-intention', item.intention_level);
+        ensureResourceModalLayout();
         openModal('modal-resource');
     } catch(e) {
         console.error('editResource error:', e);
