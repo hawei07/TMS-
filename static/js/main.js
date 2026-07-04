@@ -5425,7 +5425,11 @@ document.addEventListener('DOMContentLoaded', function() {
             currentEnrollCampusId = campusId ? parseInt(campusId) : null;
             currentEnrollCourseId = null;
             currentEnrollPlanId = null;
+            // 隐藏价格方案和报价明细
             enrollTransitionHide(document.getElementById('enroll-items-section'));
+            const plansSection = document.getElementById('enroll-plans-section');
+            if (plansSection) plansSection.style.display = 'none';
+            document.getElementById('enroll-plans-list').innerHTML = '';
             setEnrollProgress(1);
             const courseSel = document.getElementById('enroll-course-select');
             if (!campusId) {
@@ -5496,7 +5500,10 @@ function renderEnrollPlansList(plans) {
                 <span class="enroll-plan-name">${esc(p.name)}${typeTag}</span>
                 <span class="enroll-plan-price">¥${total.toFixed(2)}</span>
             </div>
-            <div class="enroll-plan-meta">${itemCount} 个报价项 · ${totalLessons} 课时</div>
+            <div class="enroll-plan-meta">
+                <span class="meta-chip">📋 ${itemCount} 项</span>
+                <span class="meta-chip">📚 ${totalLessons} 课时</span>
+            </div>
         </div>`;
     }).join('');
 }
@@ -5735,16 +5742,19 @@ async function confirmPayEnroll() {
     gap: 12px;
 }
 .enroll-plan-price {
-    font-size: 16px;
+    font-size: 18px;
     font-weight: 700;
     color: var(--color-primary, #7C3AED);
+    letter-spacing: -0.3px;
     white-space: nowrap;
-    font-variant-numeric: tabular-nums;
+    font-feature-settings: "tnum";
 }
 .enroll-plan-meta {
+    display: flex;
+    gap: 10px;
     font-size: 12px;
     color: var(--color-text-muted, #999);
-    margin-top: 6px;
+    margin-top: 4px;
 }
 `;
     document.head.appendChild(style);
