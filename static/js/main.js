@@ -5271,6 +5271,9 @@ function setEnrollProgress(step) {
 // ==================== 平滑过渡工具函数 ====================
 function enrollTransitionShow(el) {
     if (!el) return;
+    // 取消任何待执行的隐藏操作
+    if (el._hideTimer) { clearTimeout(el._hideTimer); el._hideTimer = null; }
+    if (el._hideOnEnd) { el.removeEventListener('transitionend', el._hideOnEnd); el._hideOnEnd = null; }
     el.style.display = '';
     el.style.overflow = 'hidden';
     el.style.maxHeight = '0px';
@@ -5296,26 +5299,32 @@ function enrollTransitionShow(el) {
 }
 function enrollTransitionHide(el) {
     if (!el) return;
+    // 取消之前的 hide 定时器
+    if (el._hideTimer) { clearTimeout(el._hideTimer); el._hideTimer = null; }
+    if (el._hideOnEnd) { el.removeEventListener('transitionend', el._hideOnEnd); el._hideOnEnd = null; }
     el.style.overflow = 'hidden';
     el.style.maxHeight = el.scrollHeight + 'px';
     el.style.opacity = '1';
     el.style.transition = 'max-height 0.3s ease, opacity 0.25s ease, margin-top 0.25s ease';
-    el.offsetHeight; // force reflow
+    el.offsetHeight;
     el.style.maxHeight = '0px';
     el.style.opacity = '0';
-    const onEnd = function() {
+    var onEnd = function() {
         el.style.display = 'none';
         el.style.maxHeight = '';
         el.style.overflow = '';
         el.removeEventListener('transitionend', onEnd);
+        el._hideOnEnd = null;
     };
+    el._hideOnEnd = onEnd;
     el.addEventListener('transitionend', onEnd);
-    setTimeout(() => {
+    el._hideTimer = setTimeout(function() {
         if (el.style.display !== 'none') {
             el.style.display = 'none';
             el.style.maxHeight = '';
             el.style.overflow = '';
         }
+        el._hideTimer = null;
     }, 350);
 }
 
