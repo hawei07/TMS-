@@ -1094,7 +1094,7 @@ $stmt->execute();
                     s.teacher AS session_teacher,
                     co.subject AS course_subject,
                     r.converted AS resource_converted,
-                    r.channel AS resource_channel,
+                    r.source AS resource_channel,
                     r.assigned_to AS resource_assigned_to
                     FROM appointments apt
                     LEFT JOIN classes cl ON cl.id=apt.class_id
