@@ -1321,9 +1321,17 @@ $stmt->execute();
             $scheduleId = intval($input['schedule_id'] ?? 0);
             $trialDate = trim($input['trial_date'] ?? '');
             if (!$aptId) json(['error' => '参数无效']);
-            $db->exec("UPDATE appointments SET status='已取消' WHERE id=$aptId");
-            if ($classId && $scheduleId && $trialDate) {
-                $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$trialDate' AND is_temporary=1");
+            $db->exec('START TRANSACTION');
+            try {
+                $db->exec("UPDATE appointments SET status='已取消' WHERE id=$aptId");
+                if ($classId && $scheduleId && $trialDate) {
+                    $stmt = $db->prepare("DELETE FROM class_attendance WHERE class_id=? AND schedule_id=? AND session_date=? AND is_temporary=1");
+                    $stmt->execute([$classId, $scheduleId, $trialDate]);
+                }
+                $db->exec('COMMIT');
+            } catch (Exception $e) {
+                $db->exec('ROLLBACK');
+                json(['error' => '取消失败: ' . $e->getMessage()]);
             }
             json(['message' => '已取消试听']);
 

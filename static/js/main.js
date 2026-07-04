@@ -1921,7 +1921,7 @@ function renderAptTable(rows) {
             <td>${esc(r.notes)}</td>
             <td>
                 <div class="action-btns">
-                    <button class="btn-link-danger" onclick="cancelTrial(${r.id},${r.class_id},${r.schedule_id},'${esc(r.appointment_time)}')">取消试听</button>
+                    <button class="btn-link-danger" onclick="cancelTrial(${r.id},${r.class_id},${r.schedule_id},'${(r.appointment_time||'').slice(0,10)}')">取消试听</button>
                 </div>
             </td>
         </tr>
@@ -5217,6 +5217,107 @@ let currentEnrollPlans = [];
 let currentEnrollMode = 'student'; // 'student' | 'resource'
 let currentEnrollResourceId = null;
 let currentEnrollCampusId = null;
+let currentEnrollStep = 0; // 0=未开始, 1=选择课程, 2=选择方案, 3=确认支付
+
+// ==================== 报名步骤进度条（动态创建） ====================
+function ensureEnrollProgressBar() {
+    if (document.getElementById('enroll-progress-bar')) return;
+    const formDiv = document.querySelector('#panel-enroll .enroll-form');
+    if (!formDiv) return;
+    const bar = document.createElement('div');
+    bar.id = 'enroll-progress-bar';
+    bar.className = 'enroll-progress-bar';
+    bar.innerHTML = `
+        <div class="eps" data-step="1">
+            <div class="eps-num">1</div>
+            <span>选择课程</span>
+        </div>
+        <div class="eps-conn"><div class="eps-conn-inner"></div></div>
+        <div class="eps" data-step="2">
+            <div class="eps-num">2</div>
+            <span>选择方案</span>
+        </div>
+        <div class="eps-conn"><div class="eps-conn-inner"></div></div>
+        <div class="eps" data-step="3">
+            <div class="eps-num">3</div>
+            <span>确认支付</span>
+        </div>`;
+    formDiv.insertBefore(bar, formDiv.firstChild);
+}
+function setEnrollProgress(step) {
+    if (currentEnrollStep === step) return;
+    currentEnrollStep = step;
+    ensureEnrollProgressBar();
+    const bar = document.getElementById('enroll-progress-bar');
+    if (!bar) return;
+    bar.querySelectorAll('.eps').forEach(el => {
+        const s = parseInt(el.dataset.step);
+        el.classList.toggle('active', s === step);
+        el.classList.toggle('done', s < step);
+    });
+    bar.querySelectorAll('.eps-conn').forEach((el, i) => {
+        el.classList.toggle('done', i + 1 < step);
+    });
+    // 如果回到步骤1，重置后续
+    if (step <= 1) {
+        bar.querySelectorAll('.eps[data-step="2"], .eps[data-step="3"]').forEach(el => {
+            el.classList.remove('done', 'active');
+        });
+        bar.querySelectorAll('.eps-conn').forEach(el => el.classList.remove('done'));
+        bar.querySelector('.eps[data-step="1"]').classList.add('active');
+    }
+}
+
+// ==================== 平滑过渡工具函数 ====================
+function enrollTransitionShow(el) {
+    if (!el) return;
+    el.style.display = '';
+    el.style.overflow = 'hidden';
+    el.style.maxHeight = '0px';
+    el.style.opacity = '0';
+    el.style.transition = 'max-height 0.45s cubic-bezier(0.4,0,0.2,1), opacity 0.35s ease, margin-top 0.35s ease';
+    el.offsetHeight; // force reflow
+    el.style.maxHeight = (el.scrollHeight + 600) + 'px';
+    el.style.opacity = '1';
+    // 过渡结束后移除maxHeight限制，避免内容被截断
+    const onEnd = function() {
+        el.style.maxHeight = 'none';
+        el.style.overflow = '';
+        el.removeEventListener('transitionend', onEnd);
+    };
+    el.addEventListener('transitionend', onEnd);
+    // 兜底：0.6s后强制清除
+    setTimeout(() => {
+        if (el.style.maxHeight && el.style.maxHeight !== 'none') {
+            el.style.maxHeight = 'none';
+            el.style.overflow = '';
+        }
+    }, 600);
+}
+function enrollTransitionHide(el) {
+    if (!el) return;
+    el.style.overflow = 'hidden';
+    el.style.maxHeight = el.scrollHeight + 'px';
+    el.style.opacity = '1';
+    el.style.transition = 'max-height 0.3s ease, opacity 0.25s ease, margin-top 0.25s ease';
+    el.offsetHeight; // force reflow
+    el.style.maxHeight = '0px';
+    el.style.opacity = '0';
+    const onEnd = function() {
+        el.style.display = 'none';
+        el.style.maxHeight = '';
+        el.style.overflow = '';
+        el.removeEventListener('transitionend', onEnd);
+    };
+    el.addEventListener('transitionend', onEnd);
+    setTimeout(() => {
+        if (el.style.display !== 'none') {
+            el.style.display = 'none';
+            el.style.maxHeight = '';
+            el.style.overflow = '';
+        }
+    }, 350);
+}
 
 async function goEnroll(studentId) {
     currentEnrollStudentId = studentId;
@@ -5248,10 +5349,11 @@ async function goEnroll(studentId) {
     // Load campus list
     await loadCampusOptions('enroll-campus-select');
 
-    // Hide plan/items sections
-    document.getElementById('enroll-plans-section').style.display = 'none';
-    document.getElementById('enroll-items-section').style.display = 'none';
+    // Hide plan/items sections with transition
+    enrollTransitionHide(document.getElementById('enroll-plans-section'));
+    enrollTransitionHide(document.getElementById('enroll-items-section'));
 
+    setEnrollProgress(1);
     activatePanel('panel-enroll');
     highlightLeafByPanel('panel-enroll');
 }
@@ -5287,10 +5389,11 @@ async function goEnrollFromResource(resourceId) {
     // Update back button text
     document.getElementById('btn-enroll-back').textContent = '返回我的资源';
 
-    // Hide plan/items sections
-    document.getElementById('enroll-plans-section').style.display = 'none';
-    document.getElementById('enroll-items-section').style.display = 'none';
+    // Hide plan/items sections with transition
+    enrollTransitionHide(document.getElementById('enroll-plans-section'));
+    enrollTransitionHide(document.getElementById('enroll-items-section'));
 
+    setEnrollProgress(1);
     activatePanel('panel-enroll');
     highlightLeafByPanel('panel-enroll');
 }
@@ -5304,8 +5407,9 @@ document.addEventListener('DOMContentLoaded', function() {
             currentEnrollCampusId = campusId ? parseInt(campusId) : null;
             currentEnrollCourseId = null;
             currentEnrollPlanId = null;
-            document.getElementById('enroll-plans-section').style.display = 'none';
-            document.getElementById('enroll-items-section').style.display = 'none';
+            enrollTransitionHide(document.getElementById('enroll-plans-section'));
+            enrollTransitionHide(document.getElementById('enroll-items-section'));
+            setEnrollProgress(1);
             const courseSel = document.getElementById('enroll-course-select');
             if (!campusId) {
                 courseSel.innerHTML = '<option value="">请先选择校区</option>';
@@ -5323,11 +5427,14 @@ document.addEventListener('DOMContentLoaded', function() {
             const courseId = this.value;
             currentEnrollCourseId = courseId ? parseInt(courseId) : null;
             currentEnrollPlanId = null;
-            document.getElementById('enroll-plans-section').style.display = 'none';
-            document.getElementById('enroll-items-section').style.display = 'none';
-            if (!courseId) return;
+            enrollTransitionHide(document.getElementById('enroll-plans-section'));
+            enrollTransitionHide(document.getElementById('enroll-items-section'));
+            if (!courseId) { setEnrollProgress(1); return; }
 
-            document.getElementById('enroll-plans-section').style.display = 'block';
+            setEnrollProgress(2);
+            const plansSection = document.getElementById('enroll-plans-section');
+            plansSection.style.display = '';  // 先display再transition
+            enrollTransitionShow(plansSection);
             const listDiv = document.getElementById('enroll-plans-list');
             listDiv.innerHTML = '<div style="color:#999;padding:12px;">加载中...</div>';
 
