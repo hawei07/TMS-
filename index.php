@@ -1115,7 +1115,7 @@ $stmt->execute();
                     $innerWhere
             ) sub $outerWhere ORDER BY sub.appointment_time DESC LIMIT $pageSize OFFSET $offset";
             $countQuery = "SELECT COUNT(*) FROM (" .
-                "SELECT apt.id FROM appointments apt LEFT JOIN class_attendance ca ON ca.class_id=apt.class_id AND ca.schedule_id=apt.schedule_id AND ca.session_date COLLATE utf8mb4_unicode_ci=apt.appointment_time AND ca.is_temporary=1 $innerWhere" .
+                "SELECT apt.id, CASE WHEN apt.status='已取消' THEN '已取消' WHEN ca.status='出勤' THEN '已试听' WHEN ca.status='缺勤' THEN '缺勤' ELSE '已预约待试听' END AS effective_status FROM appointments apt LEFT JOIN class_attendance ca ON ca.class_id=apt.class_id AND ca.schedule_id=apt.schedule_id AND ca.session_date COLLATE utf8mb4_unicode_ci=apt.appointment_time AND ca.is_temporary=1 $innerWhere" .
                 ") cnt $outerWhere";
             $stmt = $db->query($countQuery);
             $total = $stmt->fetchColumn();
