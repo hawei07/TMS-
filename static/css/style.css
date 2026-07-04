@@ -1628,42 +1628,67 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 /* ==================== 报名详情页面 ==================== */
 /* ==================== 报名详情面板 ==================== */
 
-/* 学员信息卡片 */
+/* ============================
+   报名页面 — 重新设计 CSS
+   紫色主题 #7C3AED · Pill 圆角 · 卡片阴影 · 渐变
+   ============================ */
+
+/* --- 学员信息卡片 --- */
 .enroll-student-info {
     display: flex;
     align-items: center;
-    gap: 16px;
-    padding: 20px 28px;
-    background: var(--color-surface);
-    border-bottom: 1px solid var(--color-border-light);
+    gap: 18px;
+    padding: 24px 28px;
+    background: linear-gradient(135deg, #faf8ff 0%, #f3eefc 50%, #ede4ff 100%);
+    border-bottom: 1px solid rgba(124, 58, 237, 0.08);
+    position: relative;
+    overflow: hidden;
+}
+.enroll-student-info::before {
+    content: '';
+    position: absolute;
+    top: -40px; right: -40px;
+    width: 140px; height: 140px;
+    border-radius: 50%;
+    background: radial-gradient(circle, rgba(124, 58, 237, 0.04) 0%, transparent 70%);
+    pointer-events: none;
 }
 .enroll-student-avatar {
-    width: 44px; height: 44px;
+    width: 52px; height: 52px;
     border-radius: 50%;
-    background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-light) 100%);
+    background: linear-gradient(135deg, #7C3AED 0%, #9F6FF0 50%, #A78BFA 100%);
     display: flex; align-items: center; justify-content: center;
     color: #fff;
     flex-shrink: 0;
+    box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+    position: relative;
+    z-index: 1;
+}
+.enroll-student-avatar svg {
+    width: 22px; height: 22px;
 }
 .enroll-student-details {
     flex: 1; min-width: 0;
+    position: relative; z-index: 1;
 }
 .enroll-student-name {
-    font-size: 16px; font-weight: 700;
-    color: var(--color-text);
+    font-size: 17px; font-weight: 700;
+    color: #1E1B2E;
     line-height: 1.3;
+    letter-spacing: -0.2px;
 }
 .enroll-student-phone {
-    font-size: 13px; color: var(--color-text-secondary);
-    margin-top: 2px;
+    font-size: 13px; color: #7C3AED;
+    margin-top: 3px;
+    font-weight: 500;
 }
 
-/* 表单区域 */
+/* --- 表单区域 --- */
 .enroll-form {
-    padding: 24px 28px;
+    padding: 28px 28px 32px;
 }
 
-/* 校区/课程并排 */
+/* --- 校区/课程并排 --- */
 .enroll-form-row {
     display: flex; gap: 16px;
 }
@@ -1671,84 +1696,122 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     flex: 1; min-width: 0;
 }
 
-/* 区块标题 */
+/* --- 区块 --- */
 .enroll-section {
-    margin-top: 20px;
+    margin-top: 24px;
+    animation: enrollFadeSlideIn 0.4s cubic-bezier(0.16, 1, 0.3, 1);
 }
+@keyframes enrollFadeSlideIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* --- 区块标题 --- */
 .enroll-section-title {
-    font-size: 13px; font-weight: 600;
-    color: var(--color-text-secondary);
-    letter-spacing: 0.5px;
-    text-transform: uppercase;
-    margin-bottom: 12px;
-    display: flex; align-items: center; gap: 8px;
+    font-size: 14px; font-weight: 700;
+    color: var(--color-text);
+    letter-spacing: 0.2px;
+    margin-bottom: 14px;
+    display: flex; align-items: center; gap: 10px;
+}
+.enroll-section-title::before {
+    content: '';
+    width: 4px; height: 18px;
+    border-radius: 2px;
+    background: linear-gradient(180deg, #7C3AED, #A78BFA);
+    flex-shrink: 0;
 }
 .enroll-section-title::after {
     content: '';
     flex: 1; height: 1px;
-    background: var(--color-border-light);
+    background: linear-gradient(90deg, var(--color-border-light), transparent);
 }
 
-/* 价格方案卡片 */
+/* --- 价格方案卡片 --- */
 .enroll-plan-card {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 14px 18px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
+    padding: 16px 20px;
+    border: 2px solid var(--color-border);
+    border-radius: 14px;
     margin-bottom: 10px;
     cursor: pointer;
-    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
     background: var(--color-surface);
     position: relative;
+    overflow: hidden;
+}
+.enroll-plan-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: linear-gradient(135deg, rgba(124, 58, 237, 0.03) 0%, transparent 100%);
+    opacity: 0;
+    transition: opacity 0.25s;
 }
 .enroll-plan-card:hover {
     border-color: var(--color-primary-light);
-    background: var(--color-primary-bg);
-    transform: translateY(-1px);
-    box-shadow: var(--shadow-sm);
+    background: #faf8ff;
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(124, 58, 237, 0.10), 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+.enroll-plan-card:hover::before {
+    opacity: 1;
 }
 .enroll-plan-card.active {
     border-color: var(--color-primary);
-    background: var(--color-primary-bg);
-    box-shadow: 0 0 0 1px var(--color-primary), 0 4px 12px rgba(124, 58, 237, 0.12);
+    background: linear-gradient(135deg, #f5f0ff 0%, #faf6ff 100%);
+    box-shadow: 0 0 0 4px rgba(124, 58, 237, 0.08), 0 6px 24px rgba(124, 58, 237, 0.14);
+    transform: translateY(-1px);
 }
 .enroll-plan-card.active::after {
     content: '✓';
-    position: absolute; top: -8px; right: -8px;
-    width: 22px; height: 22px;
-    background: var(--color-primary);
+    position: absolute; top: -10px; right: -10px;
+    width: 26px; height: 26px;
+    background: linear-gradient(135deg, #7C3AED, #9F6FF0);
     color: #fff;
     border-radius: 50%;
-    font-size: 11px; font-weight: 700;
+    font-size: 13px; font-weight: 700;
     display: flex; align-items: center; justify-content: center;
-    box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+    box-shadow: 0 3px 10px rgba(124, 58, 237, 0.35);
+    z-index: 1;
 }
 .enroll-plan-name {
-    font-size: 14px;
+    font-size: 15px;
     font-weight: 600;
     color: var(--color-text);
+    position: relative; z-index: 1;
 }
 .enroll-plan-arrow {
-    font-size: 12px;
+    font-size: 13px;
     color: var(--color-text-muted);
-    transition: transform 0.2s;
+    transition: all 0.25s;
+    position: relative; z-index: 1;
+    font-weight: 600;
 }
 .enroll-plan-card:hover .enroll-plan-arrow {
-    transform: translateX(3px);
+    transform: translateX(4px);
     color: var(--color-primary);
 }
 .enroll-plan-card.active .enroll-plan-arrow {
     color: var(--color-primary);
+    transform: translateX(2px);
 }
 
-/* 报价表格 */
+/* --- 报价表格 --- */
 .enroll-table-wrap {
     background: var(--color-bg);
     border: 1px solid var(--color-border-light);
-    border-radius: var(--radius-md);
+    border-radius: 12px;
     overflow: hidden;
+    box-shadow: var(--shadow-sm);
 }
 .enroll-items-table {
     width: 100%;
@@ -1756,24 +1819,28 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     font-size: 13px;
 }
 .enroll-items-table thead th {
-    background: var(--color-bg);
-    padding: 10px 18px;
+    background: #f8f7fc;
+    padding: 12px 18px;
     text-align: left;
-    font-weight: 600;
+    font-weight: 700;
     font-size: 12px;
-    color: var(--color-text-muted);
+    color: var(--color-text-secondary);
     letter-spacing: 0.3px;
-    border-bottom: 1px solid var(--color-border-light);
+    border-bottom: 2px solid var(--color-border-light);
     text-transform: uppercase;
 }
 .enroll-items-table thead th.col-num {
     text-align: right;
 }
 .enroll-items-table tbody td {
-    padding: 12px 18px;
+    padding: 14px 18px;
     border-bottom: 1px solid var(--color-border-light);
     color: var(--color-text);
     font-weight: 500;
+    transition: background 0.2s;
+}
+.enroll-items-table tbody tr:hover td {
+    background: #fdfbff;
 }
 .enroll-items-table tbody td.col-num {
     text-align: right;
@@ -1783,115 +1850,222 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     border-bottom: none;
 }
 
-/* 合计金额栏 */
+/* --- 合计金额栏 --- */
 .enroll-total-bar {
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding: 18px 28px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border-light);
+    padding: 18px 24px;
+    background: linear-gradient(135deg, #faf8ff 0%, #f5f0ff 100%);
+    border: 1px solid rgba(124, 58, 237, 0.1);
     border-top: none;
-    border-radius: 0 0 var(--radius-md) var(--radius-md);
+    border-radius: 0 0 12px 12px;
 }
 .enroll-total-label {
-    font-size: 14px; font-weight: 600;
+    font-size: 14px; font-weight: 700;
     color: var(--color-text);
 }
 .enroll-total-amount {
-    font-size: 22px; font-weight: 800;
+    font-size: 24px; font-weight: 800;
     color: var(--color-primary);
     font-variant-numeric: tabular-nums;
+    letter-spacing: -0.5px;
 }
-
-/* 支付方式卡片 */
+/* --- 支付方式卡片 --- */
 .enroll-payment-row {
     display: flex; gap: 16px;
 }
 .enroll-payment-card {
     flex: 1;
     min-width: 200px;
-    padding: 16px 20px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-lg);
+    padding: 20px 22px;
+    border: 2px solid var(--color-border);
+    border-radius: 14px;
     background: var(--color-surface);
-    transition: all 0.2s;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    cursor: pointer;
+    position: relative;
+    overflow: hidden;
 }
-.enroll-payment-card:focus-within {
-    border-color: var(--color-primary-light);
-    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.06);
+.enroll-payment-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.25s;
+    pointer-events: none;
+    border-radius: inherit;
+}
+/* 现金卡片 — 绿色主题 */
+.enroll-payment-card:first-child {
+    border-left: 4px solid transparent;
+}
+.enroll-payment-card:first-child:hover,
+.enroll-payment-card:first-child:focus-within {
+    border-color: #38A169;
+    box-shadow: 0 4px 16px rgba(56, 161, 105, 0.12);
+    background: #f6fdf9;
+}
+.enroll-payment-card:first-child::before {
+    background: linear-gradient(135deg, rgba(56, 161, 105, 0.04) 0%, transparent 100%);
+}
+.enroll-payment-card:first-child:hover::before,
+.enroll-payment-card:first-child:focus-within::before {
+    opacity: 1;
+}
+/* 美团卡片 — 黄色主题 */
+.enroll-payment-card:last-child:hover,
+.enroll-payment-card:last-child:focus-within {
+    border-color: #FF6D00;
+    box-shadow: 0 4px 16px rgba(255, 109, 0, 0.12);
+    background: #fffaf5;
+}
+.enroll-payment-card:last-child::before {
+    background: linear-gradient(135deg, rgba(255, 109, 0, 0.04) 0%, transparent 100%);
+}
+.enroll-payment-card:last-child:hover::before,
+.enroll-payment-card:last-child:focus-within::before {
+    opacity: 1;
 }
 .enroll-payment-header {
-    display: flex; align-items: center; gap: 10px;
-    margin-bottom: 12px;
+    display: flex; align-items: center; gap: 12px;
+    margin-bottom: 14px;
 }
 .enroll-payment-icon {
-    width: 32px; height: 32px;
-    border-radius: var(--radius-sm);
-    background: linear-gradient(135deg, #f0e6ff, #e0d0ff);
+    width: 38px; height: 38px;
+    border-radius: 10px;
+    background: linear-gradient(135deg, #e6f7ed, #c8f0d6);
     display: flex; align-items: center; justify-content: center;
-    color: var(--color-primary);
+    color: #38A169;
+    box-shadow: 0 2px 8px rgba(56, 161, 105, 0.12);
+    transition: all 0.25s;
+}
+.enroll-payment-card:first-child:hover .enroll-payment-icon,
+.enroll-payment-card:first-child:focus-within .enroll-payment-icon {
+    transform: scale(1.08);
+    box-shadow: 0 3px 12px rgba(56, 161, 105, 0.2);
 }
 .enroll-payment-icon-meituan {
-    background: linear-gradient(135deg, #fff0e6, #ffe0cc);
-    color: #ff6d00;
+    background: linear-gradient(135deg, #fff3e5, #ffe4cc);
+    color: #FF6D00;
+    box-shadow: 0 2px 8px rgba(255, 109, 0, 0.12);
+}
+.enroll-payment-card:last-child:hover .enroll-payment-icon-meituan,
+.enroll-payment-card:last-child:focus-within .enroll-payment-icon-meituan {
+    transform: scale(1.08);
+    box-shadow: 0 3px 12px rgba(255, 109, 0, 0.2);
+}
+.enroll-payment-icon svg {
+    width: 18px; height: 18px;
 }
 .enroll-payment-label {
-    font-size: 14px; font-weight: 600;
+    font-size: 15px; font-weight: 700;
     color: var(--color-text);
+    letter-spacing: 0.2px;
 }
 .enroll-payment-input {
     width: 100%;
-    padding: 10px 14px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    font-size: 16px; font-weight: 600;
+    padding: 12px 16px;
+    border: 2px solid var(--color-border);
+    border-radius: 10px;
+    font-size: 18px; font-weight: 700;
     color: var(--color-text);
     text-align: right;
     font-variant-numeric: tabular-nums;
-    background: var(--color-bg);
-    transition: all 0.2s;
+    background: #fafafb;
+    transition: all 0.25s;
     font-family: inherit;
+    letter-spacing: 0.3px;
 }
-.enroll-payment-input:focus {
+.enroll-payment-card:first-child .enroll-payment-input:focus {
     outline: none;
-    border-color: var(--color-primary);
-    background: var(--color-surface);
-    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
+    border-color: #38A169;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(56, 161, 105, 0.08);
+}
+.enroll-payment-card:last-child .enroll-payment-input:focus {
+    outline: none;
+    border-color: #FF6D00;
+    background: #fff;
+    box-shadow: 0 0 0 4px rgba(255, 109, 0, 0.08);
 }
 .enroll-payment-input::placeholder {
     color: var(--color-text-muted);
     font-weight: 400;
+    font-size: 15px;
 }
 
-/* 支付提示 */
+/* --- 支付提示 --- */
 .enroll-payment-hint {
-    margin-top: 12px;
+    margin-top: 14px;
     font-size: 13px;
-    padding: 10px 16px;
-    border-radius: var(--radius-sm);
-    font-weight: 500;
+    padding: 12px 18px;
+    border-radius: 10px;
+    font-weight: 600;
+    animation: enrollFadeSlideIn 0.3s ease;
 }
 .enroll-payment-hint.warn {
-    background: #fff3e0;
+    background: #fff8f0;
     color: #e65100;
     border: 1px solid #ffe0b2;
 }
 .enroll-payment-hint.ok {
-    background: #e8f5e9;
+    background: #f0faf4;
     color: #2e7d32;
     border: 1px solid #c8e6c9;
 }
 
-/* 操作栏 */
+/* --- 操作栏 --- */
 .enroll-action-bar {
-    margin-top: 24px;
-    display: flex; justify-content: flex-end; gap: 12px;
+    margin-top: 28px;
+    display: flex; justify-content: center; gap: 12px;
 }
 #btn-confirm-pay {
-    font-size: 15px;
-    padding: 12px 40px;
-    font-weight: 600;
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    font-size: 16px;
+    padding: 14px 56px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    border-radius: 50px;
+    background: linear-gradient(135deg, #7C3AED 0%, #9F6FF0 50%, #6D28D9 100%);
+    border: none;
+    color: #fff;
+    box-shadow: 0 4px 20px rgba(124, 58, 237, 0.35), 0 2px 6px rgba(124, 58, 237, 0.2);
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    position: relative;
+    overflow: hidden;
+    cursor: pointer;
+}
+#btn-confirm-pay::before {
+    content: '';
+    position: absolute;
+    top: 50%; left: 50%;
+    width: 0; height: 0;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.2);
+    transform: translate(-50%, -50%);
+    transition: width 0.6s, height 0.6s;
+}
+#btn-confirm-pay:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 28px rgba(124, 58, 237, 0.45), 0 4px 10px rgba(124, 58, 237, 0.3);
+}
+#btn-confirm-pay:hover::before {
+    width: 400px; height: 400px;
+}
+#btn-confirm-pay:active {
+    transform: translateY(1px);
+    box-shadow: 0 2px 10px rgba(124, 58, 237, 0.25);
+}
+#btn-confirm-pay svg {
+    width: 20px; height: 20px;
+    flex-shrink: 0;
+    position: relative; z-index: 2;
+}
+#btn-confirm-pay * {
+    position: relative; z-index: 2;
 }
 
 /* 按钮大小扩展 */
