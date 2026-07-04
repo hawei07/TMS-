@@ -1,6 +1,8 @@
 // ==================== 全局状态 ====================
 const API_BASE = '?action=';
 let myPage = 1, aptPage = 1, seaPage = 1, empPage = 1, coursePage = 1, studentPage = 1, orderPage = 1, refundPage = 1;
+let myPageSize = 15;
+let myFilterTimer = null;
 let searchTimers = {};
 let commResourceId = null;
 let commResourceName = '';
@@ -18,6 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
     populateFilterChannelSelect();
     populateFilterAssignedToSelect();
     populateFilterAssignedDeptSelect();
+    initMyResourcesPanel();
 
     // Panel-enroll back button handler
     document.getElementById('btn-enroll-back').addEventListener('click', () => {
@@ -538,27 +541,28 @@ function applyDatePreset(prefix) {
     }
     startEl.value = fmt(start);
     if (end) endEl.value = fmt(end);
-    loadMyResources();
+    debounceMyFilters();
 }
 
 function onCustomDateChange(prefix) {
     const sel = document.getElementById('filter-date-preset-' + prefix);
     if (sel && sel.value === 'custom') {
-        loadMyResources();
+        debounceMyFilters();
     }
 }
 
 async function loadMyResources() {
-    const keyword = document.getElementById('search-my').value;
-    const name = document.getElementById('filter-name-my').value;
-    const phone = document.getElementById('filter-phone-my').value;
-    const source = document.getElementById('filter-source-my').value;
-    const assignedTo = document.getElementById('filter-assigned-to-my').value;
-    const assignedDept = document.getElementById('filter-assigned-dept-my').value;
-    const createdStart = document.getElementById('filter-created-start-my').value;
-    const createdEnd = document.getElementById('filter-created-end-my').value;
-    const followStatus = document.getElementById('filter-follow-status-my').value;
-    const params = new URLSearchParams({ page: myPage, page_size: 15, pool_type: '我的资源', keyword });
+    const keyword = document.getElementById('search-my')?.value || '';
+    const name = document.getElementById('filter-name-my')?.value || '';
+    const phone = document.getElementById('filter-phone-my')?.value || '';
+    const source = document.getElementById('filter-source-my')?.value || '';
+    const assignedTo = document.getElementById('filter-assigned-to-my')?.value || '';
+    const assignedDept = document.getElementById('filter-assigned-dept-my')?.value || '';
+    const createdStart = document.getElementById('filter-created-start-my')?.value || '';
+    const createdEnd = document.getElementById('filter-created-end-my')?.value || '';
+    const followStatus = document.getElementById('filter-follow-status-my')?.value || '';
+
+    const params = new URLSearchParams({ page: myPage, page_size: myPageSize, pool_type: '我的资源', keyword });
     if (name) params.set('name', name);
     if (phone) params.set('phone', phone);
     if (source) params.set('source', source);
@@ -567,54 +571,39 @@ async function loadMyResources() {
     if (createdStart) params.set('created_start', createdStart);
     if (createdEnd) params.set('created_end', createdEnd);
     if (followStatus) params.set('follow_status', followStatus);
-    const res = await fetch(API_BASE + 'get_resources&' + params);
-    const data = await res.json();
-    renderMyTable(data.data);
-    renderPagination('pagination-my', data.total, myPage, 15, (p) => { myPage = p; loadMyResources(); });
+
+    try {
+        const res = await fetch(API_BASE + 'get_resources&' + params);
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        const data = await res.json();
+        renderMyTable(data.data || []);
+        renderMyPagination(data.total || 0, myPage, myPageSize);
+        updateMySelectionUI();
+        updateFilterCountBadge();
+    } catch (e) {
+        console.error('loadMyResources error:', e);
+        showToast('加载资源失败，请检查网络后重试', 'error');
+        const tbody = document.querySelector('#table-my-resources tbody');
+        if (tbody) {
+            tbody.innerHTML = renderEmptyState('加载失败', '请检查网络连接后重试');
+        }
+        document.getElementById('pagination-my').innerHTML = '';
+    }
 }
 
 function renderMyTable(rows) {
     const tbody = document.querySelector('#table-my-resources tbody');
+    if (!tbody) return;
+
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;padding:60px 20px;">'
-            + '<div style="margin-bottom:16px;">'
-            + '<svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#C4B5FD" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" style="display:inline-block;">'
-            + '<circle cx="11" cy="11" r="8"/>'
-            + '<line x1="21" y1="21" x2="16.65" y2="16.65"/>'
-            + '<line x1="8" y1="11" x2="14" y2="11"/>'
-            + '</svg></div>'
-            + '<div style="font-size:16px;color:#7C3AED;margin-bottom:8px;font-weight:500;">无查询结果</div>'
-            + '<div style="font-size:13px;color:#A78BFA;">调整筛选条件后重新搜索</div>'
-            + '</td></tr>';
+        tbody.innerHTML = renderEmptyState('暂无资源数据', '点击「新增资源」添加第一条数据，或调整筛选条件');
+        if (document.getElementById('select-all-my')) document.getElementById('select-all-my').checked = false;
+        document.getElementById('pagination-my').innerHTML = '';
         return;
     }
-    tbody.innerHTML = rows.map(r => `
-        <tr>
-            <td><input type="checkbox" class="cb-my" value="${r.id}"></td>
-            <td>${esc(r.name)}</td>
-            <td>${esc(r.phone)}</td>
-            <td>${esc(r.source)}</td>
-            <td>${esc(r.intention_level)}</td>
-            <td>${esc(r.assigned_to)}</td>
-            <td>${esc(r.assigned_dept || '')}</td>
-            <td><span class="follow-status-tag follow-status-${r.follow_status || 'none'}" onclick="event.stopPropagation();toggleFollowStatusEdit(this, ${r.id})" title="点击修改跟进状态">${r.follow_status || '—'}</span></td>
-            <td>${r.created_at ? r.created_at.slice(0,16) : ''}</td>
-            <td>${esc(r.gender)}</td>
-            <td>${esc(r.birth_date)}</td>
-            <td>${r.updated_at ? r.updated_at.slice(0,16) : ''}</td>
-            <td>${r.converted === '已转化' ? '<span class="tag-converted">已转化</span>' : '<span class="tag-unconverted">未转化</span>'}</td>
-            <td>
-                <div class="action-btns">
-                    <button class="btn-link" onclick="editResource(${r.id})">编辑</button>
-                    <button class="btn-link" onclick="goEnrollFromResource(${r.id})">报名</button>
-                    <button class="btn-link" onclick="openAppointmentForResource(${r.id},'${esc(r.name)}','${esc(r.phone)}')">预约试听</button>
-                    <button class="btn-link" onclick="openCommunication(${r.id},'${esc(r.name)}')">沟通记录</button>
-                    <button class="btn-link-danger" onclick="deleteResource(${r.id})">删除</button>
-                </div>
-            </td>
-        </tr>
-    `).join('');
-    document.getElementById('select-all-my').checked = false;
+
+    tbody.innerHTML = rows.map(r => renderMyResourceRow(r)).join('');
+    if (document.getElementById('select-all-my')) document.getElementById('select-all-my').checked = false;
 }
 
 const FOLLOW_STATUS_OPTIONS = ['未沟通','沟通中','已邀约未试听','已试听待转化','已转化—定金','已转化—全款','无效客户'];
@@ -751,6 +740,371 @@ async function deleteResource(rid) {
     });
 }
 
+// ==================== 我的资源：增强交互 ====================
+
+// ---------- 渲染单行 ----------
+function renderMyResourceRow(r) {
+    return `<tr class="my-resource-row" data-rid="${r.id}">
+        <td><input type="checkbox" class="cb-my" value="${r.id}"></td>
+        <td class="editable-name" data-rid="${r.id}" data-value="${esc(r.name)}" title="点击编辑姓名">
+            <span class="cell-text">${esc(r.name)}</span>
+        </td>
+        <td class="editable-phone" data-rid="${r.id}" data-value="${esc(r.phone)}" title="点击编辑电话">
+            <a href="tel:${esc(r.phone)}" class="phone-link" onclick="event.stopPropagation()" style="color:#7C3AED;text-decoration:none;">${esc(r.phone)}</a>
+        </td>
+        <td>${esc(r.source)}</td>
+        <td>${esc(r.intention_level)}</td>
+        <td>${esc(r.assigned_to)}</td>
+        <td>${esc(r.assigned_dept || '')}</td>
+        <td><span class="follow-status-tag follow-status-${r.follow_status || 'none'}" onclick="event.stopPropagation();toggleFollowStatusEdit(this, ${r.id})" title="点击修改跟进状态">${r.follow_status || '—'}</span></td>
+        <td>${r.created_at ? r.created_at.slice(0,16) : ''}</td>
+        <td>${esc(r.gender)}</td>
+        <td>${esc(r.birth_date)}</td>
+        <td>${r.updated_at ? r.updated_at.slice(0,16) : ''}</td>
+        <td>${r.converted === '已转化' ? '<span class="tag-converted">已转化</span>' : '<span class="tag-unconverted">未转化</span>'}</td>
+        <td>
+            <div class="action-btns">
+                <button class="btn-link" onclick="editResource(${r.id})">编辑</button>
+                <button class="btn-link" onclick="goEnrollFromResource(${r.id})">报名</button>
+                <button class="btn-link" onclick="openAppointmentForResource(${r.id},'${esc(r.name)}','${esc(r.phone)}')">预约试听</button>
+                <button class="btn-link" onclick="openCommunication(${r.id},'${esc(r.name)}')">沟通记录</button>
+                <button class="btn-link-danger" onclick="deleteResource(${r.id})">删除</button>
+            </div>
+        </td>
+    </tr>`;
+}
+
+// ---------- 空状态 ----------
+function renderEmptyState(title, desc) {
+    return `<tr><td colspan="14" style="text-align:center;padding:60px 20px;">
+        <div style="margin-bottom:20px;">
+            <svg width="80" height="80" viewBox="0 0 80 80" fill="none" xmlns="http://www.w3.org/2000/svg" style="display:inline-block;">
+                <rect x="16" y="22" width="48" height="40" rx="4" stroke="#C4B5FD" stroke-width="2" fill="#F5F3FF"/>
+                <rect x="24" y="32" width="32" height="3" rx="1.5" fill="#DDD6FE"/>
+                <rect x="24" y="40" width="22" height="3" rx="1.5" fill="#EDE9FE"/>
+                <rect x="24" y="48" width="18" height="3" rx="1.5" fill="#F3F0FF"/>
+                <circle cx="60" cy="18" r="11" stroke="#A78BFA" stroke-width="2" fill="#F5F3FF"/>
+                <circle cx="60" cy="18" r="5.5" stroke="#C4B5FD" stroke-width="1.5"/>
+                <line x1="67.5" y1="25.5" x2="74" y2="32" stroke="#A78BFA" stroke-width="2" stroke-linecap="round"/>
+            </svg>
+        </div>
+        <div style="font-size:16px;color:#6D28D9;margin-bottom:8px;font-weight:600;">${title}</div>
+        <div style="font-size:13px;color:#A78BFA;">${desc}</div>
+    </td></tr>`;
+}
+
+// ---------- 我的资源分页 ----------
+function renderMyPagination(total, page, pageSize) {
+    const totalPages = Math.max(1, Math.ceil(total / pageSize));
+    const container = document.getElementById('pagination-my');
+    if (!container) return;
+
+    let html = '<div style="display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;width:100%;">';
+
+    html += '<div style="display:flex;align-items:center;gap:12px;">';
+    html += '<span style="font-size:13px;color:#6B7280;">共 <strong>' + total + '</strong> 条，第 <strong>' + page + '</strong>/<strong>' + totalPages + '</strong> 页</span>';
+    html += '<select onchange="onMyPageSizeChange(this.value)" style="padding:4px 8px;border:1px solid #ddd;border-radius:4px;font-size:13px;cursor:pointer;">';
+    [15, 30, 50].forEach(function(s) {
+        html += '<option value="' + s + '"' + (s === pageSize ? ' selected' : '') + '>每页 ' + s + ' 条</option>';
+    });
+    html += '</select></div>';
+
+    if (totalPages > 1) {
+        html += '<div style="display:flex;align-items:center;gap:4px;">';
+        html += '<button' + (page === 1 ? ' disabled' : '') + ' data-page="' + (page - 1) + '">上一页</button>';
+        var maxShow = 5;
+        var start = Math.max(1, page - Math.floor(maxShow / 2));
+        var end = Math.min(totalPages, start + maxShow - 1);
+        if (end - start + 1 < maxShow) start = Math.max(1, end - maxShow + 1);
+        if (start > 1) { html += '<button data-page="1">1</button>'; if (start > 2) html += '<span style="padding:0 4px;">...</span>'; }
+        for (var i = start; i <= end; i++) {
+            html += '<button' + (i === page ? ' class="active"' : '') + ' data-page="' + i + '">' + i + '</button>';
+        }
+        if (end < totalPages) { if (end < totalPages - 1) html += '<span style="padding:0 4px;">...</span>'; html += '<button data-page="' + totalPages + '">' + totalPages + '</button>'; }
+        html += '<button' + (page === totalPages ? ' disabled' : '') + ' data-page="' + (page + 1) + '">下一页</button>';
+        html += '</div>';
+    }
+
+    html += '</div>';
+    container.innerHTML = html;
+    container.querySelectorAll('button:not([disabled])').forEach(function(btn) {
+        btn.addEventListener('click', function() {
+            myPage = parseInt(btn.dataset.page);
+            loadMyResources();
+        });
+    });
+}
+
+function onMyPageSizeChange(size) {
+    myPageSize = parseInt(size);
+    myPage = 1;
+    loadMyResources();
+}
+
+// ---------- 行内快速编辑 ----------
+function startInlineEditMy(cell, rid, field) {
+    if (cell.querySelector('input')) return;
+
+    var currentValue = cell.dataset.value || '';
+    var displayEl = cell.querySelector('.cell-text') || cell.querySelector('a');
+
+    var input = document.createElement('input');
+    input.type = 'text';
+    input.className = 'inline-edit-input';
+    input.value = currentValue;
+    input.style.cssText = 'width:100%;padding:3px 6px;border:2px solid #7C3AED;border-radius:4px;font-size:13px;outline:none;box-sizing:border-box;';
+
+    if (displayEl) displayEl.style.display = 'none';
+    cell.appendChild(input);
+    input.focus();
+    input.select();
+
+    var saving = false;
+    var doSave = async function() {
+        if (saving) return;
+        var newValue = input.value.trim();
+        if (newValue === currentValue) {
+            input.remove();
+            if (displayEl) displayEl.style.display = '';
+            return;
+        }
+        if (!newValue && field === 'name') {
+            showToast('姓名不能为空', 'error');
+            input.focus();
+            return;
+        }
+        if (!newValue && field === 'phone') {
+            showToast('电话不能为空', 'error');
+            input.focus();
+            return;
+        }
+        saving = true;
+        input.disabled = true;
+        try {
+            var payload = { id: rid };
+            payload[field] = newValue;
+            var result = await api('update_resource', payload);
+            if (result.error) {
+                showToast(result.error, 'error');
+                input.disabled = false;
+                input.focus();
+                saving = false;
+                return;
+            }
+            showToast('已更新', 'success');
+            cell.dataset.value = newValue;
+            if (field === 'phone' && displayEl && displayEl.tagName === 'A') {
+                displayEl.href = 'tel:' + newValue;
+                displayEl.textContent = newValue;
+            } else if (displayEl) {
+                displayEl.textContent = newValue;
+            }
+            input.remove();
+            if (displayEl) displayEl.style.display = '';
+            loadStats();
+        } catch (e) {
+            showToast('网络异常，请重试', 'error');
+            input.disabled = false;
+            input.focus();
+            saving = false;
+        }
+    };
+
+    var doCancel = function() {
+        input.remove();
+        if (displayEl) displayEl.style.display = '';
+    };
+
+    input.addEventListener('blur', doSave);
+    input.addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') { input.blur(); }
+        if (e.key === 'Escape') { doCancel(); }
+    });
+}
+
+// ---------- 选中状态 UI 同步 ----------
+function updateMySelectionUI() {
+    var allCbs = document.querySelectorAll('.cb-my');
+    var checkedCbs = document.querySelectorAll('.cb-my:checked');
+    var selectAll = document.getElementById('select-all-my');
+    var n = checkedCbs.length;
+
+    if (selectAll) {
+        selectAll.checked = allCbs.length > 0 && n === allCbs.length;
+    }
+
+    document.querySelectorAll('#table-my-resources tbody tr').forEach(function(row) {
+        var cb = row.querySelector('.cb-my');
+        if (cb && cb.checked) {
+            row.classList.add('row-selected');
+        } else {
+            row.classList.remove('row-selected');
+        }
+    });
+
+    var batchBtnSelectors = [
+        '#panel-my-resources .action-btn[onclick*="batchAssign"]',
+        '#panel-my-resources .action-btn[onclick*="batchMoveToSea"]',
+        '#panel-my-resources .action-btn[onclick*="openBatchCommunication"]'
+    ];
+    batchBtnSelectors.forEach(function(sel) {
+        var btn = document.querySelector(sel);
+        if (!btn) return;
+        if (n === 0) {
+            btn.classList.add('action-btn-disabled');
+            btn.style.opacity = '0.45';
+            btn.style.pointerEvents = 'none';
+        } else {
+            btn.classList.remove('action-btn-disabled');
+            btn.style.opacity = '';
+            btn.style.pointerEvents = '';
+        }
+    });
+
+    var countEl = document.getElementById('my-selected-count');
+    if (!countEl) {
+        countEl = document.createElement('span');
+        countEl.id = 'my-selected-count';
+        countEl.style.cssText = 'margin-left:12px;font-size:13px;color:#7C3AED;font-weight:500;';
+        var actionGroup = document.querySelector('#panel-my-resources .action-button-group');
+        if (actionGroup) actionGroup.appendChild(countEl);
+    }
+    countEl.textContent = n > 0 ? '已选 ' + n + ' 项' : '';
+    countEl.style.display = n > 0 ? '' : 'none';
+}
+
+// ---------- 筛选条件计数徽章 ----------
+function updateFilterCountBadge() {
+    var badge = document.getElementById('filter-count-badge-my');
+    if (!badge) return;
+    var count = 0;
+    var ids = ['filter-name-my', 'filter-phone-my', 'filter-source-my',
+               'filter-assigned-to-my', 'filter-assigned-dept-my',
+               'filter-date-preset-my', 'filter-follow-status-my'];
+    ids.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (el && el.value) count++;
+    });
+    var startEl = document.getElementById('filter-created-start-my');
+    var endEl = document.getElementById('filter-created-end-my');
+    if (startEl && startEl.style.display !== 'none' && startEl.value) count++;
+    if (endEl && endEl.style.display !== 'none' && endEl.value) count++;
+
+    if (count > 0) {
+        badge.style.display = 'inline';
+        badge.textContent = count + '项筛选';
+    } else {
+        badge.style.display = 'none';
+    }
+}
+
+// ---------- 防抖筛选 ----------
+function debounceMyFilters() {
+    clearTimeout(myFilterTimer);
+    myFilterTimer = setTimeout(function() {
+        myPage = 1;
+        loadMyResources();
+    }, 300);
+}
+
+// ---------- 重置筛选 ----------
+function resetMyFilters() {
+    document.getElementById('filter-name-my').value = '';
+    document.getElementById('filter-phone-my').value = '';
+    document.getElementById('filter-source-my').value = '';
+    document.getElementById('filter-assigned-to-my').value = '';
+    document.getElementById('filter-assigned-dept-my').value = '';
+    document.getElementById('filter-date-preset-my').value = '';
+    document.getElementById('filter-created-start-my').value = '';
+    document.getElementById('filter-created-start-my').style.display = 'none';
+    document.getElementById('filter-created-end-my').value = '';
+    document.getElementById('filter-created-end-my').style.display = 'none';
+    document.getElementById('filter-follow-status-my').value = '';
+    document.getElementById('search-my').value = '';
+    myPage = 1;
+    loadMyResources();
+}
+
+// ---------- 面板初始化（事件委托 + 工具栏改造） ----------
+function initMyResourcesPanel() {
+    var table = document.getElementById('table-my-resources');
+    if (!table) return;
+
+    table.addEventListener('click', function(e) {
+        var row = e.target.closest('tr.my-resource-row');
+        if (row && !e.target.closest('a, button, input, select, .follow-status-tag')) {
+            var cb = row.querySelector('.cb-my');
+            if (cb) { cb.checked = !cb.checked; updateMySelectionUI(); }
+        }
+        var nameCell = e.target.closest('td.editable-name');
+        if (nameCell && !e.target.closest('input')) {
+            var rid = parseInt(nameCell.dataset.rid);
+            if (rid) startInlineEditMy(nameCell, rid, 'name');
+            return;
+        }
+        var phoneCell = e.target.closest('td.editable-phone');
+        if (phoneCell && !e.target.closest('a, input')) {
+            var rid2 = parseInt(phoneCell.dataset.rid);
+            if (rid2) startInlineEditMy(phoneCell, rid2, 'phone');
+        }
+    });
+
+    table.addEventListener('change', function(e) {
+        if (e.target.classList.contains('cb-my')) {
+            updateMySelectionUI();
+        }
+    });
+
+    // 筛选下拉框改为防抖
+    var filterSelects = ['filter-source-my', 'filter-assigned-to-my',
+                         'filter-assigned-dept-my', 'filter-follow-status-my'];
+    filterSelects.forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.onchange = null;
+        el.addEventListener('change', function() { debounceMyFilters(); });
+    });
+
+    ['filter-name-my', 'filter-phone-my'].forEach(function(id) {
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.addEventListener('input', function() { debounceMyFilters(); });
+    });
+
+    // 隐藏「搜索」按钮
+    var toolbarRight = document.querySelector('#panel-my-resources .toolbar-right');
+    if (toolbarRight) {
+        var searchBtn = toolbarRight.querySelector('button.btn-primary, button.btn');
+        if (searchBtn && (searchBtn.textContent || '').trim() === '搜索') {
+            searchBtn.style.display = 'none';
+        }
+    }
+
+    // 添加「重置筛选」按钮
+    if (toolbarRight && !document.getElementById('btn-reset-my-filters')) {
+        var resetBtn = document.createElement('button');
+        resetBtn.id = 'btn-reset-my-filters';
+        resetBtn.className = 'btn btn-sm';
+        resetBtn.textContent = '重置';
+        resetBtn.title = '重置所有筛选条件';
+        resetBtn.style.cssText = 'margin-left:8px;background:#f3f4f6;color:#374151;border:1px solid #d1d5db;';
+        resetBtn.addEventListener('click', resetMyFilters);
+        toolbarRight.insertBefore(resetBtn, toolbarRight.firstChild);
+    }
+
+    // 添加筛选计数徽章
+    if (toolbarRight && !document.getElementById('filter-count-badge-my')) {
+        var badge = document.createElement('span');
+        badge.id = 'filter-count-badge-my';
+        badge.className = 'filter-count-badge';
+        badge.style.cssText = 'display:none;margin-left:6px;background:#7C3AED;color:#fff;border-radius:10px;padding:1px 7px;font-size:11px;font-weight:500;';
+        toolbarRight.appendChild(badge);
+    }
+
+    updateFilterCountBadge();
+    updateMySelectionUI();
+}
+
 // ==================== 内联：新增资源 ====================
 async function saveInlineResource() {
     const data = {
@@ -783,6 +1137,7 @@ function toggleSelectAll(tab) {
     const cls = tab === 'my' ? 'cb-my' : tab === 'sea' ? 'cb-sea' : 'cb-emp';
     const checked = document.getElementById('select-all-' + tab).checked;
     document.querySelectorAll('.' + cls).forEach(cb => cb.checked = checked);
+    if (tab === 'my') updateMySelectionUI();
 }
 
 // ==================== 批量分配（左树右表） ====================
