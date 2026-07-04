@@ -5263,9 +5263,9 @@ if (intval($countBt) === 0) {
                 <div class="panel-header">
                     <h3>预约试听名单</h3>
                     <div class="header-stats-inline">
-                        <span class="stat-badge">我的资源：<strong id="stat-my-inline2">0</strong></span>
-                        <span class="stat-badge">公海资源：<strong id="stat-sea-inline2">0</strong></span>
-                        <span class="stat-badge">预约试听：<strong id="stat-apt-inline2">0</strong></span>
+                        <span class="stat-badge stat-my">我的资源：<strong id="stat-my-inline2">0</strong></span>
+                        <span class="stat-badge stat-sea">公海资源：<strong id="stat-sea-inline2">0</strong></span>
+                        <span class="stat-badge stat-apt">预约试听：<strong id="stat-apt-inline2">0</strong></span>
                     </div>
                 </div>
                 <div class="toolbar">
@@ -5286,7 +5286,7 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-appointments">
                         <thead><tr>
-                            <th>资源</th><th>电话</th><th>课程类型</th><th>班级名称</th><th>授课老师</th><th>一级学科</th><th>二级学科</th><th>预约时间</th><th>状态</th><th>转化状态</th><th>渠道</th><th>归属人</th><th>备注</th><th width="80">操作</th>
+                            <th>资源</th><th>电话</th><th>课程类型</th><th>班级名称</th><th>授课老师</th><th>一级学科</th><th>二级学科</th><th>预约时间</th><th>状态</th><th>转化状态</th><th>渠道</th><th>归属人</th><th>备注</th><th width="110">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>
