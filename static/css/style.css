@@ -1794,21 +1794,6 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     color: var(--color-text);
     position: relative; z-index: 1;
 }
-.enroll-plan-arrow {
-    font-size: 13px;
-    color: var(--color-text-muted);
-    transition: all 0.25s;
-    position: relative; z-index: 1;
-    font-weight: 600;
-}
-.enroll-plan-card:hover .enroll-plan-arrow {
-    transform: translateX(4px);
-    color: var(--color-primary);
-}
-.enroll-plan-card.active .enroll-plan-arrow {
-    color: var(--color-primary);
-    transform: translateX(2px);
-}
 
 /* --- 报价表格 --- */
 .enroll-table-wrap {

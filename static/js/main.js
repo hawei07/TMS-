@@ -5498,8 +5498,6 @@ function renderEnrollPlansList(plans) {
                 </div>
                 <div class="enroll-plan-meta">${itemCount} 个报价项</div>
             </div>
-            <div class="enroll-plan-detail" id="enroll-plan-detail-${p.id}"></div>
-            <span class="enroll-plan-arrow">&gt;</span>
         </div>`;
     }).join('');
 }
@@ -5512,18 +5510,6 @@ function selectEnrollPlan(planId) {
     const plan = currentEnrollPlans.find(p => p.id == planId);
     currentEnrollPlanType = (plan && plan.plan_type) ? plan.plan_type : '';
 
-    // 折叠所有已展开的卡片明细
-    document.querySelectorAll('.enroll-plan-detail.expanded').forEach(d => {
-        d.style.maxHeight = d.scrollHeight + 'px';
-        d.offsetHeight;
-        d.style.maxHeight = '0px';
-        d.style.opacity = '0';
-        d.style.paddingTop = '0';
-        d.style.paddingBottom = '0';
-        d.style.marginTop = '0';
-        d.classList.remove('expanded');
-    });
-
     // 高亮选中卡片
     document.querySelectorAll('.enroll-plan-card').forEach(c => c.classList.remove('active'));
     const card = document.querySelector(`.enroll-plan-card[data-plan-id="${planId}"]`);
@@ -5532,55 +5518,6 @@ function selectEnrollPlan(planId) {
     if (!plan || !plan.items || plan.items.length === 0) {
         enrollTransitionHide(document.getElementById('enroll-items-section'));
         return;
-    }
-
-    // 在当前卡片内展开明细
-    const detailDiv = document.getElementById('enroll-plan-detail-' + planId);
-    if (detailDiv) {
-        let total = 0;
-        detailDiv.innerHTML = `
-            <div class="enroll-plan-detail-table-wrap">
-                <table class="enroll-plan-detail-table">
-                    <thead><tr>
-                        <th>报价项</th><th class="col-num">课时</th><th class="col-num">单价</th><th class="col-num">价格</th>
-                    </tr></thead>
-                    <tbody>${plan.items.map(item => {
-                        const up = item.lesson_count > 0 ? (item.actual_price / item.lesson_count) : 0;
-                        total += parseFloat(item.actual_price) || 0;
-                        return `<tr>
-                            <td>${esc(item.name)}</td>
-                            <td class="col-num">${item.lesson_count || 0}</td>
-                            <td class="col-num">¥${up.toFixed(2)}</td>
-                            <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
-                        </tr>`;
-                    }).join('')}</tbody>
-                </table>
-                <div class="enroll-plan-detail-total">
-                    <span>合计</span><span>¥${total.toFixed(2)}</span>
-                </div>
-            </div>`;
-        // 展开动画
-        detailDiv.classList.add('expanded');
-        detailDiv.style.display = '';
-        detailDiv.style.maxHeight = '0px';
-        detailDiv.style.opacity = '0';
-        detailDiv.style.paddingTop = '0';
-        detailDiv.style.paddingBottom = '0';
-        detailDiv.style.marginTop = '0';
-        detailDiv.style.transition = 'max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease, padding 0.35s ease, margin 0.35s ease';
-        detailDiv.offsetHeight;
-        const targetH = detailDiv.scrollHeight;
-        detailDiv.style.maxHeight = targetH + 'px';
-        detailDiv.style.opacity = '1';
-        detailDiv.style.paddingTop = '12px';
-        detailDiv.style.paddingBottom = '0';
-        detailDiv.style.marginTop = '10px';
-        const onEnd = function() {
-            detailDiv.style.maxHeight = 'none';
-            detailDiv.removeEventListener('transitionend', onEnd);
-        };
-        detailDiv.addEventListener('transitionend', onEnd);
-        setTimeout(() => { if (detailDiv.style.maxHeight !== 'none') { detailDiv.style.maxHeight = 'none'; } }, 500);
     }
 
     // 渲染下方报价明细表（支付相关使用）
@@ -5816,74 +5753,6 @@ async function confirmPayEnroll() {
 .enroll-plan-card {
     flex-direction: column;
     align-items: stretch;
-}
-.enroll-plan-card .enroll-plan-arrow {
-    position: absolute;
-    right: 18px;
-    top: 18px;
-    transition: transform 0.3s, color 0.2s;
-}
-.enroll-plan-card.active .enroll-plan-arrow {
-    transform: rotate(90deg);
-    color: var(--color-primary, #7C3AED);
-}
-
-/* 卡片内展开明细 */
-.enroll-plan-detail {
-    overflow: hidden;
-    max-height: 0;
-    opacity: 0;
-    padding: 0;
-    margin-top: 0;
-    border-top: 1px solid transparent;
-    transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1), opacity 0.3s ease, padding 0.35s ease, margin 0.35s ease, border-color 0.3s;
-}
-.enroll-plan-card.active .enroll-plan-detail.expanded {
-    border-top-color: var(--color-border-light, #eee);
-}
-.enroll-plan-detail-table-wrap {
-    background: var(--color-bg, #f9f9f9);
-    border-radius: 8px;
-    overflow: hidden;
-}
-.enroll-plan-detail-table {
-    width: 100%;
-    border-collapse: collapse;
-    font-size: 12px;
-}
-.enroll-plan-detail-table thead th {
-    background: rgba(124,58,237,0.04);
-    padding: 8px 14px;
-    text-align: left;
-    font-weight: 600;
-    font-size: 11px;
-    color: var(--color-text-muted, #999);
-    border-bottom: 1px solid var(--color-border-light, #eee);
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-}
-.enroll-plan-detail-table thead th.col-num { text-align: right; }
-.enroll-plan-detail-table tbody td {
-    padding: 8px 14px;
-    border-bottom: 1px solid var(--color-border-light, #f0f0f0);
-    color: var(--color-text, #333);
-    font-weight: 500;
-}
-.enroll-plan-detail-table tbody td.col-num {
-    text-align: right;
-    font-variant-numeric: tabular-nums;
-}
-.enroll-plan-detail-table tbody tr:last-child td { border-bottom: none; }
-.enroll-plan-detail-total {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    padding: 10px 14px;
-    background: rgba(124,58,237,0.06);
-    font-size: 13px;
-    font-weight: 700;
-    color: var(--color-primary, #7C3AED);
-    border-top: 1px solid var(--color-border-light, #eee);
 }
 `;
     document.head.appendChild(style);
