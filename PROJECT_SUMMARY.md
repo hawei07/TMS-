@@ -1442,3 +1442,22 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | fix | **get_appointments 无筛选时 \$result→\$stmt**：修复预约列表始终为空 | index.php | 9e265f7 |
 | style | **弹窗宽度放宽 + 去滚动条**：820→960→1100px + 95vw，white-space:nowrap | index.php | 3260c31 / 3582ab5 |
 | style | **校区/学科联动 filter**：选校区缩课/师，选学科缩课 | index.php main.js | 64b9b34 |
+
+### 2026-07-04 — 预约状态系统 + 报名修复 + 多角色工作流
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **预约状态四态系统**：已预约待试听/已试听/缺勤/已取消，由 CASE+class_attendance JOIN 联合计算 | index.php | 301cc55 / 702ef82 |
+| fix | **collation mismatch**：apointments vs class_attendance JOIN 加 COLLATE utf8mb4_unicode_ci | index.php | 702ef82 |
+| fix | **$offset 提前计算**：子查询前必须计算 offset | index.php | 773886d |
+| fix | **count 子查询加入 effective_status**：修复状态筛选 Unknown column | index.php | 702ef82 |
+| fix | **cancel_trial SQL 注入修复**：$trialDate 改用 prepared statement + 事务包裹 | index.php | 590d582 |
+| feat | **预约名单扩展 7 列**：班级/老师/一级学科/二级学科/转化/渠道/归属人 | index.php main.js | 25970dd |
+| fix | **r.channel→r.source**：resources 表无 channel 列 | index.php | 8fad8cf |
+| feat | **预约名单去编辑+删除改取消试听**：cancel_trial 更新状态+清考勤 | index.php main.js | 1230ab6 |
+| fix | **save_class_attendance 试听资源状态更新**：student_id=0 跳过扣课但更新 status | index.php | 2a0734b |
+| fix | **报名选课方案展示修复**：enrollTransitionShow 移到数据渲染后 | main.js | 3f7506d |
+| fix | **去 course/campus change 的 plans-section hide**：消除延迟 display:none 竞态 | main.js | a127470 |
+| fix | **enrollTransitionShow 取消 pending hide**：clearTimeout + removeEventListener | main.js | 8307a10 |
+| chore | **多角色开发工作流**：tms-development skill v2.0 + .hermes/project.md + memory | skill | — |
+| docs | **PROJECT_SUMMARY 更新**：07-03 + 07-04 全部变更 | .md | 242b157 / 9a14c78 |
