@@ -5867,6 +5867,17 @@ function applyCoursePickerFilters() {
             (c.subject_level2 || '').toLowerCase().includes(keyword)
         );
     }
+    // 筛选变化时清空之前选中的课程和价格方案
+    enrollCoursePickerSelected = null;
+    currentEnrollCourseId = null;
+    currentEnrollPlanId = null;
+    pickerHiddenEl.value = '';
+    pickerBodyEl.classList.remove('has-selection');
+    enrollTransitionHide(document.getElementById('enroll-items-section'));
+    const plansSection = document.getElementById('enroll-plans-section');
+    if (plansSection) plansSection.style.display = 'none';
+    document.getElementById('enroll-plans-list').innerHTML = '';
+    setEnrollProgress(2);
     renderCoursePickerCards(filtered);
 }
 
