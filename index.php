@@ -1079,30 +1079,47 @@ $stmt->execute();
 
             $where = []; $params = [];
             if ($keyword) {
-                $where[] = "(student_name LIKE ? OR resource_name LIKE ? OR phone LIKE ?)";
+                $where[] = "(apt.student_name LIKE ? OR apt.resource_name LIKE ? OR apt.phone LIKE ?)";
                 $params = ["%$keyword%", "%$keyword%", "%$keyword%"];
             }
-            if ($status) { $where[] = "status = ?"; $params[] = $status; }
-            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+            $innerWhere = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+            
+            // 外层过滤 effective_status（如果指定）
+            $outerWhere = '';
+            if ($status) {
+                $outerWhere = "WHERE effective_status = " . $db->quote($status);
+            }
 
-            $stmt = $db->query("SELECT COUNT(*) FROM appointments apt $whereStr");
-            $total = $stmt->fetchColumn();
-            $total = $total ? intval($total) : 0;
-            $offset = ($page - 1) * $pageSize;
-            $query = "SELECT apt.*,
+            $query = "SELECT * FROM (
+                SELECT apt.*,
                     cl.name AS class_name,
                     s.teacher AS session_teacher,
                     co.subject AS course_subject,
                     r.converted AS resource_converted,
                     r.source AS resource_channel,
-                    r.assigned_to AS resource_assigned_to
+                    r.assigned_to AS resource_assigned_to,
+                    ca.status AS attendance_status,
+                    CASE 
+                        WHEN apt.status='已取消' THEN '已取消'
+                        WHEN ca.status='出勤' THEN '已试听'
+                        WHEN ca.status='缺勤' THEN '缺勤'
+                        ELSE '已预约待试听'
+                    END AS effective_status
                     FROM appointments apt
                     LEFT JOIN classes cl ON cl.id=apt.class_id
                     LEFT JOIN schedules s ON s.id=apt.schedule_id
                     LEFT JOIN courses co ON co.id=apt.course_id
                     LEFT JOIN resources r ON r.id=apt.resource_id
-                    $whereStr ORDER BY apt.appointment_time DESC LIMIT $pageSize OFFSET $offset";
-            $countQuery = "SELECT COUNT(*) FROM appointments apt $whereStr";
+                    LEFT JOIN class_attendance ca ON ca.class_id=apt.class_id AND ca.schedule_id=apt.schedule_id AND ca.session_date COLLATE utf8mb4_unicode_ci=apt.appointment_time AND ca.is_temporary=1
+                    $innerWhere
+            ) sub $outerWhere ORDER BY sub.appointment_time DESC LIMIT $pageSize OFFSET $offset";
+            $countQuery = "SELECT COUNT(*) FROM (" .
+                "SELECT apt.id FROM appointments apt LEFT JOIN class_attendance ca ON ca.class_id=apt.class_id AND ca.schedule_id=apt.schedule_id AND ca.session_date COLLATE utf8mb4_unicode_ci=apt.appointment_time AND ca.is_temporary=1 $innerWhere" .
+                ") cnt $outerWhere";
+            $stmt = $db->query($countQuery);
+            $total = $stmt->fetchColumn();
+            $total = $total ? intval($total) : 0;
+            $offset = ($page - 1) * $pageSize;
             $rows = [];
             if ($params) {
                 $stmt = $db->prepare($query);
@@ -1115,6 +1132,7 @@ $stmt->execute();
                 $subjParts = explode(' > ', $r['course_subject'] ?? '');
                 $r['subject_level1'] = $subjParts[0] ?? '';
                 $r['subject_level2'] = $subjParts[1] ?? '';
+                $r['status'] = $r['effective_status'] ?? $r['status'];
                 $rows[] = $r;
             }
             json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
@@ -5243,8 +5261,9 @@ if (intval($countBt) === 0) {
                     <div class="toolbar-right">
                         <select id="filter-status-apt" onchange="loadAppointments()">
                             <option value="">全部状态</option>
-                            <option value="已预约">已预约</option>
+                            <option value="已预约待试听">已预约待试听</option>
                             <option value="已试听">已试听</option>
+                            <option value="缺勤">缺勤</option>
                             <option value="已取消">已取消</option>
                         </select>
                         <input type="text" id="search-apt" placeholder="搜索学员/资源/电话..." onkeyup="debounceSearch('apt')">
