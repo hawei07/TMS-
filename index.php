@@ -4297,6 +4297,13 @@ $stmt->execute();
                 foreach ($records as $rec) {
                     $studentId = intval($rec['student_id'] ?? 0);
                     $status = trim($rec['status'] ?? '出勤');
+                    // 试听资源 student_id=0 允许更新状态，但跳过课时扣减
+                    $isTrialResource = ($studentId === 0);
+                    if (!in_array($status, ['', '出勤', '请假', '缺勤'])) $status = '出勤';
+                    if ($isTrialResource) {
+                        $db->exec("UPDATE class_attendance SET status='$status' WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=0 AND is_temporary=1");
+                        continue;
+                    }
                     if ($studentId <= 0) continue;
                     // 判断是否为临时学员（不在 class_students 中但有 is_temporary 标记）
                     $isTempRecord = !empty($rec['is_temporary']) && intval($rec['is_temporary']) === 1;
@@ -4305,7 +4312,6 @@ $stmt->execute();
                         $isTempRecord = !$inClass;
                     }
                     $isTemp = $isTempRecord ? 1 : 0;
-                    if (!in_array($status, ['', '出勤', '请假', '缺勤'])) $status = '出勤';
                     // 查询该学员在此班级课程的一级学科
                     $classRow = $db->query("SELECT c.course_id, c.name AS course_name, c.lesson_hours, co.subject_level1, co.subject_level2, c.campus FROM classes c LEFT JOIN courses co ON c.course_id = co.id WHERE c.id = $classId")->fetch(PDO::FETCH_ASSOC);
                     $courseId = intval($classRow['course_id'] ?? 0);
