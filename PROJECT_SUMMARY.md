@@ -1490,4 +1490,17 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | fix | **去 course/campus change 的 plans-section hide**：消除延迟 display:none 竞态 | main.js | a127470 |
 | fix | **enrollTransitionShow 取消 pending hide**：clearTimeout + removeEventListener | main.js | 8307a10 |
 | chore | **多角色开发工作流**：tms-development skill v2.0 + .hermes/project.md + memory | skill | — |
-| docs | **PROJECT_SUMMARY 更新**：07-03 + 07-04 全部变更 | .md | 242b157 / 9a14c78 |
+|| docs | **PROJECT_SUMMARY 更新**：07-03 + 07-04 全部变更 | .md | 242b157 / 9a14c78 |
+
+### 2026-07-05 — 学员账户系统
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **学员账户基础功能**：新增 student_accounts 表（余额/累计充值/消费/退款）+ account_transactions 表（流水审计，type=deposit/consume/refund）；新增 get_student_account API（余额汇总+流水筛选+分页）；新增 top_up_account API（充值，事务保护，FOR UPDATE 锁行）；改造 enroll_course 支持 use_balance+balance_amount 余额支付；改造 approve_refund 支持 refund_to=balance 退款到余额 | index.php | 47a667a |
+| feat | **学员详情页账户标签页**：新增「账户」tab（余额卡片+流水表格+充值弹窗+移动端适配）；前端客户端分页+类型/日期筛选；充值弹窗支持金额/支付方式/备注 | index.php main.js style.css | 47a667a |
+| feat | **账户优化**：充值生成交易订单（order_type=账户充值，课程字段留空）；流水表+支付方式列；订单列表+一级/二级学科列；充值弹窗+校区/学科下拉 | index.php main.js style.css | 5704370 |
+| fix | **账户流水关联单号**：get_student_account LEFT JOIN orders 返回子订单号 order_no | index.php main.js | fb27b4c |
+| feat | **报名支持账户余额支付**：支付区新增账户余额卡片（蓝色主题）；pay_enroll API 支持 use_balance+balance_amount 扣款+流水 | index.php main.js style.css | ddbc26b |
+| feat | **录单页面展示账户余额**：学员信息卡片增加余额显示 | index.php main.js | 5c3d15e |
+| feat | **交易订单列表新增账户支付方式列**：现金/美团/账户三列+支付汇总含账户合计 | index.php main.js | d2ecae9 |
+| fix | **余额加载错误提示**：goEnroll 中余额加载失败时显示错误信息替代静默忽略 | main.js | 387ee88 |
