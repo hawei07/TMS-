@@ -9,6 +9,8 @@ let commResourceName = '';
 let currentBasicTypeCategory = 'course_type';
 let currentClassDetailId = null;
 let orderCampusData = []; // 订单校区筛选数据 [{name, region}]
+let campusList = [];          // 充值弹窗校区下拉 [{id, name}]
+let subjectLevel1List = [];   // 充值弹窗一级学科下拉 [{id, name}]
 
 // ==================== 初始化 ====================
 document.addEventListener('DOMContentLoaded', () => {
@@ -4635,6 +4637,7 @@ let currentViewStudentId = null;
 
 async function viewStudent(sid) {
     currentViewStudentId = sid;
+    loadCampusAndSubjects(); // 预加载校区+学科数据（充值弹窗用，不阻塞UI）
     const res = await fetch(API_BASE + 'get_student&id=' + sid);
     const data = await res.json();
     if (data.error) { showToast(data.error, 'error'); return; }
@@ -4974,7 +4977,7 @@ async function loadStudentOrders(sid) {
         }
         container.innerHTML = `<span style="font-size:14px;color:#888;">共 ${rows.length} 笔订单</span>
         <div class="table-wrap" style="margin-top:8px;"><table><thead><tr>
-            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
+            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
         </tr></thead><tbody>
         ${rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
@@ -4984,6 +4987,7 @@ async function loadStudentOrders(sid) {
             if (ot === '新报') orderTypeHtml = '<span class="tag tag-new-enroll">新报</span>';
             else if (ot === '续费') orderTypeHtml = '<span class="tag tag-renewal">续费</span>';
             else if (ot === '小课包') orderTypeHtml = '<span class="tag tag-small-pack">小课包</span>';
+            else if (ot === '账户充值') orderTypeHtml = '<span class="tag tag-account-recharge">账户充值</span>';
             return `<tr>
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
             <td style="font-family:monospace;font-size:12px;">${esc(r.parent_order_no || '')}</td>
@@ -4991,6 +4995,8 @@ async function loadStudentOrders(sid) {
             <td>${r.id}</td>
             <td>${esc(r.student_name)}</td>
             <td>${esc(r.campus || '-')}</td>
+            <td>${esc(r.subject_level1 || '-')}</td>
+            <td>${esc(r.subject_level2 || '-')}</td>
             <td>${esc(r.course_name)}</td>
             <td>${esc(r.plan_name)}</td>
             <td>${esc(r.item_name)}</td>
@@ -6251,7 +6257,7 @@ function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="19" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="21" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
@@ -6266,6 +6272,7 @@ function renderOrderTable(rows) {
         if (ot === '新报') orderTypeHtml = '<span class="tag tag-new-enroll">新报</span>';
         else if (ot === '续费') orderTypeHtml = '<span class="tag tag-renewal">续费</span>';
         else if (ot === '小课包') orderTypeHtml = '<span class="tag tag-small-pack">小课包</span>';
+        else if (ot === '账户充值') orderTypeHtml = '<span class="tag tag-account-recharge">账户充值</span>';
         return `
         <tr>
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
@@ -6274,6 +6281,8 @@ function renderOrderTable(rows) {
             <td>${r.id}</td>
             <td>${esc(r.student_name)}</td>
             <td>${esc(r.campus || '-')}</td>
+            <td>${esc(r.subject_level1 || '-')}</td>
+            <td>${esc(r.subject_level2 || '-')}</td>
             <td>${esc(r.course_name)}</td>
             <td>${esc(r.plan_name)}</td>
             <td>${esc(r.item_name)}</td>
@@ -6290,7 +6299,7 @@ function renderOrderTable(rows) {
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
-        <td colspan="12" style="text-align:right;font-weight:bold;">合计</td>
+        <td colspan="14" style="text-align:right;font-weight:bold;">合计</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
         <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
         <td colspan="5"></td>
@@ -9207,7 +9216,7 @@ const accountPageSize = 20;
 
 async function loadStudentAccount(sid) {
     const tbody = document.getElementById('account-transactions-tbody');
-    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     // Reset filters
     document.getElementById('account-filter-type').value = '';
     document.getElementById('account-filter-date-from').value = '';
@@ -9224,7 +9233,7 @@ async function loadStudentAccount(sid) {
         accountCurrentPage = 1;
         renderAccountTransactions(accountAllTransactions, 1);
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
@@ -9249,12 +9258,13 @@ function renderAccountTransactions(transactions, page) {
     const start = (page - 1) * accountPageSize;
     const rows = transactions.slice(start, start + accountPageSize);
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">暂无交易流水</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">暂无交易流水</td></tr>';
     } else {
         tbody.innerHTML = rows.map(function(r) {
             return '<tr>' +
                 '<td>' + esc(r.created_at || '') + '</td>' +
                 '<td>' + typeTag(r.type) + '</td>' +
+                '<td>' + (r.type === 'deposit' ? esc(r.payment_method || '-') : '-') + '</td>' +
                 '<td>' + formatAccountAmount(r.type, r.amount) + '</td>' +
                 '<td>¥' + Number(r.balance_after || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2}) + '</td>' +
                 '<td>' + (r.ref_type ? esc(r.ref_type) + (r.ref_id ? '#' + r.ref_id : '') : '-') + '</td>' +
@@ -9294,19 +9304,60 @@ function filterAccountTransactions() {
     renderAccountTransactions(filtered, 1);
 }
 
+// ── 加载校区 + 一级学科数据（充值弹窗用）──
+async function loadCampusAndSubjects() {
+    if (campusList.length > 0 && subjectLevel1List.length > 0) return;
+    try {
+        const [orgRes, subRes] = await Promise.all([
+            fetch(API_BASE + 'list_organizations'),
+            fetch(API_BASE + 'list_subjects')
+        ]);
+        const orgData = await orgRes.json();
+        const orgs = (orgData.data && orgData.data.flat) || [];
+        campusList = orgs
+            .filter(o => o.type === '校区')
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+
+        const subData = await subRes.json();
+        const subs = subData.flat || [];
+        subjectLevel1List = subs
+            .filter(s => s.parent_id == 0)
+            .sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh-CN'));
+    } catch (e) {
+        console.error('loadCampusAndSubjects error:', e);
+    }
+}
+
 function showRechargeModal() {
     var existing = document.querySelector('.modal-overlay');
     if (existing) existing.remove();
     var overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
     overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
-    overlay.innerHTML = '<div class="modal-content" style="background:#fff;border-radius:10px;padding:24px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">' +
+
+    // 构建下拉的 helper：数据已加载则用真实数据，否则占位
+    function buildCampusOptions() {
+        if (campusList.length === 0) return '<option value="">加载中...</option>';
+        var opts = '<option value="">请选择校区</option>';
+        campusList.forEach(function(c) { opts += '<option value="' + escHtml(c.name) + '">' + escHtml(c.name) + '</option>'; });
+        return opts;
+    }
+    function buildSubjectOptions() {
+        if (subjectLevel1List.length === 0) return '<option value="">加载中...</option>';
+        var opts = '<option value="">请选择学科</option>';
+        subjectLevel1List.forEach(function(s) { opts += '<option value="' + escHtml(s.name) + '">' + escHtml(s.name) + '</option>'; });
+        return opts;
+    }
+
+    overlay.innerHTML = '<div class="modal-content" style="background:#fff;border-radius:10px;padding:24px;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">' +
         '<h3 style="margin:0 0 20px;font-size:18px;">账户充值</h3>' +
-        '<div style="margin-bottom:16px;">' +
+        // ① 金额
+        '<div style="margin-bottom:14px;">' +
             '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">充值金额 <span style="color:#e74c3c;">*</span></label>' +
             '<input type="number" id="recharge-amount" placeholder="请输入充值金额" step="0.01" min="0.01" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
         '</div>' +
-        '<div style="margin-bottom:16px;">' +
+        // ② 支付方式
+        '<div style="margin-bottom:14px;">' +
             '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">支付方式</label>' +
             '<select id="recharge-payment-method" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
                 '<option value="现金">现金</option>' +
@@ -9316,6 +9367,21 @@ function showRechargeModal() {
                 '<option value="转账">转账</option>' +
             '</select>' +
         '</div>' +
+        // ③ 校区（必选）
+        '<div style="margin-bottom:14px;">' +
+            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">校区 <span style="color:#e74c3c;">*</span></label>' +
+            '<select id="recharge-campus" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
+                buildCampusOptions() +
+            '</select>' +
+        '</div>' +
+        // ④ 一级学科（必选）
+        '<div style="margin-bottom:14px;">' +
+            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">一级学科 <span style="color:#e74c3c;">*</span></label>' +
+            '<select id="recharge-subject" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
+                buildSubjectOptions() +
+            '</select>' +
+        '</div>' +
+        // ⑤ 备注
         '<div style="margin-bottom:20px;">' +
             '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">备注</label>' +
             '<input type="text" id="recharge-note" placeholder="可选备注" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
@@ -9330,6 +9396,21 @@ function showRechargeModal() {
     overlay.addEventListener('click', function(e) {
         if (e.target === overlay) overlay.remove();
     });
+    // 如果数据尚未加载，异步加载后刷新下拉
+    if (campusList.length === 0 || subjectLevel1List.length === 0) {
+        loadCampusAndSubjects().then(function() {
+            var campusSel = document.getElementById('recharge-campus');
+            var subjectSel = document.getElementById('recharge-subject');
+            if (campusSel && campusList.length > 0) {
+                campusSel.innerHTML = '<option value="">请选择校区</option>';
+                campusList.forEach(function(c) { campusSel.innerHTML += '<option value="' + escHtml(c.name) + '">' + escHtml(c.name) + '</option>'; });
+            }
+            if (subjectSel && subjectLevel1List.length > 0) {
+                subjectSel.innerHTML = '<option value="">请选择学科</option>';
+                subjectLevel1List.forEach(function(s) { subjectSel.innerHTML += '<option value="' + escHtml(s.name) + '">' + escHtml(s.name) + '</option>'; });
+            }
+        });
+    }
     // Focus amount input
     setTimeout(function() {
         var inp = document.getElementById('recharge-amount');
@@ -9341,11 +9422,15 @@ async function submitRecharge() {
     var amount = parseFloat(document.getElementById('recharge-amount').value);
     if (!amount || amount <= 0) { showToast('请输入有效的充值金额', 'error'); return; }
     var method = document.getElementById('recharge-payment-method').value;
+    var campus = document.getElementById('recharge-campus').value;
+    if (!campus) { showToast('请选择校区', 'error'); return; }
+    var subject = document.getElementById('recharge-subject').value;
+    if (!subject) { showToast('请选择一级学科', 'error'); return; }
     var note = document.getElementById('recharge-note').value.trim();
     var sid = currentViewStudentId;
     if (!sid) { showToast('学员信息丢失，请重新打开详情', 'error'); return; }
     try {
-        var res = await api('top_up_account', { student_id: sid, amount: amount, payment_method: method, note: note }, 'POST');
+        var res = await api('top_up_account', { student_id: sid, amount: amount, payment_method: method, campus: campus, subject_level1: subject, note: note }, 'POST');
         if (res.error) { showToast(res.error, 'error'); return; }
         showToast(res.message || '充值成功');
         document.querySelectorAll('.modal-overlay').forEach(function(m) { m.remove(); });

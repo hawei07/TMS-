@@ -275,6 +275,12 @@ if (!in_array('pay_status', $existingCols)) {
 if (!in_array('is_voided', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN is_voided VARCHAR(5) DEFAULT '否'");
 }
+if (!in_array('subject_level1', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN subject_level1 VARCHAR(500) DEFAULT ''");
+}
+if (!in_array('subject_level2', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN subject_level2 VARCHAR(500) DEFAULT ''");
+}
 
 // 兼容已有数据库：学生表添加学号字段
 $existingColsS = [];
@@ -502,6 +508,14 @@ $db->exec("CREATE TABLE IF NOT EXISTS account_transactions (
     INDEX idx_student (student_id),
     INDEX idx_created (created_at)
 )");
+
+// 兼容已有数据库：account_transactions 添加支付方式字段
+$colPM = $db->query("SHOW COLUMNS FROM account_transactions LIKE 'payment_method'")->fetch();
+if (!$colPM) $db->exec("ALTER TABLE account_transactions ADD COLUMN payment_method VARCHAR(50) DEFAULT ''");
+
+// 兼容已有数据库：account_transactions 添加学科字段
+$colSub = $db->query("SHOW COLUMNS FROM account_transactions LIKE 'subject'")->fetch();
+if (!$colSub) $db->exec("ALTER TABLE account_transactions ADD COLUMN subject VARCHAR(200) DEFAULT '' AFTER campus");
 
 date_default_timezone_set('Asia/Shanghai');
 
@@ -3222,7 +3236,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -3555,7 +3569,7 @@ $stmt->execute();
             foreach ($params as $k => $v) $countStmt->bindValue($k, $v);
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
-            $sql = "SELECT id, type, amount, balance_after, ref_type, ref_id, campus, note, created_at FROM account_transactions $whereStr ORDER BY created_at DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT id, type, amount, balance_after, ref_type, ref_id, campus, note, payment_method, created_at FROM account_transactions $whereStr ORDER BY created_at DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
@@ -3583,6 +3597,8 @@ $stmt->execute();
             $amount = floatval($input['amount'] ?? 0);
             $paymentMethod = trim($input['payment_method'] ?? '现金');
             $note = trim($input['note'] ?? '');
+            $campus = trim($input['campus'] ?? '');
+            $subjectLevel1 = trim($input['subject_level1'] ?? '');
             if ($studentId <= 0) { json(['error' => '学员ID无效']); break; }
             if ($amount <= 0) { json(['error' => '充值金额必须大于0']); break; }
             // 查询当前余额（先锁行）
@@ -3602,16 +3618,42 @@ $stmt->execute();
                 $stmt->bindValue(':bal2', $amount);
                 $stmt->bindValue(':td2', $amount);
                 $stmt->execute();
-                // 写入流水
+                // 查学员信息
+                $student = $db->prepare("SELECT name, phone, student_no FROM students WHERE id = :sid");
+                $student->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $student->execute();
+                $student = $student->fetch(PDO::FETCH_ASSOC);
+                // 生成订单号并插入订单
+                $orderNo = generateOrderNo($db);
+                $n = now();
+                $cashAmount = ($paymentMethod === '现金') ? $amount : 0;
+                $mtAmount = ($paymentMethod === '美团') ? $amount : 0;
+                $stmtOrder = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, subject_level1, subject_level2) VALUES (:sid, 0, '', '', 0, :ap, :ca, :ma, :pa, :ono, '', :ct, :ct2, '账户充值', :campus, '已支付', '否', :sl1, '')");
+                $stmtOrder->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $stmtOrder->bindValue(':ap', $amount);
+                $stmtOrder->bindValue(':ca', $cashAmount);
+                $stmtOrder->bindValue(':ma', $mtAmount);
+                $stmtOrder->bindValue(':pa', $amount);
+                $stmtOrder->bindValue(':ono', $orderNo, PDO::PARAM_STR);
+                $stmtOrder->bindValue(':ct', $n, PDO::PARAM_STR);
+                $stmtOrder->bindValue(':ct2', $n, PDO::PARAM_STR);
+                $stmtOrder->bindValue(':campus', $campus, PDO::PARAM_STR);
+                $stmtOrder->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
+                $stmtOrder->execute();
+                $orderId = $db->lastInsertId();
+                // 写入流水（含 payment_method + ref_id）
                 $refNote = $note ? ('充值: ' . $note) : ($paymentMethod . '充值');
-                $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, note) VALUES (:sid, 'deposit', :amt, :ba, 'top_up', :note)");
+                $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note, payment_method) VALUES (:sid, 'deposit', :amt, :ba, 'top_up', :rid, :campus, :note, :pm)");
                 $stmt2->bindValue(':sid', $studentId, PDO::PARAM_INT);
                 $stmt2->bindValue(':amt', $amount);
                 $stmt2->bindValue(':ba', $newBalance);
+                $stmt2->bindValue(':rid', $orderId, PDO::PARAM_INT);
+                $stmt2->bindValue(':campus', $campus, PDO::PARAM_STR);
                 $stmt2->bindValue(':note', $refNote, PDO::PARAM_STR);
+                $stmt2->bindValue(':pm', $paymentMethod, PDO::PARAM_STR);
                 $stmt2->execute();
                 $db->commit();
-                json(['success' => true, 'balance' => $newBalance, 'message' => '充值成功']);
+                json(['success' => true, 'balance' => $newBalance, 'message' => '充值成功', 'order_id' => $orderId, 'order_no' => $orderNo]);
             } catch (Exception $e) {
                 $db->rollBack();
                 json(['error' => '充值失败: ' . $e->getMessage()]);
@@ -6242,10 +6284,10 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table>
                                     <thead><tr>
-                                        <th>日期时间</th><th>类型</th><th>金额</th><th>余额变动后</th><th>关联单号</th><th>校区</th><th>备注</th>
+                                        <th>日期时间</th><th>类型</th><th>支付方式</th><th>金额</th><th>余额变动后</th><th>关联单号</th><th>校区</th><th>备注</th>
                                     </tr></thead>
                                     <tbody id="account-transactions-tbody">
-                                        <tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -6409,7 +6451,7 @@ if (intval($countBt) === 0) {
                     <div class="table-scroll-body">
                         <table id="table-orders">
                             <thead><tr>
-                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
+                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
                             </tr></thead>
                             <tbody></tbody>
                             <tfoot id="table-orders-foot" style="display:none;"></tfoot>
