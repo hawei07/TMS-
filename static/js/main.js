@@ -4686,6 +4686,7 @@ function switchStudentDetailTab(tabId) {
     if (tabId === 'tab-courses') loadStudentCourses(sid);
     else if (tabId === 'tab-orders') loadStudentOrders(sid);
     else if (tabId === 'tab-attendance') loadAttendance(sid);
+    else if (tabId === 'tab-account') loadStudentAccount(sid);
 }
 
 // 标签页点击事件委托
@@ -9197,6 +9198,161 @@ function refreshDatePickers(containerSelector) {
         if (el.offsetParent === null && el.style.display === 'none') return;
         flatpickr(el, { locale: 'zh', dateFormat: 'Y-m-d', allowInput: false, disableMobile: true });
     });
+}
+
+// ── 学员账户 ====================
+let accountAllTransactions = [];
+let accountCurrentPage = 1;
+const accountPageSize = 20;
+
+async function loadStudentAccount(sid) {
+    const tbody = document.getElementById('account-transactions-tbody');
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    // Reset filters
+    document.getElementById('account-filter-type').value = '';
+    document.getElementById('account-filter-date-from').value = '';
+    document.getElementById('account-filter-date-to').value = '';
+    try {
+        const res = await fetch(API_BASE + 'get_student_account&student_id=' + sid + '&page_size=10000');
+        const data = await res.json();
+        // Update balance cards
+        document.getElementById('account-balance').textContent = '¥' + Number(data.balance || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        document.getElementById('account-total-deposit').textContent = '¥' + Number(data.total_deposit || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        document.getElementById('account-total-consume').textContent = '¥' + Number(data.total_consume || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        document.getElementById('account-total-refund').textContent = '¥' + Number(data.total_refund || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        accountAllTransactions = data.transactions || [];
+        accountCurrentPage = 1;
+        renderAccountTransactions(accountAllTransactions, 1);
+    } catch (e) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+    }
+}
+
+function typeTag(type) {
+    const map = { deposit: ['充值', 'type-tag-deposit'], consume: ['消费', 'type-tag-consume'], refund: ['退款', 'type-tag-refund'] };
+    const [label, cls] = map[type] || [type, ''];
+    return '<span class="type-tag ' + cls + '">' + esc(label) + '</span>';
+}
+
+function formatAccountAmount(type, amount) {
+    const n = Number(amount || 0);
+    if (type === 'consume') return '<span style="color:#e74c3c;">-' + n.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + '</span>';
+    return '<span style="color:#27ae60;">+' + n.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + '</span>';
+}
+
+function renderAccountTransactions(transactions, page) {
+    const tbody = document.getElementById('account-transactions-tbody');
+    const totalPages = Math.ceil(transactions.length / accountPageSize) || 1;
+    if (page > totalPages) page = totalPages;
+    if (page < 1) page = 1;
+    accountCurrentPage = page;
+    const start = (page - 1) * accountPageSize;
+    const rows = transactions.slice(start, start + accountPageSize);
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">暂无交易流水</td></tr>';
+    } else {
+        tbody.innerHTML = rows.map(function(r) {
+            return '<tr>' +
+                '<td>' + esc(r.created_at || '') + '</td>' +
+                '<td>' + typeTag(r.type) + '</td>' +
+                '<td>' + formatAccountAmount(r.type, r.amount) + '</td>' +
+                '<td>¥' + Number(r.balance_after || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2}) + '</td>' +
+                '<td>' + (r.ref_type ? esc(r.ref_type) + (r.ref_id ? '#' + r.ref_id : '') : '-') + '</td>' +
+                '<td>' + esc(r.campus || '-') + '</td>' +
+                '<td>' + esc(r.note || '-') + '</td>' +
+                '</tr>';
+        }).join('');
+    }
+    // Pagination
+    var pagHTML = '';
+    if (totalPages > 1) {
+        pagHTML += '<button class="btn btn-sm" ' + (page <= 1 ? 'disabled' : '') + ' onclick="renderAccountTransactions(accountFilteredTransactions(), ' + (page - 1) + ')">上一页</button>';
+        for (var i = 1; i <= totalPages; i++) {
+            if (i === page) pagHTML += '<span class="page-current">' + i + '</span>';
+            else pagHTML += '<button class="btn btn-sm btn-page" onclick="renderAccountTransactions(accountFilteredTransactions(), ' + i + ')">' + i + '</button>';
+        }
+        pagHTML += '<button class="btn btn-sm" ' + (page >= totalPages ? 'disabled' : '') + ' onclick="renderAccountTransactions(accountFilteredTransactions(), ' + (page + 1) + ')">下一页</button>';
+        pagHTML += '<span style="margin-left:8px;font-size:13px;color:#666;">共 ' + transactions.length + ' 条</span>';
+    }
+    document.getElementById('pagination-account').innerHTML = pagHTML;
+}
+
+function accountFilteredTransactions() {
+    var typeFilter = document.getElementById('account-filter-type').value;
+    var dateFrom = document.getElementById('account-filter-date-from').value;
+    var dateTo = document.getElementById('account-filter-date-to').value;
+    return accountAllTransactions.filter(function(r) {
+        if (typeFilter && r.type !== typeFilter) return false;
+        if (dateFrom && r.created_at < dateFrom) return false;
+        if (dateTo && r.created_at > dateTo + ' 23:59:59') return false;
+        return true;
+    });
+}
+
+function filterAccountTransactions() {
+    var filtered = accountFilteredTransactions();
+    renderAccountTransactions(filtered, 1);
+}
+
+function showRechargeModal() {
+    var existing = document.querySelector('.modal-overlay');
+    if (existing) existing.remove();
+    var overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.innerHTML = '<div class="modal-content" style="background:#fff;border-radius:10px;padding:24px;max-width:400px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">' +
+        '<h3 style="margin:0 0 20px;font-size:18px;">账户充值</h3>' +
+        '<div style="margin-bottom:16px;">' +
+            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">充值金额 <span style="color:#e74c3c;">*</span></label>' +
+            '<input type="number" id="recharge-amount" placeholder="请输入充值金额" step="0.01" min="0.01" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
+        '</div>' +
+        '<div style="margin-bottom:16px;">' +
+            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">支付方式</label>' +
+            '<select id="recharge-payment-method" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
+                '<option value="现金">现金</option>' +
+                '<option value="微信">微信</option>' +
+                '<option value="支付宝">支付宝</option>' +
+                '<option value="银行卡">银行卡</option>' +
+                '<option value="转账">转账</option>' +
+            '</select>' +
+        '</div>' +
+        '<div style="margin-bottom:20px;">' +
+            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">备注</label>' +
+            '<input type="text" id="recharge-note" placeholder="可选备注" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
+        '</div>' +
+        '<div style="display:flex;gap:12px;justify-content:flex-end;">' +
+            '<button class="btn" onclick="this.closest(\'.modal-overlay\').remove()" style="padding:8px 20px;">取消</button>' +
+            '<button class="btn btn-primary" onclick="submitRecharge()" style="padding:8px 20px;">确认充值</button>' +
+        '</div>' +
+    '</div>';
+    document.body.appendChild(overlay);
+    // Click overlay background to close
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) overlay.remove();
+    });
+    // Focus amount input
+    setTimeout(function() {
+        var inp = document.getElementById('recharge-amount');
+        if (inp) inp.focus();
+    }, 100);
+}
+
+async function submitRecharge() {
+    var amount = parseFloat(document.getElementById('recharge-amount').value);
+    if (!amount || amount <= 0) { showToast('请输入有效的充值金额', 'error'); return; }
+    var method = document.getElementById('recharge-payment-method').value;
+    var note = document.getElementById('recharge-note').value.trim();
+    var sid = currentViewStudentId;
+    if (!sid) { showToast('学员信息丢失，请重新打开详情', 'error'); return; }
+    try {
+        var res = await api('top_up_account', { student_id: sid, amount: amount, payment_method: method, note: note }, 'POST');
+        if (res.error) { showToast(res.error, 'error'); return; }
+        showToast(res.message || '充值成功');
+        document.querySelectorAll('.modal-overlay').forEach(function(m) { m.remove(); });
+        loadStudentAccount(sid);
+    } catch (e) {
+        showToast('充值请求失败', 'error');
+    }
 }
 
 // ── 移动端侧边栏切换 ──

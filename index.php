@@ -475,6 +475,34 @@ $db->exec("CREATE TABLE IF NOT EXISTS student_subject_teacher (
     UNIQUE KEY uk_sct (student_id, campus_id, subject_id)
 )");
 
+// 学员账户表
+$db->exec("CREATE TABLE IF NOT EXISTS student_accounts (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT NOT NULL UNIQUE,
+    balance DECIMAL(10,2) DEFAULT 0.00,
+    total_deposit DECIMAL(10,2) DEFAULT 0.00,
+    total_consume DECIMAL(10,2) DEFAULT 0.00,
+    total_refund DECIMAL(10,2) DEFAULT 0.00,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+)");
+
+// 账户流水表
+$db->exec("CREATE TABLE IF NOT EXISTS account_transactions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    student_id INT NOT NULL,
+    type ENUM('deposit','consume','refund') NOT NULL,
+    amount DECIMAL(10,2) NOT NULL,
+    balance_after DECIMAL(10,2) NOT NULL,
+    ref_type VARCHAR(50) DEFAULT '',
+    ref_id INT DEFAULT 0,
+    campus VARCHAR(500) DEFAULT '',
+    note VARCHAR(500) DEFAULT '',
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    INDEX idx_student (student_id),
+    INDEX idx_created (created_at)
+)");
+
 date_default_timezone_set('Asia/Shanghai');
 
 $action = $_GET['action'] ?? '';
@@ -722,6 +750,7 @@ function handleApi() {
     $method = $_SERVER['REQUEST_METHOD'];
     $input = json_decode(file_get_contents('php://input'), true) ?? [];
     error_log('DEBUG: handleApi action=' . $action . ' method=' . $method);
+    error_log('DEBUG: handleApi input=' . json_encode($input, JSON_UNESCAPED_UNICODE));
 
     switch ($action) {
         case 'get_resources':
@@ -2757,7 +2786,6 @@ $stmt->execute();
             break;
 
         case 'enroll_course':
-            $input = json_decode(file_get_contents('php://input'), true) ?? [];
             $studentId = intval($input['student_id'] ?? 0);
             $courseId = intval($input['course_id'] ?? 0);
             if ($studentId <= 0 || $courseId <= 0) { json(['error' => '请选择学员和课程']); break; }
@@ -2772,22 +2800,69 @@ $stmt->execute();
                 $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
                 $campusName = $campusRow['name'] ?? '';
             }
+            // 余额支付
+            $useBalance = !empty($input['use_balance']);
+            $balanceAmount = $useBalance ? floatval($input['balance_amount'] ?? 0) : 0;
+            if ($balanceAmount < 0) $balanceAmount = 0;
+            if ($balanceAmount > $actualPrice) { json(['error' => '余额支付金额不能超过订单总额']); break; }
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus, :ps, :iv)");
-            $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
-            $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
-            $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
-            $stmt->bindValue(':inm', $itemName, PDO::PARAM_STR);
-            $stmt->bindValue(':lc', $lessonCount, PDO::PARAM_INT);
-            $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
-            $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
-            $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
-            $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
+            $db->beginTransaction();
+            try {
+                $cashAmount = 0.0;
+                $mtAmount = 0.0;
+                if ($useBalance && $balanceAmount > 0) {
+                    // 查询并锁定账户
+                    $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
+                    $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $acct->execute();
+                    $acct = $acct->fetch(PDO::FETCH_ASSOC);
+                    $currentBalance = $acct ? floatval($acct['balance']) : 0.00;
+                    if ($currentBalance < $balanceAmount) {
+                        $db->rollBack();
+                        json(['error' => '账户余额不足（当前余额：' . $currentBalance . '，需要：' . $balanceAmount . '）']); break;
+                    }
+                    $newBalance = round($currentBalance - $balanceAmount, 2);
+                    $upd = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, 0, 0, 0, 0) ON DUPLICATE KEY UPDATE balance = :bal, total_consume = total_consume + :tc");
+                    $upd->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $upd->bindValue(':bal', $newBalance);
+                    $upd->bindValue(':tc', $balanceAmount);
+                    $upd->execute();
+                    $cashAmount = $balanceAmount;
+                }
+                $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, order_no, created_at, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :ono, :ct, :campus, :ps, :iv)");
+                $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
+                $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
+                $stmt->bindValue(':inm', $itemName, PDO::PARAM_STR);
+                $stmt->bindValue(':lc', $lessonCount, PDO::PARAM_INT);
+                $stmt->bindValue(':ap', $actualPrice, PDO::PARAM_STR);
+                $stmt->bindValue(':ca', $cashAmount, PDO::PARAM_STR);
+                $stmt->bindValue(':ma', $mtAmount, PDO::PARAM_STR);
+                $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
+                $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+                $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
                 $stmt->bindValue(':ps', '待支付', PDO::PARAM_STR);
                 $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
-            $stmt->execute();
-            json(['message' => '报名成功', 'order_id' => $db->lastInsertId(), 'order_no' => $orderNo]);
+                $stmt->execute();
+                $newOrderId = $db->lastInsertId();
+                // 写入账户流水
+                if ($useBalance && $balanceAmount > 0) {
+                    $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note) VALUES (:sid, 'consume', :amt, :ba, 'order', :rid, :campus, :note)");
+                    $stmt2->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $stmt2->bindValue(':amt', $balanceAmount);
+                    $stmt2->bindValue(':ba', $newBalance);
+                    $stmt2->bindValue(':rid', $newOrderId, PDO::PARAM_INT);
+                    $stmt2->bindValue(':campus', $campusName, PDO::PARAM_STR);
+                    $stmt2->bindValue(':note', '报名消费: ' . $planName . ' - ' . $itemName, PDO::PARAM_STR);
+                    $stmt2->execute();
+                }
+                $db->commit();
+                json(['message' => '报名成功', 'order_id' => $newOrderId, 'order_no' => $orderNo]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '报名失败: ' . $e->getMessage()]);
+            }
             break;
         case 'enroll_from_resource':
             $input = json_decode(file_get_contents('php://input'), true) ?? [];
@@ -3356,14 +3431,57 @@ $stmt->execute();
                 $db->exec("UPDATE refund_records SET status='二级审批通过', approval_stage='财务确认', approver2=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
                 json(['message' => '二级审批通过，等待财务确认']);
             } elseif ($currentStage === '财务确认') {
-                // 财务确认通过：更新状态为已退费，同步更新订单
-                $db->exec("UPDATE refund_records SET status='已退费', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                // 退款方式：退到余额或现金
+                $refundTo = trim($input['refund_to'] ?? 'cash');
+                $refundAmount = floatval($rr['actual_refund'] ?? 0);
                 $orderId = intval($rr['order_id']);
-                // 将订单消耗课时设置为总课时（剩余课时归零）
                 $order2 = $db->query("SELECT lesson_count FROM orders WHERE id=$orderId")->fetch(PDO::FETCH_ASSOC);
                 $lc = $order2 ? intval($order2['lesson_count']) : 0;
-                $affected = $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
-                json(['message' => '财务确认通过，退费已完成']);
+                if ($refundTo === 'balance' && $refundAmount > 0) {
+                    // 退到余额：整个流程包裹在事务中，保证原子性
+                    $db->beginTransaction();
+                    try {
+                        $db->exec("UPDATE refund_records SET status='已退费', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                        // 将订单消耗课时设置为总课时（剩余课时归零）
+                        $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
+                        $studentId = intval($rr['student_id']);
+                        // 查询当前余额
+                        $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
+                        $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $acct->execute();
+                        $acct = $acct->fetch(PDO::FETCH_ASSOC);
+                        $oldBalance = $acct ? floatval($acct['balance']) : 0.00;
+                        $newBalance = round($oldBalance + $refundAmount, 2);
+                        // 更新余额
+                        $upd = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, :bal, 0, 0, :tr) ON DUPLICATE KEY UPDATE balance = balance + :bal2, total_refund = total_refund + :tr2");
+                        $upd->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $upd->bindValue(':bal', $refundAmount);
+                        $upd->bindValue(':tr', $refundAmount);
+                        $upd->bindValue(':bal2', $refundAmount);
+                        $upd->bindValue(':tr2', $refundAmount);
+                        $upd->execute();
+                        // 写入流水
+                        $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note) VALUES (:sid, 'refund', :amt, :ba, 'refund', :rid, :campus, :note)");
+                        $stmt2->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $stmt2->bindValue(':amt', $refundAmount);
+                        $stmt2->bindValue(':ba', $newBalance);
+                        $stmt2->bindValue(':rid', $id, PDO::PARAM_INT);
+                        $stmt2->bindValue(':campus', $rr['campus'] ?? '', PDO::PARAM_STR);
+                        $stmt2->bindValue(':note', '退费退回余额: ' . ($rr['course_name'] ?? ''), PDO::PARAM_STR);
+                        $stmt2->execute();
+                        $db->commit();
+                        json(['message' => '财务确认通过，退费已退回余额']);
+                    } catch (Exception $e) {
+                        $db->rollBack();
+                        json(['error' => '退款到余额失败：' . $e->getMessage()]);
+                    }
+                } else {
+                    // 现金退款：原有逻辑保持不变
+                    $db->exec("UPDATE refund_records SET status='已退费', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                    // 将订单消耗课时设置为总课时（剩余课时归零）
+                    $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
+                    json(['message' => '财务确认通过，退费已完成']);
+                }
             } else {
                 json(['error' => '当前审批阶段异常']);
             }
@@ -3396,6 +3514,108 @@ $stmt->execute();
                 WHERE rr.id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$rr) { json(['error' => '退费记录不存在']); break; }
             json(['data' => $rr]);
+            break;
+
+// ==================== 学员账户 API ====================
+        // 查询学员账户及流水
+        case 'get_student_account':
+            $studentId = intval($_GET['student_id'] ?? 0);
+            if ($studentId <= 0) { json(['error' => '学员ID无效']); break; }
+            // 查询账户汇总
+            $acct = $db->prepare("SELECT * FROM student_accounts WHERE student_id = :sid");
+            $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
+            $acct->execute();
+            $acct = $acct->fetch(PDO::FETCH_ASSOC);
+            if (!$acct) {
+                // 账户不存在则返回默认值
+                $acct = ['balance' => 0, 'total_deposit' => 0, 'total_consume' => 0, 'total_refund' => 0];
+            }
+            // 流水筛选+分页
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = min(50, max(1, intval($_GET['page_size'] ?? 20)));
+            $typeFilter = trim($_GET['type_filter'] ?? '');
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $where = ['student_id = :sid'];
+            $params = [':sid' => $studentId];
+            if ($typeFilter) {
+                $where[] = 'type = :tf';
+                $params[':tf'] = $typeFilter;
+            }
+            if ($dateFrom) {
+                $where[] = 'created_at >= :df';
+                $params[':df'] = $dateFrom . ' 00:00:00';
+            }
+            if ($dateTo) {
+                $where[] = 'created_at <= :dt';
+                $params[':dt'] = $dateTo . ' 23:59:59';
+            }
+            $whereStr = 'WHERE ' . implode(' AND ', $where);
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM account_transactions $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v);
+            $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
+            $offset = ($page - 1) * $pageSize;
+            $sql = "SELECT id, type, amount, balance_after, ref_type, ref_id, campus, note, created_at FROM account_transactions $whereStr ORDER BY created_at DESC LIMIT :lim OFFSET :off";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $transactions = [];
+            while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $transactions[] = $row;
+            json([
+                'balance' => floatval($acct['balance']),
+                'total_deposit' => floatval($acct['total_deposit']),
+                'total_consume' => floatval($acct['total_consume']),
+                'total_refund' => floatval($acct['total_refund']),
+                'transactions' => $transactions,
+                'total' => $total,
+                'page' => $page,
+                'page_size' => $pageSize
+            ]);
+            break;
+
+        // 学员账户充值
+        case 'top_up_account':
+            error_log('DEBUG: top_up_account input=' . json_encode($input, JSON_UNESCAPED_UNICODE));
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $studentId = intval($input['student_id'] ?? 0);
+            $amount = floatval($input['amount'] ?? 0);
+            $paymentMethod = trim($input['payment_method'] ?? '现金');
+            $note = trim($input['note'] ?? '');
+            if ($studentId <= 0) { json(['error' => '学员ID无效']); break; }
+            if ($amount <= 0) { json(['error' => '充值金额必须大于0']); break; }
+            // 查询当前余额（先锁行）
+            $db->beginTransaction();
+            try {
+                $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
+                $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $acct->execute();
+                $acct = $acct->fetch(PDO::FETCH_ASSOC);
+                $oldBalance = $acct ? floatval($acct['balance']) : 0.00;
+                $newBalance = round($oldBalance + $amount, 2);
+                // INSERT ... ON DUPLICATE KEY UPDATE
+                $stmt = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, :bal, :td, 0, 0) ON DUPLICATE KEY UPDATE balance = balance + :bal2, total_deposit = total_deposit + :td2");
+                $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $stmt->bindValue(':bal', $amount);
+                $stmt->bindValue(':td', $amount);
+                $stmt->bindValue(':bal2', $amount);
+                $stmt->bindValue(':td2', $amount);
+                $stmt->execute();
+                // 写入流水
+                $refNote = $note ? ('充值: ' . $note) : ($paymentMethod . '充值');
+                $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, note) VALUES (:sid, 'deposit', :amt, :ba, 'top_up', :note)");
+                $stmt2->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $stmt2->bindValue(':amt', $amount);
+                $stmt2->bindValue(':ba', $newBalance);
+                $stmt2->bindValue(':note', $refNote, PDO::PARAM_STR);
+                $stmt2->execute();
+                $db->commit();
+                json(['success' => true, 'balance' => $newBalance, 'message' => '充值成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '充值失败: ' . $e->getMessage()]);
+            }
             break;
 
 // ==================== 班级管理 API ====================
@@ -5956,6 +6176,7 @@ if (intval($countBt) === 0) {
                     <button class="sdt-tab active" data-tab="tab-courses">报读课程</button>
                     <button class="sdt-tab" data-tab="tab-orders">交易订单</button>
                     <button class="sdt-tab" data-tab="tab-attendance">上课记录</button>
+                    <button class="sdt-tab" data-tab="tab-account">账户</button>
                 </div>
                 <div class="student-detail-tab-content">
                     <!-- 报读课程 -->
@@ -5984,6 +6205,52 @@ if (intval($countBt) === 0) {
                                     </tbody>
                                 </table>
                             </div>
+                        </div>
+                    </div>
+                    <!-- 账户 -->
+                    <div class="sdt-panel" id="tab-account">
+                        <div style="padding:8px 16px 16px;">
+                            <!-- 余额卡片 -->
+                            <div id="account-balance-cards" style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                                <div style="flex:1;min-width:220px;background:linear-gradient(135deg, #11998e 0%, #38ef7d 100%);border-radius:10px;padding:20px 24px;color:#fff;box-shadow:0 4px 12px rgba(17,153,142,0.3);">
+                                    <div style="font-size:13px;opacity:0.85;margin-bottom:4px;">账户余额</div>
+                                    <div style="font-size:32px;font-weight:700;line-height:1.2;" id="account-balance">¥0.00</div>
+                                </div>
+                                <div style="flex:1;min-width:220px;background:#f8f9fb;border:1px solid #e8ecf1;border-radius:10px;padding:16px 20px;display:flex;flex-direction:column;gap:8px;">
+                                    <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#666;">累计充值</span><span style="font-weight:600;color:#11998e;" id="account-total-deposit">¥0.00</span></div>
+                                    <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#666;">累计消费</span><span style="font-weight:600;color:#e74c3c;" id="account-total-consume">¥0.00</span></div>
+                                    <div style="display:flex;justify-content:space-between;font-size:13px;"><span style="color:#666;">累计退款</span><span style="font-weight:600;color:#e67e22;" id="account-total-refund">¥0.00</span></div>
+                                    <button class="btn btn-primary btn-sm" onclick="showRechargeModal()" style="margin-top:4px;align-self:flex-start;">+ 充值</button>
+                                </div>
+                            </div>
+                            <!-- 筛选栏 -->
+                            <div style="display:flex;gap:12px;align-items:center;margin-bottom:12px;flex-wrap:wrap;" id="account-filter-bar">
+                                <label style="font-size:13px;">类型：</label>
+                                <select id="account-filter-type" onchange="filterAccountTransactions()" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                                    <option value="">全部</option>
+                                    <option value="deposit">充值</option>
+                                    <option value="consume">消费</option>
+                                    <option value="refund">退款</option>
+                                </select>
+                                <label style="font-size:13px;margin-left:8px;">日期：</label>
+                                <input type="date" id="account-filter-date-from" onchange="filterAccountTransactions()" style="width:140px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                                <span style="color:#999;">至</span>
+                                <input type="date" id="account-filter-date-to" onchange="filterAccountTransactions()" style="width:140px;padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                                <button class="btn btn-sm" onclick="filterAccountTransactions()" style="padding:6px 14px;">查询</button>
+                            </div>
+                            <!-- 流水表格 -->
+                            <div class="table-wrap">
+                                <table>
+                                    <thead><tr>
+                                        <th>日期时间</th><th>类型</th><th>金额</th><th>余额变动后</th><th>关联单号</th><th>校区</th><th>备注</th>
+                                    </tr></thead>
+                                    <tbody id="account-transactions-tbody">
+                                        <tr><td colspan="7" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                            <!-- 分页 -->
+                            <div class="pagination" id="pagination-account"></div>
                         </div>
                     </div>
                 </div>
