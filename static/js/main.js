@@ -5366,6 +5366,20 @@ async function goEnroll(studentId) {
         document.getElementById('enroll-info-phone').textContent = data.student.phone || '-';
     } catch (e) { showToast('加载学员信息失败', 'error'); return; }
 
+    // Load account balance
+    try {
+        const acctRes = await fetch(API_BASE + 'get_student_account&student_id=' + studentId);
+        const acctData = await acctRes.json();
+        const bal = parseFloat(acctData.balance) || 0;
+        document.getElementById('enroll-balance-avail').textContent = '(¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + ')';
+        document.getElementById('enroll-payment-balance').max = bal;
+    } catch (e) { /* ignore */ }
+
+    // Reset payment inputs
+    document.getElementById('enroll-payment-cash').value = '0';
+    document.getElementById('enroll-payment-meituan').value = '0';
+    document.getElementById('enroll-payment-balance').value = '0';
+
     // Reset course picker
     loadEnrollCoursePicker(null);
 
@@ -5533,24 +5547,35 @@ function onPaymentInput() {
     const total = parseFloat(totalText) || 0;
     const cashEl = document.getElementById('enroll-payment-cash');
     const meituanEl = document.getElementById('enroll-payment-meituan');
+    const balanceEl = document.getElementById('enroll-payment-balance');
     const cash = parseFloat(cashEl.value) || 0;
     const meituan = parseFloat(meituanEl.value) || 0;
+    const bal = parseFloat(balanceEl.value) || 0;
     const activeEl = document.activeElement;
 
     if (activeEl === cashEl) {
-        // 用户编辑现金 → 美团自动补足
-        const remaining = Math.max(0, total - cash);
+        // 用户编辑现金 → 美团自动补足（余额不变）
+        const remaining = Math.max(0, total - cash - bal);
         meituanEl.value = remaining.toFixed(2);
-        if (cash > total) {
-            cashEl.value = total.toFixed(2);
+        if (cash + bal > total) {
+            cashEl.value = Math.max(0, total - bal).toFixed(2);
             meituanEl.value = '0.00';
         }
     } else if (activeEl === meituanEl) {
-        // 用户编辑美团 → 现金自动补足
-        const remaining = Math.max(0, total - meituan);
+        // 用户编辑美团 → 现金自动补足（余额不变）
+        const remaining = Math.max(0, total - meituan - bal);
         cashEl.value = remaining.toFixed(2);
-        if (meituan > total) {
-            meituanEl.value = total.toFixed(2);
+        if (meituan + bal > total) {
+            meituanEl.value = Math.max(0, total - bal).toFixed(2);
+            cashEl.value = '0.00';
+        }
+    } else if (activeEl === balanceEl) {
+        // 用户编辑余额 → 现金自动补足
+        const remaining = Math.max(0, total - bal);
+        cashEl.value = remaining.toFixed(2);
+        meituanEl.value = '0.00';
+        if (bal > total) {
+            balanceEl.value = total.toFixed(2);
             cashEl.value = '0.00';
         }
     }
@@ -5561,14 +5586,19 @@ function onPaymentInput() {
 function updatePaymentHint() {
     const cash = parseFloat(document.getElementById('enroll-payment-cash').value) || 0;
     const meituan = parseFloat(document.getElementById('enroll-payment-meituan').value) || 0;
+    const bal = parseFloat(document.getElementById('enroll-payment-balance').value) || 0;
     const totalText = document.getElementById('enroll-total-price').textContent.replace('¥', '');
     const total = parseFloat(totalText) || 0;
     const hint = document.getElementById('enroll-payment-hint');
-    const diff = cash + meituan - total;
+    const diff = cash + meituan + bal - total;
     if (Math.abs(diff) < 0.01) {
         hint.style.display = 'block';
         hint.className = 'enroll-payment-hint ok';
-        hint.textContent = '金额匹配' + (cash > 0 && meituan > 0 ? '（现金 ¥' + cash.toFixed(2) + ' + 美团 ¥' + meituan.toFixed(2) + '）' : '');
+        const parts = [];
+        if (bal > 0) parts.push('余额 ¥' + bal.toFixed(2));
+        if (cash > 0) parts.push('现金 ¥' + cash.toFixed(2));
+        if (meituan > 0) parts.push('美团 ¥' + meituan.toFixed(2));
+        hint.textContent = '金额匹配' + (parts.length ? '（' + parts.join(' + ') + '）' : '');
     } else if (diff > 0) {
         hint.style.display = 'block';
         hint.className = 'enroll-payment-hint warn';
@@ -5584,10 +5614,11 @@ async function confirmPayEnroll() {
     // 支付金额校验
     const paymentCash = parseFloat(document.getElementById('enroll-payment-cash').value) || 0;
     const paymentMeituan = parseFloat(document.getElementById('enroll-payment-meituan').value) || 0;
+    const paymentBalance = parseFloat(document.getElementById('enroll-payment-balance').value) || 0;
     const totalText = document.getElementById('enroll-total-price').textContent.replace('¥', '');
     const totalPrice = parseFloat(totalText) || 0;
-    if (Math.abs(paymentCash + paymentMeituan - totalPrice) > 0.01) {
-        return showToast('支付金额合计（¥' + (paymentCash + paymentMeituan).toFixed(2) + '）与订单总额（¥' + totalPrice.toFixed(2) + '）不一致，请调整', 'error');
+    if (Math.abs(paymentCash + paymentMeituan + paymentBalance - totalPrice) > 0.01) {
+        return showToast('支付金额合计（¥' + (paymentCash + paymentMeituan + paymentBalance).toFixed(2) + '）与订单总额（¥' + totalPrice.toFixed(2) + '）不一致，请调整', 'error');
     }
 
     if (currentEnrollMode === 'resource') {
@@ -5611,7 +5642,9 @@ async function confirmPayEnroll() {
                 plan_type: currentEnrollPlanType,
                 payment_cash: paymentCash,
                 payment_meituan: paymentMeituan,
-                campus_id: currentEnrollCampusId || 0
+                campus_id: currentEnrollCampusId || 0,
+                use_balance: paymentBalance > 0 ? 1 : 0,
+                balance_amount: paymentBalance
             }, 'POST');
             if (result.error) { showToast(result.error, 'error'); return; }
             showToast(result.message);
@@ -5635,7 +5668,9 @@ async function confirmPayEnroll() {
             plan_type: currentEnrollPlanType,
             payment_cash: paymentCash,
             payment_meituan: paymentMeituan,
-            campus_id: currentEnrollCampusId || 0
+            campus_id: currentEnrollCampusId || 0,
+            use_balance: paymentBalance > 0 ? 1 : 0,
+            balance_amount: paymentBalance
         }, 'POST');
         if (result.error) { showToast(result.error, 'error'); return; }
         showToast(result.message);

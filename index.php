@@ -2216,6 +2216,8 @@ $stmt->execute();
             if (empty($items)) json(['error' => '该方案下无报价单']);
             $paymentCash = floatval($input['payment_cash'] ?? 0);
             $paymentMeituan = floatval($input['payment_meituan'] ?? 0);
+            $useBalance = intval($input['use_balance'] ?? 0);
+            $balanceAmount = floatval($input['balance_amount'] ?? 0);
             $campusId = intval($input['campus_id'] ?? 0);
             $campusName = '';
             if ($campusId > 0) {
@@ -2224,8 +2226,35 @@ $stmt->execute();
             }
             $itemPrices = array_map(function($it) { return floatval($it['actual_price']); }, $items);
             $totalPrice = array_sum($itemPrices);
-            if (abs($paymentCash + $paymentMeituan - $totalPrice) > 0.01) {
-                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan) . '）与订单总额（' . $totalPrice . '）不一致，请调整']);
+            if (abs($paymentCash + $paymentMeituan + $balanceAmount - $totalPrice) > 0.01) {
+                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan + $balanceAmount) . '）与订单总额（' . $totalPrice . '）不一致，请调整']);
+            }
+            // 余额支付：扣减账户余额
+            $newBalAfter = null;
+            if ($useBalance && $balanceAmount > 0) {
+                $db->beginTransaction();
+                try {
+                    $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
+                    $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $acct->execute();
+                    $acct = $acct->fetch(PDO::FETCH_ASSOC);
+                    $currentBalance = $acct ? floatval($acct['balance']) : 0.00;
+                    if ($currentBalance < $balanceAmount) {
+                        $db->rollBack();
+                        json(['error' => '账户余额不足（当前 ¥' . number_format($currentBalance, 2) . '，需要 ¥' . number_format($balanceAmount, 2) . '）']);
+                    }
+                    $newBalance = round($currentBalance - $balanceAmount, 2);
+                    $newBalAfter = $newBalance;
+                    $upd = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, 0, 0, 0, 0) ON DUPLICATE KEY UPDATE balance = :bal, total_consume = total_consume + :tc");
+                    $upd->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $upd->bindValue(':bal', $newBalance);
+                    $upd->bindValue(':tc', $balanceAmount);
+                    $upd->execute();
+                    $db->commit();
+                } catch (Exception $e) {
+                    $db->rollBack();
+                    json(['error' => '余额扣款失败: ' . $e->getMessage()]);
+                }
             }
             $n = date('Y-m-d H:i:s');
             $orderIds = [];
@@ -2284,6 +2313,17 @@ $stmt->execute();
             $stmtParent->bindValue(':ct', $n, PDO::PARAM_STR);
             $stmtParent->bindValue(':campus', $campusName, PDO::PARAM_STR);
             $stmtParent->execute();
+            // 余额支付：写入账户流水
+            if ($useBalance && $balanceAmount > 0 && !empty($orderIds)) {
+                $txStmt = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note) VALUES (:sid, 'consume', :amt, :ba, 'order', :rid, :campus, :note)");
+                $txStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $txStmt->bindValue(':amt', $balanceAmount);
+                $txStmt->bindValue(':ba', $newBalAfter, PDO::PARAM_STR);
+                $txStmt->bindValue(':rid', $orderIds[0], PDO::PARAM_INT);
+                $txStmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
+                $txStmt->bindValue(':note', '余额支付', PDO::PARAM_STR);
+                $txStmt->execute();
+            }
             // 标记来源资源为已转化（不可逆）
             $db->exec("UPDATE resources SET converted = '已转化' WHERE id = (SELECT resource_id FROM students WHERE id = $studentId) AND converted = '未转化'");
             $msg = '支付成功，共生成 ' . count($orderIds) . ' 笔订单';
@@ -6389,6 +6429,15 @@ if (intval($countBt) === 0) {
                                         <span class="enroll-payment-label">美团</span>
                                     </div>
                                     <input type="number" id="enroll-payment-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                </div>
+                                <div class="enroll-payment-card enroll-payment-card-balance">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon enroll-payment-icon-balance">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">账户余额 <span id="enroll-balance-avail" style="font-weight:400;font-size:12px;color:#16a34a;">(¥0.00)</span></span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
                             </div>
                             <div id="enroll-payment-hint" class="enroll-payment-hint" style="display:none;"></div>

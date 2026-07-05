@@ -2065,14 +2065,28 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     opacity: 1;
 }
 /* 美团卡片 — 黄色主题 */
-.enroll-payment-card:last-child:hover,
-.enroll-payment-card:last-child:focus-within {
+.enroll-payment-card:nth-child(2):hover,
+.enroll-payment-card:nth-child(2):focus-within {
     border-color: #FF6D00;
     box-shadow: 0 4px 16px rgba(255, 109, 0, 0.12);
     background: #fffaf5;
 }
-.enroll-payment-card:last-child::before {
+.enroll-payment-card:nth-child(2)::before {
     background: linear-gradient(135deg, rgba(255, 109, 0, 0.04) 0%, transparent 100%);
+}
+.enroll-payment-card:nth-child(2):hover::before,
+.enroll-payment-card:nth-child(2):focus-within::before {
+    opacity: 1;
+}
+/* 账户余额卡片 — 蓝色主题 */
+.enroll-payment-card:last-child:hover,
+.enroll-payment-card:last-child:focus-within {
+    border-color: #3B82F6;
+    box-shadow: 0 4px 16px rgba(59, 130, 246, 0.12);
+    background: #f5f9ff;
+}
+.enroll-payment-card:last-child::before {
+    background: linear-gradient(135deg, rgba(59, 130, 246, 0.04) 0%, transparent 100%);
 }
 .enroll-payment-card:last-child:hover::before,
 .enroll-payment-card:last-child:focus-within::before {
