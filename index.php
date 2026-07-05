@@ -15,7 +15,7 @@ ini_set('error_log', __DIR__ . '/php_errors.log');
 header('Content-Type: text/html; charset=utf-8');
 
 try {
-    $db = new PDO('mysql:host=127.0.0.1;port=3306;dbname=tms_db;charset=utf8mb4', 'root', 'root', [
+    $db = new PDO('mysql:host=127.0.0.1;port=3306;dbname=tms_db;charset=utf8mb4', 'root', '', [
         PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
         PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
         PDO::ATTR_EMULATE_PREPARES => false,
@@ -72,6 +72,18 @@ foreach ([
     }
 }
 // 预约试听: class_attendance needs student_name
+$db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    class_id INT NOT NULL DEFAULT 0,
+    schedule_id INT NOT NULL DEFAULT 0,
+    session_date VARCHAR(500) DEFAULT '',
+    student_id INT NOT NULL DEFAULT 0,
+    student_name VARCHAR(500) DEFAULT '',
+    status VARCHAR(500) DEFAULT '出勤',
+    is_temporary INT DEFAULT 0,
+    deducted_lessons INT DEFAULT 0,
+    created_at VARCHAR(500) DEFAULT ''
+)");
 $caCols = [];
 $caRes = $db->query("SHOW COLUMNS FROM class_attendance");
 while ($c = $caRes->fetch(PDO::FETCH_ASSOC)) $caCols[] = $c['Field'];
@@ -290,10 +302,32 @@ $colCheck = $db->query("SHOW COLUMNS FROM attendance_records LIKE 'order_id'")->
 if (!$colCheck) {
     $db->exec("ALTER TABLE attendance_records ADD COLUMN order_id INT DEFAULT 0");
 }
-// 回填旧记录的 order_id（按 student_id + course_id + campus 匹配订单）
-$db->exec("UPDATE attendance_records a JOIN orders o ON o.student_id = a.student_id AND o.course_id = a.course_id AND o.campus = a.campus SET a.order_id = o.id WHERE a.order_id = 0");
-// 按 attendance_records 重算订单 consumed_lessons（修正跨校区虚高），跳过退费中/已退费订单
-$db->exec("UPDATE orders o SET o.consumed_lessons = COALESCE((SELECT SUM(a.deducted_lessons) FROM attendance_records a WHERE a.order_id = o.id AND a.status = '出勤'), 0) WHERE o.refund_status != '已退费' AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))");
+// 补充新装缺失的列
+foreach ([
+    "campus VARCHAR(500) DEFAULT ''",
+    "class_id INT DEFAULT 0",
+    "schedule_id INT DEFAULT 0",
+    "class_name VARCHAR(500) DEFAULT ''",
+    "teacher VARCHAR(500) DEFAULT ''",
+    "subject_level1 VARCHAR(500) DEFAULT ''",
+    "subject_level2 VARCHAR(500) DEFAULT ''",
+    "class_time VARCHAR(500) DEFAULT ''",
+    "attended_at VARCHAR(500) DEFAULT ''",
+    "deducted_lessons INT DEFAULT 0",
+    "consumed_amount DECIMAL(10,2) DEFAULT 0"
+] as $colDef) {
+    $colName = explode(' ', $colDef)[0];
+    $check = $db->query("SHOW COLUMNS FROM attendance_records LIKE '$colName'")->fetch();
+    if (!$check) $db->exec("ALTER TABLE attendance_records ADD COLUMN $colDef");
+}
+// 回填旧记录的 order_id（按 student_id + course_id 匹配订单）—— 兼容新装/列不存在
+try {
+    $db->exec("UPDATE attendance_records a JOIN orders o ON o.student_id = a.student_id AND o.course_id = a.course_id SET a.order_id = o.id WHERE a.order_id = 0");
+    // 按 attendance_records 重算订单 consumed_lessons
+    $db->exec("UPDATE orders o SET o.consumed_lessons = COALESCE((SELECT SUM(a.deducted_lessons) FROM attendance_records a WHERE a.order_id = o.id AND a.status = '出勤'), 0) WHERE o.refund_status != '已退费' AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))");
+} catch (PDOException $e) {
+    // 新装数据库，列尚未完全迁移，静默跳过
+}
 
 $db->exec("CREATE TABLE IF NOT EXISTS absence_records (
     id INT PRIMARY KEY AUTO_INCREMENT,
