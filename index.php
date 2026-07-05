@@ -6354,6 +6354,7 @@ if (intval($countBt) === 0) {
                     <div class="enroll-student-details">
                         <div class="enroll-student-name" id="enroll-info-name">-</div>
                         <div class="enroll-student-phone" id="enroll-info-phone">-</div>
+                        <div class="enroll-student-balance" id="enroll-info-balance" style="font-size:13px;color:#16a34a;margin-top:2px;">账户余额：-</div>
                     </div>
                 </div>
 

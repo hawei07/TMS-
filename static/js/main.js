@@ -5373,6 +5373,7 @@ async function goEnroll(studentId) {
         const bal = parseFloat(acctData.balance) || 0;
         document.getElementById('enroll-balance-avail').textContent = '(¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + ')';
         document.getElementById('enroll-payment-balance').max = bal;
+        document.getElementById('enroll-info-balance').textContent = '账户余额：¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2});
     } catch (e) { /* ignore */ }
 
     // Reset payment inputs
