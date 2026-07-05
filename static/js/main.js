@@ -9267,7 +9267,7 @@ function renderAccountTransactions(transactions, page) {
                 '<td>' + (r.type === 'deposit' ? esc(r.payment_method || '-') : '-') + '</td>' +
                 '<td>' + formatAccountAmount(r.type, r.amount) + '</td>' +
                 '<td>¥' + Number(r.balance_after || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2}) + '</td>' +
-                '<td>' + (r.ref_type ? esc(r.ref_type) + (r.ref_id ? '#' + r.ref_id : '') : '-') + '</td>' +
+                '<td>' + (esc(r.ref_no) || '-') + '</td>' +
                 '<td>' + esc(r.campus || '-') + '</td>' +
                 '<td>' + esc(r.note || '-') + '</td>' +
                 '</tr>';

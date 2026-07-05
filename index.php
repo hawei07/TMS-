@@ -3550,26 +3550,26 @@ $stmt->execute();
             $typeFilter = trim($_GET['type_filter'] ?? '');
             $dateFrom = trim($_GET['date_from'] ?? '');
             $dateTo = trim($_GET['date_to'] ?? '');
-            $where = ['student_id = :sid'];
+            $where = ['at.student_id = :sid'];
             $params = [':sid' => $studentId];
             if ($typeFilter) {
-                $where[] = 'type = :tf';
+                $where[] = 'at.type = :tf';
                 $params[':tf'] = $typeFilter;
             }
             if ($dateFrom) {
-                $where[] = 'created_at >= :df';
+                $where[] = 'at.created_at >= :df';
                 $params[':df'] = $dateFrom . ' 00:00:00';
             }
             if ($dateTo) {
-                $where[] = 'created_at <= :dt';
+                $where[] = 'at.created_at <= :dt';
                 $params[':dt'] = $dateTo . ' 23:59:59';
             }
             $whereStr = 'WHERE ' . implode(' AND ', $where);
-            $countStmt = $db->prepare("SELECT COUNT(*) FROM account_transactions $whereStr");
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM account_transactions at $whereStr");
             foreach ($params as $k => $v) $countStmt->bindValue($k, $v);
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
-            $sql = "SELECT id, type, amount, balance_after, ref_type, ref_id, campus, note, payment_method, created_at FROM account_transactions $whereStr ORDER BY created_at DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT at.id, at.type, at.amount, at.balance_after, at.ref_type, at.ref_id, at.campus, at.note, at.payment_method, at.created_at, o.order_no AS ref_no FROM account_transactions at LEFT JOIN orders o ON at.ref_id = o.id $whereStr ORDER BY at.created_at DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
