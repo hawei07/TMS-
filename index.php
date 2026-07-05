@@ -281,6 +281,9 @@ if (!in_array('subject_level1', $existingCols)) {
 if (!in_array('subject_level2', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN subject_level2 VARCHAR(500) DEFAULT ''");
 }
+if (!in_array('account_amount', $existingCols)) {
+    $db->exec("ALTER TABLE orders ADD COLUMN account_amount REAL DEFAULT 0");
+}
 
 // 兼容已有数据库：学生表添加学号字段
 $existingColsS = [];
@@ -2260,16 +2263,19 @@ $stmt->execute();
             $orderIds = [];
             $childOrderNos = [];
             $totalLessons = 0;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
+            $remainingAccount = $balanceAmount;
             foreach ($items as $i => $item) {
                 $itemPrice = floatval($item['actual_price']);
-                // 先用现金填，不够再用美团
-                $cashForThis = min($remainingCash, $itemPrice);
+                // 先用余额，再用现金，最后美团
+                $acctForThis = min($remainingAccount, $itemPrice);
+                $remainingAccount -= $acctForThis;
+                $cashForThis = min($remainingCash, $itemPrice - $acctForThis);
                 $remainingCash -= $cashForThis;
-                $mtForThis = min($remainingMeituan, $itemPrice - $cashForThis);
+                $mtForThis = min($remainingMeituan, $itemPrice - $acctForThis - $cashForThis);
                 $remainingMeituan -= $mtForThis;
                 $orderNo = generateOrderNo($db);
                 $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
@@ -2280,7 +2286,8 @@ $stmt->execute();
                 $stmt->bindValue(':ap', $itemPrice, PDO::PARAM_STR);
                 $stmt->bindValue(':ca', $cashForThis, PDO::PARAM_STR);
                 $stmt->bindValue(':ma', $mtForThis, PDO::PARAM_STR);
-                $stmt->bindValue(':pa', $cashForThis + $mtForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':aa', $acctForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':pa', $acctForThis + $cashForThis + $mtForThis, PDO::PARAM_STR);
                 $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
                 $stmt->bindValue(':pono', $parentOrderNo, PDO::PARAM_STR);
                 $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
@@ -3276,7 +3283,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.account_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -3285,11 +3292,11 @@ $stmt->execute();
 $stmt->execute();
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             // 支付方式汇总
-            $summarySql = "SELECT SUM(COALESCE(o.cash_amount,0)) AS cash_total, SUM(COALESCE(o.meituan_amount,0)) AS meituan_total FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
+            $summarySql = "SELECT SUM(COALESCE(o.cash_amount,0)) AS cash_total, SUM(COALESCE(o.meituan_amount,0)) AS meituan_total, SUM(COALESCE(o.account_amount,0)) AS account_total FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
             $sumStmt = $db->prepare($summarySql);
             foreach ($params as $k => $v) $sumStmt->bindValue($k, $v, PDO::PARAM_STR);
 $sumStmt->execute();
-            $paymentSummary = $sumStmt->fetch(PDO::FETCH_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0];
+            $paymentSummary = $sumStmt->fetch(PDO::FETCH_ASSOC) ?: ['cash_total' => 0, 'meituan_total' => 0, 'account_total' => 0];
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize, 'payment_summary' => $paymentSummary]);
             break;
 
@@ -3668,7 +3675,7 @@ $stmt->execute();
                 $n = now();
                 $cashAmount = ($paymentMethod === '现金') ? $amount : 0;
                 $mtAmount = ($paymentMethod === '美团') ? $amount : 0;
-                $stmtOrder = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, subject_level1, subject_level2) VALUES (:sid, 0, '', '', 0, :ap, :ca, :ma, :pa, :ono, '', :ct, :ct2, '账户充值', :campus, '已支付', '否', :sl1, '')");
+                $stmtOrder = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, subject_level1, subject_level2) VALUES (:sid, 0, '', '', 0, :ap, :ca, :ma, 0, :pa, :ono, '', :ct, :ct2, '账户充值', :campus, '已支付', '否', :sl1, '')");
                 $stmtOrder->bindValue(':sid', $studentId, PDO::PARAM_INT);
                 $stmtOrder->bindValue(':ap', $amount);
                 $stmtOrder->bindValue(':ca', $cashAmount);
@@ -6501,7 +6508,7 @@ if (intval($countBt) === 0) {
                     <div class="table-scroll-body">
                         <table id="table-orders">
                             <thead><tr>
-                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
+                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
                             </tr></thead>
                             <tbody></tbody>
                             <tfoot id="table-orders-foot" style="display:none;"></tfoot>

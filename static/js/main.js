@@ -4977,11 +4977,12 @@ async function loadStudentOrders(sid) {
         }
         container.innerHTML = `<span style="font-size:14px;color:#888;">共 ${rows.length} 笔订单</span>
         <div class="table-wrap" style="margin-top:8px;"><table><thead><tr>
-            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
+            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
         </tr></thead><tbody>
         ${rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
             const mt = Number(r.meituan_amount) || 0;
+            const acct = Number(r.account_amount) || 0;
             let orderTypeHtml = '';
             const ot = (r.order_type || '').trim();
             if (ot === '新报') orderTypeHtml = '<span class="tag tag-new-enroll">新报</span>';
@@ -5003,7 +5004,8 @@ async function loadStudentOrders(sid) {
             <td>${r.lesson_count || ''}</td>
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
-            <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
+                        <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
+                        <td>${acct > 0 ? '¥' + acct.toFixed(2) : '-'}</td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td>${orderTypeHtml}</td>
@@ -6293,16 +6295,18 @@ function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="21" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="22" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
-    let totalCash = 0, totalMeituan = 0;
-    tbody.innerHTML = rows.map(r => {
-        const cash = Number(r.cash_amount) || 0;
-        const mt = Number(r.meituan_amount) || 0;
-        totalCash += cash;
-        totalMeituan += mt;
+    let totalCash = 0, totalMeituan = 0, totalAccount = 0;
+        tbody.innerHTML = rows.map(r => {
+            const cash = Number(r.cash_amount) || 0;
+            const mt = Number(r.meituan_amount) || 0;
+            const acct = Number(r.account_amount) || 0;
+            totalCash += cash;
+            totalMeituan += mt;
+            totalAccount += acct;
         let orderTypeHtml = '';
         const ot = (r.order_type || '').trim();
         if (ot === '新报') orderTypeHtml = '<span class="tag tag-new-enroll">新报</span>';
@@ -6325,7 +6329,8 @@ function renderOrderTable(rows) {
             <td>${r.lesson_count || ''}</td>
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
-            <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
+                        <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
+                        <td>${acct > 0 ? '¥' + acct.toFixed(2) : '-'}</td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td>${orderTypeHtml}</td>
@@ -6335,11 +6340,12 @@ function renderOrderTable(rows) {
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
-        <td colspan="14" style="text-align:right;font-weight:bold;">合计</td>
-        <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
-        <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
-        <td colspan="5"></td>
-    </tr>`;
+            <td colspan="14" style="text-align:right;font-weight:bold;">合计</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalAccount.toFixed(2)}</td>
+            <td colspan="5"></td>
+        </tr>`;
     tfoot.style.display = '';
     syncOrderTableScrollWidth();
 }
@@ -6372,7 +6378,8 @@ function renderPaymentSummary(summary) {
     }
     const cash = Number(summary.cash_total) || 0;
     const mt = Number(summary.meituan_total) || 0;
-    const total = cash + mt;
+    const acct = Number(summary.account_total) || 0;
+    const total = cash + mt + acct;
     el.innerHTML = `<div class="payment-summary-inner">
         <span class="payment-summary-title">支付方式汇总</span>
         <div class="payment-summary-card">
@@ -6382,6 +6389,10 @@ function renderPaymentSummary(summary) {
         <div class="payment-summary-card">
             <span class="payment-summary-label">美团</span>
             <span class="payment-summary-amount">¥${mt.toFixed(2)}</span>
+        </div>
+        <div class="payment-summary-card">
+            <span class="payment-summary-label">账户</span>
+            <span class="payment-summary-amount">¥${acct.toFixed(2)}</span>
         </div>
         <div class="payment-summary-card payment-summary-total">
             <span class="payment-summary-label">总计</span>
