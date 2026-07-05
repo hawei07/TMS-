@@ -5,20 +5,22 @@
 
 ## 开发流程约定（强制执行）
 
-> 核心规则：所有开发任务必须通过 Agency Agents 六专家流程执行。主会话仅负责流程调度，不直接写代码。
+> 核心规则：所有开发任务必须通过 Agency Agents 六专家流程执行。使用 `delegate_task` 派发子 Agent 独立干活，主会话只负责调度和验收，不直接写代码。
 
 ### 强制工作流
 
 ```
 用户提出需求
   ↓
-1. UI Designer        → agency_agents_load agent=ui-designer       → 设计页面与交互
-2. Backend Architect  → agency_agents_load agent=backend-architect → 写后端代码（路由/模型/API）
-3. Frontend Developer → agency_agents_load agent=frontend-developer → 实现前端
-4. API Tester         → agency_agents_load agent=api-tester        → 测试所有端点
-5. Code Reviewer      → agency_agents_load agent=code-reviewer     → 审查代码
-6. Git Workflow Master → agency_agents_load agent=git-workflow-master → 分支策略+提交
+1. UI Designer        → delegate_task(goal, context, toolsets)      → 设计页面与交互
+2. Backend Architect  → delegate_task(goal, context, toolsets)      → 写后端代码
+3. Frontend Developer → delegate_task(goal, context, toolsets)      → 实现前端
+4. API Tester         → delegate_task(goal, context, toolsets)      → 测试所有端点
+5. Code Reviewer      → delegate_task(goal, context, toolsets)      → 审查代码
+6. Git Workflow Master → delegate_task(goal, context, toolsets)     → 分支策略+提交
 ```
+
+每个子 Agent 独立运行在自己的上下文中，完成后返回结果。主会话收到结果后汇报给用户。
 
 | 阶段 | 专家 | Slug | 用途 |
 |------|------|------|------|
@@ -31,16 +33,17 @@
 
 ### 主会话职责边界
 
-- ✅ 加载专家（`agency_agents_load`）
-- ✅ 流程调度（决定先加载哪个专家）
-- ✅ 结果汇报
+- ✅ 派发子 Agent（`delegate_task`）
+- ✅ 流程调度（决定先派哪个专家）
+- ✅ 结果验收和汇报
 - ❌ 直接写 HTML/CSS/JS/PHP
 - ❌ 直接用 `patch()` 改代码
 - ❌ 用 `execute_code` 跑临时脚本代替专家执行
+- ❌ 用 `agency_agents_load` 化身专家（那是主会话自己在干活）
 
 ### 新功能开发：先给方案再看
 
-在动手写任何代码前，先用文字描述：API 设计、数据流、前端布局、交互规格。用户确认后再实现。
+在动手写任何代码前，先用文字描述：API 设计、数据流、前端布局、交互规格。用户确认后再派专家实现。
 
 ### Git 提交规范
 
