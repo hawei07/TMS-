@@ -4987,6 +4987,10 @@ if (intval($countBt) === 0) {
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
+    <div class="mobile-topbar">
+        <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
+        <span class="mobile-title">TMS管理系统</span>
+    </div>
     <div class="app-layout">
         <!-- 左侧树状导航 -->
         <aside class="sidebar" id="sidebar">
@@ -7569,5 +7573,6 @@ if (intval($countBt) === 0) {
     </div>
 
     <script src="static/js/main.js?v=20260702a"></script>
+    <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 </body>
 </html>

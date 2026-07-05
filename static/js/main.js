@@ -9198,3 +9198,11 @@ function refreshDatePickers(containerSelector) {
         flatpickr(el, { locale: 'zh', dateFormat: 'Y-m-d', allowInput: false, disableMobile: true });
     });
 }
+
+// ── 移动端侧边栏切换 ──
+function toggleSidebar() {
+    var sidebar = document.querySelector('.sidebar');
+    var overlay = document.querySelector('.sidebar-overlay');
+    sidebar.classList.toggle('mobile-open');
+    if (overlay) overlay.classList.toggle('active');
+}
