@@ -5376,7 +5376,10 @@ async function goEnroll(studentId) {
         document.getElementById('enroll-balance-avail').textContent = '(¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + ')';
         document.getElementById('enroll-payment-balance').max = bal;
         document.getElementById('enroll-info-balance').textContent = '账户余额：¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2});
-    } catch (e) { /* ignore */ }
+    } catch (e) {
+        console.error('加载账户余额失败:', e);
+        document.getElementById('enroll-info-balance').textContent = '账户余额：加载失败';
+    }
 
     // Reset payment inputs
     document.getElementById('enroll-payment-cash').value = '0';
