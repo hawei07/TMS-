@@ -4211,7 +4211,7 @@ async function showScheduleForm(classId, scheduleId) {
         if (campusFilter) { url += '&campus=' + encodeURIComponent(campusFilter); }
         const pr = await fetch(url);
         const pd = await pr.json();
-        window._classPeriods = pd.data || [];
+        window._classPeriods = (pd.data || []).sort((a, b) => a.start_time.localeCompare(b.start_time));
     } catch(e) { window._classPeriods = []; }
 
     // Initialize flatpickr BEFORE loading editing data
