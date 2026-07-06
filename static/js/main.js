@@ -8670,11 +8670,13 @@ function renderWeekView(d) {
     const days = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
 
     const colors = [
-        { bg: '#e8f4fd', border: '#1890ff', text: '#096dd9' },
-        { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
-        { bg: '#fff7e6', border: '#fa8c16', text: '#d46b08' },
-        { bg: '#f9f0ff', border: '#722ed1', text: '#531dab' },
-        { bg: '#fff0f6', border: '#eb2f96', text: '#c41d7f' },
+        { bg: '#FFF0E6', border: '#FF8C52', text: '#D4652A' },  // 暖橙
+        { bg: '#F0E6FF', border: '#8B5CF6', text: '#6D3ED4' },  // 薰衣草紫
+        { bg: '#E6FFFA', border: '#14B8A6', text: '#0D9488' },  // 薄荷绿
+        { bg: '#FFF5E6', border: '#F59E0B', text: '#D97706' },  // 暖金
+        { bg: '#FFE6F0', border: '#EC4899', text: '#DB2777' },  // 粉红
+        { bg: '#E6F0FF', border: '#3B82F6', text: '#2563EB' },  // 天空蓝
+        { bg: '#F5FFE6', border: '#84CC16', text: '#65A30D' },  // 嫩绿
     ];
     const courseColorMap = {};
     let colorIdx = 0;
@@ -8749,11 +8751,13 @@ function renderMonthView(d) {
     const conflictKeys = new Set(d.conflicts || []);
 
     const colors = [
-        { bg: '#e8f4fd', border: '#1890ff', text: '#096dd9' },
-        { bg: '#f6ffed', border: '#52c41a', text: '#389e0d' },
-        { bg: '#fff7e6', border: '#fa8c16', text: '#d46b08' },
-        { bg: '#f9f0ff', border: '#722ed1', text: '#531dab' },
-        { bg: '#fff0f6', border: '#eb2f96', text: '#c41d7f' },
+        { bg: '#FFF0E6', border: '#FF8C52', text: '#D4652A' },
+        { bg: '#F0E6FF', border: '#8B5CF6', text: '#6D3ED4' },
+        { bg: '#E6FFFA', border: '#14B8A6', text: '#0D9488' },
+        { bg: '#FFF5E6', border: '#F59E0B', text: '#D97706' },
+        { bg: '#FFE6F0', border: '#EC4899', text: '#DB2777' },
+        { bg: '#E6F0FF', border: '#3B82F6', text: '#2563EB' },
+        { bg: '#F5FFE6', border: '#84CC16', text: '#65A30D' },
     ];
 
     let html = '';
