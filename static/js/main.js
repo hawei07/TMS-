@@ -99,6 +99,7 @@ function refreshPanel(panelId) {
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
         case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
+        case 'panel-period-settings': loadPeriodTable(); break;
     }
 }
 
@@ -263,6 +264,76 @@ async function deleteChannel(cid) {
         const result = await api('delete_channel', { id: cid });
         showToast(result.message);
         loadChannelTable();
+    });
+}
+
+// ==================== 上课时段管理 ====================
+async function loadPeriodTable() {
+    try {
+        const res = await fetch(API_BASE + 'list_class_periods');
+        const data = await res.json();
+        const periods = data.data || [];
+        const tbody = document.querySelector('#table-periods tbody');
+        if (periods.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无时段，请添加</td></tr>';
+            return;
+        }
+        tbody.innerHTML = periods.map(p => `
+            <tr>
+                <td>${p.sort_order || 0}</td>
+                <td>${esc(p.name)}</td>
+                <td>${p.start_time || ''}</td>
+                <td>${p.end_time || ''}</td>
+                <td>${p.created_at ? p.created_at.slice(0, 16) : ''}</td>
+                <td><button class="btn-link-danger" onclick="deletePeriod(${p.id})">删除</button></td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('loadPeriodTable', e);
+        showToast('加载时段列表失败', 'error');
+    }
+}
+
+async function addPeriod() {
+    const nameEl = document.getElementById('period-name-input');
+    const startEl = document.getElementById('period-start-input');
+    const endEl = document.getElementById('period-end-input');
+    const sortEl = document.getElementById('period-sort-input');
+    const name = nameEl.value.trim();
+    const start_time = startEl.value;
+    const end_time = endEl.value;
+    const sort_order = parseInt(sortEl.value) || 0;
+
+    if (!name) return showToast('请输入时段名称', 'error');
+    if (!start_time) return showToast('请选择开始时间', 'error');
+    if (!end_time) return showToast('请选择结束时间', 'error');
+    if (start_time >= end_time) return showToast('开始时间必须早于结束时间', 'error');
+
+    try {
+        const result = await api('add_class_period', { name, start_time, end_time, sort_order });
+        if (result.error) { showToast(result.error, 'error'); return; }
+        showToast(result.message || '添加成功');
+        nameEl.value = '';
+        startEl.value = '';
+        endEl.value = '';
+        sortEl.value = '';
+        loadPeriodTable();
+    } catch (e) {
+        console.error('addPeriod', e);
+        showToast('添加失败', 'error');
+    }
+}
+
+async function deletePeriod(pid) {
+    showCustomConfirm('确定删除该上课时段？', async () => {
+        try {
+            const result = await api('delete_class_period', { id: pid });
+            showToast(result.message);
+            loadPeriodTable();
+        } catch (e) {
+            console.error('deletePeriod', e);
+            showToast('删除失败', 'error');
+        }
     });
 }
 
@@ -3986,27 +4057,32 @@ function getSelectedWeekdayNames() {
 function updateScheduleTimeSlots() {
     const container = document.getElementById('schedule-time-slots');
     const selectedDays = getSelectedWeekdayNames();
+    const periods = window._classPeriods || [];
     if (selectedDays.length === 0) {
         container.innerHTML = '<div class="schedule-time-hint">请先选择上课周期</div>';
         return;
     }
-    const existingInputs = {};
+    if (periods.length === 0) {
+        container.innerHTML = '<div class="schedule-time-hint">暂无预设时段，请先在基础设置中配置</div>';
+        return;
+    }
+    const existingSelections = {};
     container.querySelectorAll('.schedule-time-row').forEach(row => {
         const dayKey = row.dataset.day;
-        const startEl = row.querySelector('.schedule-time-start');
-        const endEl = row.querySelector('.schedule-time-end');
-        if (startEl && endEl) {
-            existingInputs[dayKey] = { start: startEl.value, end: endEl.value };
-        }
+        const sel = row.querySelector('.schedule-period-select');
+        if (sel) existingSelections[dayKey] = sel.value;
     });
     container.innerHTML = selectedDays.map((name, i) => {
         const dayNum = getSelectedWeekdays()[i];
-        const prev = existingInputs[String(dayNum)] || { start: '', end: '' };
+        const prevVal = existingSelections[String(dayNum)] || '';
+        let opts = '<option value="">-- 选择时段 --</option>';
+        periods.forEach(p => {
+            const selected = String(p.id) === prevVal ? ' selected' : '';
+            opts += `<option value="${p.id}" data-start="${p.start_time}" data-end="${p.end_time}"${selected}>${esc(p.name)} ${p.start_time}-${p.end_time}</option>`;
+        });
         return '<div class="schedule-time-row" data-day="' + dayNum + '" style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">' +
             '<span style="min-width:40px;font-size:13px;color:#333;">' + name + '</span>' +
-            '<input type="time" class="schedule-time-start" value="' + prev.start + '" style="flex:1;">' +
-            '<span style="color:#666;">至</span>' +
-            '<input type="time" class="schedule-time-end" value="' + prev.end + '" style="flex:1;">' +
+            '<select class="schedule-period-select" style="flex:1;padding:9px 12px;border:1px solid #E2E0E7;border-radius:8px;font-size:13px;outline:none;font-family:inherit;">' + opts + '</select>' +
         '</div>';
     }).join('');
 }
@@ -4015,10 +4091,14 @@ function getScheduleTimeSlots() {
     const slots = {};
     document.querySelectorAll('.schedule-time-row').forEach(row => {
         const day = row.dataset.day;
-        const start = row.querySelector('.schedule-time-start').value;
-        const end = row.querySelector('.schedule-time-end').value;
-        if (start && end) {
-            slots[day] = { start, end };
+        const sel = row.querySelector('.schedule-period-select');
+        if (sel && sel.selectedIndex > 0) {
+            const opt = sel.options[sel.selectedIndex];
+            slots[day] = {
+                period_id: parseInt(sel.value),
+                start: opt.dataset.start,
+                end: opt.dataset.end
+            };
         }
     });
     return slots;
@@ -4028,11 +4108,25 @@ function setScheduleTimeSlots(slots) {
     const container = document.getElementById('schedule-time-slots');
     container.querySelectorAll('.schedule-time-row').forEach(row => {
         const day = row.dataset.day;
-        if (slots[day]) {
-            const startEl = row.querySelector('.schedule-time-start');
-            const endEl = row.querySelector('.schedule-time-end');
-            if (startEl) startEl.value = slots[day].start || '';
-            if (endEl) endEl.value = slots[day].end || '';
+        const sel = row.querySelector('.schedule-period-select');
+        if (!sel || !slots[day]) return;
+        const slot = slots[day];
+        // 优先用 period_id 匹配
+        if (slot.period_id) {
+            for (let i = 0; i < sel.options.length; i++) {
+                if (parseInt(sel.options[i].value) === slot.period_id) {
+                    sel.selectedIndex = i;
+                    return;
+                }
+            }
+        }
+        // 降级用 start+end 匹配
+        for (let i = 0; i < sel.options.length; i++) {
+            const opt = sel.options[i];
+            if (opt.dataset.start === slot.start && opt.dataset.end === slot.end) {
+                sel.selectedIndex = i;
+                return;
+            }
         }
     });
 }
@@ -4097,6 +4191,13 @@ async function showScheduleForm(classId, scheduleId) {
                 });
         }
     } catch (e) { /* ignore */ }
+
+    // 预加载上课时段列表
+    try {
+        const pr = await fetch(API_BASE + 'list_class_periods');
+        const pd = await pr.json();
+        window._classPeriods = pd.data || [];
+    } catch(e) { window._classPeriods = []; }
 
     // Initialize flatpickr BEFORE loading editing data
     initScheduleDatePickers();

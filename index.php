@@ -520,6 +520,15 @@ if (!$colPM) $db->exec("ALTER TABLE account_transactions ADD COLUMN payment_meth
 $colSub = $db->query("SHOW COLUMNS FROM account_transactions LIKE 'subject'")->fetch();
 if (!$colSub) $db->exec("ALTER TABLE account_transactions ADD COLUMN subject VARCHAR(200) DEFAULT '' AFTER campus");
 
+$db->exec("CREATE TABLE IF NOT EXISTS class_periods (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(200) NOT NULL DEFAULT '',
+    start_time VARCHAR(5) NOT NULL DEFAULT '',
+    end_time VARCHAR(5) NOT NULL DEFAULT '',
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at VARCHAR(500) NOT NULL DEFAULT ''
+)");
+
 date_default_timezone_set('Asia/Shanghai');
 
 $action = $_GET['action'] ?? '';
@@ -1539,6 +1548,55 @@ $stmt->execute();
             $cid = intval($input['id'] ?? 0);
             $db->exec("DELETE FROM channels WHERE id=$cid");
             json(['message' => '渠道删除成功']);
+
+        case 'list_class_periods':
+            $stmt = $db->query("SELECT * FROM class_periods ORDER BY sort_order ASC, id ASC");
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
+            json(['data' => $rows]);
+
+        case 'add_class_period':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            $start_time = trim($input['start_time'] ?? '');
+            $end_time = trim($input['end_time'] ?? '');
+            $sort_order = intval($input['sort_order'] ?? 0);
+            if (!$name) json(['error' => '时段名称不能为空']);
+            if (!$start_time || !$end_time) json(['error' => '开始时间和结束时间不能为空']);
+            if ($start_time >= $end_time) json(['error' => '开始时间必须早于结束时间']);
+            $stmt = $db->query("SELECT COUNT(*) FROM class_periods WHERE name = " . $db->quote($name) . "");
+            $existing = $stmt->fetchColumn();
+            if (intval($existing) > 0) json(['error' => '时段名称已存在']);
+            $n = now();
+            $db->exec("INSERT INTO class_periods (name, start_time, end_time, sort_order, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($start_time) . ", " . $db->quote($end_time) . ", $sort_order, '$n')");
+            json(['id' => $db->lastInsertId(), 'message' => '时段添加成功']);
+
+        case 'update_class_period':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $pid = intval($input['id'] ?? 0);
+            if (!$pid) json(['error' => '时段ID无效']);
+            $stmt = $db->query("SELECT * FROM class_periods WHERE id = $pid");
+            $cur = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$cur) json(['error' => '时段不存在']);
+            $name = array_key_exists('name', $input) ? trim($input['name']) : $cur['name'];
+            $start_time = array_key_exists('start_time', $input) ? trim($input['start_time']) : $cur['start_time'];
+            $end_time = array_key_exists('end_time', $input) ? trim($input['end_time']) : $cur['end_time'];
+            $sort_order = array_key_exists('sort_order', $input) ? intval($input['sort_order']) : $cur['sort_order'];
+            if (!$name) json(['error' => '时段名称不能为空']);
+            if (!$start_time || !$end_time) json(['error' => '开始时间和结束时间不能为空']);
+            if ($start_time >= $end_time) json(['error' => '开始时间必须早于结束时间']);
+            $stmt = $db->query("SELECT COUNT(*) FROM class_periods WHERE name = " . $db->quote($name) . " AND id != $pid");
+            $dup = $stmt->fetchColumn();
+            if (intval($dup) > 0) json(['error' => '时段名称已存在']);
+            $db->exec("UPDATE class_periods SET name = " . $db->quote($name) . ", start_time = " . $db->quote($start_time) . ", end_time = " . $db->quote($end_time) . ", sort_order = $sort_order WHERE id = $pid");
+            json(['message' => '时段修改成功']);
+
+        case 'delete_class_period':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $pid = intval($input['id'] ?? 0);
+            if (!$pid) json(['error' => '时段ID无效']);
+            $db->exec("DELETE FROM class_periods WHERE id=$pid");
+            json(['message' => '时段删除成功']);
 
         case 'list_intention_levels':
             $stmt = $db->query("SELECT * FROM intention_levels ORDER BY sort_order ASC, id ASC");
@@ -5362,6 +5420,12 @@ if (intval($countBt) === 0) {
                                             <span class="tree-label">基础类型设置</span>
                                         </div>
                                     </li>
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-period-settings">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                                            <span class="tree-label">上课时段设置</span>
+                                        </div>
+                                    </li>
                                 </ul>
                             </li>
                         </ul>
@@ -5701,6 +5765,38 @@ if (intval($countBt) === 0) {
                                 <th width="120">操作</th>
                             </tr></thead>
                             <tbody></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：上课时段设置 -->
+            <section class="content-panel" id="panel-period-settings">
+                <div class="panel-header">
+                    <h3>🕐 上课时段设置</h3>
+                </div>
+                <div class="channel-settings-panel">
+                    <div class="channel-add-row period-add-row">
+                        <input type="text" id="period-name-input" placeholder="时段名称，如：上午第一节" maxlength="30" class="period-input-name">
+                        <input type="time" id="period-start-input" step="60" class="period-input-time">
+                        <span class="period-separator">至</span>
+                        <input type="time" id="period-end-input" step="60" class="period-input-time">
+                        <input type="number" id="period-sort-input" placeholder="排序号" min="0" class="period-input-sort">
+                        <button class="btn btn-primary" onclick="addPeriod()">添加时段</button>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-periods">
+                            <thead><tr>
+                                <th width="80">排序</th>
+                                <th>时段名称</th>
+                                <th width="120">开始时间</th>
+                                <th width="120">结束时间</th>
+                                <th>创建时间</th>
+                                <th width="120">操作</th>
+                            </tr></thead>
+                            <tbody>
+                                <tr><td colspan="6">加载中...</td></tr>
+                            </tbody>
                         </table>
                     </div>
                 </div>
