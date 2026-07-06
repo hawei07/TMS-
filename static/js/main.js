@@ -8790,6 +8790,7 @@ function renderMonthView(d) {
                     if (isConflict) html += '⚠️';
                     html += '<b>' + escHtml((s.teacher || '未知').substring(0, 6)) + '</b> ';
                     html += '<span style="font-size:9px;opacity:0.8;">' + escHtml(s.start + '-' + s.end) + '</span>';
+                    html += '<br><span style="font-size:9px;">' + escHtml((s.class_name || '').substring(0, 8)) + '</span>';
                     html += '</div>';
                 });
             }
