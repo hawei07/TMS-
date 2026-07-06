@@ -434,8 +434,21 @@ $db->exec("CREATE TABLE IF NOT EXISTS class_attendance (
     status VARCHAR(500) NOT NULL DEFAULT '出勤',
     deducted_lessons INT DEFAULT 0,
     deducted_order_id INT DEFAULT 0,
+    deduction_json TEXT,
+    is_temporary INT DEFAULT 0,
     created_at VARCHAR(500) NOT NULL DEFAULT ''
 )");
+
+// 兼容已有数据库：class_attendance 新增缺失字段
+foreach ([
+    "deducted_order_id INT DEFAULT 0",
+    "deduction_json TEXT",
+    "is_temporary INT DEFAULT 0",
+] as $colDef) {
+    $colName = explode(' ', $colDef)[0];
+    $check = $db->query("SHOW COLUMNS FROM class_attendance LIKE '$colName'")->fetch();
+    if (!$check) $db->exec("ALTER TABLE class_attendance ADD COLUMN $colDef");
+}
 
 
 // 退费记录表
