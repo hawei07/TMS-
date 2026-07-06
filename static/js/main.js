@@ -8786,9 +8786,10 @@ function renderMonthView(d) {
                     const clr = teacherColorMap[s.teacher];
                     const conflictKey = cell.date + '|' + s.classroom + '|' + s.start + '-' + s.end;
                     const isConflict = conflictKeys.has(conflictKey);
-                    html += '<div class="schedule-month-item' + (isConflict ? ' schedule-card-conflict' : '') + '" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')" title="' + escHtml(s.course_name + ' ' + s.start + '-' + s.end) + '" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';color:' + clr.text + ';">';
+                    html += '<div class="schedule-month-item' + (isConflict ? ' schedule-card-conflict' : '') + '" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')" title="' + escHtml((s.teacher||'') + ' ' + s.course_name + ' ' + s.start + '-' + s.end) + '" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';color:' + clr.text + ';">';
                     if (isConflict) html += '⚠️';
-                    html += escHtml(s.course_name.substring(0, 8)) + (s.course_name.length > 8 ? '..' : '');
+                    html += '<b>' + escHtml((s.teacher || '未知').substring(0, 6)) + '</b> ';
+                    html += '<span style="font-size:9px;opacity:0.8;">' + escHtml(s.start + '-' + s.end) + '</span>';
                     html += '</div>';
                 });
             }

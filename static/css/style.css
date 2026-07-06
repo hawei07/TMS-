@@ -3867,8 +3867,8 @@ span.flatpickr-weekday {
 }
 .schedule-month-cell {
     border: 1px solid #F0F2F5;
-    min-height: 80px;
-    padding: 4px;
+    min-height: 90px;
+    padding: 3px;
     vertical-align: top;
     overflow: hidden;
 }
