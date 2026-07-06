@@ -6571,7 +6571,7 @@ document.addEventListener('click', function(e) {
     }
 });
 
-function switchAttendanceTab(tabId) {
+async function switchAttendanceTab(tabId) {
     document.querySelectorAll('.att-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tabId));
     document.querySelectorAll('.att-panel').forEach(p => p.classList.toggle('active', p.id === tabId));
     if (tabId === 'tab-classes') {
@@ -6584,7 +6584,7 @@ function switchAttendanceTab(tabId) {
         loadAbsenceRecords();
     } else if (tabId === 'tab-schedule-view') {
         scheduleWeekOffset = 0;
-        initScheduleCampusFilter();
+        await initScheduleCampusFilter();
         loadScheduleView();
     }
 }
@@ -8555,26 +8555,24 @@ function getMonday(offset) {
     return d;
 }
 
-function initScheduleCampusFilter() {
-    api('list_organizations').then(res => {
-        const sel = document.getElementById('filter-schedule-campus');
-        if (!sel) return;
-        sel.innerHTML = '<option value="">全部校区</option>';
-        const orgs = (res.data && res.data.flat) ? res.data.flat : [];
-        window._campusMap = {}; // name → id 映射
-        const campuses = orgs.filter(o => o.type === '校区');
-        campuses.forEach(o => {
-            const opt = document.createElement('option');
-            opt.value = o.name;
-            opt.textContent = o.name;
-            sel.appendChild(opt);
-            window._campusMap[o.name] = String(o.id);
-        });
-        // 默认选中第一个校区
-        if (campuses.length > 0) {
-            sel.value = campuses[0].name;
-        }
+async function initScheduleCampusFilter() {
+    const res = await api('list_organizations');
+    const sel = document.getElementById('filter-schedule-campus');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">全部校区</option>';
+    const orgs = (res.data && res.data.flat) ? res.data.flat : [];
+    window._campusMap = {};
+    const campuses = orgs.filter(o => o.type === '校区');
+    campuses.forEach(o => {
+        const opt = document.createElement('option');
+        opt.value = o.name;
+        opt.textContent = o.name;
+        sel.appendChild(opt);
+        window._campusMap[o.name] = String(o.id);
     });
+    if (campuses.length > 0) {
+        sel.value = campuses[0].name;
+    }
 }
 
 function initScheduleTeacherFilter() {
