@@ -95,7 +95,7 @@ function refreshPanel(panelId) {
         case 'panel-classrooms': loadClassrooms(); break;
         case 'panel-students': initStudentCampusFilter(); loadStudents(); break;
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
-        case 'panel-attendance': switchAttendanceTab('tab-classes'); break;
+        case 'panel-attendance': switchAttendanceTab('tab-schedule-view'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
         case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
