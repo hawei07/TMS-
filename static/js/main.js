@@ -8562,13 +8562,18 @@ function initScheduleCampusFilter() {
         sel.innerHTML = '<option value="">全部校区</option>';
         const orgs = (res.data && res.data.flat) ? res.data.flat : [];
         window._campusMap = {}; // name → id 映射
-        orgs.filter(o => o.type === '校区').forEach(o => {
+        const campuses = orgs.filter(o => o.type === '校区');
+        campuses.forEach(o => {
             const opt = document.createElement('option');
             opt.value = o.name;
             opt.textContent = o.name;
             sel.appendChild(opt);
             window._campusMap[o.name] = String(o.id);
         });
+        // 默认选中第一个校区
+        if (campuses.length > 0) {
+            sel.value = campuses[0].name;
+        }
     });
 }
 
@@ -8678,7 +8683,7 @@ function renderWeekView(d) {
         { bg: '#FAF5FF', border: '#9F7AEA', text: '#6B46C1' },  // Purple
         { bg: '#EBF8FF', border: '#63B3ED', text: '#2B6CB0' },  // Blue
     ];
-    const courseColorMap = {};
+    const teacherColorMap = {};
     let colorIdx = 0;
 
     // Build thead
@@ -8709,11 +8714,11 @@ function renderWeekView(d) {
                 tbodyHTML += '<td class="' + (isToday ? 'schedule-today-col' : '') + '" data-day="' + dayLabel + '" data-start="' + start + '" data-end="' + end + '">';
                 if (cellSlots.length > 0) {
                     cellSlots.forEach(s => {
-                        if (!courseColorMap[s.course_name]) {
-                            courseColorMap[s.course_name] = colors[colorIdx % colors.length];
+                        if (!teacherColorMap[s.teacher]) {
+                            teacherColorMap[s.teacher] = colors[colorIdx % colors.length];
                             colorIdx++;
                         }
-                        const clr = courseColorMap[s.course_name];
+                        const clr = teacherColorMap[s.teacher];
                         const conflictKey = dayLabel + '|' + s.classroom + '|' + s.start + '-' + s.end;
                         const isConflict = conflictKeys.has(conflictKey);
                         let infoStr = '';
@@ -8759,6 +8764,8 @@ function renderMonthView(d) {
         { bg: '#FAF5FF', border: '#9F7AEA', text: '#6B46C1' },
         { bg: '#EBF8FF', border: '#63B3ED', text: '#2B6CB0' },
     ];
+    const teacherColorMap = {};
+    let colorIdx = 0;
 
     let html = '';
     for (let i = 0; i < monthGrid.length; i++) {
@@ -8774,9 +8781,14 @@ function renderMonthView(d) {
             html += '<div class="schedule-month-day">' + cell.day + '</div>';
             if (slots.length > 0) {
                 slots.forEach(s => {
+                    if (!teacherColorMap[s.teacher]) {
+                        teacherColorMap[s.teacher] = colors[colorIdx % colors.length];
+                        colorIdx++;
+                    }
+                    const clr = teacherColorMap[s.teacher];
                     const conflictKey = cell.date + '|' + s.classroom + '|' + s.start + '-' + s.end;
                     const isConflict = conflictKeys.has(conflictKey);
-                    html += '<div class="schedule-month-item' + (isConflict ? ' schedule-card-conflict' : '') + '" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')" title="' + escHtml(s.course_name + ' ' + s.start + '-' + s.end) + '">';
+                    html += '<div class="schedule-month-item' + (isConflict ? ' schedule-card-conflict' : '') + '" onclick="showScheduleDetail(' + escAttr(JSON.stringify(s)) + ')" title="' + escHtml(s.course_name + ' ' + s.start + '-' + s.end) + '" style="background:' + clr.bg + ';border-left:3px solid ' + clr.border + ';color:' + clr.text + ';">';
                     if (isConflict) html += '⚠️';
                     html += escHtml(s.course_name.substring(0, 8)) + (s.course_name.length > 8 ? '..' : '');
                     html += '</div>';
