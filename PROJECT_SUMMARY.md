@@ -1504,3 +1504,18 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | feat | **录单页面展示账户余额**：学员信息卡片增加余额显示 | index.php main.js | 5c3d15e |
 | feat | **交易订单列表新增账户支付方式列**：现金/美团/账户三列+支付汇总含账户合计 | index.php main.js | d2ecae9 |
 | fix | **余额加载错误提示**：goEnroll 中余额加载失败时显示错误信息替代静默忽略 | main.js | 387ee88 |
+
+### 2026-07-06 — 上课时段设置 + 课表UI重设计
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **上课时段设置**：教务管理基础设置新增 class_periods 表+5个API(校区列表/时段CRUD)，支持按校区独立管理时段；排课表单时间输入改为下拉选择预设时段 | index.php main.js style.css | b61bf38 |
+| feat | **时段校区归属**：class_periods 加 campus 字段，唯一约束改为(name,campus)；list_class_periods 支持 ?campus= 过滤；排课时按班级校区过滤时段 | index.php main.js style.css | b61bf38 |
+| fix | **排课时段按时间排序**：下拉框选项按 start_time 升序排列 | main.js | b763b7c |
+| style | **课表UI重设计**：暖色7色课程卡片（暖橙/薰衣草紫/薄荷绿/暖金/粉红/天空蓝/嫩绿）→ 现代简约纯色风格（Indigo/Teal/Red/Orange/Green/Purple/Blue），去掉全部渐变改用纯色+细阴影 | style.css main.js | 62bb40d / b9e7108 |
+| fix | **排课拖拽效果优化**：投放区虚线→实线蓝框+内阴影 min-height 56px；拖拽项虚线+缩小+确认按钮改主蓝色 | style.css | b3ca73b |
+| fix | **考勤保存失败修复**：class_attendance 表补全3个缺失字段（deducted_order_id/deduction_json/is_temporary），通过 ALTER TABLE 自动迁移 | index.php | f900642 |
+| fix | **课表默认校区+教师色块**：initScheduleCampusFilter 默认选第一个校区；色块区分逻辑从按课程改为按老师 | main.js | 87ef01e |
+| refactor | **考勤页班级管理移到最后**：tab 顺序改为课表→操作考勤→学员课耗→缺勤记录→班级管理；默认进入课表 | index.php main.js | 4bd279d / b793440 |
+| fix | **课表首次加载异步竞态**：initScheduleCampusFilter 改为 async/await，等校区列表加载完再请求排课数据 | main.js | 9d85ac5 |
+| feat | **月视图色块优化**：显示老师名字+上课时间+班级名称（单行）；同一天多排课按开始时间排序 | main.js style.css | 053f34c / 1c7c77d / 2e46bfb |
