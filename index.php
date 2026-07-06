@@ -6289,94 +6289,6 @@ if (intval($countBt) === 0) {
                 </div>
             </section>
 
-            <!-- 面板：班级管理 -->
-            <section class="content-panel" id="panel-classes">
-                <div class="panel-header">
-                    <h3>班级管理</h3>
-                    <div class="header-stats-inline">
-                        <span class="stat-badge">班级总数：<strong id="stat-classes-inline">0</strong></span>
-                    </div>
-                </div>
-                <div class="toolbar">
-                    <div class="toolbar-left">
-                        <button class="btn btn-primary" onclick="showClassForm()">+ 新增班级</button>
-                    </div>
-                    <div class="toolbar-right" style="margin-left:auto;">
-                        <input type="text" id="search-class" placeholder="搜索班级名称..." onkeyup="debounceSearch('class')">
-                        <button class="btn btn-primary btn-sm" onclick="loadClasses(1)">搜索</button>
-                    </div>
-                </div>
-                <div class="table-wrap">
-                    <table id="table-classes">
-                        <thead><tr>
-                            <th width="60">编号</th><th>班级名称</th><th>关联课程</th><th>一级学科</th><th>二级学科</th><th>班级类型</th><th>招生人数</th><th>授课课时</th><th>可试听</th><th>当前校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
-                        </tr></thead>
-                        <tbody></tbody>
-                    </table>
-                </div>
-                <div class="pagination" id="pagination-class"></div>
-            </section>
-
-            <!-- 面板：班级详情 -->
-            <section class="content-panel" id="panel-class-detail">
-                <div class="class-detail-breadcrumb">
-                    <a href="javascript:void(0)" onclick="switchToClasses()" class="breadcrumb-back">&larr; 返回班级列表</a>
-                    <span class="breadcrumb-sep">|</span>
-                    <span class="breadcrumb-title" id="class-detail-name">班级详情</span>
-                </div>
-                <div class="class-detail-tabs">
-                    <button class="cdt-tab active" data-tab="tab-class-students">学员列表</button>
-                    <button class="cdt-tab" data-tab="tab-class-schedules">编辑排课</button>
-                </div>
-                <div class="class-detail-tab-content">
-                    <!-- 学员列表 -->
-                    <div class="cdt-panel active" id="tab-class-students">
-                        <div class="toolbar" style="padding:12px 16px;">
-                            <div class="toolbar-left">
-                                <button class="btn btn-primary btn-sm" onclick="showAddStudentModal()">+ 添加学员</button>
-                            </div>
-                            <div class="toolbar-right" style="margin-left:auto;">
-                                <input type="text" id="search-available-student" placeholder="搜索姓名/手机号..." onkeyup="debounceSearchAvailableStudent()">
-                            </div>
-                        </div>
-                        <div class="table-wrap" style="margin:0 16px;">
-                            <table id="table-class-students">
-                                <thead><tr>
-                                    <th width="60">学号</th>
-                                    <th>姓名</th>
-                                    <th>手机号</th>
-                                    <th>来源</th>
-                                    <th width="100">操作</th>
-                                </tr></thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                    <!-- 排课信息 -->
-                    <div class="cdt-panel" id="tab-class-schedules">
-                        <div class="toolbar" style="padding:12px 16px;">
-                            <div class="toolbar-left">
-                                <button class="btn btn-primary btn-sm" onclick="showScheduleForm(currentClassDetailId)">+ 新增排课</button>
-                            </div>
-                        </div>
-                        <div class="table-wrap" style="margin:0 16px;">
-                            <table id="table-class-schedules">
-                                <thead><tr>
-                                    <th width="50">序号</th>
-                                    <th>日期</th>
-                                    <th>星期</th>
-                                    <th>上课时间</th>
-                                    <th>授课老师</th>
-                                    <th>上课教室</th>
-                                    <th width="70">考勤状态</th>
-                                    <th width="160">操作</th>
-                                </tr></thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                    </div>
-                </div>
-            </section>
 
             <!-- 面板：学员详情 -->
             <section class="content-panel" id="panel-student-detail">
@@ -6883,6 +6795,95 @@ if (intval($countBt) === 0) {
                         </tr></thead>
                         <tbody></tbody>
                     </table>
+                </div>
+            </section>
+
+            <!-- 面板：班级管理 -->
+            <section class="content-panel" id="panel-classes">
+                <div class="panel-header">
+                    <h3>班级管理</h3>
+                    <div class="header-stats-inline">
+                        <span class="stat-badge">班级总数：<strong id="stat-classes-inline">0</strong></span>
+                    </div>
+                </div>
+                <div class="toolbar">
+                    <div class="toolbar-left">
+                        <button class="btn btn-primary" onclick="showClassForm()">+ 新增班级</button>
+                    </div>
+                    <div class="toolbar-right" style="margin-left:auto;">
+                        <input type="text" id="search-class" placeholder="搜索班级名称..." onkeyup="debounceSearch('class')">
+                        <button class="btn btn-primary btn-sm" onclick="loadClasses(1)">搜索</button>
+                    </div>
+                </div>
+                <div class="table-wrap">
+                    <table id="table-classes">
+                        <thead><tr>
+                            <th width="60">编号</th><th>班级名称</th><th>关联课程</th><th>一级学科</th><th>二级学科</th><th>班级类型</th><th>招生人数</th><th>授课课时</th><th>可试听</th><th>当前校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
+                        </tr></thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+                <div class="pagination" id="pagination-class"></div>
+            </section>
+
+            <!-- 面板：班级详情 -->
+            <section class="content-panel" id="panel-class-detail">
+                <div class="class-detail-breadcrumb">
+                    <a href="javascript:void(0)" onclick="switchToClasses()" class="breadcrumb-back">&larr; 返回班级列表</a>
+                    <span class="breadcrumb-sep">|</span>
+                    <span class="breadcrumb-title" id="class-detail-name">班级详情</span>
+                </div>
+                <div class="class-detail-tabs">
+                    <button class="cdt-tab active" data-tab="tab-class-students">学员列表</button>
+                    <button class="cdt-tab" data-tab="tab-class-schedules">编辑排课</button>
+                </div>
+                <div class="class-detail-tab-content">
+                    <!-- 学员列表 -->
+                    <div class="cdt-panel active" id="tab-class-students">
+                        <div class="toolbar" style="padding:12px 16px;">
+                            <div class="toolbar-left">
+                                <button class="btn btn-primary btn-sm" onclick="showAddStudentModal()">+ 添加学员</button>
+                            </div>
+                            <div class="toolbar-right" style="margin-left:auto;">
+                                <input type="text" id="search-available-student" placeholder="搜索姓名/手机号..." onkeyup="debounceSearchAvailableStudent()">
+                            </div>
+                        </div>
+                        <div class="table-wrap" style="margin:0 16px;">
+                            <table id="table-class-students">
+                                <thead><tr>
+                                    <th width="60">学号</th>
+                                    <th>姓名</th>
+                                    <th>手机号</th>
+                                    <th>来源</th>
+                                    <th width="100">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                    <!-- 排课信息 -->
+                    <div class="cdt-panel" id="tab-class-schedules">
+                        <div class="toolbar" style="padding:12px 16px;">
+                            <div class="toolbar-left">
+                                <button class="btn btn-primary btn-sm" onclick="showScheduleForm(currentClassDetailId)">+ 新增排课</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap" style="margin:0 16px;">
+                            <table id="table-class-schedules">
+                                <thead><tr>
+                                    <th width="50">序号</th>
+                                    <th>日期</th>
+                                    <th>星期</th>
+                                    <th>上课时间</th>
+                                    <th>授课老师</th>
+                                    <th>上课教室</th>
+                                    <th width="70">考勤状态</th>
+                                    <th width="160">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
                 </div>
             </section>
         </main>
