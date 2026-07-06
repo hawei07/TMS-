@@ -6092,34 +6092,13 @@ if (intval($countBt) === 0) {
                     <h3>考勤</h3>
                 </div>
                 <div class="attendance-tabs">
-                    <button class="att-tab active" data-tab="tab-classes">班级管理</button>
-                    <button class="att-tab" data-tab="tab-schedule-view">课表</button>
+                    <button class="att-tab active" data-tab="tab-schedule-view">课表</button>
                     <button class="att-tab" data-tab="tab-attendance-operations">操作考勤</button>
                     <button class="att-tab" data-tab="tab-student-consumption">学员课耗</button>
                     <button class="att-tab" data-tab="tab-absence-records">缺勤记录</button>
+                    <button class="att-tab" data-tab="tab-classes">班级管理</button>
                 </div>
                 <div class="attendance-tab-content">
-                    <!-- 班级管理页签 -->
-                    <div class="att-panel active" id="tab-classes">
-                        <div class="toolbar">
-                            <div class="toolbar-left">
-                                <button class="btn btn-primary" onclick="showClassForm()">+ 新增班级</button>
-                            </div>
-                            <div class="toolbar-right" style="margin-left:auto;">
-                                <input type="text" id="att-search-class" placeholder="搜索班级名称..." onkeyup="debounceSearch('att-class')">
-                                <button class="btn btn-primary btn-sm" onclick="loadClasses(1,'att')">搜索</button>
-                            </div>
-                        </div>
-                        <div class="table-wrap">
-                            <table id="att-table-classes">
-                                <thead><tr>
-                                    <th width="60">编号</th><th>班级名称</th><th>关联课程</th><th>一级学科</th><th>二级学科</th><th>班级类型</th><th>招生人数</th><th>授课课时</th><th>可试听</th><th>当前校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
-                                </tr></thead>
-                                <tbody></tbody>
-                            </table>
-                        </div>
-                        <div class="pagination" id="pagination-att-class"></div>
-                    </div>
                     <!-- 操作考勤页签 -->
                     <div class="att-panel" id="tab-attendance-operations">
                         <div class="toolbar">
@@ -6190,6 +6169,27 @@ if (intval($countBt) === 0) {
                             </table>
                         </div>
                         <div class="pagination" id="pagination-absence-records"></div>
+                    </div>
+                    <!-- 班级管理页签 -->
+                    <div class="att-panel" id="tab-classes">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <button class="btn btn-primary" onclick="showClassForm()">+ 新增班级</button>
+                            </div>
+                            <div class="toolbar-right" style="margin-left:auto;">
+                                <input type="text" id="att-search-class" placeholder="搜索班级名称..." onkeyup="debounceSearch('att-class')">
+                                <button class="btn btn-primary btn-sm" onclick="loadClasses(1,'att')">搜索</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="att-table-classes">
+                                <thead><tr>
+                                    <th width="60">编号</th><th>班级名称</th><th>关联课程</th><th>一级学科</th><th>二级学科</th><th>班级类型</th><th>招生人数</th><th>授课课时</th><th>可试听</th><th>当前校区</th><th>备注</th><th>创建时间</th><th width="160">操作</th>
+                                </tr></thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-att-class"></div>
                     </div>
                     <!-- 课表页签 -->
                     <div class="att-panel" id="tab-schedule-view">
