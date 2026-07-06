@@ -5167,6 +5167,7 @@ tbody td {
 .period-input-time { width: 120px; flex: none; padding: 9px 12px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: 13px; outline: none; transition: all var(--transition); font-family: inherit; }
 .period-input-time:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
 .period-separator { font-size: 13px; color: var(--color-text-muted); white-space: nowrap; flex: none; }
+.period-input-campus { width: 120px; flex: none; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: 13px; outline: none; font-family: inherit; }
 .period-input-sort { width: 80px; flex: none; padding: 9px 10px; border: 1px solid var(--color-border); border-radius: var(--radius-md); font-size: 13px; outline: none; transition: all var(--transition); font-family: inherit; }
 .period-input-sort:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
 #table-periods thead th:first-child, #table-periods tbody td:first-child { text-align: center; }

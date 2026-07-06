@@ -526,8 +526,13 @@ $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     start_time VARCHAR(5) NOT NULL DEFAULT '',
     end_time VARCHAR(5) NOT NULL DEFAULT '',
     sort_order INT NOT NULL DEFAULT 0,
+    campus VARCHAR(500) NOT NULL DEFAULT '',
     created_at VARCHAR(500) NOT NULL DEFAULT ''
 )");
+
+// 兼容已有数据库：class_periods 添加校区字段
+$colCP = $db->query("SHOW COLUMNS FROM class_periods LIKE 'campus'")->fetch();
+if (!$colCP) $db->exec("ALTER TABLE class_periods ADD COLUMN campus VARCHAR(500) NOT NULL DEFAULT ''");
 
 date_default_timezone_set('Asia/Shanghai');
 
@@ -1549,8 +1554,17 @@ $stmt->execute();
             $db->exec("DELETE FROM channels WHERE id=$cid");
             json(['message' => '渠道删除成功']);
 
+        case 'list_campuses':
+            $rows = $db->query("SELECT id, name FROM organizations WHERE type='校区' ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
+            json(['data' => $rows]);
+
         case 'list_class_periods':
-            $stmt = $db->query("SELECT * FROM class_periods ORDER BY sort_order ASC, id ASC");
+            $campusFilter = trim($_GET['campus'] ?? '');
+            $sql = "SELECT * FROM class_periods";
+            $params = [];
+            if ($campusFilter) { $sql .= " WHERE campus = " . $db->quote($campusFilter); }
+            $sql .= " ORDER BY sort_order ASC, id ASC";
+            $stmt = $db->query($sql);
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $r;
             json(['data' => $rows]);
@@ -1561,14 +1575,16 @@ $stmt->execute();
             $start_time = trim($input['start_time'] ?? '');
             $end_time = trim($input['end_time'] ?? '');
             $sort_order = intval($input['sort_order'] ?? 0);
+            $campus = trim($input['campus'] ?? '');
             if (!$name) json(['error' => '时段名称不能为空']);
+            if (!$campus) json(['error' => '请选择校区']);
             if (!$start_time || !$end_time) json(['error' => '开始时间和结束时间不能为空']);
             if ($start_time >= $end_time) json(['error' => '开始时间必须早于结束时间']);
-            $stmt = $db->query("SELECT COUNT(*) FROM class_periods WHERE name = " . $db->quote($name) . "");
+            $stmt = $db->query("SELECT COUNT(*) FROM class_periods WHERE name = " . $db->quote($name) . " AND campus = " . $db->quote($campus));
             $existing = $stmt->fetchColumn();
-            if (intval($existing) > 0) json(['error' => '时段名称已存在']);
+            if (intval($existing) > 0) json(['error' => '该校区已存在同名时段']);
             $n = now();
-            $db->exec("INSERT INTO class_periods (name, start_time, end_time, sort_order, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($start_time) . ", " . $db->quote($end_time) . ", $sort_order, '$n')");
+            $db->exec("INSERT INTO class_periods (name, start_time, end_time, sort_order, campus, created_at) VALUES (" . $db->quote($name) . ", " . $db->quote($start_time) . ", " . $db->quote($end_time) . ", $sort_order, " . $db->quote($campus) . ", '$n')");
             json(['id' => $db->lastInsertId(), 'message' => '时段添加成功']);
 
         case 'update_class_period':
@@ -1582,13 +1598,15 @@ $stmt->execute();
             $start_time = array_key_exists('start_time', $input) ? trim($input['start_time']) : $cur['start_time'];
             $end_time = array_key_exists('end_time', $input) ? trim($input['end_time']) : $cur['end_time'];
             $sort_order = array_key_exists('sort_order', $input) ? intval($input['sort_order']) : $cur['sort_order'];
+            $campus = array_key_exists('campus', $input) ? trim($input['campus']) : $cur['campus'];
             if (!$name) json(['error' => '时段名称不能为空']);
+            if (!$campus) json(['error' => '校区不能为空']);
             if (!$start_time || !$end_time) json(['error' => '开始时间和结束时间不能为空']);
             if ($start_time >= $end_time) json(['error' => '开始时间必须早于结束时间']);
-            $stmt = $db->query("SELECT COUNT(*) FROM class_periods WHERE name = " . $db->quote($name) . " AND id != $pid");
+            $stmt = $db->query("SELECT COUNT(*) FROM class_periods WHERE name = " . $db->quote($name) . " AND campus = " . $db->quote($campus) . " AND id != $pid");
             $dup = $stmt->fetchColumn();
-            if (intval($dup) > 0) json(['error' => '时段名称已存在']);
-            $db->exec("UPDATE class_periods SET name = " . $db->quote($name) . ", start_time = " . $db->quote($start_time) . ", end_time = " . $db->quote($end_time) . ", sort_order = $sort_order WHERE id = $pid");
+            if (intval($dup) > 0) json(['error' => '该校区已存在同名时段']);
+            $db->exec("UPDATE class_periods SET name = " . $db->quote($name) . ", start_time = " . $db->quote($start_time) . ", end_time = " . $db->quote($end_time) . ", sort_order = $sort_order, campus = " . $db->quote($campus) . " WHERE id = $pid");
             json(['message' => '时段修改成功']);
 
         case 'delete_class_period':
@@ -5420,12 +5438,6 @@ if (intval($countBt) === 0) {
                                             <span class="tree-label">基础类型设置</span>
                                         </div>
                                     </li>
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-period-settings">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                                            <span class="tree-label">上课时段设置</span>
-                                        </div>
-                                    </li>
                                 </ul>
                             </li>
                         </ul>
@@ -5513,6 +5525,12 @@ if (intval($countBt) === 0) {
                                         <div class="tree-leaf tree-leaf-deep" data-panel="panel-classrooms">
                                             <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></span>
                                             <span class="tree-label">教室管理</span>
+                                        </div>
+                                    </li>
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-period-settings">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
+                                            <span class="tree-label">上课时段设置</span>
                                         </div>
                                     </li>
                                 </ul>
@@ -5781,6 +5799,7 @@ if (intval($countBt) === 0) {
                         <input type="time" id="period-start-input" step="60" class="period-input-time">
                         <span class="period-separator">至</span>
                         <input type="time" id="period-end-input" step="60" class="period-input-time">
+                        <select id="period-campus-input" class="period-input-campus"><option value="">选择校区</option></select>
                         <input type="number" id="period-sort-input" placeholder="排序号" min="0" class="period-input-sort">
                         <button class="btn btn-primary" onclick="addPeriod()">添加时段</button>
                     </div>
@@ -5791,11 +5810,12 @@ if (intval($countBt) === 0) {
                                 <th>时段名称</th>
                                 <th width="120">开始时间</th>
                                 <th width="120">结束时间</th>
+                                <th>校区</th>
                                 <th>创建时间</th>
                                 <th width="120">操作</th>
                             </tr></thead>
                             <tbody>
-                                <tr><td colspan="6">加载中...</td></tr>
+                                <tr><td colspan="7">加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>

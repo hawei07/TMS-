@@ -270,12 +270,21 @@ async function deleteChannel(cid) {
 // ==================== 上课时段管理 ====================
 async function loadPeriodTable() {
     try {
+        // 加载校区列表填充下拉框
+        try {
+            const cr = await fetch(API_BASE + 'list_campuses');
+            const cd = await cr.json();
+            const sel = document.getElementById('period-campus-input');
+            if (sel && cd.data) {
+                sel.innerHTML = '<option value="">选择校区</option>' + cd.data.map(c => `<option value="${esc(c.name)}">${esc(c.name)}</option>`).join('');
+            }
+        } catch(e) {}
         const res = await fetch(API_BASE + 'list_class_periods');
         const data = await res.json();
         const periods = data.data || [];
         const tbody = document.querySelector('#table-periods tbody');
         if (periods.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无时段，请添加</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无时段，请添加</td></tr>';
             return;
         }
         tbody.innerHTML = periods.map(p => `
@@ -284,6 +293,7 @@ async function loadPeriodTable() {
                 <td>${esc(p.name)}</td>
                 <td>${p.start_time || ''}</td>
                 <td>${p.end_time || ''}</td>
+                <td>${esc(p.campus || '')}</td>
                 <td>${p.created_at ? p.created_at.slice(0, 16) : ''}</td>
                 <td><button class="btn-link-danger" onclick="deletePeriod(${p.id})">删除</button></td>
             </tr>
@@ -298,19 +308,22 @@ async function addPeriod() {
     const nameEl = document.getElementById('period-name-input');
     const startEl = document.getElementById('period-start-input');
     const endEl = document.getElementById('period-end-input');
+    const campusEl = document.getElementById('period-campus-input');
     const sortEl = document.getElementById('period-sort-input');
     const name = nameEl.value.trim();
     const start_time = startEl.value;
     const end_time = endEl.value;
+    const campus = campusEl.value;
     const sort_order = parseInt(sortEl.value) || 0;
 
     if (!name) return showToast('请输入时段名称', 'error');
+    if (!campus) return showToast('请选择校区', 'error');
     if (!start_time) return showToast('请选择开始时间', 'error');
     if (!end_time) return showToast('请选择结束时间', 'error');
     if (start_time >= end_time) return showToast('开始时间必须早于结束时间', 'error');
 
     try {
-        const result = await api('add_class_period', { name, start_time, end_time, sort_order });
+        const result = await api('add_class_period', { name, start_time, end_time, campus, sort_order });
         if (result.error) { showToast(result.error, 'error'); return; }
         showToast(result.message || '添加成功');
         nameEl.value = '';
@@ -4192,9 +4205,11 @@ async function showScheduleForm(classId, scheduleId) {
         }
     } catch (e) { /* ignore */ }
 
-    // 预加载上课时段列表
+    // 预加载上课时段列表（按校区过滤）
     try {
-        const pr = await fetch(API_BASE + 'list_class_periods');
+        let url = API_BASE + 'list_class_periods';
+        if (campusFilter) { url += '&campus=' + encodeURIComponent(campusFilter); }
+        const pr = await fetch(url);
         const pd = await pr.json();
         window._classPeriods = pd.data || [];
     } catch(e) { window._classPeriods = []; }
