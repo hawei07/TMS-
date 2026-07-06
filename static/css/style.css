@@ -3867,7 +3867,7 @@ span.flatpickr-weekday {
 }
 .schedule-month-cell {
     border: 1px solid #F0F2F5;
-    min-height: 100px;
+    min-height: 80px;
     padding: 3px;
     vertical-align: top;
     overflow: hidden;
@@ -3906,15 +3906,15 @@ span.flatpickr-weekday {
 }
 .schedule-month-item {
     font-size: 10px;
-    padding: 2px 6px;
+    padding: 2px 5px;
     margin-bottom: 2px;
     border-radius: 4px;
     cursor: pointer;
-    white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
     font-weight: 500;
     line-height: 1.5;
+    white-space: nowrap;
 }
 .schedule-month-item:hover {
     opacity: 0.85;
