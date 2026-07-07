@@ -7712,7 +7712,7 @@ function renderRefundRecordTable(rows) {
         }
         const isAccount = (project === '账户');
         const ar = parseFloat(r.actual_refund) || 0;
-        const da = parseFloat(r.consumed_amount) || 0;
+        const cd = parseFloat(r.custom_deduction) || 0;
         const subject = r.subject_level1 || '-';
         const refundMethod = r.refund_method || '转账';
         let methodBadge = '';
@@ -7750,7 +7750,7 @@ function renderRefundRecordTable(rows) {
             <td>${esc(subject)}</td>
             <td>${esc(r.campus || '')}</td>
             <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
-            <td>${isAccount ? '¥0.00' : '¥'+da.toFixed(2)}</td>
+            <td>${isAccount ? '¥0.00' : '¥'+cd.toFixed(2)}</td>
             <td>${methodBadge}</td>
             <td style="white-space:nowrap;">${statusHtml}</td>
             <td>${created}</td>
