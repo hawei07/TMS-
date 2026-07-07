@@ -7952,8 +7952,8 @@ async function showApproveModal(id) {
                     <div class="amount-item"><div class="amount-label">消耗金额</div><div class="amount-value">¥${Number(rr.consumed_amount || 0).toFixed(2)}</div></div>
                     <div class="amount-item"><div class="amount-label">剩余可退课时</div><div class="amount-value">${parseInt(rr.remaining_lessons) || 0}</div></div>
                     <div class="amount-item"><div class="amount-label">剩余可退金额</div><div class="amount-value">¥${Number(rr.remaining_amount || 0).toFixed(2)}</div></div>
-                    <div class="amount-item"><div class="amount-label">自定义扣减</div><div class="amount-value">¥${Number(rr.custom_deduction || 0).toFixed(2)}</div></div>
-                    <div class="amount-item amount-hero"><div class="amount-label">实退金额</div><div class="amount-value">¥${Number(rr.actual_refund || 0).toFixed(2)}</div></div>
+                    <div class="amount-item"><div class="amount-label">自定义扣减</div><div class="amount-value"><input type="number" id="approve-custom-deduction" value="${Number(rr.custom_deduction || 0)}" step="0.01" min="0" oninput="onApproveDeductionChange()" style="width:100px;padding:4px 8px;border:1px solid #ddd;border-radius:6px;font-size:13px;text-align:right;"></div></div>
+                    <div class="amount-item amount-hero"><div class="amount-label">实退金额</div><div class="amount-value" id="approve-actual-refund-display">¥${Number(rr.actual_refund || 0).toFixed(2)}</div></div>
                 </div>
             </div>
         </div>`;
@@ -7983,6 +7983,8 @@ async function showApproveModal(id) {
                 </div>
             </div>` : ''}
         `;
+        // 初始化扣减金额计算
+        approveRemainingAmount = Number(rr.remaining_amount || 0);
         if (canApprove) {
             document.getElementById('refund-approve-footer').style.display = 'flex';
             document.getElementById('btn-refund-reject').style.display = 'inline-block';
@@ -7995,6 +7997,15 @@ async function showApproveModal(id) {
     } catch (e) {
         document.getElementById('refund-approve-content').innerHTML = '<div style="text-align:center;color:#e74c3c;padding:40px;">加载失败</div>';
     }
+}
+
+// 审批弹窗内自定义扣减调整
+let approveRemainingAmount = 0;
+function onApproveDeductionChange() {
+    const deduction = parseFloat(document.getElementById('approve-custom-deduction')?.value) || 0;
+    const actual = Math.max(0, approveRemainingAmount - deduction);
+    const display = document.getElementById('approve-actual-refund-display');
+    if (display) display.textContent = '¥' + actual.toFixed(2);
 }
 
 async function submitApproval(action) {
@@ -8012,11 +8023,16 @@ async function submitApproval(action) {
         let refundTo = 'cash';
         const refundToRadio = document.querySelector('input[name="approve-refund-to"]:checked');
         if (refundToRadio) refundTo = refundToRadio.value;
+        // 读取调整后的扣减金额
+        const customDeduction = parseFloat(document.getElementById('approve-custom-deduction')?.value) || 0;
+        const actualRefund = Math.max(0, approveRemainingAmount - customDeduction);
         const body = {
             id: currentApproveId,
             action: action,
             approver: approver,
-            reject_reason: rejectReason
+            reject_reason: rejectReason,
+            custom_deduction: customDeduction,
+            actual_refund: actualRefund
         };
         if (action === 'approve') body.refund_to = refundTo;
         const res = await fetch(API_BASE + 'approve_refund', {
