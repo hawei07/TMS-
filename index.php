@@ -542,6 +542,14 @@ if (!$colCont) {
     // 历史数据回填
     $db->exec("UPDATE refund_records SET content = course_name WHERE project = '课程'");
 }
+// 兼容已有数据库：refund_records 添加学科/退费方式
+$colSubj = $db->query("SHOW COLUMNS FROM refund_records LIKE 'subject_level1'")->fetch();
+if (!$colSubj) $db->exec("ALTER TABLE refund_records ADD COLUMN subject_level1 VARCHAR(100) DEFAULT '' AFTER content");
+$colRfM = $db->query("SHOW COLUMNS FROM refund_records LIKE 'refund_method'")->fetch();
+if (!$colRfM) {
+    $db->exec("ALTER TABLE refund_records ADD COLUMN refund_method VARCHAR(20) DEFAULT '转账' AFTER subject_level1");
+    $db->exec("UPDATE refund_records SET refund_method='转账' WHERE refund_method=''");
+}
 
 $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     id INT PRIMARY KEY AUTO_INCREMENT,
@@ -3449,7 +3457,7 @@ $stmt->execute();
                 $orderId = intval($input['order_id'] ?? 0);
                 if ($orderId <= 0) { json(['error' => '订单ID无效']); break; }
                 // 查询订单信息
-                $order = $db->query("SELECT o.*, c.name AS course_name FROM orders o LEFT JOIN courses c ON o.course_id=c.id WHERE o.id=$orderId")->fetch(PDO::FETCH_ASSOC);
+                $order = $db->query("SELECT o.*, c.name AS course_name, c.subject_level1 FROM orders o LEFT JOIN courses c ON o.course_id=c.id WHERE o.id=$orderId")->fetch(PDO::FETCH_ASSOC);
                 if (!$order) { json(['error' => '订单不存在']); break; }
                 if (($order['refund_status'] ?? '正常') !== '正常') { json(['error' => '该订单已申请退费，不能重复申请']); break; }
                 $lessonCount = intval($order['lesson_count'] ?? 0);
@@ -3470,11 +3478,15 @@ $stmt->execute();
                 $bankAccount = trim($input['bank_account'] ?? '');
                 $accountHolder = trim($input['account_holder'] ?? '');
                 $refundReason = trim($input['refund_reason'] ?? '');
+                $refundTo = trim($input['refund_to'] ?? 'cash');
+                $refundMethod = ($refundTo === 'balance') ? '账户' : '转账';
                 $courseName = $order['course_name'] ?? '';
                 $n = now();
-                $db->exec("INSERT INTO refund_records (project, content, order_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
+                $db->exec("INSERT INTO refund_records (project, content, subject_level1, refund_method, order_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
                     $db->quote('课程') . ", " .
                     $db->quote($courseName) . ", " .
+                    $db->quote($order['subject_level1'] ?? '') . ", " .
+                    $db->quote($refundMethod) . ", " .
                     "$orderId, " .
                     intval($order['student_id']) . ", " .
                     $db->quote($order['campus'] ?? '') . ", " .
@@ -3501,6 +3513,7 @@ $stmt->execute();
                 // === 账户退费（新增） ===
                 $studentId = intval($input['student_id'] ?? 0);
                 if ($studentId <= 0) { json(['error' => '学员ID无效']); break; }
+                $subjectLevel1 = trim($input['subject_level1'] ?? '');
 
                 $db->beginTransaction();
                 try {
@@ -3531,7 +3544,7 @@ $stmt->execute();
                 if ($orderCampus) $campus = $orderCampus['campus'] ?? '';
 
                 $n = now();
-                $db->exec("INSERT INTO refund_records (\n                    project, content, order_id, student_id, campus,\n                    course_name, total_lessons, total_amount,\n                    consumed_lessons, consumed_amount,\n                    remaining_lessons, remaining_amount,\n                    custom_deduction, actual_refund,\n                    bank_name, bank_account, account_holder,\n                    refund_reason, status, approval_stage, created_at, updated_at\n                ) VALUES (\n                    '账户', '账户退费', 0, $studentId, " . $db->quote($campus) . ",\n                    '账户退费', 0, 0,\n                    0, 0,\n                    0, 0,\n                    0, $refundAmount,\n                    " . $db->quote($bankName) . ", " . $db->quote($bankAccount) . ", " . $db->quote($accountHolder) . ",\n                    " . $db->quote($refundReason) . ", '待审批', '一级审批', '$n', '$n'\n                )");
+                $db->exec("INSERT INTO refund_records (\n                    project, content, subject_level1, refund_method, order_id, student_id, campus,\n                    course_name, total_lessons, total_amount,\n                    consumed_lessons, consumed_amount,\n                    remaining_lessons, remaining_amount,\n                    custom_deduction, actual_refund,\n                    bank_name, bank_account, account_holder,\n                    refund_reason, status, approval_stage, created_at, updated_at\n                ) VALUES (\n                    '账户', '账户退费', " . $db->quote($subjectLevel1) . ", '转账', 0, $studentId, " . $db->quote($campus) . ",\n                    '账户退费', 0, 0,\n                    0, 0,\n                    0, 0,\n                    0, $refundAmount,\n                    " . $db->quote($bankName) . ", " . $db->quote($bankAccount) . ", " . $db->quote($accountHolder) . ",\n                    " . $db->quote($refundReason) . ", '待审批', '一级审批', '$n', '$n'\n                )");
 
                 // 立即扣减余额（冻结）
                 $upd = $db->prepare("UPDATE student_accounts SET balance=balance-:amt, total_refund=total_refund+:amt2 WHERE student_id=:sid");
@@ -3716,7 +3729,7 @@ $stmt->execute();
                     // 退到余额：整个流程包裹在事务中，保证原子性
                     $db->beginTransaction();
                     try {
-                        $db->exec("UPDATE refund_records SET status='已退费', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                        $db->exec("UPDATE refund_records SET status='已退费', refund_method='账户', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
                         // 将订单消耗课时设置为总课时（剩余课时归零）
                         $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
                         $studentId = intval($rr['student_id']);
@@ -6762,7 +6775,7 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-refund-records">
                                 <thead><tr>
-                                    <th width="80">订单号</th><th>学员</th><th width="60">项目</th><th>内容</th><th>校区</th><th>报读课时</th><th>消耗课时</th><th>剩余课时</th><th>报读金额</th><th>实退金额</th><th>扣减金额</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
+                                    <th width="80">订单号</th><th>学员</th><th width="60">项目</th><th>内容</th><th>学科</th><th>校区</th><th>剩余课时</th><th>实退金额</th><th>扣减金额</th><th>退费方式</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
                                 </tr></thead>
                                 <tbody></tbody>
                             </table>
@@ -8236,6 +8249,16 @@ if (intval($countBt) === 0) {
                         <input type="number" id="account-refund-amount" class="form-input" step="0.01" min="0.01"
                                placeholder="请输入退费金额" oninput="validateAccountRefundAmount()">
                         <div id="account-refund-amount-hint" style="margin-top:6px;font-size:12px;color:#999;"></div>
+                    </div>
+                </div>
+                <!-- 学科选择 -->
+                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px;">
+                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">学科信息 <span style="color:#e74c3c;">*</span></h5>
+                    <div class="form-group">
+                        <label>一级学科</label>
+                        <select id="account-refund-subject" class="form-input" style="width:100%;">
+                            <option value="">请选择学科</option>
+                        </select>
                     </div>
                 </div>
                 <!-- 收款信息 -->

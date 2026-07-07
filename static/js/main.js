@@ -7692,14 +7692,14 @@ async function loadRefundRecords() {
     } catch (e) {
         console.error('loadRefundRecords error:', e);
         const tbody = document.querySelector('#table-refund-records tbody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
     }
 }
 
 function renderRefundRecordTable(rows) {
     const tbody = document.querySelector('#table-refund-records tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -7711,12 +7711,17 @@ function renderRefundRecordTable(rows) {
             projectBadge = '<span style="display:inline-block;padding:2px 8px;background:#e0e7ff;color:#4f46e5;border-radius:10px;font-size:12px;">课程</span>';
         }
         const isAccount = (project === '账户');
-        const ttl = parseInt(r.total_lessons) || 0;
-        const ta = parseFloat(r.total_amount) || 0;
-        const cl = parseInt(r.consumed_lessons) || 0;
         const rl = parseInt(r.remaining_lessons) || 0;
         const ar = parseFloat(r.actual_refund) || 0;
         const da = parseFloat(r.consumed_amount) || 0;
+        const subject = r.subject_level1 || '-';
+        const refundMethod = r.refund_method || '转账';
+        let methodBadge = '';
+        if (refundMethod === '账户') {
+            methodBadge = '<span style="display:inline-block;padding:2px 8px;background:#dcfce7;color:#16a34a;border-radius:10px;font-size:12px;">账户</span>';
+        } else {
+            methodBadge = '<span style="display:inline-block;padding:2px 8px;background:#e0e7ff;color:#4f46e5;border-radius:10px;font-size:12px;">转账</span>';
+        }
         const status = r.status || '';
         let statusHtml = '';
         if (status === '待审批') statusHtml = '<span class="tag tag-orange">待审批</span>';
@@ -7743,13 +7748,12 @@ function renderRefundRecordTable(rows) {
             <td>${esc(r.student_name || '')}</td>
             <td>${projectBadge}</td>
             <td>${esc(r.content || r.course_name || '')}</td>
+            <td>${esc(subject)}</td>
             <td>${esc(r.campus || '')}</td>
-            <td>${isAccount ? '-' : ttl}</td>
-            <td>${isAccount ? '-' : cl}</td>
             <td>${isAccount ? '-' : rl}</td>
-            <td>${isAccount ? '-' : '¥'+ta.toFixed(2)}</td>
             <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
             <td>${isAccount ? '-' : '¥'+da.toFixed(2)}</td>
+            <td>${methodBadge}</td>
             <td style="white-space:nowrap;">${statusHtml}</td>
             <td>${created}</td>
             <td>${optHtml}</td>
@@ -8006,10 +8010,33 @@ async function showAccountRefundModal() {
         document.getElementById('account-refund-account-holder').value = '';
         document.getElementById('account-refund-reason').value = '';
 
+        // 加载一级学科下拉
+        await loadAccountRefundSubjects();
+
         openModal('modal-account-refund');
     } catch (e) {
         console.error('showAccountRefundModal error:', e);
         showToast('加载账户信息失败', 'error');
+    }
+}
+
+async function loadAccountRefundSubjects() {
+    const select = document.getElementById('account-refund-subject');
+    if (!select) return;
+    select.innerHTML = '<option value="">请选择学科</option>';
+    try {
+        const res = await fetch(API_BASE + 'list_subjects');
+        const data = await res.json();
+        if (data && data.tree) {
+            data.tree.forEach(parent => {
+                const opt = document.createElement('option');
+                opt.value = parent.name;
+                opt.textContent = parent.name;
+                select.appendChild(opt);
+            });
+        }
+    } catch (e) {
+        console.error('loadAccountRefundSubjects error:', e);
     }
 }
 
@@ -8042,7 +8069,9 @@ async function submitAccountRefund() {
     const bankAccount = document.getElementById('account-refund-bank-account').value.trim();
     const accountHolder = document.getElementById('account-refund-account-holder').value.trim();
     const reason = document.getElementById('account-refund-reason').value.trim();
+    const subjectLevel1 = document.getElementById('account-refund-subject').value;
 
+    if (!subjectLevel1) { showToast('请选择一级学科', 'error'); return; }
     if (!bankName) { showToast('请输入转账银行', 'error'); return; }
     if (!bankAccount) { showToast('请输入银行卡号', 'error'); return; }
     if (!accountHolder) { showToast('请输入开户人姓名', 'error'); return; }
@@ -8055,6 +8084,7 @@ async function submitAccountRefund() {
                 refund_type: 'account',
                 student_id: sid,
                 refund_amount: amount,
+                subject_level1: subjectLevel1,
                 bank_name: bankName,
                 bank_account: bankAccount,
                 account_holder: accountHolder,
