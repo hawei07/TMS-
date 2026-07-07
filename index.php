@@ -549,9 +549,37 @@ $colRfM = $db->query("SHOW COLUMNS FROM refund_records LIKE 'refund_method'")->f
 if (!$colRfM) {
     $db->exec("ALTER TABLE refund_records ADD COLUMN refund_method VARCHAR(20) DEFAULT '转账' AFTER subject_level1");
     $db->exec("UPDATE refund_records SET refund_method='转账' WHERE refund_method=''");
-}
+    }
 
-$db->exec("CREATE TABLE IF NOT EXISTS class_periods (
+    // 优惠管理模块建表
+    $db->exec("CREATE TABLE IF NOT EXISTS discount_plans (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(200) NOT NULL DEFAULT '',
+        plan_type VARCHAR(20) NOT NULL DEFAULT '新报',
+        discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        start_date VARCHAR(20) DEFAULT '',
+        end_date VARCHAR(20) DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE IF NOT EXISTS discount_plan_campuses (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        plan_id INT NOT NULL,
+        campus_id INT NOT NULL,
+        INDEX idx_dpc_plan (plan_id),
+        INDEX idx_dpc_campus (campus_id),
+        FOREIGN KEY (plan_id) REFERENCES discount_plans(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+    $db->exec("CREATE TABLE IF NOT EXISTS discount_plan_subjects (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        plan_id INT NOT NULL,
+        subject_id INT NOT NULL,
+        INDEX idx_dps_plan (plan_id),
+        INDEX idx_dps_subject (subject_id),
+        FOREIGN KEY (plan_id) REFERENCES discount_plans(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+    $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(200) NOT NULL DEFAULT '',
     start_time VARCHAR(5) NOT NULL DEFAULT '',
