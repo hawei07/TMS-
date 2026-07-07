@@ -7525,6 +7525,7 @@ async function showRefundApplyModal(orderId) {
 
     document.getElementById('refund-custom-deduction').value = '0';
     document.getElementById('refund-actual-amount-display').textContent = '¥' + remainingAmount.toFixed(2);
+    document.getElementById('refund-calc-base-amount').textContent = '¥' + remainingAmount.toFixed(2);
     document.getElementById('refund-bank-name').value = '';
     document.getElementById('refund-bank-account').value = '';
     document.getElementById('refund-account-holder').value = '';
@@ -7544,10 +7545,10 @@ function onRefundMethodChange() {
     const bankSection = document.getElementById('refund-bank-info-section');
     const hint = document.querySelector('#modal-refund-apply .refund-account-hint');
     if (method === 'account') {
-        if (bankSection) bankSection.style.display = 'none';
+        if (bankSection) bankSection.classList.add('collapsed');
         if (hint) hint.style.display = 'flex';
     } else {
-        if (bankSection) bankSection.style.display = '';
+        if (bankSection) bankSection.classList.remove('collapsed');
         if (hint) hint.style.display = 'none';
     }
 }
@@ -7573,6 +7574,9 @@ async function submitRefundApply() {
     if (!refundReason) { showToast('请填写退费原因', 'error'); return; }
 
     try {
+        const btn = document.getElementById('btn-refund-submit');
+        if (btn) btn.classList.add('loading');
+
         const res = await fetch(API_BASE + 'submit_refund', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
@@ -7594,6 +7598,9 @@ async function submitRefundApply() {
         loadStudentCourses(currentViewStudentId);
     } catch (e) {
         showToast('网络错误，请重试', 'error');
+    } finally {
+        const btn = document.getElementById('btn-refund-submit');
+        if (btn) btn.classList.remove('loading');
     }
 }
 

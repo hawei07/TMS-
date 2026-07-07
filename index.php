@@ -8217,34 +8217,63 @@ if (intval($countBt) === 0) {
             </div>
             <div class="modal-body">
                 <input type="hidden" id="refund-apply-order-id">
-                <!-- 自动计算区（只读） -->
-                <div style="background:#f7f9fc;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px;">
-                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">自动计算信息</h5>
-                    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;">
-                        <div><span style="color:#888;">报读校区：</span><span id="refund-auto-campus">-</span></div>
-                        <div><span style="color:#888;">课程名称：</span><span id="refund-auto-course">-</span></div>
-                        <div><span style="color:#888;">报读课时：</span><span id="refund-auto-total-lessons">0</span></div>
-                        <div><span style="color:#888;">报读金额：</span><span id="refund-auto-total-amount">¥0.00</span></div>
-                        <div><span style="color:#888;">消耗课时：</span><span id="refund-auto-consumed-lessons">0</span></div>
-                        <div><span style="color:#888;">消耗金额：</span><span id="refund-auto-consumed-amount">¥0.00</span></div>
-                        <div><span style="color:#888;">剩余可退课时：</span><b id="refund-auto-remaining-lessons">0</b></div>
-                        <div><span style="color:#888;">剩余可退金额：</span><b id="refund-auto-remaining-amount">¥0.00</b></div>
+
+                <!-- 卡片 1：订单摘要 -->
+                <div class="refund-card refund-card--highlight">
+                    <div class="refund-card-header">
+                        <span class="card-icon card-icon--info">📊</span>
+                        <span>订单摘要</span>
+                    </div>
+                    <div class="info-grid">
+                        <div><div class="info-label">报读校区</div><div class="info-value" id="refund-auto-campus">-</div></div>
+                        <div><div class="info-label">课程名称</div><div class="info-value" id="refund-auto-course">-</div></div>
+                        <div><div class="info-label">报读课时</div><div class="info-value" id="refund-auto-total-lessons">0</div></div>
+                        <div><div class="info-label">报读金额</div><div class="info-value" id="refund-auto-total-amount">¥0.00</div></div>
+                        <div><div class="info-label">消耗课时</div><div class="info-value" id="refund-auto-consumed-lessons">0</div></div>
+                        <div><div class="info-label">消耗金额</div><div class="info-value" id="refund-auto-consumed-amount">¥0.00</div></div>
+                        <div><div class="info-label">剩余可退课时</div><div class="info-value info-value--large" id="refund-auto-remaining-lessons">0</div></div>
+                        <div><div class="info-label">剩余可退金额</div><div class="info-value info-value--large" id="refund-auto-remaining-amount">¥0.00</div></div>
                     </div>
                 </div>
-                <!-- 补充区 -->
-                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px;">
-                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">费用调整</h5>
-                    <div class="form-group">
-                        <label>自定义扣减金额 (元)</label>
-                        <input type="number" id="refund-custom-deduction" class="form-input" step="0.01" min="0" value="0" oninput="calcActualRefund()">
+
+                <!-- 卡片 2：费用计算 -->
+                <div class="refund-card refund-card--calc">
+                    <div class="refund-card-header">
+                        <span class="card-icon card-icon--calc">💰</span>
+                        <span>费用计算</span>
                     </div>
-                    <div class="form-group" style="font-size:16px;font-weight:bold;color:#e74c3c;">
-                        实退金额：<span id="refund-actual-amount-display">¥0.00</span>
+                    <!-- 剩余金额（只读参考） -->
+                    <div class="calc-row calc-row--base">
+                        <span class="calc-label">剩余可退金额</span>
+                        <span class="calc-value" id="refund-calc-base-amount">¥0.00</span>
+                    </div>
+                    <!-- 减号分隔 -->
+                    <div class="calc-separator">
+                        <span class="calc-operator">−</span>
+                        <span class="calc-desc" style="font-size:13px;color:var(--color-text-muted);">自定义扣减</span>
+                        <div class="calc-line"></div>
+                    </div>
+                    <!-- 扣减输入 -->
+                    <div class="calc-row calc-row--deduct">
+                        <input type="number" id="refund-custom-deduction" class="calc-input" step="0.01" min="0" value="0" oninput="calcActualRefund()">
+                    </div>
+                    <!-- 等号线 -->
+                    <div class="calc-divider">
+                        <div class="calc-divider-line"></div>
+                    </div>
+                    <!-- 实退金额 -->
+                    <div class="calc-row calc-row--result">
+                        <span class="calc-label" style="color:rgba(255,255,255,0.8);">实退金额</span>
+                        <span class="calc-value calc-value--result" id="refund-actual-amount-display">¥0.00</span>
                     </div>
                 </div>
-                <!-- 退费方式 -->
-                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px;">
-                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">退费方式</h5>
+
+                <!-- 卡片 3：退费方式 -->
+                <div class="refund-card">
+                    <div class="refund-card-header">
+                        <span class="card-icon card-icon--method">💳</span>
+                        <span>退费方式</span>
+                    </div>
                     <div class="refund-method-radio-group">
                         <label class="refund-method-radio-label">
                             <input type="radio" name="refund-method" value="cash" checked onchange="onRefundMethodChange()">
@@ -8262,33 +8291,49 @@ if (intval($countBt) === 0) {
                         <span>二级审批通过后自动进入学员账户余额</span>
                     </div>
                 </div>
-                <!-- 信息填写区 -->
-                <div id="refund-bank-info-section" style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
-                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">收款信息</h5>
+
+                <!-- 卡片 4：收款信息（条件显示，带收起动画） -->
+                <div class="refund-card" id="refund-bank-info-section">
+                    <div class="refund-card-header">
+                        <span class="card-icon card-icon--bank">🏦</span>
+                        <span>收款信息</span>
+                    </div>
                     <div class="form-row">
-                        <div class="form-group" style="flex:1;">
+                        <div class="form-group">
                             <label>转账银行</label>
                             <input type="text" id="refund-bank-name" class="form-input" placeholder="请输入银行名称">
                         </div>
-                        <div class="form-group" style="flex:1;">
+                        <div class="form-group">
                             <label>银行卡号</label>
                             <input type="text" id="refund-bank-account" class="form-input" placeholder="请输入银行卡号">
                         </div>
-                        <div class="form-group" style="flex:1;">
+                        <div class="form-group">
                             <label>开户人</label>
                             <input type="text" id="refund-account-holder" class="form-input" placeholder="请输入开户人姓名">
                         </div>
                     </div>
                 </div>
-                <!-- 退费原因（始终可见） -->
-                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-top:16px;">
-                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">退费原因</h5>
+
+                <!-- 卡片 5：退费原因（始终可见） -->
+                <div class="refund-card">
+                    <div class="refund-card-header">
+                        <span class="card-icon card-icon--reason">📝</span>
+                        <span>退费原因<span style="color:#DC2626;margin-left:2px;">*</span></span>
+                    </div>
                     <textarea id="refund-apply-reason" class="form-input" rows="3" placeholder="请输入退费原因"></textarea>
                 </div>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-refund-apply')">取消</button>
-                <button class="btn btn-primary" onclick="submitRefundApply()">提交申请</button>
+                <button class="btn btn-primary" id="btn-refund-submit" onclick="submitRefundApply()">
+                    <span class="btn-text">提交申请</span>
+                    <span class="btn-spinner" style="display:none;">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                            <circle cx="12" cy="12" r="10" stroke-opacity="0.25"/>
+                            <path d="M12 2a10 10 0 0 1 10 10" stroke-linecap="round"/>
+                        </svg>
+                    </span>
+                </button>
             </div>
         </div>
     </div>

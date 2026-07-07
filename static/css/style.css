@@ -5218,10 +5218,7 @@ tbody td {
     height: 0;
 }
 
-/* 银行信息区域过渡动画（配合 JS display:none 切换） */
-#modal-refund-apply #refund-bank-info-section {
-    transition: opacity 0.2s ease;
-}
+/* 银行信息区域过渡动画 — 移至末尾 #modal-refund-apply 卡片体系 */
 
 /* 退到学员账户提示条 */
 #modal-refund-apply .refund-account-hint {
@@ -5771,4 +5768,233 @@ tbody td {
     #modal-refund-approve .approve-info-cards {
         grid-template-columns: 1fr;
     }
+}
+
+/* ==================== 退费申请弹窗 — 卡片体系 ==================== */
+
+/* 基础卡片容器 */
+#modal-refund-apply .refund-card {
+    background: var(--color-surface);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-lg);
+    padding: 20px;
+    margin-bottom: 16px;
+    box-shadow: var(--shadow-sm);
+    transition: box-shadow 0.2s ease, border-color 0.2s ease;
+}
+#modal-refund-apply .refund-card:hover {
+    border-color: var(--color-primary-light);
+    box-shadow: 0 2px 8px rgba(124,58,237,0.08);
+}
+
+/* 卡片头部 */
+#modal-refund-apply .refund-card-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 16px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--color-border-light);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-text);
+}
+#modal-refund-apply .refund-card-header .card-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: var(--radius-sm);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 14px;
+    flex-shrink: 0;
+}
+
+/* 图标颜色语义 */
+#modal-refund-apply .card-icon--info   { background: #EDE9FE; color: var(--color-primary); }
+#modal-refund-apply .card-icon--calc   { background: #FEF3C7; color: #D97706; }
+#modal-refund-apply .card-icon--method { background: #E0E7FF; color: #4338CA; }
+#modal-refund-apply .card-icon--bank   { background: #DCFCE7; color: #15803D; }
+#modal-refund-apply .card-icon--reason { background: #FEE2E2; color: #DC2626; }
+
+/* 摘要区高亮卡片 */
+#modal-refund-apply .refund-card--highlight {
+    background: linear-gradient(135deg, #FAF8FF 0%, #F5F0FF 100%);
+    border-color: var(--color-primary-light);
+}
+#modal-refund-apply .refund-card--highlight .refund-card-header {
+    border-bottom-color: rgba(124,58,237,0.15);
+}
+
+/* 双列 Grid 信息行 */
+#modal-refund-apply .info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 24px;
+    font-size: 13px;
+}
+#modal-refund-apply .info-grid .info-label {
+    color: var(--color-text-muted);
+    font-size: 12px;
+    margin-bottom: 2px;
+}
+#modal-refund-apply .info-grid .info-value {
+    color: var(--color-text);
+    font-weight: 500;
+}
+#modal-refund-apply .info-grid .info-value--large {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--color-primary-dark);
+}
+
+/* ==================== 费用计算流视觉 ==================== */
+
+#modal-refund-apply .refund-card--calc {
+    background: linear-gradient(135deg, #FFFBEB 0%, #FFFFFF 100%);
+    border-color: #FDE68A;
+}
+
+/* 计算行 */
+#modal-refund-apply .calc-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0;
+}
+#modal-refund-apply .calc-row--base {
+    background: var(--color-primary-bg);
+    border-radius: var(--radius-md);
+    padding: 12px 16px;
+    margin-bottom: 8px;
+}
+#modal-refund-apply .calc-row--result {
+    background: linear-gradient(135deg, #7C3AED 0%, #6D28D9 100%);
+    border-radius: var(--radius-md);
+    padding: 14px 16px;
+}
+#modal-refund-apply .calc-label {
+    font-size: 13px; color: var(--color-text-muted);
+}
+#modal-refund-apply .calc-value {
+    font-size: 22px; font-weight: 700; color: var(--color-primary-dark);
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono','Consolas',monospace;
+}
+#modal-refund-apply .calc-value--result {
+    color: #FFFFFF; font-size: 26px;
+}
+
+/* 分隔符 */
+#modal-refund-apply .calc-separator {
+    display: flex; align-items: center; gap: 8px;
+    padding: 4px 0 4px 16px;
+}
+#modal-refund-apply .calc-operator {
+    font-size: 18px; color: var(--color-text-muted); font-weight: 300;
+}
+#modal-refund-apply .calc-line {
+    flex: 1; height: 1px; background: var(--color-border-light);
+    margin-left: 8px;
+}
+#modal-refund-apply .calc-divider {
+    padding: 8px 0;
+}
+#modal-refund-apply .calc-divider-line {
+    height: 1px;
+    background: repeating-linear-gradient(90deg, var(--color-border-light) 0, var(--color-border-light) 6px, transparent 6px, transparent 12px);
+}
+
+/* 扣减输入框 */
+#modal-refund-apply .calc-input {
+    width: 100%; padding: 10px 14px;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 18px; font-weight: 600;
+    text-align: right;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono','Consolas',monospace;
+    background: #FFFBEB;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    box-sizing: border-box;
+}
+#modal-refund-apply .calc-input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.12);
+    background: #FFFFFF;
+}
+
+/* ==================== 银行信息区收起/展开动画 ==================== */
+
+#modal-refund-apply #refund-bank-info-section {
+    overflow: hidden;
+    max-height: 300px;
+    opacity: 1;
+    transition: max-height 0.35s ease, opacity 0.25s ease, margin-bottom 0.35s ease, padding 0.35s ease;
+}
+#modal-refund-apply #refund-bank-info-section.collapsed {
+    max-height: 0;
+    opacity: 0;
+    margin-bottom: 0;
+    padding-top: 0;
+    padding-bottom: 0;
+    border-width: 0;
+}
+
+/* ==================== 输入控件统一 ==================== */
+
+#modal-refund-apply .form-input,
+#modal-refund-apply input[type="text"],
+#modal-refund-apply input[type="number"],
+#modal-refund-apply select,
+#modal-refund-apply textarea {
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--color-border);
+    padding: 9px 14px;
+    font-size: 14px;
+    color: var(--color-text);
+    background: #FAFAFE;
+    transition: border-color 0.2s, box-shadow 0.2s, background 0.2s;
+}
+#modal-refund-apply .form-input:focus,
+#modal-refund-apply input[type="text"]:focus,
+#modal-refund-apply input[type="number"]:focus,
+#modal-refund-apply select:focus,
+#modal-refund-apply textarea:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.10);
+    background: #FFFFFF;
+}
+
+/* form-row / form-group 增强 */
+#modal-refund-apply .form-row {
+    display: flex; gap: 16px;
+}
+#modal-refund-apply .form-row .form-group {
+    flex: 1; min-width: 0;
+}
+
+/* ==================== 提交按钮 Loading 态 ==================== */
+
+#modal-refund-apply .btn-spinner svg {
+    animation: refund-spin 0.8s linear infinite;
+}
+@keyframes refund-spin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+#modal-refund-apply .btn-primary.loading {
+    pointer-events: none;
+    opacity: 0.75;
+}
+#modal-refund-apply .btn-primary.loading .btn-text        { display: none; }
+#modal-refund-apply .btn-primary.loading .btn-spinner      { display: inline-flex; }
+
+/* ==================== 必填标记 ==================== */
+
+#modal-refund-apply label.required::after {
+    content: ' *';
+    color: var(--color-danger);
+    font-weight: 600;
 }
