@@ -8279,12 +8279,12 @@ if (intval($countBt) === 0) {
                             <input type="text" id="refund-account-holder" class="form-input" placeholder="请输入开户人姓名">
                         </div>
                     </div>
-                    <div class="form-group">
-                        <label>退费原因</label>
-                        <textarea id="refund-apply-reason" class="form-input" rows="3" placeholder="请输入退费原因"></textarea>
-                    </div>
                 </div>
-            </div>
+                <!-- 退费原因（始终可见） -->
+                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-top:16px;">
+                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">退费原因</h5>
+                    <textarea id="refund-apply-reason" class="form-input" rows="3" placeholder="请输入退费原因"></textarea>
+                </div>
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-refund-apply')">取消</button>
                 <button class="btn btn-primary" onclick="submitRefundApply()">提交申请</button>
