@@ -3203,12 +3203,12 @@ function updatePlanCountBadge() {
     if (countEl) countEl.textContent = currentPlans.length;
 }
 
-function selectPlan(planId) {
+async function selectPlan(planId) {
     currentSelectedPlanId = planId;
     renderPlanList();
     renderItemList();
     ensureInlineEditDelegation();
-    preloadInlineDiscountData();
+    await preloadInlineDiscountData();
 }
 
 async function preloadInlineDiscountData() {
@@ -3364,6 +3364,15 @@ function enterInlineEdit(tr, item) {
     const first = tr.querySelector('input.inline-edit-input');
     if (first) first.focus();
 
+    // 点击行外任意位置 → 保存
+    setTimeout(() => {
+        document.addEventListener('click', tr._clickOutside = (e) => {
+            if (!tr.contains(e.target) && tr.classList.contains('inline-editing')) {
+                saveInlineEdit(tr, item);
+            }
+        });
+    }, 0);
+
     // 绑定联动事件
     bindInlinePriceRecalc(tr);
     // 绑定键盘事件
@@ -3506,6 +3515,7 @@ async function saveInlineEdit(tr) {
     } finally {
         tr.classList.remove('inline-saving');
     }
+    if (tr._clickOutside) { document.removeEventListener('click', tr._clickOutside); tr._clickOutside = null; }
 }
 
 function cancelInlineEdit(tr) {
@@ -3533,6 +3543,7 @@ function cancelInlineEdit(tr) {
             td.textContent = original || '';
         }
     });
+    if (tr._clickOutside) { document.removeEventListener('click', tr._clickOutside); tr._clickOutside = null; }
     tr.classList.remove('inline-editing');
     delete tr._snapshot;
 }
