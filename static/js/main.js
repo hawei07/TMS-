@@ -7699,7 +7699,7 @@ async function loadRefundRecords() {
 function renderRefundRecordTable(rows) {
     const tbody = document.querySelector('#table-refund-records tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -7869,7 +7869,7 @@ async function showApproveModal(id) {
                 <div><span style="color:#888;">课程：</span>${esc(rr.course_name || '')}</div>
                 <div><span style="color:#888;">订单号：</span><span style="font-family:monospace;">${esc(rr.order_no || '')}</span></div>
                 <div><span style="color:#888;">报读课时：</span>${parseInt(rr.total_lessons) || 0}</div>
-                <div><span style="color:#888;">报读金额：</span>¥${parseFloat(rr.total_amount || 0).toFixed(2)}</div>
+                <div><span style="color:#888;">报读金额：</span>¥${Number(rr.total_amount || 0).toFixed(2)}</div>
                 <div><span style="color:#888;">消耗课时：</span>${parseInt(rr.consumed_lessons) || 0}</div>
                 <div><span style="color:#888;">消耗金额：</span>¥${parseFloat(rr.consumed_amount || 0).toFixed(2)}</div>
                 <div><span style="color:#888;">剩余可退课时：</span><b>${parseInt(rr.remaining_lessons) || 0}</b></div>
@@ -7957,7 +7957,7 @@ async function submitApproval(action) {
 }
 
 async function cancelRefund(id) {
-    if (!confirm('确定要撤销该退费申请吗？撤销后订单将恢复正常状态。')) return;
+    showCustomConfirm('确定要撤销该退费申请吗？', async () => {
     try {
         const res = await fetch(API_BASE + 'cancel_refund', {
             method: 'POST',
@@ -7972,6 +7972,7 @@ async function cancelRefund(id) {
     } catch (e) {
         showToast('网络错误，请重试', 'error');
     }
+    });
 }
 
 // ==================== 账户退费 ====================

@@ -533,6 +533,16 @@ if (!$colPM) $db->exec("ALTER TABLE account_transactions ADD COLUMN payment_meth
 $colSub = $db->query("SHOW COLUMNS FROM account_transactions LIKE 'subject'")->fetch();
 if (!$colSub) $db->exec("ALTER TABLE account_transactions ADD COLUMN subject VARCHAR(200) DEFAULT '' AFTER campus");
 
+// 兼容已有数据库：refund_records 添加项目/内容字段
+$colProj = $db->query("SHOW COLUMNS FROM refund_records LIKE 'project'")->fetch();
+if (!$colProj) $db->exec("ALTER TABLE refund_records ADD COLUMN project VARCHAR(20) DEFAULT '课程' AFTER id");
+$colCont = $db->query("SHOW COLUMNS FROM refund_records LIKE 'content'")->fetch();
+if (!$colCont) {
+    $db->exec("ALTER TABLE refund_records ADD COLUMN content VARCHAR(500) DEFAULT '' AFTER project");
+    // 历史数据回填
+    $db->exec("UPDATE refund_records SET content = course_name WHERE project = '课程'");
+}
+
 $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(200) NOT NULL DEFAULT '',
@@ -3492,6 +3502,8 @@ $stmt->execute();
                 $studentId = intval($input['student_id'] ?? 0);
                 if ($studentId <= 0) { json(['error' => '学员ID无效']); break; }
 
+                $db->beginTransaction();
+                try {
                 // 查询学员账户余额（FOR UPDATE 锁行）
                 $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id=:sid FOR UPDATE");
                 $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
@@ -3499,14 +3511,13 @@ $stmt->execute();
                 $acctRow = $acct->fetch(PDO::FETCH_ASSOC);
                 $currentBalance = $acctRow ? floatval($acctRow['balance']) : 0.00;
 
-                if ($currentBalance <= 0) { json(['error' => '账户余额为0，无法发起退费']); break; }
+                if ($currentBalance <= 0) { throw new Exception('账户余额为0，无法发起退费'); }
 
                 // 退费金额 = 用户申请金额（不能超过余额）
                 $refundAmount = floatval($input['refund_amount'] ?? 0);
-                if ($refundAmount <= 0) { json(['error' => '退费金额必须大于0']); break; }
+                if ($refundAmount <= 0) { throw new Exception('退费金额必须大于0'); }
                 if ($refundAmount > $currentBalance) {
-                    json(['error' => '退费金额不能超过账户余额（当前余额：' . number_format($currentBalance, 2) . '）']);
-                    break;
+                    throw new Exception('退费金额不能超过账户余额（当前余额：' . number_format($currentBalance, 2) . '）');
                 }
 
                 $bankName = trim($input['bank_name'] ?? '');
@@ -3542,7 +3553,12 @@ $stmt->execute();
                 $stmt2->bindValue(':note', '账户退费申请-提现冻结', PDO::PARAM_STR);
                 $stmt2->execute();
 
+                $db->commit();
                 json(['message' => '账户退费申请提交成功', 'id' => $refundId]);
+                } catch (Exception $e) {
+                    $db->rollBack();
+                    json(['error' => $e->getMessage()]);
+                }
 
             } else {
                 json(['error' => '无效的退费类型']);
@@ -3645,6 +3661,8 @@ $stmt->execute();
                 if ($rrProject === '账户') {
                     $refundAmt = floatval($rr['actual_refund'] ?? 0);
                     $sid = intval($rr['student_id']);
+                    $db->beginTransaction();
+                    try {
                     $db->exec("UPDATE student_accounts SET balance=balance+$refundAmt, total_refund=total_refund-$refundAmt WHERE student_id=$sid");
                     // 写恢复流水
                     $acctBal = $db->query("SELECT balance FROM student_accounts WHERE student_id=$sid")->fetch(PDO::FETCH_ASSOC);
@@ -3657,6 +3675,12 @@ $stmt->execute();
                     $rstmt->execute();
                     // 标记原冻结流水
                     $db->exec("UPDATE account_transactions SET note='账户退费-已驳回' WHERE ref_type='refund_account' AND ref_id=$id");
+                    $db->commit();
+                    } catch (Exception $e) {
+                        $db->rollBack();
+                        json(['error' => '驳回处理失败：' . $e->getMessage()]);
+                        break;
+                    }
                 } else {
                     // 恢复订单状态为正常
                     $db->exec("UPDATE orders SET refund_status='正常' WHERE id=" . intval($rr['order_id']));
@@ -3752,6 +3776,8 @@ $stmt->execute();
                 // 恢复余额
                 $refundAmount = floatval($rr['actual_refund'] ?? 0);
                 $studentId = intval($rr['student_id']);
+                $db->beginTransaction();
+                try {
                 $db->exec("UPDATE student_accounts SET balance=balance+$refundAmount, total_refund=total_refund-$refundAmount WHERE student_id=$studentId");
                 // 写恢复流水
                 $acct = $db->query("SELECT balance FROM student_accounts WHERE student_id=$studentId")->fetch(PDO::FETCH_ASSOC);
@@ -3764,6 +3790,12 @@ $stmt->execute();
                 $stmt->execute();
                 // 标记原冻结流水的备注
                 $db->exec("UPDATE account_transactions SET note='账户退费-已撤销' WHERE ref_type='refund_account' AND ref_id=$id");
+                $db->commit();
+                } catch (Exception $e) {
+                    $db->rollBack();
+                    json(['error' => '撤销失败：' . $e->getMessage()]);
+                    break;
+                }
             } else {
                 // 恢复订单退费状态
                 $orderId = intval($rr['order_id']);
