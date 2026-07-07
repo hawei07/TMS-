@@ -7373,9 +7373,6 @@ if (intval($countBt) === 0) {
                             <span style="margin:0 4px;color:#999;">至</span>
                             <input type="date" id="cr-date-to" style="width:135px;" onchange="loadCouponRecords()">
                         </div>
-                        <div class="toolbar-right">
-                            <button class="btn btn-primary btn-sm" onclick="showCouponRecordForm()">+ 新增发放记录</button>
-                        </div>
                     </div>
                     <div class="table-wrap">
                         <table id="table-coupon-records">
