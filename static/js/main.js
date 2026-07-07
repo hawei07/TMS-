@@ -3477,12 +3477,30 @@ async function deleteItem(itemId) {
 }
 
 // 课时价格变化时自动同步实际支付价格
-function onUnitPriceChange() {
+let priceItemDiscountPlans = [];
+let priceItemCoupons = [];
+
+function recalcItemActualPrice() {
     const unitPriceEl = document.getElementById('price-item-unit-price');
     const actualPriceEl = document.getElementById('price-item-actual-price');
-    if (unitPriceEl && actualPriceEl) {
-        actualPriceEl.value = parseFloat(unitPriceEl.value) || 0;
+    const discountSelect = document.getElementById('price-item-discount-plan');
+    const couponSelect = document.getElementById('price-item-coupon');
+    if (!unitPriceEl || !actualPriceEl) return;
+    const basePrice = parseFloat(unitPriceEl.value) || 0;
+    let discount = 0;
+    if (discountSelect && discountSelect.value) {
+        const dp = priceItemDiscountPlans.find(d => d.id == discountSelect.value);
+        if (dp) discount += Number(dp.amount || 0);
     }
+    if (couponSelect && couponSelect.value) {
+        const cp = priceItemCoupons.find(c => c.id == couponSelect.value);
+        if (cp) discount += Number(cp.amount || 0);
+    }
+    actualPriceEl.value = Math.max(0, basePrice - discount).toFixed(2);
+}
+
+function onUnitPriceChange() {
+    recalcItemActualPrice();
 }
 
 // 加载报价单优惠方案下拉（按当前价格方案的 plan_type 筛选）
@@ -3505,9 +3523,10 @@ async function loadPriceItemDiscountOptions(selectedValue) {
 
     try {
         const res = await api('list_discount_plans', { plan_type: planType, page_size: 200 }, 'GET');
-        const data = res.data || [];
+        priceItemDiscountPlans = res.data || [];
         select.innerHTML = '<option value="">不使用优惠方案</option>' +
-            data.map(d => `<option value="${d.id}">${esc(d.name)}（¥${Number(d.amount || 0).toFixed(2)}）</option>`).join('');
+            priceItemDiscountPlans.map(d => `<option value="${d.id}">${esc(d.name)}（¥${Number(d.amount || 0).toFixed(2)}）</option>`).join('');
+        select.onchange = recalcItemActualPrice;
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
             select.value = selectedValue;
         }
@@ -3529,9 +3548,10 @@ async function loadPriceItemCouponOptions(selectedValue) {
 
     try {
         const res = await api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET');
-        const data = res.data || [];
+        priceItemCoupons = res.data || [];
         select.innerHTML = '<option value="">不使用优惠券</option>' +
-            data.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`).join('');
+            priceItemCoupons.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`).join('');
+        select.onchange = recalcItemActualPrice;
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
             select.value = selectedValue;
         }
