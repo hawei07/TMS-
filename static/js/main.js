@@ -98,7 +98,7 @@ function refreshPanel(panelId) {
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-schedule-view'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
-        case 'panel-discounts': initDiscountTabs(); loadDiscountPlans(); break;
+        case 'panel-discounts': initCouponTabs(); loadDiscountPlans(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
         case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
         case 'panel-period-settings': loadPeriodTable(); break;
@@ -567,6 +567,8 @@ function debounceSearch(tab) {
         else if (tab === 'order') { orderPage = 1; loadOrders(); }
         else if (tab === 'refund') { refundPage = 1; loadRefundRecords(); }
         else if (tab === 'discount') { discountPlanPage = 1; loadDiscountPlans(); }
+        else if (tab === 'coupon') { couponPage = 1; loadCoupons(); }
+        else if (tab === 'cr') { couponRecordPage = 1; loadCouponRecords(); }
         else if (tab === 'classroom') { loadClassrooms(); }
     }, 400);
 }
@@ -9872,20 +9874,24 @@ function toggleSidebar() {
 let discountPlanEditingId = null;
 let discountSubjectCheckboxData = [];
 
-// 标签页初始化
-function initDiscountTabs() {
+// 标签页初始化（优惠券模块：3个标签）
+function initDiscountTabs() {}  // 保留兼容，实际使用 initCouponTabs
+
+function initCouponTabs() {
     document.querySelectorAll('#panel-discounts .sec-tab').forEach(tab => {
         tab.addEventListener('click', function() {
             document.querySelectorAll('#panel-discounts .sec-tab').forEach(t => t.classList.remove('active'));
-            document.querySelectorAll('#panel-discounts .sec-panel').forEach(p => p.classList.remove('active'));
             this.classList.add('active');
-            const targetId = this.dataset.tab;
-            const target = document.getElementById(targetId);
-            if (target) target.classList.add('active');
-            if (targetId === 'tab-discount-plans') {
-                discountPlanPage = 1;
-                loadDiscountPlans();
-            }
+            // 切换标签页可见性
+            ['tab-discount-plans', 'tab-coupons', 'tab-coupon-records'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.style.display = id === this.dataset.tab ? 'block' : 'none';
+            });
+            // 按需加载数据
+            const tabId = this.dataset.tab;
+            if (tabId === 'tab-discount-plans') { discountPlanPage = 1; loadDiscountPlans(); }
+            else if (tabId === 'tab-coupons') { couponPage = 1; loadCoupons(); }
+            else if (tabId === 'tab-coupon-records') { couponRecordPage = 1; loadCouponRecords(); }
         });
     });
 }
@@ -9893,8 +9899,8 @@ function initDiscountTabs() {
 // 加载优惠方案列表
 async function loadDiscountPlans(page) {
     if (page) discountPlanPage = page;
-    const keyword = document.getElementById('search-discount')?.value || '';
-    const planType = document.getElementById('filter-discount-type')?.value || '';
+    const keyword = document.getElementById('discount-search')?.value || '';
+    const planType = document.getElementById('discount-type-filter')?.value || '';
     try {
         const result = await api('list_discount_plans', {
             page: discountPlanPage,
@@ -10202,4 +10208,440 @@ function ensureDiscountCampusTreeListener() {
         }
     });
     _discountCampusTreeListenerBound = true;
+}
+
+// ==================== 优惠券管理 ====================
+let couponEditingId = null;
+let couponPage = 1;
+let couponRecordPage = 1;
+let couponSubjectCheckboxData = [];
+
+// 加载优惠券列表
+async function loadCoupons(page) {
+    if (page) couponPage = page;
+    const keyword = document.getElementById('coupon-search')?.value || '';
+    const couponType = document.getElementById('coupon-type-filter')?.value || '';
+    try {
+        const result = await api('list_coupons', {
+            page: couponPage,
+            page_size: 15,
+            keyword: keyword,
+            coupon_type: couponType
+        }, 'GET');
+        const rows = result.data || [];
+        renderCouponTable(rows);
+        renderCouponPagination(result.total || 0, couponPage);
+    } catch (e) {
+        showToast('加载优惠券失败', 'error');
+    }
+}
+
+// 渲染优惠券表格（8列）
+function renderCouponTable(rows) {
+    const tbody = document.querySelector('#table-coupons tbody');
+    if (!tbody) return;
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无优惠券</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const campusText = r.campus_names || '全部校区';
+        const subjectText = r.subject_names || '全部学科';
+        return `
+        <tr>
+            <td>${escHtml(r.name)}</td>
+            <td><span class="tag tag-${r.coupon_type === '课程券' ? 'green' : 'orange'}">${escHtml(r.coupon_type)}</span></td>
+            <td style="text-align:right;font-weight:600;color:#DC2626;">¥${Number(r.amount || 0).toFixed(2)}</td>
+            <td>${(r.start_date||'')} ~ ${(r.end_date||'')}</td>
+            <td title="${escHtml(campusText)}">${escHtml(campusText.length > 16 ? campusText.substring(0, 16) + '...' : campusText)}</td>
+            <td title="${escHtml(subjectText)}">${escHtml(subjectText.length > 16 ? subjectText.substring(0, 16) + '...' : subjectText)}</td>
+            <td>${r.record_count || 0} 次</td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn-link" onclick="showCouponForm(${r.id})">编辑</button>
+                    <button class="btn-link-danger" onclick="deleteCoupon(${r.id}, '${escHtml(r.name).replace(/'/g, "\\'")}')">删除</button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// 优惠券分页
+function renderCouponPagination(total, page) {
+    const container = document.getElementById('pagination-coupon');
+    if (!container) return;
+    if (total <= 15) { container.innerHTML = ''; return; }
+    const totalPages = Math.ceil(total / 15);
+    let html = '';
+    html += `<button ${page <= 1 ? 'disabled' : ''} onclick="loadCoupons(${page - 1})">上一页</button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === page ? 'active' : ''}" onclick="loadCoupons(${i})">${i}</button>`;
+    }
+    html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadCoupons(${page + 1})">下一页</button>`;
+    container.innerHTML = html;
+}
+
+// 新增/编辑优惠券弹窗
+async function showCouponForm(id) {
+    couponEditingId = id || null;
+    document.getElementById('coupon-modal-title').textContent = id ? '编辑优惠券' : '新增优惠券';
+    // 清空表单
+    document.getElementById('coupon-name').value = '';
+    document.getElementById('coupon-type').value = '课程券';
+    document.getElementById('coupon-amount').value = '';
+    document.getElementById('coupon-start').value = '';
+    document.getElementById('coupon-end').value = '';
+    // 重置 badge
+    const campusBadge = document.getElementById('cp-campus-count');
+    if (campusBadge) { campusBadge.textContent = '未选择'; campusBadge.classList.remove('has-selection'); }
+    const subjectBadge = document.getElementById('cp-subject-count');
+    if (subjectBadge) { subjectBadge.textContent = '未选择'; subjectBadge.classList.remove('has-selection'); }
+    // 加载树
+    loadCampusTree('coupon-campus-tree');
+    loadCouponSubjectTree();
+    ensureCouponCampusTreeListener();
+    openModal('modal-coupon');
+    // 初始化 Flatpickr
+    if (typeof refreshDatePickers === 'function') refreshDatePickers('#modal-coupon');
+    // 编辑模式：回填数据
+    if (id) {
+        try {
+            const detail = await api('get_coupon', { id: id }, 'GET');
+            document.getElementById('coupon-name').value = detail.name || '';
+            document.getElementById('coupon-type').value = detail.coupon_type || '课程券';
+            document.getElementById('coupon-amount').value = detail.amount || '';
+            document.getElementById('coupon-start').value = detail.start_date || '';
+            document.getElementById('coupon-end').value = detail.end_date || '';
+            // 勾选校区（延迟等待树渲染完成）
+            setTimeout(() => {
+                (detail.campus_ids || []).forEach(cid => {
+                    const cb = document.querySelector('#coupon-campus-tree .campus-tree-node[data-id="' + cid + '"] .campus-tree-check');
+                    if (cb) { cb.checked = true; if (typeof toggleCampusTreeNode === 'function') toggleCampusTreeNode(cb); }
+                });
+                syncAllCouponCampusRows();
+                updateCouponCampusCount();
+                (detail.subject_ids || []).forEach(sid => {
+                    const cb = document.querySelector('#coupon-subject-tree .campus-tree-node[data-id="' + sid + '"] .campus-tree-check');
+                    if (cb) { cb.checked = true; onCouponSubjectCheck(cb); }
+                });
+                updateAllCouponSubjectRowStates();
+                updateCouponSubjectCount();
+            }, 500);
+        } catch (e) {
+            showToast('加载优惠券详情失败', 'error');
+        }
+    }
+}
+
+// 保存优惠券
+async function saveCoupon() {
+    const id = couponEditingId;
+    const name = document.getElementById('coupon-name').value.trim();
+    const couponType = document.getElementById('coupon-type').value;
+    const amount = parseFloat(document.getElementById('coupon-amount').value);
+    const startDate = document.getElementById('coupon-start').value;
+    const endDate = document.getElementById('coupon-end').value;
+    const campusIds = getCouponSelectedCampuses();
+    const subjectIds = getCouponSelectedSubjects();
+
+    // 校验
+    if (!name) { showToast('请输入优惠券名称', 'error'); return; }
+    if (!couponType) { showToast('请选择类型', 'error'); return; }
+    if (!amount || amount <= 0) { showToast('优惠金额必须大于0', 'error'); return; }
+    if (!startDate) { showToast('请选择开始日期', 'error'); return; }
+    if (!endDate) { showToast('请选择结束日期', 'error'); return; }
+    if (endDate < startDate) { showToast('结束日期不能早于开始日期', 'error'); return; }
+
+    const payload = {
+        name: name,
+        coupon_type: couponType,
+        discount_amount: amount,
+        start_date: startDate,
+        end_date: endDate,
+        campus_ids: campusIds,
+        subject_ids: subjectIds
+    };
+    if (id) payload.id = parseInt(id);
+
+    try {
+        const action = id ? 'update_coupon' : 'add_coupon';
+        const result = await api(action, payload);
+        showToast(result.message || '保存成功');
+        closeModal('modal-coupon');
+        loadCoupons();
+    } catch (e) {
+        showToast('保存失败', 'error');
+    }
+}
+
+// 删除优惠券
+function deleteCoupon(id, name) {
+    showCustomConfirm('确定要删除优惠券「' + name + '」吗？删除后不可恢复，关联的发放记录也将一并删除。', async function() {
+        try {
+            const result = await api('delete_coupon', { id: id });
+            showToast(result.message || '已删除');
+            loadCoupons();
+        } catch (e) {
+            showToast('删除失败', 'error');
+        }
+    });
+}
+
+// ==================== 优惠券学科树 ====================
+async function loadCouponSubjectTree() {
+    const container = document.getElementById('coupon-subject-tree');
+    if (!container) return;
+    container.innerHTML = '<span style="color:#999;font-size:13px;">加载中...</span>';
+    try {
+        const result = await api('list_subjects', {}, 'GET');
+        const tree = result.tree || [];
+        couponSubjectCheckboxData = result.flat || [];
+        if (tree.length === 0) {
+            container.innerHTML = '<span style="color:#999;font-size:13px;">暂无学科数据</span>';
+            return;
+        }
+        container.innerHTML = tree.map(node => renderCouponSubjectNode(node, 0)).join('');
+    } catch (e) {
+        container.innerHTML = '<span style="color:#e6a23c;font-size:13px;">加载学科失败</span>';
+    }
+}
+
+function renderCouponSubjectNode(node, level) {
+    const hasChildren = node.children && node.children.length > 0;
+    let html = '<div class="campus-tree-node" data-id="' + node.id + '" data-has-children="' + !!hasChildren + '" data-expanded="' + (level === 0) + '">';
+    html += '<div class="campus-tree-row" style="padding-left:' + (level * 20 + 12) + 'px">';
+    if (hasChildren) {
+        html += '<span class="campus-tree-arrow" onclick="toggleCampusTreeExpand(this)">' + (level === 0 ? '▾' : '▸') + '</span>';
+    } else {
+        html += '<span class="campus-tree-arrow" style="visibility:hidden;">▸</span>';
+    }
+    html += '<input type="checkbox" class="campus-tree-check" onclick="onCouponSubjectCheck(this)">';
+    html += '<span class="campus-tree-label">' + escHtml(node.name) + '</span>';
+    html += '</div>';
+    if (hasChildren) {
+        html += '<div class="campus-tree-children" style="display:' + (level === 0 ? 'block' : 'none') + '">';
+        node.children.forEach(child => { html += renderCouponSubjectNode(child, level + 1); });
+        html += '</div>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function onCouponSubjectCheck(el) {
+    const node = el.closest('.campus-tree-node');
+    if (!node) return;
+    const checked = el.checked;
+    node.querySelectorAll('.campus-tree-check').forEach(c => { c.checked = checked; c.indeterminate = false; });
+    node.querySelectorAll('.campus-tree-check').forEach(c => syncTreeRowState(c));
+    const parentNode = node.parentElement?.closest('.campus-tree-node');
+    if (parentNode) updateCouponSubjectParentState(parentNode);
+    updateAllCouponSubjectRowStates();
+    updateCouponSubjectCount();
+}
+
+function updateAllCouponSubjectRowStates() {
+    var checks = document.querySelectorAll('#coupon-subject-tree .campus-tree-check');
+    for (var i = 0; i < checks.length; i++) { syncTreeRowState(checks[i]); }
+}
+
+function updateCouponSubjectParentState(node) {
+    const check = node.querySelector(':scope > .campus-tree-row > .campus-tree-check');
+    const childChecks = node.querySelectorAll(':scope > .campus-tree-children .campus-tree-node .campus-tree-row > .campus-tree-check');
+    if (!check || childChecks.length === 0) return;
+    const checkedCount = Array.from(childChecks).filter(c => c.checked).length;
+    if (checkedCount === 0) {
+        check.checked = false; check.indeterminate = false;
+    } else if (checkedCount === childChecks.length) {
+        check.checked = true; check.indeterminate = false;
+    } else {
+        check.checked = false; check.indeterminate = true;
+    }
+    syncTreeRowState(check);
+    const parentNode2 = node.parentElement?.closest('.campus-tree-node');
+    if (parentNode2) updateCouponSubjectParentState(parentNode2);
+}
+
+function getCouponSelectedSubjects() {
+    const checks = document.querySelectorAll('#coupon-subject-tree .campus-tree-check:checked');
+    return Array.from(checks).map(c => parseInt(c.closest('.campus-tree-node').dataset.id));
+}
+
+function getCouponSelectedCampuses() {
+    const checks = document.querySelectorAll('#coupon-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked');
+    return Array.from(checks).map(c => parseInt(c.closest('.campus-tree-node').dataset.id));
+}
+
+function updateCouponSubjectCount() {
+    const checks = document.querySelectorAll('#coupon-subject-tree .campus-tree-check:checked');
+    const badge = document.getElementById('cp-subject-count');
+    if (!badge) return;
+    const n = checks.length;
+    badge.textContent = n > 0 ? '已选 ' + n : '未选择';
+    badge.classList.toggle('has-selection', n > 0);
+}
+
+function updateCouponCampusCount() {
+    const checks = document.querySelectorAll('#coupon-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked');
+    const badge = document.getElementById('cp-campus-count');
+    if (!badge) return;
+    const n = checks.length;
+    badge.textContent = n > 0 ? '已选 ' + n : '未选择';
+    badge.classList.toggle('has-selection', n > 0);
+}
+
+function syncAllCouponCampusRows() {
+    const checks = document.querySelectorAll('#coupon-campus-tree .campus-tree-check');
+    checks.forEach(function(c) { syncTreeRowState(c); });
+}
+
+let _couponCampusTreeListenerBound = false;
+function ensureCouponCampusTreeListener() {
+    if (_couponCampusTreeListenerBound) return;
+    const tree = document.getElementById('coupon-campus-tree');
+    if (!tree) return;
+    tree.addEventListener('click', function(e) {
+        if (e.target.classList.contains('campus-tree-check')) {
+            setTimeout(function() {
+                syncAllCouponCampusRows();
+                updateCouponCampusCount();
+            }, 0);
+        }
+    });
+    _couponCampusTreeListenerBound = true;
+}
+
+// ==================== 优惠券发放记录 ====================
+
+// 加载发放记录
+async function loadCouponRecords(page) {
+    if (page) couponRecordPage = page;
+    const keyword = document.getElementById('cr-search')?.value || '';
+    const dateFrom = document.getElementById('cr-date-from')?.value || '';
+    const dateTo = document.getElementById('cr-date-to')?.value || '';
+    try {
+        const params = {
+            page: couponRecordPage,
+            page_size: 15,
+            keyword: keyword
+        };
+        if (dateFrom) params.date_from = dateFrom;
+        if (dateTo) params.date_to = dateTo;
+        const result = await api('list_coupon_records', params, 'GET');
+        const rows = result.data || [];
+        renderCouponRecordTable(rows);
+        renderCouponRecordPagination(result.total || 0, couponRecordPage);
+    } catch (e) {
+        showToast('加载发放记录失败', 'error');
+    }
+}
+
+// 渲染发放记录表格（7列）
+function renderCouponRecordTable(rows) {
+    const tbody = document.querySelector('#table-coupon-records tbody');
+    if (!tbody) return;
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无发放记录</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const dt = r.distributed_at || '';
+        return `
+        <tr>
+            <td>${dt.substring(0, 16)}</td>
+            <td>${escHtml(r.coupon_name || '')}</td>
+            <td style="text-align:right;font-weight:600;color:#DC2626;">¥${Number(r.discount_amount || 0).toFixed(2)}</td>
+            <td>${escHtml(r.student_name)}</td>
+            <td>${escHtml(r.phone)}</td>
+            <td>${escHtml(r.distributor || '')}</td>
+            <td>
+                <button class="btn-link-danger" onclick="deleteCouponRecord(${r.id})">删除</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// 发放记录分页
+function renderCouponRecordPagination(total, page) {
+    const container = document.getElementById('pagination-cr');
+    if (!container) return;
+    if (total <= 15) { container.innerHTML = ''; return; }
+    const totalPages = Math.ceil(total / 15);
+    let html = '';
+    html += `<button ${page <= 1 ? 'disabled' : ''} onclick="loadCouponRecords(${page - 1})">上一页</button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === page ? 'active' : ''}" onclick="loadCouponRecords(${i})">${i}</button>`;
+    }
+    html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadCouponRecords(${page + 1})">下一页</button>`;
+    container.innerHTML = html;
+}
+
+// 打开发放记录弹窗
+async function showCouponRecordForm() {
+    // 清空表单
+    document.getElementById('cr-coupon-select').value = '';
+    document.getElementById('cr-student-name').value = '';
+    document.getElementById('cr-phone').value = '';
+    document.getElementById('cr-distributor').value = '';
+    document.getElementById('cr-distributed-at').value = '';
+    // 加载优惠券下拉（全部）
+    const sel = document.getElementById('cr-coupon-select');
+    sel.innerHTML = '<option value="">加载中...</option>';
+    try {
+        const result = await api('list_coupons', { page: 1, page_size: 200 }, 'GET');
+        const coupons = result.data || [];
+        sel.innerHTML = '<option value="">请选择优惠券</option>' +
+            coupons.map(c => `<option value="${c.id}">${escHtml(c.name)} (${c.coupon_type} ¥${Number(c.amount || 0).toFixed(2)})</option>`).join('');
+    } catch (e) {
+        sel.innerHTML = '<option value="">加载失败</option>';
+        showToast('加载优惠券列表失败', 'error');
+    }
+    openModal('modal-coupon-record');
+    if (typeof refreshDatePickers === 'function') refreshDatePickers('#modal-coupon-record');
+}
+
+// 保存发放记录
+async function saveCouponRecord() {
+    const couponId = parseInt(document.getElementById('cr-coupon-select').value);
+    const studentName = document.getElementById('cr-student-name').value.trim();
+    const phone = document.getElementById('cr-phone').value.trim();
+    const distributor = document.getElementById('cr-distributor').value.trim();
+    const distributedAt = document.getElementById('cr-distributed-at').value;
+
+    if (!couponId || couponId <= 0) { showToast('请选择优惠券', 'error'); return; }
+    if (!studentName) { showToast('请输入学员姓名', 'error'); return; }
+    if (!phone) { showToast('请输入手机号', 'error'); return; }
+    if (!distributor) { showToast('请输入发放人', 'error'); return; }
+
+    const payload = {
+        coupon_id: couponId,
+        student_name: studentName,
+        phone: phone,
+        distributor: distributor
+    };
+    if (distributedAt) payload.distributed_at = distributedAt + ' 00:00:00';
+
+    try {
+        const result = await api('add_coupon_record', payload);
+        showToast(result.message || '发放成功');
+        closeModal('modal-coupon-record');
+        loadCouponRecords();
+        // 同时刷新优惠券列表（更新已发放次数）
+        loadCoupons();
+    } catch (e) {
+        showToast('发放失败', 'error');
+    }
+}
+
+// 删除发放记录
+function deleteCouponRecord(id) {
+    showCustomConfirm('确定要删除这条发放记录吗？删除后不可恢复。', async function() {
+        try {
+            const result = await api('delete_coupon_record', { id: id });
+            showToast(result.message || '已删除');
+            loadCouponRecords();
+            loadCoupons();
+        } catch (e) {
+            showToast('删除失败', 'error');
+        }
+    });
 }

@@ -577,9 +577,36 @@ if (!$colRfM) {
         INDEX idx_dps_plan (plan_id),
         INDEX idx_dps_subject (subject_id),
         FOREIGN KEY (plan_id) REFERENCES discount_plans(id) ON DELETE CASCADE
-    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
-    $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
+        // 优惠券模块建表
+        $db->exec("CREATE TABLE IF NOT EXISTS coupons (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        name VARCHAR(200) NOT NULL DEFAULT '',
+        coupon_type VARCHAR(20) NOT NULL DEFAULT '课程券',
+        discount_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+        start_date VARCHAR(20) DEFAULT '',
+        end_date VARCHAR(20) DEFAULT '',
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("CREATE TABLE IF NOT EXISTS coupon_campuses (
+        id INT PRIMARY KEY AUTO_INCREMENT, coupon_id INT NOT NULL, campus_id INT NOT NULL,
+        INDEX idx_cc_coupon (coupon_id), FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("CREATE TABLE IF NOT EXISTS coupon_subjects (
+        id INT PRIMARY KEY AUTO_INCREMENT, coupon_id INT NOT NULL, subject_id INT NOT NULL,
+        INDEX idx_cs_coupon (coupon_id), FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        $db->exec("CREATE TABLE IF NOT EXISTS coupon_records (
+        id INT PRIMARY KEY AUTO_INCREMENT, coupon_id INT NOT NULL,
+        coupon_name VARCHAR(200) DEFAULT '', student_name VARCHAR(200) DEFAULT '',
+        phone VARCHAR(50) DEFAULT '', issuer VARCHAR(100) DEFAULT '',
+        issued_at DATETIME DEFAULT CURRENT_TIMESTAMP, created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        INDEX idx_cr_coupon (coupon_id), FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(200) NOT NULL DEFAULT '',
     start_time VARCHAR(5) NOT NULL DEFAULT '',
@@ -2707,6 +2734,269 @@ $stmt->execute();
             $plan['subject_ids'] = $subjectIds;
 
             json($plan);
+            break;
+
+// ==================== 优惠券 API ====================
+        case 'list_coupons':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 15)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $couponType = trim($_GET['coupon_type'] ?? '');
+            $campusId = intval($_GET['campus_id'] ?? 0);
+            $offset = ($page - 1) * $pageSize;
+
+            $where = ['1=1'];
+            if ($keyword !== '') {
+                $where[] = 'c.name LIKE ' . $db->quote('%' . $keyword . '%');
+            }
+            if ($couponType !== '') {
+                $where[] = 'c.coupon_type = ' . $db->quote($couponType);
+            }
+            if ($campusId > 0) {
+                $where[] = '(c.id IN (SELECT coupon_id FROM coupon_campuses WHERE campus_id=' . $campusId . ') OR c.id NOT IN (SELECT coupon_id FROM coupon_campuses))';
+            }
+            $whereStr = implode(' AND ', $where);
+
+            $cnt = $db->query("SELECT COUNT(*) FROM coupons c WHERE $whereStr")->fetchColumn();
+            $total = intval($cnt);
+
+            $sql = "SELECT c.*,
+                (SELECT GROUP_CONCAT(DISTINCT cc2.campus_id ORDER BY cc2.campus_id SEPARATOR ',') FROM coupon_campuses cc2 WHERE cc2.coupon_id=c.id) AS campus_ids,
+                (SELECT GROUP_CONCAT(DISTINCT o.name ORDER BY o.name SEPARATOR ', ') FROM coupon_campuses cc2 LEFT JOIN organizations o ON cc2.campus_id=o.id WHERE cc2.coupon_id=c.id) AS campus_names,
+                (SELECT GROUP_CONCAT(DISTINCT cs2.subject_id ORDER BY cs2.subject_id SEPARATOR ',') FROM coupon_subjects cs2 WHERE cs2.coupon_id=c.id) AS subject_ids,
+                (SELECT GROUP_CONCAT(DISTINCT s.name ORDER BY s.name SEPARATOR ', ') FROM coupon_subjects cs2 LEFT JOIN subjects s ON cs2.subject_id=s.id WHERE cs2.coupon_id=c.id) AS subject_names,
+                (SELECT COUNT(*) FROM coupon_records cr WHERE cr.coupon_id=c.id) AS record_count
+            FROM coupons c
+            WHERE $whereStr
+            ORDER BY c.created_at DESC
+            LIMIT $offset, $pageSize";
+            $res = $db->query($sql);
+            $rows = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+                $r['amount'] = floatval($r['discount_amount']);
+                unset($r['discount_amount']);
+                $r['record_count'] = intval($r['record_count']);
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        case 'add_coupon':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            $couponType = trim($input['coupon_type'] ?? '课程券');
+            $discountAmount = floatval($input['discount_amount'] ?? 0);
+            $startDate = trim($input['start_date'] ?? '');
+            $endDate = trim($input['end_date'] ?? '');
+            $campusIdsRaw = $input['campus_ids'] ?? [];
+            $subjectIdsRaw = $input['subject_ids'] ?? [];
+
+            if ($name === '') { json(['error' => '优惠券名称不能为空']); break; }
+            if (!in_array($couponType, ['课程券', '商品券'])) { json(['error' => '类型无效']); break; }
+            if ($discountAmount <= 0) { json(['error' => '优惠金额必须大于0']); break; }
+            if ($startDate === '' || $endDate === '') { json(['error' => '日期不能为空']); break; }
+            if ($endDate < $startDate) { json(['error' => '结束日期不能早于开始日期']); break; }
+
+            $dup = $db->query("SELECT COUNT(*) FROM coupons WHERE name=" . $db->quote($name) . " AND coupon_type=" . $db->quote($couponType))->fetchColumn();
+            if ($dup > 0) { json(['error' => '同类型下优惠券名称已存在']); break; }
+
+            $n = now();
+            $db->beginTransaction();
+            try {
+                $db->exec("INSERT INTO coupons (name, coupon_type, discount_amount, start_date, end_date, created_at, updated_at) VALUES (" . $db->quote($name) . ", " . $db->quote($couponType) . ", $discountAmount, " . $db->quote($startDate) . ", " . $db->quote($endDate) . ", '$n', '$n')");
+                $couponId = $db->lastInsertId();
+
+                if (!empty($campusIdsRaw)) {
+                    $campusIds = is_string($campusIdsRaw) ? array_map('intval', explode(',', $campusIdsRaw)) : array_map('intval', $campusIdsRaw);
+                    $vals = [];
+                    foreach ($campusIds as $cid) { if ($cid > 0) $vals[] = "($couponId, $cid)"; }
+                    if (!empty($vals)) $db->exec("INSERT INTO coupon_campuses (coupon_id, campus_id) VALUES " . implode(', ', $vals));
+                }
+
+                if (!empty($subjectIdsRaw)) {
+                    $subjectIds = is_string($subjectIdsRaw) ? array_map('intval', explode(',', $subjectIdsRaw)) : array_map('intval', $subjectIdsRaw);
+                    $vals = [];
+                    foreach ($subjectIds as $sid) { if ($sid > 0) $vals[] = "($couponId, $sid)"; }
+                    if (!empty($vals)) $db->exec("INSERT INTO coupon_subjects (coupon_id, subject_id) VALUES " . implode(', ', $vals));
+                }
+
+                $db->commit();
+                json(['message' => '优惠券创建成功', 'id' => $couponId]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '创建失败: ' . $e->getMessage()]);
+            }
+            break;
+
+        case 'update_coupon':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $existing = $db->query("SELECT * FROM coupons WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) { json(['error' => '优惠券不存在']); break; }
+
+            $name = trim($input['name'] ?? $existing['name']);
+            $couponType = trim($input['coupon_type'] ?? $existing['coupon_type']);
+            $discountAmount = floatval($input['discount_amount'] ?? $existing['discount_amount']);
+            $startDate = trim($input['start_date'] ?? $existing['start_date']);
+            $endDate = trim($input['end_date'] ?? $existing['end_date']);
+            $campusIdsRaw = $input['campus_ids'] ?? null;
+            $subjectIdsRaw = $input['subject_ids'] ?? null;
+
+            if ($name === '') { json(['error' => '优惠券名称不能为空']); break; }
+            if (!in_array($couponType, ['课程券', '商品券'])) { json(['error' => '类型无效']); break; }
+            if ($discountAmount <= 0) { json(['error' => '优惠金额必须大于0']); break; }
+            if ($endDate < $startDate) { json(['error' => '结束日期不能早于开始日期']); break; }
+
+            $dup = $db->query("SELECT COUNT(*) FROM coupons WHERE name=" . $db->quote($name) . " AND coupon_type=" . $db->quote($couponType) . " AND id!=$id")->fetchColumn();
+            if ($dup > 0) { json(['error' => '同类型下优惠券名称已存在']); break; }
+
+            $db->beginTransaction();
+            try {
+                $db->exec("UPDATE coupons SET name=" . $db->quote($name) . ", coupon_type=" . $db->quote($couponType) . ", discount_amount=$discountAmount, start_date=" . $db->quote($startDate) . ", end_date=" . $db->quote($endDate) . ", updated_at='" . now() . "' WHERE id=$id");
+
+                if ($campusIdsRaw !== null) {
+                    $db->exec("DELETE FROM coupon_campuses WHERE coupon_id=$id");
+                    if (!empty($campusIdsRaw)) {
+                        $campusIds = is_string($campusIdsRaw) ? array_map('intval', explode(',', $campusIdsRaw)) : array_map('intval', $campusIdsRaw);
+                        $vals = [];
+                        foreach ($campusIds as $cid) { if ($cid > 0) $vals[] = "($id, $cid)"; }
+                        if (!empty($vals)) $db->exec("INSERT INTO coupon_campuses (coupon_id, campus_id) VALUES " . implode(', ', $vals));
+                    }
+                }
+
+                if ($subjectIdsRaw !== null) {
+                    $db->exec("DELETE FROM coupon_subjects WHERE coupon_id=$id");
+                    if (!empty($subjectIdsRaw)) {
+                        $subjectIds = is_string($subjectIdsRaw) ? array_map('intval', explode(',', $subjectIdsRaw)) : array_map('intval', $subjectIdsRaw);
+                        $vals = [];
+                        foreach ($subjectIds as $sid) { if ($sid > 0) $vals[] = "($id, $sid)"; }
+                        if (!empty($vals)) $db->exec("INSERT INTO coupon_subjects (coupon_id, subject_id) VALUES " . implode(', ', $vals));
+                    }
+                }
+
+                $db->commit();
+                json(['message' => '优惠券更新成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '更新失败: ' . $e->getMessage()]);
+            }
+            break;
+
+        case 'delete_coupon':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $existing = $db->query("SELECT * FROM coupons WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) { json(['error' => '优惠券不存在']); break; }
+
+            $db->exec("DELETE FROM coupons WHERE id=$id");
+            json(['message' => '优惠券已删除']);
+            break;
+
+        case 'get_coupon':
+            $id = intval($_GET['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $coupon = $db->query("SELECT * FROM coupons WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$coupon) { json(['error' => '优惠券不存在']); break; }
+
+            $campusRes = $db->query("SELECT campus_id FROM coupon_campuses WHERE coupon_id=$id ORDER BY campus_id");
+            $campusIds = [];
+            while ($cr2 = $campusRes->fetch(PDO::FETCH_ASSOC)) $campusIds[] = intval($cr2['campus_id']);
+
+            $subjectRes = $db->query("SELECT subject_id FROM coupon_subjects WHERE coupon_id=$id ORDER BY subject_id");
+            $subjectIds = [];
+            while ($sr = $subjectRes->fetch(PDO::FETCH_ASSOC)) $subjectIds[] = intval($sr['subject_id']);
+
+            $coupon['amount'] = floatval($coupon['discount_amount']);
+            unset($coupon['discount_amount']);
+            $coupon['campus_ids'] = $campusIds;
+            $coupon['subject_ids'] = $subjectIds;
+
+            json($coupon);
+            break;
+
+// ==================== 优惠券发放记录 API ====================
+        case 'list_coupon_records':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 15)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $couponId = intval($_GET['coupon_id'] ?? 0);
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $offset = ($page - 1) * $pageSize;
+
+            $where = ['1=1'];
+            if ($keyword !== '') {
+                $where[] = '(cr.student_name LIKE ' . $db->quote('%' . $keyword . '%') . ' OR cr.phone LIKE ' . $db->quote('%' . $keyword . '%') . ' OR cr.coupon_name LIKE ' . $db->quote('%' . $keyword . '%') . ')';
+            }
+            if ($couponId > 0) {
+                $where[] = 'cr.coupon_id = ' . $couponId;
+            }
+            if ($dateFrom !== '') {
+                $where[] = 'cr.issued_at >= ' . $db->quote($dateFrom . ' 00:00:00');
+            }
+            if ($dateTo !== '') {
+                $where[] = 'cr.issued_at <= ' . $db->quote($dateTo . ' 23:59:59');
+            }
+            $whereStr = implode(' AND ', $where);
+
+            $cnt = $db->query("SELECT COUNT(*) FROM coupon_records cr LEFT JOIN coupons c ON cr.coupon_id=c.id WHERE $whereStr")->fetchColumn();
+            $total = intval($cnt);
+
+            $sql = "SELECT cr.id, cr.coupon_id, cr.student_name, cr.phone, cr.issuer AS distributor, cr.issued_at AS distributed_at, cr.created_at,
+                COALESCE(cr.coupon_name, c.name) AS coupon_name,
+                c.coupon_type,
+                c.discount_amount
+            FROM coupon_records cr
+            LEFT JOIN coupons c ON cr.coupon_id=c.id
+            WHERE $whereStr
+            ORDER BY cr.issued_at DESC
+            LIMIT $offset, $pageSize";
+            $res = $db->query($sql);
+            $rows = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+                $r['discount_amount'] = floatval($r['discount_amount']);
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        case 'add_coupon_record':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $couponId = intval($input['coupon_id'] ?? 0);
+            $studentName = trim($input['student_name'] ?? '');
+            $phone = trim($input['phone'] ?? '');
+            $distributor = trim($input['issuer'] ?? $input['distributor'] ?? '');
+            $distributedAt = trim($input['issued_at'] ?? $input['distributed_at'] ?? now());
+
+            if ($couponId <= 0) { json(['error' => '优惠券ID无效']); break; }
+            if ($studentName === '') { json(['error' => '学员姓名不能为空']); break; }
+            if ($phone === '') { json(['error' => '手机号不能为空']); break; }
+            if ($distributor === '') { json(['error' => '发放人不能为空']); break; }
+
+            $cp = $db->query("SELECT name, coupon_type FROM coupons WHERE id=$couponId")->fetch(PDO::FETCH_ASSOC);
+            if (!$cp) { json(['error' => '优惠券不存在']); break; }
+
+            $couponName = $cp['name'];
+            $n = now();
+            $db->exec("INSERT INTO coupon_records (coupon_id, coupon_name, student_name, phone, issuer, issued_at, created_at) VALUES ($couponId, " . $db->quote($couponName) . ", " . $db->quote($studentName) . ", " . $db->quote($phone) . ", " . $db->quote($distributor) . ", " . $db->quote($distributedAt) . ", '$n')");
+            json(['message' => '发放记录添加成功', 'id' => $db->lastInsertId()]);
+            break;
+
+        case 'delete_coupon_record':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $existing = $db->query("SELECT * FROM coupon_records WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) { json(['error' => '发放记录不存在']); break; }
+
+            $db->exec("DELETE FROM coupon_records WHERE id=$id");
+            json(['message' => '发放记录已删除']);
             break;
 
 // ==================== 组织管理 API ====================
@@ -7020,6 +7310,8 @@ if (intval($countBt) === 0) {
                 <div class="panel-header"><h3>优惠管理</h3></div>
                 <div class="section-tabs">
                     <span class="sec-tab active" data-tab="tab-discount-plans">优惠方案</span>
+                    <span class="sec-tab" data-tab="tab-coupons">优惠券</span>
+                    <span class="sec-tab" data-tab="tab-coupon-records">发放记录</span>
                 </div>
                 <div id="tab-discount-plans">
                     <div class="toolbar">
@@ -7044,6 +7336,56 @@ if (intval($countBt) === 0) {
                         </table>
                     </div>
                     <div class="pagination" id="pagination-discount"></div>
+                </div>
+
+                <!-- Tab 2: 优惠券 -->
+                <div id="tab-coupons" style="display:none;">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <input type="text" id="coupon-search" placeholder="搜索优惠券名称..." oninput="debounceSearch('coupon')" style="width:220px;">
+                            <select id="coupon-type-filter" onchange="loadCoupons()">
+                                <option value="">全部类型</option>
+                                <option value="课程券">课程券</option>
+                                <option value="商品券">商品券</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-primary btn-sm" onclick="showCouponForm()">+ 新增优惠券</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-coupons">
+                            <thead><tr>
+                                <th>优惠券名称</th><th>类型</th><th>优惠金额</th><th>有效期</th><th>适用校区</th><th>适用学科</th><th>已发放</th><th width="120">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="pagination-coupon"></div>
+                </div>
+
+                <!-- Tab 3: 发放记录 -->
+                <div id="tab-coupon-records" style="display:none;">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <input type="text" id="cr-search" placeholder="搜索学员/手机号..." oninput="debounceSearch('cr')" style="width:200px;">
+                            <input type="date" id="cr-date-from" style="width:135px;" onchange="loadCouponRecords()">
+                            <span style="margin:0 4px;color:#999;">至</span>
+                            <input type="date" id="cr-date-to" style="width:135px;" onchange="loadCouponRecords()">
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-primary btn-sm" onclick="showCouponRecordForm()">+ 新增发放记录</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-coupon-records">
+                            <thead><tr>
+                                <th>发放时间</th><th>优惠券</th><th>优惠金额</th><th>学员姓名</th><th>手机号</th><th>发放人</th><th width="80">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="pagination-cr"></div>
                 </div>
             </section>
 
@@ -8714,6 +9056,129 @@ if (intval($countBt) === 0) {
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-discount-plan')">取消</button>
                 <button class="btn btn-primary" id="btn-discount-plan-save" onclick="saveDiscountPlan()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 优惠券弹窗 -->
+    <div class="modal-overlay" id="modal-coupon">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h4 id="coupon-modal-title">新增优惠券</h4>
+                <button class="modal-close" onclick="closeModal('modal-coupon')">&times;</button>
+            </div>
+            <div class="modal-body">
+
+                <!-- 卡片 1: 基本信息 -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">📋</span> 基本信息
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-group">
+                            <label class="required">优惠券名称</label>
+                            <input type="text" id="coupon-name" class="form-input" placeholder="请输入优惠券名称" maxlength="50">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label>类型</label>
+                                <select id="coupon-type" class="form-input">
+                                    <option value="课程券">课程券</option>
+                                    <option value="商品券">商品券</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label>优惠金额 (元)</label>
+                                <input type="number" id="coupon-amount" class="form-input" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 卡片 2: 有效期 -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">📅</span> 有效期
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label>开始日期</label>
+                                <input type="date" id="coupon-start" class="form-input">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label>结束日期</label>
+                                <input type="date" id="coupon-end" class="form-input">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- 卡片 3: 适用范围 -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">🏫</span> 适用范围
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-group">
+                            <div class="dp-tree-header">
+                                <label>适用校区</label>
+                                <span class="dp-badge" id="cp-campus-count">未选择</span>
+                            </div>
+                            <div class="dp-tree-wrap" id="coupon-campus-tree"></div>
+                        </div>
+                        <div class="form-group">
+                            <div class="dp-tree-header">
+                                <label>适用学科</label>
+                                <span class="dp-badge" id="cp-subject-count">未选择</span>
+                            </div>
+                            <div class="dp-tree-wrap" id="coupon-subject-tree"></div>
+                        </div>
+                    </div>
+                </div>
+
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-default" onclick="closeModal('modal-coupon')">取消</button>
+                <button class="btn btn-primary" id="btn-coupon-save" onclick="saveCoupon()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 发放记录弹窗 -->
+    <div class="modal-overlay" id="modal-coupon-record">
+        <div class="modal modal-lg" style="max-width:550px;">
+            <div class="modal-header">
+                <h4>新增发放记录</h4>
+                <button class="modal-close" onclick="closeModal('modal-coupon-record')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group">
+                    <label class="required">优惠券</label>
+                    <select id="cr-coupon-select" class="form-input">
+                        <option value="">请选择优惠券</option>
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label class="required">学员姓名</label>
+                    <input type="text" id="cr-student-name" class="form-input" placeholder="请输入学员姓名" maxlength="200">
+                </div>
+                <div class="form-group">
+                    <label class="required">手机号</label>
+                    <input type="text" id="cr-phone" class="form-input" placeholder="请输入手机号" maxlength="20">
+                </div>
+                <div class="form-group">
+                    <label class="required">发放人</label>
+                    <input type="text" id="cr-distributor" class="form-input" placeholder="请输入发放人" maxlength="100">
+                </div>
+                <div class="form-group">
+                    <label>发放时间</label>
+                    <input type="date" id="cr-distributed-at" class="form-input">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-default" onclick="closeModal('modal-coupon-record')">取消</button>
+                <button class="btn btn-primary" id="btn-cr-save" onclick="saveCouponRecord()">保存</button>
             </div>
         </div>
     </div>
