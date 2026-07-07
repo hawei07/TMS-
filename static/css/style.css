@@ -5287,3 +5287,488 @@ tbody td {
     color: #fff;
     box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
 }
+
+/* ==================== 退费审批弹窗 UI 优化 ==================== */
+
+/* --- 区域 1：信息卡片 --- */
+#modal-refund-approve .approve-info-cards {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+#modal-refund-approve .approve-info-cards .card-full {
+    grid-column: 1 / -1;
+}
+
+#modal-refund-approve .approve-info-card {
+    background: #fff;
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-md);
+    padding: 16px 20px;
+}
+#modal-refund-approve .approve-info-card .card-title {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    color: var(--color-text-muted);
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid var(--color-border-light);
+}
+#modal-refund-approve .approve-info-card .info-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 5px 0;
+    font-size: 13px;
+    line-height: 1.6;
+}
+#modal-refund-approve .approve-info-card .info-label {
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    flex-shrink: 0;
+    margin-right: 12px;
+}
+#modal-refund-approve .approve-info-card .info-value {
+    color: var(--color-text);
+    font-weight: 500;
+    text-align: right;
+    word-break: break-all;
+}
+#modal-refund-approve .approve-info-card .info-value.mono {
+    font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 12px;
+}
+
+/* 金额卡片 */
+#modal-refund-approve .card-amount {
+    background: linear-gradient(180deg, #FAF8FF 0%, #FFFFFF 100%);
+    border: 1px solid #EDE9FE;
+    border-top: 3px solid var(--color-primary);
+}
+#modal-refund-approve .card-amount .amount-grid {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 16px;
+}
+#modal-refund-approve .card-amount .amount-item {
+    text-align: center;
+    padding: 12px 8px;
+    border-radius: var(--radius-sm);
+    background: #FAFAFE;
+    transition: background 0.2s;
+}
+#modal-refund-approve .card-amount .amount-item:hover {
+    background: var(--color-primary-bg);
+}
+#modal-refund-approve .card-amount .amount-label {
+    font-size: 11px;
+    color: var(--color-text-muted);
+    margin-bottom: 6px;
+}
+#modal-refund-approve .card-amount .amount-value {
+    font-size: 16px;
+    font-weight: 700;
+    color: var(--color-text);
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
+}
+
+/* Hero：实退金额 */
+#modal-refund-approve .card-amount .amount-item.amount-hero {
+    background: linear-gradient(135deg, #FEF3C7 0%, #FFF7ED 100%);
+    border: 1px solid #FCD34D;
+    position: relative;
+}
+#modal-refund-approve .card-amount .amount-item.amount-hero::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 12px; right: 12px;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, #F59E0B, transparent);
+}
+#modal-refund-approve .card-amount .amount-item.amount-hero .amount-value {
+    color: #B45309;
+    font-size: 22px;
+    font-weight: 800;
+}
+#modal-refund-approve .card-amount .amount-item.amount-hero .amount-label {
+    color: #92400E;
+    font-weight: 600;
+}
+
+/* --- 区域 2：进度条 --- */
+#modal-refund-approve .approval-steps {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 20px 16px 16px;
+    background: #FAFAFE;
+    border-radius: var(--radius-md);
+    border: 1px solid var(--color-border-light);
+}
+#modal-refund-approve .approval-step {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 8px;
+    position: relative;
+    flex: 0 0 auto;
+    min-width: 80px;
+}
+#modal-refund-approve .approval-step-dot {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #E5E7EB;
+    border: 2px solid #E5E7EB;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.3s ease;
+    position: relative;
+    z-index: 2;
+}
+#modal-refund-approve .approval-step span {
+    font-size: 12px;
+    color: #9CA3AF;
+    white-space: nowrap;
+    font-weight: 500;
+    transition: color 0.3s;
+}
+#modal-refund-approve .approval-step-line {
+    flex: 1;
+    height: 3px;
+    background: #E5E7EB;
+    min-width: 44px;
+    max-width: 80px;
+    margin: 0 -4px;
+    align-self: flex-start;
+    margin-top: 12px;
+    border-radius: 2px;
+    transition: background 0.4s ease;
+    position: relative;
+    z-index: 1;
+}
+
+/* 当前步骤 */
+#modal-refund-approve .approval-step-current .approval-step-dot {
+    background: #fff;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 6px rgba(124,58,237,0.12);
+    animation: approve-pulse 2s infinite;
+}
+#modal-refund-approve .approval-step-current span {
+    color: var(--color-primary);
+    font-weight: 700;
+}
+@keyframes approve-pulse {
+    0%, 100% { box-shadow: 0 0 0 6px rgba(124,58,237,0.12); }
+    50%      { box-shadow: 0 0 0 12px rgba(124,58,237,0.06); }
+}
+
+/* 已完成步骤 */
+#modal-refund-approve .approval-step-done .approval-step-dot {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+#modal-refund-approve .approval-step-done .approval-step-dot::after {
+    content: '';
+    display: block;
+    width: 6px;
+    height: 10px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    margin-top: -2px;
+}
+#modal-refund-approve .approval-step-done span {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+#modal-refund-approve .approval-step-line.line-done {
+    background: var(--color-primary-light);
+}
+
+/* 驳回步骤 */
+#modal-refund-approve .approval-step-rejected .approval-step-dot {
+    background: #fff;
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 4px rgba(229,62,62,0.12);
+}
+#modal-refund-approve .approval-step-rejected .approval-step-dot::after {
+    content: '✕';
+    color: var(--color-danger);
+    font-size: 12px;
+    font-weight: 700;
+    line-height: 1;
+}
+#modal-refund-approve .approval-step-rejected span {
+    color: var(--color-danger);
+    font-weight: 600;
+}
+
+/* --- 区域 3：审批操作区 --- */
+#modal-refund-approve .approve-action-area {
+    margin-top: 20px;
+    padding-top: 16px;
+    border-top: 1px solid var(--color-border-light);
+}
+#modal-refund-approve .approve-action-area .approve-approver-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 14px;
+}
+#modal-refund-approve .approve-action-area .approve-approver-row label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    white-space: nowrap;
+    min-width: 48px;
+}
+#modal-refund-approve .approve-action-area .approve-approver-row input {
+    flex: 1;
+    max-width: 240px;
+    padding: 8px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    transition: border-color 0.2s, box-shadow 0.2s;
+    background: #fff;
+}
+#modal-refund-approve .approve-action-area .approve-approver-row input:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.1);
+}
+
+/* 退款方式 radio */
+#modal-refund-approve .approve-refund-to-group {
+    margin-bottom: 14px;
+}
+#modal-refund-approve .approve-refund-to-group > label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    display: block;
+    margin-bottom: 8px;
+}
+#modal-refund-approve .refund-to-options {
+    display: flex;
+    gap: 24px;
+}
+#modal-refund-approve .refund-to-radio-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    color: #333;
+    padding: 6px 0;
+    user-select: none;
+    transition: color 0.15s;
+}
+#modal-refund-approve .refund-to-radio-label:hover { color: var(--color-primary); }
+#modal-refund-approve .refund-to-radio-custom {
+    width: 18px; height: 18px; border-radius: 50%;
+    border: 2px solid #C4C4C4; flex-shrink: 0;
+    transition: border-color 0.2s, background 0.2s;
+}
+#modal-refund-approve .refund-to-radio-label:hover .refund-to-radio-custom {
+    border-color: var(--color-primary-light);
+}
+#modal-refund-approve .refund-to-radio-label input:checked + .refund-to-radio-custom {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    box-shadow: inset 0 0 0 4px #fff;
+}
+#modal-refund-approve .refund-to-radio-label input[type="radio"] {
+    position: absolute; opacity: 0; width: 0; height: 0;
+}
+
+/* 驳回原因 textarea */
+#modal-refund-approve #approve-reject-reason-group {
+    margin-bottom: 0;
+}
+#modal-refund-approve #approve-reject-reason-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #B91C1C;
+    display: block;
+    margin-bottom: 6px;
+}
+#modal-refund-approve #approve-reject-reason {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid #FECACA;
+    border-radius: var(--radius-sm);
+    font-size: 13px;
+    resize: vertical;
+    transition: border-color 0.2s;
+    background: #FFF5F5;
+}
+#modal-refund-approve #approve-reject-reason:focus {
+    outline: none;
+    border-color: var(--color-danger);
+    box-shadow: 0 0 0 3px rgba(229,62,62,0.1);
+}
+
+/* --- 区域 4：底部按钮 --- */
+#modal-refund-approve .modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 28px 20px;
+}
+#modal-refund-approve .modal-footer .btn-default {
+    padding: 9px 20px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    color: var(--color-text-secondary);
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+#modal-refund-approve .modal-footer .btn-default:hover {
+    background: #F9F9FB;
+    border-color: #C4C4C4;
+}
+#modal-refund-approve #btn-refund-reject {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 22px;
+    border: 1px solid #FECACA;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    color: var(--color-danger);
+    background: #fff;
+    cursor: pointer;
+    transition: all 0.2s;
+}
+#modal-refund-approve #btn-refund-reject:hover {
+    background: var(--color-danger-bg);
+    border-color: var(--color-danger);
+    box-shadow: 0 2px 8px rgba(229,62,62,0.15);
+    transform: translateY(-1px);
+}
+#modal-refund-approve #btn-refund-reject::before {
+    content: '✕';
+    font-size: 13px;
+    font-weight: 700;
+}
+#modal-refund-approve #btn-refund-approve {
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 9px 24px;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-weight: 600;
+    color: #fff;
+    background: linear-gradient(135deg, #7C3AED, #6D28D9);
+    cursor: pointer;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.25);
+    transition: all 0.2s;
+}
+#modal-refund-approve #btn-refund-approve:hover {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    box-shadow: 0 4px 14px rgba(124,58,237,0.35);
+    transform: translateY(-1px);
+}
+#modal-refund-approve #btn-refund-approve::after {
+    content: '→';
+    font-size: 15px;
+}
+
+/* --- 区域 5：辅助元素 --- */
+#modal-refund-approve .approve-section-title {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    font-size: 13px;
+    font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 4px;
+}
+#modal-refund-approve .approve-section-title::before {
+    content: '';
+    display: inline-block;
+    width: 3px;
+    height: 16px;
+    background: var(--color-primary);
+    border-radius: 2px;
+}
+#modal-refund-approve .approve-approver-tags {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 8px;
+    margin-top: 10px;
+}
+#modal-refund-approve .approve-approver-tag {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 12px;
+    background: var(--color-primary-bg);
+    border-radius: 20px;
+    font-size: 12px;
+    color: var(--color-primary);
+    font-weight: 500;
+}
+#modal-refund-approve .approve-approver-tag::before {
+    content: '✓';
+    font-size: 10px;
+    font-weight: 700;
+}
+
+/* 驳回横幅 */
+#modal-refund-approve .approve-reject-banner {
+    margin-top: 12px;
+    padding: 10px 16px;
+    background: #fff5f5;
+    border-left: 3px solid var(--color-danger);
+    color: #c53030;
+    font-size: 13px;
+    border-radius: 6px;
+    line-height: 1.6;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+#modal-refund-approve .approve-reject-banner .banner-icon {
+    flex-shrink: 0;
+    font-size: 14px;
+    margin-top: 1px;
+}
+
+/* 绿色提示条覆盖 */
+#modal-refund-approve .approve-account-hint {
+    margin-top: 12px;
+    padding: 10px 16px;
+    background: #f0fdf4;
+    border-left: 3px solid #16a34a;
+    color: #15803d;
+    font-size: 13px;
+    border-radius: 6px;
+    line-height: 1.6;
+    display: flex;
+    align-items: flex-start;
+    gap: 8px;
+}
+
+/* 响应式：1200px 以下金额卡片 2 列 / 信息卡片单列 */
+@media (max-width: 1200px) {
+    #modal-refund-approve .card-amount .amount-grid {
+        grid-template-columns: repeat(2, 1fr);
+    }
+    #modal-refund-approve .approve-info-cards {
+        grid-template-columns: 1fr;
+    }
+}

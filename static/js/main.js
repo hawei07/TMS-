@@ -7895,6 +7895,7 @@ async function showApproveModal(id) {
         else if (status === '已退费') currentStepIdx = 3;
         else if (status === '审批驳回') currentStepIdx = -1;
 
+        // === 进度条（含 line-done 连线变色） ===
         let stepsHtml = '<div class="approval-steps">';
         steps.forEach((s, i) => {
             let cls = 'approval-step';
@@ -7902,59 +7903,83 @@ async function showApproveModal(id) {
             else if (i < currentStepIdx || status === '已退费') cls += ' approval-step-done';
             else if (i === currentStepIdx) cls += ' approval-step-current';
             stepsHtml += `<div class="${cls}"><div class="approval-step-dot"></div><span>${s}</span></div>`;
-            if (i < 2) stepsHtml += '<div class="approval-step-line"></div>';
+            if (i < 2) {
+                let lineCls = 'approval-step-line';
+                if (status !== '审批驳回' && i < currentStepIdx) lineCls += ' line-done';
+                stepsHtml += `<div class="${lineCls}"></div>`;
+            }
         });
         stepsHtml += '</div>';
 
+        // === 驳回横幅（CSS 类化） ===
         if (status === '审批驳回') {
-            stepsHtml += `<div style="margin-top:12px;padding:8px 12px;background:#fff5f5;border-left:3px solid #e53e3e;color:#c53030;font-size:13px;">驳回原因：${esc(rr.reject_reason || '无')}</div>`;
+            stepsHtml += `<div class="approve-reject-banner"><span class="banner-icon">⚠️</span>驳回原因：${esc(rr.reject_reason || '无')}</div>`;
         }
 
-        let approverInfo = '';
-        if (rr.approver1) approverInfo += `<div style="font-size:12px;color:#888;">一级审批人：${esc(rr.approver1)}</div>`;
-        if (rr.approver2) approverInfo += `<div style="font-size:12px;color:#888;">二级审批人：${esc(rr.approver2)}</div>`;
-        if (rr.approver3) approverInfo += `<div style="font-size:12px;color:#888;">财务确认人：${esc(rr.approver3)}</div>`;
+        // === 已审批人 Pill 标签 ===
+        let approverTagsHtml = '';
+        if (rr.approver1) approverTagsHtml += `<span class="approve-approver-tag">${esc(rr.approver1)}</span>`;
+        if (rr.approver2) approverTagsHtml += `<span class="approve-approver-tag">${esc(rr.approver2)}</span>`;
+        if (rr.approver3) approverTagsHtml += `<span class="approve-approver-tag">${esc(rr.approver3)}</span>`;
+        if (approverTagsHtml) approverTagsHtml = `<div class="approve-approver-tags">${approverTagsHtml}</div>`;
 
-        document.getElementById('refund-approve-content').innerHTML = `
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;font-size:13px;margin-bottom:16px;">
-                <div><span style="color:#888;">学员：</span>${esc(rr.student_name || '')}</div>
-                <div><span style="color:#888;">校区：</span>${esc(rr.campus || '-')}</div>
-                <div><span style="color:#888;">课程：</span>${esc(rr.course_name || '')}</div>
-                <div><span style="color:#888;">订单号：</span><span style="font-family:monospace;">${esc(rr.order_no || '')}</span></div>
-                <div><span style="color:#888;">报读课时：</span>${parseInt(rr.total_lessons) || 0}</div>
-                <div><span style="color:#888;">报读金额：</span>¥${Number(rr.total_amount || 0).toFixed(2)}</div>
-                <div><span style="color:#888;">消耗课时：</span>${parseInt(rr.consumed_lessons) || 0}</div>
-                <div><span style="color:#888;">消耗金额：</span>¥${parseFloat(rr.consumed_amount || 0).toFixed(2)}</div>
-                <div><span style="color:#888;">剩余可退课时：</span><b>${parseInt(rr.remaining_lessons) || 0}</b></div>
-                <div><span style="color:#888;">剩余可退金额：</span><b>¥${parseFloat(rr.remaining_amount || 0).toFixed(2)}</b></div>
-                <div><span style="color:#888;">自定义扣减：</span>¥${parseFloat(rr.custom_deduction || 0).toFixed(2)}</div>
-                <div><span style="color:#888;font-weight:bold;">实退金额：</span><b style="color:#e74c3c;">¥${parseFloat(rr.actual_refund || 0).toFixed(2)}</b></div>
-                <div><span style="color:#888;">转账银行：</span>${esc(rr.bank_name || '-')}</div>
-                <div><span style="color:#888;">银行卡号：</span>${esc(rr.bank_account || '-')}</div>
-                <div><span style="color:#888;">开户人：</span>${esc(rr.account_holder || '-')}</div>
-                <div><span style="color:#888;">退费原因：</span>${esc(rr.refund_reason || '-')}</div>
+        // === 信息卡片 HTML（三卡片布局） ===
+        let infoCardsHtml = `<div class="approve-info-cards">
+            <div class="approve-info-card">
+                <div class="card-title">📋 学员信息</div>
+                <div class="info-row"><span class="info-label">学员</span><span class="info-value">${esc(rr.student_name || '')}</span></div>
+                <div class="info-row"><span class="info-label">校区</span><span class="info-value">${esc(rr.campus || '-')}</span></div>
+                <div class="info-row"><span class="info-label">课程</span><span class="info-value">${esc(rr.course_name || '')}</span></div>
             </div>
-            <div style="border-top:1px solid #e0e0e0;padding-top:16px;">
-                <h5 style="margin:0 0 12px;font-size:14px;color:#666;">审批进度</h5>
-                ${stepsHtml}
-                ${approverInfo ? '<div style="margin-top:8px;">' + approverInfo + '</div>' : ''}
-                ${(rr.approval_stage === '二级审批' && rrProject === '课程' && rrMethod === '账户') ? '<div class="approve-account-hint"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> 二级审批通过后自动进入学员账户余额</div>' : ''}
-            </div>
-            ${canApprove ? `<div style="margin-top:16px;border-top:1px solid #e0e0e0;padding-top:12px;">
-                <div class="form-group">
-                    <label>审批人</label>
-                    <input type="text" id="approve-approver-name" class="form-input" placeholder="请输入审批人姓名">
+            <div class="approve-info-card">
+                <div class="card-title">📦 订单信息</div>
+                <div class="info-row"><span class="info-label">订单号</span><span class="info-value mono">${esc(rr.order_no || '')}</span></div>
+                <div class="info-row"><span class="info-label">退费类型</span><span class="info-value">${isAccount ? '账户余额退费' : '课程退费'}</span></div>
+                <div class="info-row"><span class="info-label">退费原因</span><span class="info-value">${esc(rr.refund_reason || '-')}</span></div>`;
+        if (!isAccount && rrMethod !== '账户') {
+            infoCardsHtml += `
+                <div class="info-row"><span class="info-label">转账银行</span><span class="info-value">${esc(rr.bank_name || '-')}</span></div>
+                <div class="info-row"><span class="info-label">银行卡号</span><span class="info-value mono">${esc(rr.bank_account || '-')}</span></div>
+                <div class="info-row"><span class="info-label">开户人</span><span class="info-value">${esc(rr.account_holder || '-')}</span></div>`;
+        }
+        infoCardsHtml += `</div>
+            <div class="approve-info-card card-amount card-full">
+                <div class="card-title">💰 金额明细</div>
+                <div class="amount-grid">
+                    <div class="amount-item"><div class="amount-label">报读课时</div><div class="amount-value">${parseInt(rr.total_lessons) || 0}</div></div>
+                    <div class="amount-item"><div class="amount-label">报读金额</div><div class="amount-value">¥${Number(rr.total_amount || 0).toFixed(2)}</div></div>
+                    <div class="amount-item"><div class="amount-label">消耗课时</div><div class="amount-value">${parseInt(rr.consumed_lessons) || 0}</div></div>
+                    <div class="amount-item"><div class="amount-label">消耗金额</div><div class="amount-value">¥${Number(rr.consumed_amount || 0).toFixed(2)}</div></div>
+                    <div class="amount-item"><div class="amount-label">剩余可退课时</div><div class="amount-value">${parseInt(rr.remaining_lessons) || 0}</div></div>
+                    <div class="amount-item"><div class="amount-label">剩余可退金额</div><div class="amount-value">¥${Number(rr.remaining_amount || 0).toFixed(2)}</div></div>
+                    <div class="amount-item"><div class="amount-label">自定义扣减</div><div class="amount-value">¥${Number(rr.custom_deduction || 0).toFixed(2)}</div></div>
+                    <div class="amount-item amount-hero"><div class="amount-label">实退金额</div><div class="amount-value">¥${Number(rr.actual_refund || 0).toFixed(2)}</div></div>
                 </div>
-                ${rr.approval_stage === '财务确认' ? `<div class="form-group" id="approve-refund-to-group">
+            </div>
+        </div>`;
+
+        // === 组装内容 ===
+        document.getElementById('refund-approve-content').innerHTML = `
+            ${infoCardsHtml}
+            <div class="approve-section-title">审批进度</div>
+            ${stepsHtml}
+            ${approverTagsHtml}
+            ${(rr.approval_stage === '二级审批' && rrProject === '课程' && rrMethod === '账户') ? '<div class="approve-account-hint"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> 二级审批通过后自动进入学员账户余额</div>' : ''}
+            ${canApprove ? `<div class="approve-action-area">
+                <div class="approve-approver-row">
+                    <label>审批人</label>
+                    <input type="text" id="approve-approver-name" placeholder="请输入审批人姓名">
+                </div>
+                ${rr.approval_stage === '财务确认' ? `<div class="approve-refund-to-group">
                     <label>退款方式</label>
-                    <div style="display:flex;gap:20px;">
-                        <label style="font-weight:normal;cursor:pointer;"><input type="radio" name="approve-refund-to" value="cash" checked> 退到银行卡</label>
-                        ${(isAccount || (rrProject==='课程' && rrMethod==='账户')) ? '' : `<label style="font-weight:normal;cursor:pointer;"><input type="radio" name="approve-refund-to" value="balance"> 退到余额</label>`}
+                    <div class="refund-to-options">
+                        <label class="refund-to-radio-label"><input type="radio" name="approve-refund-to" value="cash" checked><span class="refund-to-radio-custom"></span>退到银行卡</label>
+                        ${(isAccount || (rrProject==='课程' && rrMethod==='账户')) ? '' : `<label class="refund-to-radio-label"><input type="radio" name="approve-refund-to" value="balance"><span class="refund-to-radio-custom"></span>退到余额</label>`}
                     </div>
                 </div>` : ''}
-                <div class="form-group" id="approve-reject-reason-group" style="display:none;">
+                <div id="approve-reject-reason-group" style="display:none;">
                     <label>驳回原因 <span style="color:red;">*</span></label>
-                    <textarea id="approve-reject-reason" class="form-input" rows="2" placeholder="请输入驳回原因"></textarea>
+                    <textarea id="approve-reject-reason" rows="2" placeholder="请输入驳回原因"></textarea>
                 </div>
             </div>` : ''}
         `;
