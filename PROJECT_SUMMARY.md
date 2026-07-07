@@ -1518,4 +1518,23 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | fix | **课表默认校区+教师色块**：initScheduleCampusFilter 默认选第一个校区；色块区分逻辑从按课程改为按老师 | main.js | 87ef01e |
 | refactor | **考勤页班级管理移到最后**：tab 顺序改为课表→操作考勤→学员课耗→缺勤记录→班级管理；默认进入课表 | index.php main.js | 4bd279d / b793440 |
 | fix | **课表首次加载异步竞态**：initScheduleCampusFilter 改为 async/await，等校区列表加载完再请求排课数据 | main.js | 9d85ac5 |
-| feat | **月视图色块优化**：显示老师名字+上课时间+班级名称（单行）；同一天多排课按开始时间排序 | main.js style.css | 053f34c / 1c7c77d / 2e46bfb |
+| feat | **月视图色块优化**：显示老师名字+上课时间+班级名称（单行）；同一天多排课按开始时间排序 | main.js style.css | 053f34c / 1c77c7d / 2e46bfb |
+
+### 2026-07-07 — 退费系统重构 + 账户退费 + UI 优化
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **退费记录增加项目/内容字段**：refund_records 新增 project（课程/账户）+ content 字段；退费记录表格新增项目/内容列+筛选；历史数据自动回填 | index.php main.js | 0758bdc |
+| feat | **账户退费功能**：学员账户余额支持发起退费（退到银行卡）；submit_refund 支持 refund_type=account；申请时立即扣减余额（事务+FOR UPDATE）；approve_refund/cancel_refund 支持账户退费的驳回/撤销余额恢复 | index.php main.js | 0758bdc / 1fc559b |
+| feat | **退费记录增加学科/退费方式字段**：refund_records 新增 subject_level1 + refund_method；表格精简12列（去报读课时/消耗课时/报读金额/剩余课时/剩余金额）；账户退费扣减默认0、需选学科；退费方式 badge（转账蓝/账户绿） | index.php main.js | 9b41ce3 |
+| feat | **课程退费增加「退到学员账户」方式**：退费申请弹窗新增退费方式 radio；选账户时免财务审批，二级审批直接到账+余额入账；审批弹窗适配提示 | index.php main.js style.css | 2f1f6a5 |
+| fix | **Code Review 修复**：事务保护（beginTransaction/rollBack × 3）、兼容迁移、colspan 修正、confirm→showCustomConfirm、parseFloat→Number | index.php main.js | 1fc559b / 84bfe5a |
+| fix | **审批弹窗嵌套修复**：modal-body 缺闭合标签导致审批弹窗嵌套在退费申请弹窗内 | index.php | 32adab0 |
+| fix | **openModal 关闭旧弹窗**：打开新弹窗前自动关闭所有已打开弹窗，避免重叠 | main.js | fafcc02 |
+| fix | **扣减金额字段映射错误**：consumed_amount→custom_deduction | main.js | 104ccb6 |
+| style | **退费记录页面 UI 优化**：Badge 系统 CSS class 化；表格 hover/对齐/空态/骨架屏/响应式/入场动画 | style.css main.js | df29128 |
+| style | **退费记录表格对齐修复**：table-layout:fixed→移除、border-left→伪元素→移除，最终精简为纯默认样式 | style.css | 4099d93 / eaf8999 / c9df54b |
+| style | **退费审批弹窗 UI 优化**：三卡片布局、实退金额 Hero 样式、进度条增强（24px 圆点/pulse/✓）、审批人 pill、按钮主次分明 | style.css main.js | 14cb865 |
+| chore | **导航顺序调整**：市场管理→教务管理→数据中心→员工管理 | index.php | 0758bdc |
+| chore | **Product Manager 加入开发工作流** | .hermes/project.md | 0758bdc |
+| chore | **账户充值标签颜色区分**：蓝色 #2563EB | style.css | 0758bdc |
