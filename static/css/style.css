@@ -6259,3 +6259,552 @@ tbody td {
     .dp-card-body { padding: 12px; }
     .dp-card-title { padding: 10px 14px; font-size: 13px; }
 }
+
+/* ================================================================
+   价格方案弹窗 UI 优化（PRD: price-plan-dialog-ui-redesign）
+   ================================================================ */
+
+/* ===== 价格方案弹窗容器 ===== */
+#modal-price .modal {
+    width: 960px;
+    max-width: 95vw;
+}
+
+#modal-price .modal-body.price-body {
+    display: flex;
+    height: 500px;
+    overflow: hidden;
+    padding: 0;
+    background: var(--color-bg);
+}
+
+/* ===== 左侧面板 ===== */
+.price-panel {
+    width: 240px;
+    min-width: 240px;
+    display: flex;
+    flex-direction: column;
+    border-right: 1px solid var(--color-border);
+    background: var(--color-surface);
+}
+
+.price-panel-header {
+    padding: 14px 16px;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--color-primary-dark);
+    background: linear-gradient(135deg, var(--color-primary-bg), #FAF8FF);
+    border-bottom: 1px solid var(--color-border-light);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+/* 方案计数 badge */
+.price-plan-count-badge {
+    display: inline-flex;
+    align-items: center;
+    height: 20px;
+    padding: 0 8px;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--color-primary);
+    background: rgba(124,58,237,0.08);
+    border-radius: 9999px;
+}
+
+.price-panel-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 6px;
+}
+
+/* 右侧滚动条美化 */
+.price-panel-list::-webkit-scrollbar { width: 5px; }
+.price-panel-list::-webkit-scrollbar-track { background: transparent; }
+.price-panel-list::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+}
+.price-panel-list::-webkit-scrollbar-thumb:hover {
+    background: var(--color-primary-light);
+}
+
+/* ===== 价格方案卡片 ===== */
+.price-plan-card {
+    display: flex;
+    align-items: center;
+    padding: 10px 14px;
+    margin: 3px 0;
+    border-radius: var(--radius-md);
+    cursor: pointer;
+    font-size: 13px;
+    border: 1.5px solid transparent;
+    border-left: 3px solid transparent;
+    transition: all 0.18s ease;
+}
+
+.price-plan-card:hover {
+    background: var(--color-primary-hover);
+    border-color: var(--color-primary-light);
+    transform: translateX(2px);
+}
+
+.price-plan-card.active {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary);
+    border-left-color: var(--color-primary);
+    color: var(--color-primary);
+    font-weight: 600;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.12);
+    transform: none;
+}
+
+.price-plan-card-body {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    overflow: hidden;
+}
+
+.price-plan-card-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.price-plan-card-actions {
+    display: none;
+    gap: 2px;
+    flex-shrink: 0;
+}
+
+.price-plan-card:hover .price-plan-card-actions {
+    display: flex;
+}
+
+.price-plan-card-actions .btn-link {
+    font-size: 11px;
+    padding: 2px 6px;
+    color: var(--color-primary);
+}
+
+.price-plan-card-actions .btn-link-danger {
+    font-size: 11px;
+    padding: 2px 6px;
+}
+
+/* 面板底部 */
+.price-panel-footer {
+    padding: 10px 8px;
+    border-top: 1px solid var(--color-border-light);
+    background: var(--color-bg);
+}
+
+.price-panel-footer .btn-primary {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    border: none;
+    box-shadow: 0 1px 4px rgba(124,58,237,0.2);
+    transition: all 0.18s;
+}
+.price-panel-footer .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(124,58,237,0.3);
+}
+
+/* ===== 右侧报价单区 ===== */
+.price-detail {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    background: var(--color-surface);
+}
+
+.price-detail-header {
+    padding: 14px 20px;
+    font-weight: 700;
+    font-size: 14px;
+    color: var(--color-text);
+    border-bottom: 1px solid var(--color-border);
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    background: linear-gradient(180deg, #FFFFFF, var(--color-bg));
+}
+
+.price-detail-table-wrap {
+    flex: 1;
+    overflow-y: auto;
+    padding: 0;
+}
+
+/* 表格滚动条 */
+.price-detail-table-wrap::-webkit-scrollbar { width: 6px; }
+.price-detail-table-wrap::-webkit-scrollbar-thumb {
+    background: var(--color-border);
+    border-radius: 3px;
+}
+
+/* ===== 报价单表格 ===== */
+#price-item-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+
+/* 表头 sticky */
+#price-item-table thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+#price-item-table th {
+    padding: 12px 14px;
+    text-align: left;
+    font-weight: 600;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    background: var(--color-bg);
+    backdrop-filter: blur(8px);
+    border-bottom: 2px solid var(--color-border);
+    white-space: nowrap;
+}
+
+/* 表格单元格 */
+#price-item-table td {
+    padding: 10px 14px;
+    border-bottom: 1px solid var(--color-border-light);
+    transition: background 0.15s;
+}
+
+/* 行 hover — 左紫竖线 */
+#price-item-table tbody tr {
+    transition: all 0.15s ease;
+    border-left: 3px solid transparent;
+}
+
+#price-item-table tbody tr:hover {
+    background: var(--color-primary-hover);
+    border-left-color: var(--color-primary);
+}
+
+/* 行交替颜色 */
+#price-item-table tbody tr:nth-child(even) {
+    background: rgba(245,240,255,0.25);
+}
+#price-item-table tbody tr:nth-child(even):hover {
+    background: var(--color-primary-hover);
+}
+
+/* 金额列右对齐 */
+#price-item-table td:nth-child(3),
+#price-item-table td:nth-child(4),
+#price-item-table th:nth-child(3),
+#price-item-table th:nth-child(4) {
+    text-align: right;
+}
+
+/* 金额列 tabular-nums */
+#price-item-table td:nth-child(3),
+#price-item-table td:nth-child(4) {
+    font-variant-numeric: tabular-nums;
+    font-weight: 500;
+}
+
+/* 实付金额列强调 */
+#price-item-table td:nth-child(4) {
+    color: var(--color-primary-dark);
+    font-weight: 700;
+}
+
+/* 操作列 */
+#price-item-table td:last-child,
+#price-item-table th:last-child {
+    text-align: center;
+    width: 120px;
+}
+
+/* ===== 总计行 ===== */
+#price-item-table .price-total-row td {
+    font-weight: bold;
+    border-top: 2px solid var(--color-primary-light);
+    border-bottom: 2px solid var(--color-primary-light);
+    background: linear-gradient(90deg, var(--color-primary-bg), rgba(245,240,255,0.4));
+    padding: 12px 14px;
+}
+
+/* 行入场动画（渐入 + 上移） */
+#price-item-table tbody tr {
+    animation: priceRowFadeIn 0.3s ease both;
+}
+#price-item-table tbody tr:nth-child(1)  { animation-delay: 0.00s; }
+#price-item-table tbody tr:nth-child(2)  { animation-delay: 0.03s; }
+#price-item-table tbody tr:nth-child(3)  { animation-delay: 0.06s; }
+#price-item-table tbody tr:nth-child(4)  { animation-delay: 0.09s; }
+#price-item-table tbody tr:nth-child(5)  { animation-delay: 0.12s; }
+#price-item-table tbody tr:nth-child(6)  { animation-delay: 0.15s; }
+#price-item-table tbody tr:nth-child(7)  { animation-delay: 0.18s; }
+#price-item-table tbody tr:nth-child(8)  { animation-delay: 0.21s; }
+#price-item-table tbody tr:nth-child(9)  { animation-delay: 0.24s; }
+#price-item-table tbody tr:nth-child(10) { animation-delay: 0.27s; }
+#price-item-table tbody tr:nth-child(n+11) { animation-delay: 0.30s; }
+#price-item-table.paginating tbody tr { animation: none; }
+
+@keyframes priceRowFadeIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+
+/* 细节底部 */
+.price-detail-footer {
+    padding: 12px 20px;
+    border-top: 1px solid var(--color-border-light);
+    background: var(--color-bg);
+}
+
+.price-detail-footer .btn-primary {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    border: none;
+    box-shadow: 0 1px 4px rgba(124,58,237,0.2);
+    transition: all 0.18s;
+}
+.price-detail-footer .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(124,58,237,0.3);
+}
+
+/* ===== Footer 增强 ===== */
+#modal-price .modal-footer {
+    padding: 14px 24px;
+    border-top: 1px solid var(--color-border-light);
+    background: var(--color-bg);
+}
+
+#modal-price .modal-footer .btn-outline {
+    padding: 8px 24px;
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--color-border);
+    color: var(--color-text-secondary);
+    transition: all 0.15s;
+}
+#modal-price .modal-footer .btn-outline:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-primary-bg);
+}
+
+/* ===== 报价单编辑弹窗 ===== */
+#modal-price-item .modal {
+    width: 560px;
+    max-width: 95vw;
+}
+
+#modal-price-item .modal-body {
+    padding: 20px 24px;
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+/* 卡片包裹 */
+#modal-price-item .pi-card {
+    background: var(--color-bg);
+    border: 1px solid var(--color-border-light);
+    border-radius: var(--radius-lg);
+    overflow: hidden;
+}
+
+#modal-price-item .pi-card:focus-within {
+    border-color: var(--color-primary-light);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.08);
+}
+
+#modal-price-item .pi-card-title {
+    padding: 12px 18px;
+    font-weight: 700;
+    font-size: 13px;
+    color: var(--color-primary-dark);
+    background: linear-gradient(135deg, var(--color-primary-bg), rgba(245,240,255,0.3));
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+#modal-price-item .pi-card-body {
+    padding: 16px 18px;
+    background: var(--color-surface);
+}
+
+/* 双列布局 */
+#modal-price-item .pi-card-body .form-row {
+    display: flex;
+    gap: 16px;
+}
+
+#modal-price-item .pi-card-body .form-row .form-group {
+    flex: 1;
+    margin-bottom: 0;
+}
+
+/* 输入控件统一增强 */
+#modal-price-item input,
+#modal-price-item select {
+    padding: 10px 14px;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    background: var(--color-surface);
+    outline: none;
+}
+
+#modal-price-item input:hover:not(:disabled):not([readonly]),
+#modal-price-item select:hover {
+    border-color: var(--color-primary-light);
+}
+
+#modal-price-item input:focus,
+#modal-price-item select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(124,58,237,0.10);
+    background: #FAF8FF;
+}
+
+/* readonly 态 */
+#modal-price-item input[readonly] {
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    cursor: not-allowed;
+}
+
+/* placeholder */
+#modal-price-item input::placeholder {
+    color: var(--color-text-muted);
+    opacity: 0.6;
+}
+
+/* form-group 间距微调 */
+#modal-price-item .form-group {
+    margin-bottom: 14px;
+}
+
+#modal-price-item .form-group:last-child {
+    margin-bottom: 0;
+}
+
+#modal-price-item .form-group label {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+}
+
+#modal-price-item .form-group label .required {
+    color: var(--color-danger);
+}
+
+/* 实际支付价格字段高亮 */
+#modal-price-item .pi-actual-price-group label {
+    color: var(--color-primary-dark);
+}
+
+/* Footer */
+#modal-price-item .modal-footer {
+    padding: 16px 24px;
+    border-top: 1px solid var(--color-border-light);
+    background: var(--color-bg);
+}
+
+#modal-price-item .modal-footer .btn-primary {
+    padding: 10px 28px;
+    font-weight: 600;
+    border-radius: var(--radius-md);
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    border: none;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.25);
+    transition: all 0.18s;
+}
+#modal-price-item .modal-footer .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(124,58,237,0.35);
+}
+
+#modal-price-item .modal-footer .btn-outline {
+    padding: 10px 24px;
+    border-radius: var(--radius-md);
+    border: 1.5px solid var(--color-border);
+    color: var(--color-text-secondary);
+    transition: all 0.15s;
+}
+#modal-price-item .modal-footer .btn-outline:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+    background: var(--color-primary-bg);
+}
+
+/* ===== 价格方案名称弹窗微调 ===== */
+#modal-price-plan input,
+#modal-price-plan select {
+    padding: 10px 14px;
+    border: 1.5px solid var(--color-border);
+    border-radius: var(--radius-md);
+    font-size: 14px;
+    width: 100%;
+    box-sizing: border-box;
+    transition: border-color 0.15s, box-shadow 0.15s, background 0.15s;
+    outline: none;
+}
+
+#modal-price-plan input:focus,
+#modal-price-plan select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 4px rgba(124,58,237,0.10);
+    background: #FAF8FF;
+}
+
+#modal-price-plan .modal-footer .btn-primary {
+    background: linear-gradient(135deg, var(--color-primary), var(--color-primary-dark));
+    border: none;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.25);
+}
+#modal-price-plan .modal-footer .btn-primary:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(124,58,237,0.35);
+}
+
+/* ===== 空态 ===== */
+.price-empty-state {
+    padding: 40px 20px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 13px;
+}
+
+.price-empty-subtitle {
+    display: block;
+    font-size: 11px;
+    margin-top: 6px;
+    opacity: 0.6;
+}
+
+#price-item-table tbody tr.price-empty-row td {
+    padding: 48px 20px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 13px;
+    animation: none;
+    border-left: none;
+}
+
+/* ===== 优惠方案/优惠券下拉加载态 ===== */
+#price-item-discount-plan.loading,
+#price-item-coupon.loading {
+    opacity: 0.5;
+    pointer-events: none;
+}

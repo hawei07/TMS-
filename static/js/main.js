@@ -3172,7 +3172,8 @@ async function loadPricePlans(courseId) {
 function renderPlanList() {
     const container = document.getElementById('price-plan-list');
     if (!currentPlans.length) {
-        container.innerHTML = '<div style="padding:20px;color:#999;text-align:center;">暂无价格方案<br>请点击下方按钮新增</div>';
+        container.innerHTML = '<div class="price-empty-state">暂无价格方案<span class="price-empty-subtitle">点击下方按钮新增方案</span></div>';
+        updatePlanCountBadge();
         return;
     }
     container.innerHTML = currentPlans.map(p => {
@@ -3182,14 +3183,24 @@ function renderPlanList() {
         if (pt === '新报') typeTag = '<span class="tag tag-new-enroll">新报</span>';
         else if (pt === '续费') typeTag = '<span class="tag tag-renewal">续费</span>';
         else if (pt === '小课包') typeTag = '<span class="tag tag-small-pack">小课包</span>';
-        return `<div class="price-plan-item${activeClass}" data-plan-id="${p.id}" onclick="selectPlan(${p.id})">
-            <span class="price-plan-name">${esc(p.name)}${typeTag}</span>
-            <span class="price-plan-actions">
+        return `<div class="price-plan-card${activeClass}" data-plan-id="${p.id}" onclick="selectPlan(${p.id})">
+            <div class="price-plan-card-body">
+                <span class="price-plan-card-name">${esc(p.name)}</span>
+                ${typeTag}
+            </div>
+            <span class="price-plan-card-actions">
                 <button class="btn-link" onclick="event.stopPropagation();editPlan(${p.id})">编辑</button>
                 <button class="btn-link-danger" onclick="event.stopPropagation();deletePlan(${p.id})">删除</button>
             </span>
         </div>`;
     }).join('');
+    // 更新方案计数
+    updatePlanCountBadge();
+}
+
+function updatePlanCountBadge() {
+    const countEl = document.getElementById('price-plan-count');
+    if (countEl) countEl.textContent = currentPlans.length;
 }
 
 function selectPlan(planId) {
@@ -3204,7 +3215,7 @@ function renderItemList() {
     const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
     if (!plan) {
         if (tagEl) tagEl.innerHTML = '';
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
         return;
     }
     // 在报价单列表标题旁展示方案类型标签
@@ -3217,7 +3228,7 @@ function renderItemList() {
     }
     const items = plan.items || [];
     if (!items.length) {
-        tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;">暂无报价单，请点击下方按钮新增</td></tr>';
+        tbody.innerHTML = '<tr class="price-empty-row"><td colspan="7">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
         return;
     }
     tbody.innerHTML = items.map(item => `
@@ -3226,6 +3237,8 @@ function renderItemList() {
             <td>${item.lesson_count}</td>
             <td>${parseFloat(item.unit_price).toFixed(2)}</td>
             <td>${parseFloat(item.actual_price).toFixed(2)}</td>
+            <td>${esc(item.discount_plan_name || '-')}</td>
+            <td>${esc(item.coupon_name || '-')}</td>
             <td>
                 <button class="btn-link" onclick="editItem(${item.id})">编辑</button>
                 <button class="btn-link-danger" onclick="deleteItem(${item.id})">删除</button>
@@ -3242,6 +3255,8 @@ function renderItemList() {
             <td style="font-weight:bold;">${totalLessons}</td>
             <td></td>
             <td style="font-weight:bold;">${totalActualPrice.toFixed(2)}</td>
+            <td></td>
+            <td></td>
             <td></td>
         </tr>`;
 }
@@ -3296,6 +3311,8 @@ async function savePlan() {
             lesson_count: item.lesson_count,
             unit_price: item.unit_price,
             actual_price: item.actual_price,
+            discount_plan_id: parseInt(item.discount_plan_id) || 0,
+            coupon_id: parseInt(item.coupon_id) || 0,
             sort_order: idx
         })) : [];
 
@@ -3347,6 +3364,10 @@ function addItem() {
     document.getElementById('price-item-lesson-count').value = '';
     document.getElementById('price-item-unit-price').value = '';
     document.getElementById('price-item-actual-price').value = '';
+    document.getElementById('price-item-discount-plan').value = '';
+    document.getElementById('price-item-coupon').value = '';
+    loadPriceItemDiscountOptions();
+    loadPriceItemCouponOptions();
     openModal('modal-price-item');
 }
 
@@ -3362,6 +3383,8 @@ function editItem(itemId) {
     document.getElementById('price-item-lesson-count').value = item.lesson_count;
     document.getElementById('price-item-unit-price').value = item.unit_price;
     document.getElementById('price-item-actual-price').value = item.actual_price;
+    loadPriceItemDiscountOptions(item.discount_plan_id || '');
+    loadPriceItemCouponOptions(item.coupon_id || '');
     openModal('modal-price-item');
 }
 
@@ -3382,6 +3405,8 @@ async function saveItem() {
         lesson_count: item.lesson_count,
         unit_price: item.unit_price,
         actual_price: item.actual_price,
+        discount_plan_id: parseInt(item.discount_plan_id) || 0,
+        coupon_id: parseInt(item.coupon_id) || 0,
         sort_order: idx
     }));
 
@@ -3390,6 +3415,8 @@ async function saveItem() {
         lesson_count: lessonCount,
         unit_price: unitPrice,
         actual_price: actualPrice,
+        discount_plan_id: parseInt(document.getElementById('price-item-discount-plan').value) || 0,
+        coupon_id: parseInt(document.getElementById('price-item-coupon').value) || 0,
         sort_order: items.length
     };
 
@@ -3438,6 +3465,8 @@ async function deleteItem(itemId) {
                 lesson_count: item.lesson_count,
                 unit_price: item.unit_price,
                 actual_price: item.actual_price,
+                discount_plan_id: parseInt(item.discount_plan_id) || 0,
+                coupon_id: parseInt(item.coupon_id) || 0,
                 sort_order: idx
             }))
         }, 'POST');
@@ -3453,6 +3482,63 @@ function onUnitPriceChange() {
     const actualPriceEl = document.getElementById('price-item-actual-price');
     if (unitPriceEl && actualPriceEl) {
         actualPriceEl.value = parseFloat(unitPriceEl.value) || 0;
+    }
+}
+
+// 加载报价单优惠方案下拉（按当前价格方案的 plan_type 筛选）
+async function loadPriceItemDiscountOptions(selectedValue) {
+    const select = document.getElementById('price-item-discount-plan');
+    if (!select) return;
+
+    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+    const planType = plan ? (plan.plan_type || '') : '';
+
+    // 小课包/无类型不加载优惠方案
+    if (!planType || planType === '小课包') {
+        select.innerHTML = '<option value="">无可用优惠方案</option>';
+        return;
+    }
+
+    // loading 态
+    select.classList.add('loading');
+    select.innerHTML = '<option value="">加载中...</option>';
+
+    try {
+        const res = await api('list_discount_plans?plan_type=' + encodeURIComponent(planType) + '&page_size=200', null, 'GET');
+        const data = res.data || [];
+        select.innerHTML = '<option value="">不使用优惠方案</option>' +
+            data.map(d => `<option value="${d.id}">${esc(d.name)}（¥${Number(d.discount_amount || 0).toFixed(2)}）</option>`).join('');
+        if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
+            select.value = selectedValue;
+        }
+    } catch (e) {
+        select.innerHTML = '<option value="">加载失败</option>';
+    } finally {
+        select.classList.remove('loading');
+    }
+}
+
+// 加载课时优惠券下拉（仅课程券）
+async function loadPriceItemCouponOptions(selectedValue) {
+    const select = document.getElementById('price-item-coupon');
+    if (!select) return;
+
+    // loading 态
+    select.classList.add('loading');
+    select.innerHTML = '<option value="">加载中...</option>';
+
+    try {
+        const res = await api('list_coupons?coupon_type=课程券&page_size=200', null, 'GET');
+        const data = res.data || [];
+        select.innerHTML = '<option value="">不使用优惠券</option>' +
+            data.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.discount_amount || 0).toFixed(2)}）</option>`).join('');
+        if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
+            select.value = selectedValue;
+        }
+    } catch (e) {
+        select.innerHTML = '<option value="">加载失败</option>';
+    } finally {
+        select.classList.remove('loading');
     }
 }
 

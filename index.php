@@ -580,7 +580,10 @@ if (!$colRfM) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // 优惠券模块建表
-        $db->exec("CREATE TABLE IF NOT EXISTS coupons (
+        try { $db->exec("ALTER TABLE price_items ADD COLUMN discount_plan_id INT DEFAULT NULL AFTER actual_price"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE price_items ADD COLUMN coupon_id INT DEFAULT NULL AFTER discount_plan_id"); } catch (PDOException $e) {}
+
+$db->exec("CREATE TABLE IF NOT EXISTS coupons (
         id INT PRIMARY KEY AUTO_INCREMENT,
         name VARCHAR(200) NOT NULL DEFAULT '',
         coupon_type VARCHAR(20) NOT NULL DEFAULT '课程券',
@@ -2338,7 +2341,14 @@ $stmt->execute();
             $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
-                $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
+                $itemRes = $db->query(
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name
+                     FROM price_items pi
+                     LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
+                     LEFT JOIN coupons c ON pi.coupon_id = c.id
+                     WHERE pi.plan_id=" . intval($plan['id']) . "
+                     ORDER BY pi.sort_order, pi.id"
+                );
                 while ($item = $itemRes->fetch(PDO::FETCH_ASSOC)) $items[] = $item;
                 $plan['items'] = $items;
                 $plans[] = $plan;
@@ -2352,7 +2362,14 @@ $stmt->execute();
             $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
-                $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
+                $itemRes = $db->query(
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name
+                     FROM price_items pi
+                     LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
+                     LEFT JOIN coupons c ON pi.coupon_id = c.id
+                     WHERE pi.plan_id=" . intval($plan['id']) . "
+                     ORDER BY pi.sort_order, pi.id"
+                );
                 while ($item = $itemRes->fetch(PDO::FETCH_ASSOC)) $items[] = $item;
                 $plan['items'] = $items;
                 $plans[] = $plan;
@@ -2542,8 +2559,12 @@ $stmt->execute();
                 $unitPrice = floatval($item['unit_price'] ?? 0);
                 $actualPrice = floatval($item['actual_price'] ?? $unitPrice);
                 $sortOrder = intval($item['sort_order'] ?? $idx);
+                $discountPlanId = intval($item['discount_plan_id'] ?? 0);
+                $couponId = intval($item['coupon_id'] ?? 0);
                 if (!$itemName || $lessonCount <= 0) continue;
-                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, sort_order) VALUES ($planId, " . $db->quote($itemName) . ", $lessonCount, $unitPrice, $actualPrice, $sortOrder)");
+                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, discount_plan_id, coupon_id, sort_order) VALUES ($planId, " . $db->quote($itemName) . ", $lessonCount, $unitPrice, $actualPrice, "
+                    . ($discountPlanId > 0 ? $discountPlanId : 'NULL') . ", "
+                    . ($couponId > 0 ? $couponId : 'NULL') . ", $sortOrder)");
             }
             json(['id' => $planId, 'message' => $planId ? '价格方案保存成功' : '价格方案保存成功']);
 
@@ -7783,28 +7804,28 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：设置价格 -->
     <div class="modal-overlay" id="modal-price">
-        <div class="modal modal-xl" style="max-width:900px;"><div class="modal-header"><h3 id="modal-price-title">设置价格</h3><button class="modal-close" onclick="closeModal('modal-price')">&times;</button></div>
-        <div class="modal-body" style="display:flex;height:420px;overflow:hidden;padding:0;">
+        <div class="modal modal-xl"><div class="modal-header"><h3 id="modal-price-title">设置价格</h3><button class="modal-close" onclick="closeModal('modal-price')">&times;</button></div>
+        <div class="modal-body price-body">
             <!-- 左侧：价格方案列表 -->
-            <div class="price-left">
-                <div class="price-left-header">价格方案</div>
-                <div class="price-plan-list-wrap" id="price-plan-list">
+            <div class="price-left price-panel">
+                <div class="price-panel-header">📦 价格方案 <span class="price-plan-count-badge" id="price-plan-count">0</span></div>
+                <div class="price-panel-list" id="price-plan-list">
                     <div style="padding:20px;color:#999;">加载中...</div>
                 </div>
-                <div class="price-left-footer">
+                <div class="price-panel-footer">
                     <button class="btn btn-primary btn-sm" onclick="addPlan()" style="width:100%;">+ 新增方案</button>
                 </div>
             </div>
             <!-- 右侧：报价单列表 -->
-            <div class="price-right">
-                <div class="price-right-header">报价单列表 <span id="price-plan-type-tag"></span></div>
-                <div class="price-item-table-wrap">
-                    <table class="price-item-table">
-                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>实际支付价格</th><th width="120">操作</th></tr></thead>
+            <div class="price-right price-detail">
+                <div class="price-detail-header">报价单列表 <span id="price-plan-type-tag"></span></div>
+                <div class="price-detail-table-wrap">
+                    <table id="price-item-table" class="price-item-table">
+                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>实际价格</th><th>优惠方案</th><th>优惠券</th><th width="120">操作</th></tr></thead>
                         <tbody id="price-item-table-body"></tbody>
                     </table>
                 </div>
-                <div class="price-right-footer">
+                <div class="price-detail-footer">
                     <button class="btn btn-primary btn-sm" onclick="addItem()">+ 新增报价单</button>
                 </div>
             </div>
@@ -7828,10 +7849,55 @@ if (intval($countBt) === 0) {
         <div class="modal"><div class="modal-header"><h3 id="modal-price-item-title">新增报价单</h3><button class="modal-close" onclick="closeModal('modal-price-item')">&times;</button></div>
         <div class="modal-body">
             <input type="hidden" id="edit-price-item-id">
-            <div class="form-group"><label>报价单名称 <span class="required">*</span></label><input type="text" id="price-item-name" maxlength="50" placeholder="如：32课时包"></div>
-            <div class="form-group"><label>课时数量 <span class="required">*</span></label><input type="number" id="price-item-lesson-count" min="1" placeholder="请输入课时数量"></div>
-            <div class="form-group"><label>课时价格 <span class="required">*</span></label><input type="number" id="price-item-unit-price" step="0.01" min="0" placeholder="请输入课时价格" oninput="onUnitPriceChange()"></div>
-            <div class="form-group"><label>实际支付价格</label><input type="number" id="price-item-actual-price" step="0.01" min="0" readonly style="background:#f5f7fa;"></div>
+
+            <!-- 卡片：基本信息 -->
+            <div class="pi-card">
+                <div class="pi-card-title">📋 基本信息</div>
+                <div class="pi-card-body">
+                    <div class="form-group">
+                        <label>报价单名称 <span class="required">*</span></label>
+                        <input type="text" id="price-item-name" maxlength="50" placeholder="如：32课时包">
+                    </div>
+                    <div class="form-group">
+                        <label>课时数量 <span class="required">*</span></label>
+                        <input type="number" id="price-item-lesson-count" min="1" placeholder="请输入课时数量">
+                    </div>
+                </div>
+            </div>
+
+            <!-- 卡片：价格设置 -->
+            <div class="pi-card">
+                <div class="pi-card-title">💰 价格设置</div>
+                <div class="pi-card-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>课时价格 <span class="required">*</span></label>
+                            <input type="number" id="price-item-unit-price" step="0.01" min="0" placeholder="请输入课时价格" oninput="onUnitPriceChange()">
+                        </div>
+                        <div class="form-group pi-actual-price-group">
+                            <label>实际支付价格</label>
+                            <input type="number" id="price-item-actual-price" step="0.01" min="0" readonly placeholder="自动同步课时价格">
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 卡片：优惠关联 -->
+            <div class="pi-card" id="pi-discount-card">
+                <div class="pi-card-title">🎁 优惠关联</div>
+                <div class="pi-card-body">
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label>优惠方案</label>
+                            <select id="price-item-discount-plan"><option value="">不使用优惠方案</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label>课时优惠券</label>
+                            <select id="price-item-coupon"><option value="">不使用优惠券</option></select>
+                        </div>
+                    </div>
+                </div>
+            </div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-price-item')">取消</button><button class="btn btn-primary" onclick="saveItem()">保存</button></div></div>
     </div>
