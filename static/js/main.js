@@ -7535,6 +7535,19 @@ function calcActualRefund() {
     document.getElementById('refund-actual-amount-display').textContent = '¥' + actual.toFixed(2);
 }
 
+function onRefundMethodChange() {
+    const method = document.querySelector('input[name="refund-method"]:checked')?.value || 'cash';
+    const bankSection = document.getElementById('refund-bank-info-section');
+    const hint = document.querySelector('#modal-refund-apply .refund-account-hint');
+    if (method === 'account') {
+        if (bankSection) bankSection.style.display = 'none';
+        if (hint) hint.style.display = 'flex';
+    } else {
+        if (bankSection) bankSection.style.display = '';
+        if (hint) hint.style.display = 'none';
+    }
+}
+
 async function submitRefundApply() {
     const orderId = parseInt(document.getElementById('refund-apply-order-id').value) || 0;
     if (!orderId) { showToast('订单信息错误', 'error'); return; }
@@ -7543,6 +7556,17 @@ async function submitRefundApply() {
     const bankAccount = document.getElementById('refund-bank-account').value.trim();
     const accountHolder = document.getElementById('refund-account-holder').value.trim();
     const refundReason = document.getElementById('refund-apply-reason').value.trim();
+
+    // 读取退费方式
+    const refundTo = document.querySelector('input[name="refund-method"]:checked')?.value || 'cash';
+
+    // 退到银行卡时校验银行信息
+    if (refundTo === 'cash') {
+        if (!bankName) { showToast('请填写转账银行', 'error'); return; }
+        if (!bankAccount) { showToast('请填写银行卡号', 'error'); return; }
+        if (!accountHolder) { showToast('请填写开户人', 'error'); return; }
+    }
+    if (!refundReason) { showToast('请填写退费原因', 'error'); return; }
 
     try {
         const res = await fetch(API_BASE + 'submit_refund', {
@@ -7554,7 +7578,8 @@ async function submitRefundApply() {
                 bank_name: bankName,
                 bank_account: bankAccount,
                 account_holder: accountHolder,
-                refund_reason: refundReason
+                refund_reason: refundReason,
+                refund_to: refundTo
             })
         });
         const data = await res.json();
@@ -7835,6 +7860,8 @@ async function showApproveModal(id) {
         const status = rr.status || '';
         const project = rr.project || '课程';
         const isAccount = (project === '账户');
+        const rrMethod = rr.refund_method || '';
+        const rrProject = rr.project || '课程';
         const canApprove = (status === '待审批' || status === '一级审批通过' || status === '二级审批通过');
         // 审批进度
         const steps = ['一级审批', '二级审批', '财务确认'];
@@ -7887,6 +7914,7 @@ async function showApproveModal(id) {
                 <h5 style="margin:0 0 12px;font-size:14px;color:#666;">审批进度</h5>
                 ${stepsHtml}
                 ${approverInfo ? '<div style="margin-top:8px;">' + approverInfo + '</div>' : ''}
+                ${(rr.approval_stage === '二级审批' && rrProject === '课程' && rrMethod === '账户') ? '<div class="approve-account-hint"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;vertical-align:middle;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg> 二级审批通过后自动进入学员账户余额</div>' : ''}
             </div>
             ${canApprove ? `<div style="margin-top:16px;border-top:1px solid #e0e0e0;padding-top:12px;">
                 <div class="form-group">
@@ -7897,7 +7925,7 @@ async function showApproveModal(id) {
                     <label>退款方式</label>
                     <div style="display:flex;gap:20px;">
                         <label style="font-weight:normal;cursor:pointer;"><input type="radio" name="approve-refund-to" value="cash" checked> 退到银行卡</label>
-                        ${isAccount ? '' : `<label style="font-weight:normal;cursor:pointer;"><input type="radio" name="approve-refund-to" value="balance"> 退到余额</label>`}
+                        ${(isAccount || (rrProject==='课程' && rrMethod==='账户')) ? '' : `<label style="font-weight:normal;cursor:pointer;"><input type="radio" name="approve-refund-to" value="balance"> 退到余额</label>`}
                     </div>
                 </div>` : ''}
                 <div class="form-group" id="approve-reject-reason-group" style="display:none;">

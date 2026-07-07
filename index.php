@@ -3479,7 +3479,7 @@ $stmt->execute();
                 $accountHolder = trim($input['account_holder'] ?? '');
                 $refundReason = trim($input['refund_reason'] ?? '');
                 $refundTo = trim($input['refund_to'] ?? 'cash');
-                $refundMethod = ($refundTo === 'balance') ? '账户' : '转账';
+                $refundMethod = (in_array($refundTo, ['balance', 'account'])) ? '账户' : '转账';
                 $courseName = $order['course_name'] ?? '';
                 $n = now();
                 $db->exec("INSERT INTO refund_records (project, content, subject_level1, refund_method, order_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
@@ -3707,8 +3707,57 @@ $stmt->execute();
                 $db->exec("UPDATE refund_records SET status='一级审批通过', approval_stage='二级审批', approver1=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
                 json(['message' => '一级审批通过，等待二级审批']);
             } elseif ($currentStage === '二级审批') {
-                $db->exec("UPDATE refund_records SET status='二级审批通过', approval_stage='财务确认', approver2=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
-                json(['message' => '二级审批通过，等待财务确认']);
+                // 检查：课程退费 + 退到学员账户 → 直接完成，跳过财务确认
+                $rrMethod = $rr['refund_method'] ?? '转账';
+                $rrProject = $rr['project'] ?? '课程';
+                if ($rrProject === '课程' && $rrMethod === '账户') {
+                    // 直接完成退费：余额到账 + 写流水
+                    $refundAmount = floatval($rr['actual_refund'] ?? 0);
+                    $orderId = intval($rr['order_id']);
+                    $studentId = intval($rr['student_id']);
+                    $order2 = $db->query("SELECT lesson_count FROM orders WHERE id=$orderId")->fetch(PDO::FETCH_ASSOC);
+                    $lc = $order2 ? intval($order2['lesson_count']) : 0;
+                    $db->beginTransaction();
+                    try {
+                        // 1. 更新退费记录：直接标记「已退费」（跳过财务确认）
+                        $db->exec("UPDATE refund_records SET status='已退费', approval_stage='已完成', approver2=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                        // 2. 将订单消耗课时设置为总课时（剩余课时归零）
+                        $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
+                        // 3. 余额到账 + FOR UPDATE 防并发
+                        $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
+                        $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $acct->execute();
+                        $acctRow = $acct->fetch(PDO::FETCH_ASSOC);
+                        $oldBalance = $acctRow ? floatval($acctRow['balance']) : 0.00;
+                        $newBalance = round($oldBalance + $refundAmount, 2);
+                        // 4. 更新余额
+                        $upd = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, :bal, 0, 0, :tr) ON DUPLICATE KEY UPDATE balance = balance + :bal2, total_refund = total_refund + :tr2");
+                        $upd->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $upd->bindValue(':bal', $refundAmount);
+                        $upd->bindValue(':tr', $refundAmount);
+                        $upd->bindValue(':bal2', $refundAmount);
+                        $upd->bindValue(':tr2', $refundAmount);
+                        $upd->execute();
+                        // 5. 写账户流水
+                        $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note) VALUES (:sid, 'refund', :amt, :ba, 'refund', :rid, :campus, :note)");
+                        $stmt2->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                        $stmt2->bindValue(':amt', $refundAmount);
+                        $stmt2->bindValue(':ba', $newBalance);
+                        $stmt2->bindValue(':rid', $id, PDO::PARAM_INT);
+                        $stmt2->bindValue(':campus', $rr['campus'] ?? '', PDO::PARAM_STR);
+                        $stmt2->bindValue(':note', '课程退费-退回学员账户: ' . ($rr['course_name'] ?? ''), PDO::PARAM_STR);
+                        $stmt2->execute();
+                        $db->commit();
+                        json(['message' => '二级审批通过，退费已自动到账学员账户']);
+                    } catch (Exception $e) {
+                        $db->rollBack();
+                        json(['error' => '退费到账户失败：' . $e->getMessage()]);
+                    }
+                } else {
+                    // 原有逻辑：进入财务确认阶段
+                    $db->exec("UPDATE refund_records SET status='二级审批通过', approval_stage='财务确认', approver2=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                    json(['message' => '二级审批通过，等待财务确认']);
+                }
             } elseif ($currentStage === '财务确认') {
                 $rrProject = $rr['project'] ?? '课程';
 
@@ -8193,8 +8242,28 @@ if (intval($countBt) === 0) {
                         实退金额：<span id="refund-actual-amount-display">¥0.00</span>
                     </div>
                 </div>
+                <!-- 退费方式 -->
+                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;margin-bottom:16px;">
+                    <h5 style="margin:0 0 12px;font-size:14px;color:#666;">退费方式</h5>
+                    <div class="refund-method-radio-group">
+                        <label class="refund-method-radio-label">
+                            <input type="radio" name="refund-method" value="cash" checked onchange="onRefundMethodChange()">
+                            <span class="refund-method-radio-custom"></span>
+                            退到银行卡
+                        </label>
+                        <label class="refund-method-radio-label">
+                            <input type="radio" name="refund-method" value="account" onchange="onRefundMethodChange()">
+                            <span class="refund-method-radio-custom"></span>
+                            退到学员账户
+                        </label>
+                    </div>
+                    <div class="refund-account-hint" style="display:none;">
+                        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" style="flex-shrink:0;margin-top:1px;"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                        <span>二级审批通过后自动进入学员账户余额</span>
+                    </div>
+                </div>
                 <!-- 信息填写区 -->
-                <div style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
+                <div id="refund-bank-info-section" style="background:#fff;border:1px solid #e0e0e0;border-radius:8px;padding:16px;">
                     <h5 style="margin:0 0 12px;font-size:14px;color:#666;">收款信息</h5>
                     <div class="form-row">
                         <div class="form-group" style="flex:1;">

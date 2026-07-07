@@ -5161,3 +5161,90 @@ tbody td {
 .period-input-sort:focus { border-color: var(--color-primary); box-shadow: 0 0 0 3px rgba(124,58,237,0.08); }
 #table-periods thead th:first-child, #table-periods tbody td:first-child { text-align: center; }
 #table-periods thead th:nth-child(3), #table-periods thead th:nth-child(4), #table-periods tbody td:nth-child(3), #table-periods tbody td:nth-child(4) { text-align: center; font-variant-numeric: tabular-nums; }
+
+/* ==================== 退费申请弹窗 — 退费方式 radio 组 ==================== */
+
+/* 退费方式 Radio 组容器（与审批弹窗中退款方式 radio 风格一致） */
+#modal-refund-apply .refund-method-radio-group {
+    display: flex;
+    gap: 28px;
+    flex-wrap: wrap;
+    align-items: center;
+}
+
+/* 退费方式每个 radio label */
+#modal-refund-apply .refund-method-radio-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: normal;
+    color: #333;
+    padding: 6px 0;
+    user-select: none;
+    transition: color 0.15s;
+}
+#modal-refund-apply .refund-method-radio-label:hover {
+    color: var(--color-primary);
+}
+
+/* 自定义 radio 圆形按钮 */
+#modal-refund-apply .refund-method-radio-custom {
+    width: 18px;
+    height: 18px;
+    border-radius: 50%;
+    border: 2px solid #C4C4C4;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: border-color 0.2s, background 0.2s;
+}
+#modal-refund-apply .refund-method-radio-label:hover .refund-method-radio-custom {
+    border-color: var(--color-primary-light);
+}
+#modal-refund-apply .refund-method-radio-label input:checked + .refund-method-radio-custom {
+    border-color: var(--color-primary);
+    background: var(--color-primary);
+    box-shadow: inset 0 0 0 4px #fff;
+}
+
+/* 隐藏原生 radio，用自定义样式替代 */
+#modal-refund-apply .refund-method-radio-label input[type="radio"] {
+    position: absolute;
+    opacity: 0;
+    width: 0;
+    height: 0;
+}
+
+/* 银行信息区域过渡动画（配合 JS display:none 切换） */
+#modal-refund-apply #refund-bank-info-section {
+    transition: opacity 0.2s ease;
+}
+
+/* 退到学员账户提示条 */
+#modal-refund-apply .refund-account-hint {
+    margin-top: 10px;
+    padding: 9px 14px;
+    background: #f0fdf4;
+    border-left: 3px solid #16a34a;
+    color: #15803d;
+    font-size: 13px;
+    border-radius: 4px;
+    line-height: 1.5;
+}
+
+/* ==================== 审批弹窗 — 退到学员账户提示 ==================== */
+
+/* 二级审批阶段：退到学员账户的绿色提示条 */
+#modal-refund-approve .approve-account-hint {
+    margin-top: 10px;
+    padding: 9px 14px;
+    background: #f0fdf4;
+    border-left: 3px solid #16a34a;
+    color: #15803d;
+    font-size: 13px;
+    border-radius: 4px;
+    line-height: 1.5;
+}
