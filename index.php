@@ -7015,6 +7015,38 @@ if (intval($countBt) === 0) {
                 </div>
             </section>
 
+            <!-- 面板：优惠管理 -->
+            <section class="content-panel" id="panel-discounts">
+                <div class="panel-header"><h3>优惠管理</h3></div>
+                <div class="section-tabs">
+                    <span class="sec-tab active" data-tab="tab-discount-plans">优惠方案</span>
+                </div>
+                <div id="tab-discount-plans">
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <input type="text" id="discount-search" placeholder="搜索方案名称..." oninput="debounceSearch('discount')" style="width:200px;">
+                            <select id="discount-type-filter" onchange="loadDiscountPlans()">
+                                <option value="">全部类型</option>
+                                <option value="新报">新报</option>
+                                <option value="续费">续费</option>
+                            </select>
+                        </div>
+                        <div class="toolbar-right">
+                            <button class="btn btn-primary btn-sm" onclick="showDiscountPlanForm()">+ 新增方案</button>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-discount-plans">
+                            <thead><tr>
+                                <th>方案名称</th><th>类型</th><th>优惠金额</th><th>有效期</th><th>适用校区</th><th>适用学科</th><th width="100">创建时间</th><th width="120">操作</th>
+                            </tr></thead>
+                            <tbody></tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="pagination-discount"></div>
+                </div>
+            </section>
+
             <!-- 面板：课表视图 -->
             <!-- 面板：学科设置 -->
             <section class="content-panel" id="panel-subjects">
@@ -8597,6 +8629,33 @@ if (intval($countBt) === 0) {
                 <button class="btn btn-default" onclick="closeModal('modal-refund-approve')">关闭</button>
                 <button class="btn btn-danger" id="btn-refund-reject" onclick="submitApproval('reject')">驳回</button>
                 <button class="btn btn-primary" id="btn-refund-approve" onclick="submitApproval('approve')">审批通过</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 优惠方案弹窗 -->
+    <div class="modal-overlay" id="modal-discount-plan">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h4 id="discount-plan-modal-title">新增优惠方案</h4>
+                <button class="modal-close" onclick="closeModal('modal-discount-plan')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <div class="form-group"><label>方案名称</label><input type="text" id="discount-plan-name" class="form-input" placeholder="请输入方案名称"></div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;"><label>类型</label><select id="discount-plan-type" class="form-input"><option value="新报">新报</option><option value="续费">续费</option></select></div>
+                    <div class="form-group" style="flex:1;"><label>优惠金额 (元)</label><input type="number" id="discount-plan-amount" class="form-input" step="0.01" min="0" placeholder="请输入优惠金额"></div>
+                </div>
+                <div class="form-row">
+                    <div class="form-group" style="flex:1;"><label>有效期开始</label><input type="date" id="discount-plan-start" class="form-input"></div>
+                    <div class="form-group" style="flex:1;"><label>有效期结束</label><input type="date" id="discount-plan-end" class="form-input"></div>
+                </div>
+                <div class="form-group"><label>适用校区</label><div id="discount-campus-tree" style="max-height:180px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:8px;"></div></div>
+                <div class="form-group"><label>适用学科</label><div id="discount-subject-tree" style="max-height:200px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:8px;"></div></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-default" onclick="closeModal('modal-discount-plan')">取消</button>
+                <button class="btn btn-primary" id="btn-discount-plan-save" onclick="saveDiscountPlan()">保存</button>
             </div>
         </div>
     </div>
