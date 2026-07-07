@@ -7942,7 +7942,8 @@ async function showApproveModal(id) {
                 <div class="card-title">📦 订单信息</div>
                 <div class="info-row"><span class="info-label">订单号</span><span class="info-value mono">${esc(rr.order_no || '')}</span></div>
                 <div class="info-row"><span class="info-label">退费类型</span><span class="info-value">${isAccount ? '账户余额退费' : '课程退费'}</span></div>
-                <div class="info-row"><span class="info-label">退费原因</span><span class="info-value">${esc(rr.refund_reason || '-')}</span></div>`;
+                <div class="info-row"><span class="info-label">退费原因</span><span class="info-value">${esc(rr.refund_reason || '-')}</span></div>
+                <div class="info-row"><span class="info-label">退费方式</span><span class="info-value">${rrMethod === '账户' ? '<span class="refund-badge refund-badge-balance">退到学员账户</span>' : '<span class="refund-badge refund-badge-transfer">退到银行卡</span>'}</span></div>`;
         if (!isAccount && rrMethod !== '账户') {
             infoCardsHtml += `
                 <div class="info-row"><span class="info-label">转账银行</span><span class="info-value">${esc(rr.bank_name || '-')}</span></div>
