@@ -12,6 +12,7 @@
 ```
 用户提出需求
   ↓
+0. Product Manager    → delegate_task(goal, context, toolsets)      → 需求分析、方案设计、PRD
 1. UI Designer        → delegate_task(goal, context, toolsets)      → 设计页面与交互
 2. Backend Architect  → delegate_task(goal, context, toolsets)      → 写后端代码
 3. Frontend Developer → delegate_task(goal, context, toolsets)      → 实现前端
@@ -24,6 +25,7 @@
 
 | 阶段 | 专家 | Slug | 用途 |
 |------|------|------|------|
+| 📋 产品 | Product Manager | product-manager | 需求分析、方案设计、PRD 撰写、路线图 |
 | 🎨 设计 | UI Designer | ui-designer | 页面布局、交互设计、组件样式 |
 | 🔧 后端 | Backend Architect | backend-architect | 系统设计、API开发、数据库架构、PHP |
 | 💻 前端 | Frontend Developer | frontend-developer | HTML/CSS/JS 实现、Vanilla JS |

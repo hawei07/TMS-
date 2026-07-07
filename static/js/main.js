@@ -7662,6 +7662,7 @@ async function loadRefundRecords() {
         const dateFrom = document.getElementById('filter-refund-date-from')?.value || '';
         const dateTo = document.getElementById('filter-refund-date-to')?.value || '';
         const status = document.getElementById('filter-refund-status')?.value || '';
+        const project = document.getElementById('filter-refund-project')?.value || '';
         const regionSel = document.getElementById('filter-refund-region');
         const campusSel = document.getElementById('filter-refund-campus');
         const params = new URLSearchParams({ page: refundPage, page_size: 15, _: Date.now() });
@@ -7669,6 +7670,7 @@ async function loadRefundRecords() {
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo) params.set('date_to', dateTo);
         if (status) params.set('status', status);
+        if (project) params.set('project', project);
         // 校区筛选：选区域时收集该区域下所有校区；选具体校区时传单个校区
         let campusValue = '';
         if (regionSel && campusSel) {
@@ -7690,17 +7692,25 @@ async function loadRefundRecords() {
     } catch (e) {
         console.error('loadRefundRecords error:', e);
         const tbody = document.querySelector('#table-refund-records tbody');
-        if (tbody) tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
+        if (tbody) tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#e74c3c;padding:30px;">加载失败：' + e.message + '</td></tr>';
     }
 }
 
 function renderRefundRecordTable(rows) {
     const tbody = document.querySelector('#table-refund-records tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
+        const project = r.project || '课程';
+        let projectBadge = '';
+        if (project === '账户') {
+            projectBadge = '<span style="display:inline-block;padding:2px 8px;background:#fef3c7;color:#d97706;border-radius:10px;font-size:12px;">账户</span>';
+        } else {
+            projectBadge = '<span style="display:inline-block;padding:2px 8px;background:#e0e7ff;color:#4f46e5;border-radius:10px;font-size:12px;">课程</span>';
+        }
+        const isAccount = (project === '账户');
         const ttl = parseInt(r.total_lessons) || 0;
         const ta = parseFloat(r.total_amount) || 0;
         const cl = parseInt(r.consumed_lessons) || 0;
@@ -7731,14 +7741,15 @@ function renderRefundRecordTable(rows) {
         return `<tr>
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
             <td>${esc(r.student_name || '')}</td>
-            <td>${esc(r.course_name || '')}</td>
+            <td>${projectBadge}</td>
+            <td>${esc(r.content || r.course_name || '')}</td>
             <td>${esc(r.campus || '')}</td>
-            <td>${ttl}</td>
-            <td>${cl}</td>
-            <td>${rl}</td>
-            <td>¥${ta.toFixed(2)}</td>
+            <td>${isAccount ? '-' : ttl}</td>
+            <td>${isAccount ? '-' : cl}</td>
+            <td>${isAccount ? '-' : rl}</td>
+            <td>${isAccount ? '-' : '¥'+ta.toFixed(2)}</td>
             <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
-            <td>¥${da.toFixed(2)}</td>
+            <td>${isAccount ? '-' : '¥'+da.toFixed(2)}</td>
             <td style="white-space:nowrap;">${statusHtml}</td>
             <td>${created}</td>
             <td>${optHtml}</td>
@@ -7820,6 +7831,8 @@ async function showApproveModal(id) {
         if (data.error) { showToast(data.error, 'error'); closeModal('modal-refund-approve'); return; }
         const rr = data.data;
         const status = rr.status || '';
+        const project = rr.project || '课程';
+        const isAccount = (project === '账户');
         const canApprove = (status === '待审批' || status === '一级审批通过' || status === '二级审批通过');
         // 审批进度
         const steps = ['一级审批', '二级审批', '财务确认'];
@@ -7878,6 +7891,13 @@ async function showApproveModal(id) {
                     <label>审批人</label>
                     <input type="text" id="approve-approver-name" class="form-input" placeholder="请输入审批人姓名">
                 </div>
+                ${rr.approval_stage === '财务确认' ? `<div class="form-group" id="approve-refund-to-group">
+                    <label>退款方式</label>
+                    <div style="display:flex;gap:20px;">
+                        <label style="font-weight:normal;cursor:pointer;"><input type="radio" name="approve-refund-to" value="cash" checked> 退到银行卡</label>
+                        ${isAccount ? '' : `<label style="font-weight:normal;cursor:pointer;"><input type="radio" name="approve-refund-to" value="balance"> 退到余额</label>`}
+                    </div>
+                </div>` : ''}
                 <div class="form-group" id="approve-reject-reason-group" style="display:none;">
                     <label>驳回原因 <span style="color:red;">*</span></label>
                     <textarea id="approve-reject-reason" class="form-input" rows="2" placeholder="请输入驳回原因"></textarea>
@@ -7910,15 +7930,20 @@ async function submitApproval(action) {
         }
     }
     try {
+        let refundTo = 'cash';
+        const refundToRadio = document.querySelector('input[name="approve-refund-to"]:checked');
+        if (refundToRadio) refundTo = refundToRadio.value;
+        const body = {
+            id: currentApproveId,
+            action: action,
+            approver: approver,
+            reject_reason: rejectReason
+        };
+        if (action === 'approve') body.refund_to = refundTo;
         const res = await fetch(API_BASE + 'approve_refund', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                id: currentApproveId,
-                action: action,
-                approver: approver,
-                reject_reason: rejectReason
-            })
+            body: JSON.stringify(body)
         });
         const data = await res.json();
         if (data.error) { showToast(data.error, 'error'); return; }
@@ -7945,6 +7970,103 @@ async function cancelRefund(id) {
         loadRefundRecords();
         if (currentViewStudentId) loadStudentCourses(currentViewStudentId);
     } catch (e) {
+        showToast('网络错误，请重试', 'error');
+    }
+}
+
+// ==================== 账户退费 ====================
+let accountRefundMaxAmount = 0;
+
+async function showAccountRefundModal() {
+    const sid = currentViewStudentId;
+    if (!sid) { showToast('请先选择学员', 'error'); return; }
+
+    try {
+        const res = await fetch(API_BASE + 'get_student_account&student_id=' + sid);
+        const data = await res.json();
+        const balance = Number(data.balance || 0);
+
+        if (balance <= 0) {
+            showToast('账户余额为0，无法申请退费', 'warn');
+            return;
+        }
+
+        accountRefundMaxAmount = balance;
+        // 填充账户信息
+        document.getElementById('account-refund-balance').textContent = '¥' + balance.toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        document.getElementById('account-refund-total-deposit').textContent = '¥' + Number(data.total_deposit || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        document.getElementById('account-refund-total-consume').textContent = '¥' + Number(data.total_consume || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        document.getElementById('account-refund-total-refund').textContent = '¥' + Number(data.total_refund || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        // 清空表单
+        document.getElementById('account-refund-amount').value = '';
+        document.getElementById('account-refund-amount-hint').innerHTML = '';
+        document.getElementById('account-refund-bank-name').value = '';
+        document.getElementById('account-refund-bank-account').value = '';
+        document.getElementById('account-refund-account-holder').value = '';
+        document.getElementById('account-refund-reason').value = '';
+
+        openModal('modal-account-refund');
+    } catch (e) {
+        console.error('showAccountRefundModal error:', e);
+        showToast('加载账户信息失败', 'error');
+    }
+}
+
+function validateAccountRefundAmount() {
+    const input = document.getElementById('account-refund-amount');
+    const hint = document.getElementById('account-refund-amount-hint');
+    const val = parseFloat(input.value);
+    if (isNaN(val) || val <= 0) {
+        hint.innerHTML = '<span style="color:#999;">请输入有效的退费金额</span>';
+        return;
+    }
+    if (val > accountRefundMaxAmount) {
+        hint.innerHTML = '<span style="color:#e74c3c;">⚠ 退费金额不能超过账户余额（当前余额：¥' + accountRefundMaxAmount.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + '）</span>';
+        input.style.borderColor = '#e74c3c';
+    } else {
+        hint.innerHTML = '<span style="color:#27ae60;">✓ 退费金额有效，实退：¥' + val.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + '</span>';
+        input.style.borderColor = '#27ae60';
+    }
+}
+
+async function submitAccountRefund() {
+    const sid = currentViewStudentId;
+    if (!sid) { showToast('学员ID无效', 'error'); return; }
+
+    const amount = parseFloat(document.getElementById('account-refund-amount').value);
+    if (isNaN(amount) || amount <= 0) { showToast('请输入有效的退费金额', 'error'); return; }
+    if (amount > accountRefundMaxAmount) { showToast('退费金额不能超过账户余额', 'error'); return; }
+
+    const bankName = document.getElementById('account-refund-bank-name').value.trim();
+    const bankAccount = document.getElementById('account-refund-bank-account').value.trim();
+    const accountHolder = document.getElementById('account-refund-account-holder').value.trim();
+    const reason = document.getElementById('account-refund-reason').value.trim();
+
+    if (!bankName) { showToast('请输入转账银行', 'error'); return; }
+    if (!bankAccount) { showToast('请输入银行卡号', 'error'); return; }
+    if (!accountHolder) { showToast('请输入开户人姓名', 'error'); return; }
+
+    try {
+        const res = await fetch(API_BASE + 'submit_refund', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                refund_type: 'account',
+                student_id: sid,
+                refund_amount: amount,
+                bank_name: bankName,
+                bank_account: bankAccount,
+                account_holder: accountHolder,
+                refund_reason: reason
+            })
+        });
+        const data = await res.json();
+        if (data.error) { showToast(data.error, 'error'); return; }
+        showToast(data.message || '账户退费申请提交成功');
+        closeModal('modal-account-refund');
+        if (currentViewStudentId) loadStudentAccount(currentViewStudentId);
+    } catch (e) {
+        console.error('submitAccountRefund error:', e);
         showToast('网络错误，请重试', 'error');
     }
 }
@@ -9412,6 +9534,15 @@ async function loadStudentAccount(sid) {
         document.getElementById('account-total-deposit').textContent = '¥' + Number(data.total_deposit || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
         document.getElementById('account-total-consume').textContent = '¥' + Number(data.total_consume || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
         document.getElementById('account-total-refund').textContent = '¥' + Number(data.total_refund || 0).toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        // 更新「申请退费」按钮状态
+        const btn = document.getElementById('btn-account-refund');
+        if (btn) {
+            const bal = Number(data.balance || 0);
+            btn.disabled = (bal <= 0);
+            btn.title = bal <= 0 ? '账户余额为0，无法申请退费' : '申请将余额退至银行卡';
+            btn.style.opacity = bal <= 0 ? '0.5' : '1';
+            btn.style.cursor = bal <= 0 ? 'not-allowed' : 'pointer';
+        }
         accountAllTransactions = data.transactions || [];
         accountCurrentPage = 1;
         renderAccountTransactions(accountAllTransactions, 1);
