@@ -7750,7 +7750,7 @@ function renderRefundRecordTable(rows) {
             <td>${esc(subject)}</td>
             <td>${esc(r.campus || '')}</td>
             <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
-            <td>${isAccount ? '-' : '¥'+da.toFixed(2)}</td>
+            <td>${isAccount ? '¥0.00' : '¥'+da.toFixed(2)}</td>
             <td>${methodBadge}</td>
             <td style="white-space:nowrap;">${statusHtml}</td>
             <td>${created}</td>
