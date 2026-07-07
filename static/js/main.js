@@ -9926,8 +9926,7 @@ function renderDiscountPlanTable(rows) {
             <td>${esc(r.name)}</td>
             <td><span class="tag tag-${r.plan_type === '新报' ? 'green' : 'blue'}">${esc(r.plan_type)}</span></td>
             <td style="text-align:right;font-weight:600;color:#DC2626;">¥${Number(r.amount).toFixed(2)}</td>
-            <td>${r.start_date || '-'}</td>
-            <td>${r.end_date || '-'}</td>
+            <td>${(r.start_date||'')} ~ ${(r.end_date||'')}</td>
             <td title="${esc(campusText)}">${esc(campusText.length > 16 ? campusText.substring(0, 16) + '...' : campusText)}</td>
             <td title="${esc(subjectText)}">${esc(subjectText.length > 16 ? subjectText.substring(0, 16) + '...' : subjectText)}</td>
             <td>${(r.created_at || '').substring(0, 16)}</td>
