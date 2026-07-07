@@ -3283,6 +3283,7 @@ function renderItemList() {
             <td></td>
             <td></td>
         </tr>`;
+    ensureInlineEditDelegation();
 }
 
 // 点击事件委托：在 #price-item-table-body 上挂单击处理
