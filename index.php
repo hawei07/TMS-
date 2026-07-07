@@ -3661,8 +3661,6 @@ $stmt->execute();
             $action = trim($input['action'] ?? ''); // approve / reject
             $approver = trim($input['approver'] ?? '');
             $rejectReason = trim($input['reject_reason'] ?? '');
-            $customDeduction = floatval($input['custom_deduction'] ?? 0);
-            $approveActualRefund = floatval($input['actual_refund'] ?? 0);
             if ($id <= 0) { json(['error' => 'ID无效']); break; }
             if (!in_array($action, ['approve', 'reject'])) { json(['error' => '操作无效']); break; }
             $rr = $db->query("SELECT * FROM refund_records WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
@@ -3706,7 +3704,7 @@ $stmt->execute();
             // 审批通过
             $currentStage = $rr['approval_stage'];
             if ($currentStage === '一级审批') {
-                $db->exec("UPDATE refund_records SET status='一级审批通过', approval_stage='二级审批', approver1=" . $db->quote($approver) . ", custom_deduction=$customDeduction, actual_refund=$approveActualRefund, updated_at='$n' WHERE id=$id");
+                $db->exec("UPDATE refund_records SET status='一级审批通过', approval_stage='二级审批', approver1=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
                 json(['message' => '一级审批通过，等待二级审批']);
             } elseif ($currentStage === '二级审批') {
                 // 检查：课程退费 + 退到学员账户 → 直接完成，跳过财务确认
@@ -3722,7 +3720,7 @@ $stmt->execute();
                     $db->beginTransaction();
                     try {
                         // 1. 更新退费记录：直接标记「已退费」（跳过财务确认）
-                        $db->exec("UPDATE refund_records SET status='已退费', approval_stage='已完成', approver2=" . $db->quote($approver) . ", custom_deduction=$customDeduction, actual_refund=$approveActualRefund, updated_at='$n' WHERE id=$id");
+                        $db->exec("UPDATE refund_records SET status='已退费', approval_stage='已完成', approver2=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
                         // 2. 将订单消耗课时设置为总课时（剩余课时归零）
                         $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
                         // 3. 余额到账 + FOR UPDATE 防并发
@@ -3757,7 +3755,7 @@ $stmt->execute();
                     }
                 } else {
                     // 原有逻辑：进入财务确认阶段
-                    $db->exec("UPDATE refund_records SET status='二级审批通过', approval_stage='财务确认', approver2=" . $db->quote($approver) . ", custom_deduction=$customDeduction, actual_refund=$approveActualRefund, updated_at='$n' WHERE id=$id");
+                    $db->exec("UPDATE refund_records SET status='二级审批通过', approval_stage='财务确认', approver2=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
                     json(['message' => '二级审批通过，等待财务确认']);
                 }
             } elseif ($currentStage === '财务确认') {
