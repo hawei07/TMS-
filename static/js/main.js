@@ -3208,7 +3208,7 @@ async function selectPlan(planId) {
     renderPlanList();
     renderItemList();
     ensureInlineEditDelegation();
-    await preloadInlineDiscountData();
+    preloadInlineDiscountData(); // 异步加载，不阻塞 UI
 }
 
 async function preloadInlineDiscountData() {
@@ -3222,7 +3222,7 @@ async function preloadInlineDiscountData() {
         priceItemDiscountPlans = discountRes.data || [];
         priceItemCoupons = couponRes.data || [];
     } catch (e) {
-        // 预加载失败不阻塞
+        console.error('preloadInlineDiscountData failed:', e);
     }
 }
 
@@ -3325,6 +3325,12 @@ function enterInlineEdit(tr, item) {
         const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
         return plan && plan.plan_type === '小课包';
     })();
+
+    // 如果数据未加载，先加载再进入编辑
+    if (!isSmallPack && priceItemDiscountPlans.length === 0 && priceItemCoupons.length === 0) {
+        preloadInlineDiscountData().then(() => enterInlineEdit(tr, item));
+        return;
+    }
 
     tr.classList.add('inline-editing');
 
