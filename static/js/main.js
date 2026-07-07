@@ -7977,13 +7977,6 @@ async function showApproveModal(id) {
                     <label>审批人</label>
                     <input type="text" id="approve-approver-name" placeholder="请输入审批人姓名">
                 </div>
-                ${rr.approval_stage === '财务确认' ? `<div class="approve-refund-to-group">
-                    <label>退款方式</label>
-                    <div class="refund-to-options">
-                        <label class="refund-to-radio-label"><input type="radio" name="approve-refund-to" value="cash" checked><span class="refund-to-radio-custom"></span>退到银行卡</label>
-                        ${(isAccount || (rrProject==='课程' && rrMethod==='账户')) ? '' : `<label class="refund-to-radio-label"><input type="radio" name="approve-refund-to" value="balance"><span class="refund-to-radio-custom"></span>退到余额</label>`}
-                    </div>
-                </div>` : ''}
                 <div id="approve-reject-reason-group" style="display:none;">
                     <label>驳回原因 <span style="color:red;">*</span></label>
                     <textarea id="approve-reject-reason" rows="2" placeholder="请输入驳回原因"></textarea>
@@ -8016,16 +8009,12 @@ async function submitApproval(action) {
         }
     }
     try {
-        let refundTo = 'cash';
-        const refundToRadio = document.querySelector('input[name="approve-refund-to"]:checked');
-        if (refundToRadio) refundTo = refundToRadio.value;
         const body = {
             id: currentApproveId,
             action: action,
             approver: approver,
             reject_reason: rejectReason
         };
-        if (action === 'approve') body.refund_to = refundTo;
         const res = await fetch(API_BASE + 'approve_refund', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },

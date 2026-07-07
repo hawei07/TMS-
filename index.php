@@ -3768,58 +3768,15 @@ $stmt->execute();
                     $db->exec("UPDATE account_transactions SET note='账户退费-已退至银行卡' WHERE ref_type='refund_account' AND ref_id=$id");
                     json(['message' => '财务确认通过，账户退费已完成（退至银行卡）']);
                 } else {
-                    // 课程退费：退款方式退到余额或现金
-                    $refundTo = trim($input['refund_to'] ?? 'cash');
-                $refundAmount = floatval($rr['actual_refund'] ?? 0);
-                $orderId = intval($rr['order_id']);
-                $order2 = $db->query("SELECT lesson_count FROM orders WHERE id=$orderId")->fetch(PDO::FETCH_ASSOC);
-                $lc = $order2 ? intval($order2['lesson_count']) : 0;
-                if ($refundTo === 'balance' && $refundAmount > 0) {
-                    // 退到余额：整个流程包裹在事务中，保证原子性
-                    $db->beginTransaction();
-                    try {
-                        $db->exec("UPDATE refund_records SET status='已退费', refund_method='账户', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
-                        // 将订单消耗课时设置为总课时（剩余课时归零）
-                        $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
-                        $studentId = intval($rr['student_id']);
-                        // 查询当前余额
-                        $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
-                        $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
-                        $acct->execute();
-                        $acct = $acct->fetch(PDO::FETCH_ASSOC);
-                        $oldBalance = $acct ? floatval($acct['balance']) : 0.00;
-                        $newBalance = round($oldBalance + $refundAmount, 2);
-                        // 更新余额
-                        $upd = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, :bal, 0, 0, :tr) ON DUPLICATE KEY UPDATE balance = balance + :bal2, total_refund = total_refund + :tr2");
-                        $upd->bindValue(':sid', $studentId, PDO::PARAM_INT);
-                        $upd->bindValue(':bal', $refundAmount);
-                        $upd->bindValue(':tr', $refundAmount);
-                        $upd->bindValue(':bal2', $refundAmount);
-                        $upd->bindValue(':tr2', $refundAmount);
-                        $upd->execute();
-                        // 写入流水
-                        $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note) VALUES (:sid, 'refund', :amt, :ba, 'refund', :rid, :campus, :note)");
-                        $stmt2->bindValue(':sid', $studentId, PDO::PARAM_INT);
-                        $stmt2->bindValue(':amt', $refundAmount);
-                        $stmt2->bindValue(':ba', $newBalance);
-                        $stmt2->bindValue(':rid', $id, PDO::PARAM_INT);
-                        $stmt2->bindValue(':campus', $rr['campus'] ?? '', PDO::PARAM_STR);
-                        $stmt2->bindValue(':note', '退费退回余额: ' . ($rr['course_name'] ?? ''), PDO::PARAM_STR);
-                        $stmt2->execute();
-                        $db->commit();
-                        json(['message' => '财务确认通过，退费已退回余额']);
-                    } catch (Exception $e) {
-                        $db->rollBack();
-                        json(['error' => '退款到余额失败：' . $e->getMessage()]);
-                    }
-                } else {
-                    // 现金退款：原有逻辑保持不变
-                    $db->exec("UPDATE refund_records SET status='已退费', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
-                    // 将订单消耗课时设置为总课时（剩余课时归零）
-                    $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
-                    json(['message' => '财务确认通过，退费已完成']);
-                }
-                }
+                                    // 课程退费：退到银行卡
+                                $refundAmount = floatval($rr['actual_refund'] ?? 0);
+                                $orderId = intval($rr['order_id']);
+                                $order2 = $db->query("SELECT lesson_count FROM orders WHERE id=$orderId")->fetch(PDO::FETCH_ASSOC);
+                                $lc = $order2 ? intval($order2['lesson_count']) : 0;
+                                $db->exec("UPDATE refund_records SET status='已退费', approver3=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
+                                $db->exec("UPDATE orders SET refund_status='已退费', consumed_lessons=$lc WHERE id=$orderId");
+                                json(['message' => '财务确认通过，退费已完成']);
+                                }
             } else {
                 json(['error' => '当前审批阶段异常']);
             }
