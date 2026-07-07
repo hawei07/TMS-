@@ -3507,7 +3507,7 @@ async function loadPriceItemDiscountOptions(selectedValue) {
         const res = await api('list_discount_plans', { plan_type: planType, page_size: 200 }, 'GET');
         const data = res.data || [];
         select.innerHTML = '<option value="">不使用优惠方案</option>' +
-            data.map(d => `<option value="${d.id}">${esc(d.name)}（¥${Number(d.discount_amount || 0).toFixed(2)}）</option>`).join('');
+            data.map(d => `<option value="${d.id}">${esc(d.name)}（¥${Number(d.amount || 0).toFixed(2)}）</option>`).join('');
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
             select.value = selectedValue;
         }
@@ -3531,7 +3531,7 @@ async function loadPriceItemCouponOptions(selectedValue) {
         const res = await api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET');
         const data = res.data || [];
         select.innerHTML = '<option value="">不使用优惠券</option>' +
-            data.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.discount_amount || 0).toFixed(2)}）</option>`).join('');
+            data.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`).join('');
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
             select.value = selectedValue;
         }
