@@ -2528,6 +2528,187 @@ $stmt->execute();
             $db->exec("DELETE FROM price_plans WHERE id=$planId");
             json(['message' => '价格方案删除成功']);
 
+// ==================== 优惠管理 API ====================
+        case 'list_discount_plans':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 15)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $planType = trim($_GET['plan_type'] ?? '');
+            $campusId = intval($_GET['campus_id'] ?? 0);
+            $offset = ($page - 1) * $pageSize;
+
+            $where = ['1=1'];
+            if ($keyword !== '') {
+                $where[] = 'dp.name LIKE ' . $db->quote('%' . $keyword . '%');
+            }
+            if ($planType !== '') {
+                $where[] = 'dp.plan_type = ' . $db->quote($planType);
+            }
+            if ($campusId > 0) {
+                $where[] = '(dp.id IN (SELECT plan_id FROM discount_plan_campuses WHERE campus_id=' . $campusId . ') OR dp.id NOT IN (SELECT plan_id FROM discount_plan_campuses))';
+            }
+            $whereStr = implode(' AND ', $where);
+
+            $cnt = $db->query("SELECT COUNT(*) FROM discount_plans dp WHERE $whereStr")->fetchColumn();
+            $total = intval($cnt);
+
+            $sql = "SELECT dp.*,
+                (SELECT GROUP_CONCAT(DISTINCT dpc2.campus_id ORDER BY dpc2.campus_id SEPARATOR ',') FROM discount_plan_campuses dpc2 WHERE dpc2.plan_id=dp.id) AS campus_ids,
+                (SELECT GROUP_CONCAT(DISTINCT o.name ORDER BY o.name SEPARATOR ', ') FROM discount_plan_campuses dpc2 LEFT JOIN organizations o ON dpc2.campus_id=o.id WHERE dpc2.plan_id=dp.id) AS campus_names,
+                (SELECT GROUP_CONCAT(DISTINCT dps2.subject_id ORDER BY dps2.subject_id SEPARATOR ',') FROM discount_plan_subjects dps2 WHERE dps2.plan_id=dp.id) AS subject_ids,
+                (SELECT GROUP_CONCAT(DISTINCT s.name ORDER BY s.name SEPARATOR ', ') FROM discount_plan_subjects dps2 LEFT JOIN subjects s ON dps2.subject_id=s.id WHERE dps2.plan_id=dp.id) AS subject_names
+            FROM discount_plans dp
+            WHERE $whereStr
+            ORDER BY dp.created_at DESC
+            LIMIT $offset, $pageSize";
+            $res = $db->query($sql);
+            $rows = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+                $r['amount'] = floatval($r['discount_amount']);
+                unset($r['discount_amount']);
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        case 'add_discount_plan':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            $planType = trim($input['plan_type'] ?? '新报');
+            $discountAmount = floatval($input['discount_amount'] ?? $input['amount'] ?? 0);
+            $startDate = trim($input['start_date'] ?? '');
+            $endDate = trim($input['end_date'] ?? '');
+            $campusIdsRaw = $input['campus_ids'] ?? [];
+            $subjectIdsRaw = $input['subject_ids'] ?? [];
+
+            if ($name === '') { json(['error' => '方案名称不能为空']); break; }
+            if (!in_array($planType, ['新报', '续费'])) { json(['error' => '类型无效']); break; }
+            if ($discountAmount <= 0) { json(['error' => '优惠金额必须大于0']); break; }
+            if ($startDate === '' || $endDate === '') { json(['error' => '日期不能为空']); break; }
+            if ($endDate < $startDate) { json(['error' => '结束日期不能早于开始日期']); break; }
+
+            $dup = $db->query("SELECT COUNT(*) FROM discount_plans WHERE name=" . $db->quote($name) . " AND plan_type=" . $db->quote($planType))->fetchColumn();
+            if ($dup > 0) { json(['error' => '同类型下方案名称已存在']); break; }
+
+            $n = now();
+            $db->beginTransaction();
+            try {
+                $db->exec("INSERT INTO discount_plans (name, plan_type, discount_amount, start_date, end_date, created_at, updated_at) VALUES (" . $db->quote($name) . ", " . $db->quote($planType) . ", $discountAmount, " . $db->quote($startDate) . ", " . $db->quote($endDate) . ", '$n', '$n')");
+                $planId = $db->lastInsertId();
+
+                if (!empty($campusIdsRaw)) {
+                    $campusIds = is_string($campusIdsRaw) ? array_map('intval', explode(',', $campusIdsRaw)) : array_map('intval', $campusIdsRaw);
+                    $vals = [];
+                    foreach ($campusIds as $cid) { if ($cid > 0) $vals[] = "($planId, $cid)"; }
+                    if (!empty($vals)) $db->exec("INSERT INTO discount_plan_campuses (plan_id, campus_id) VALUES " . implode(', ', $vals));
+                }
+
+                if (!empty($subjectIdsRaw)) {
+                    $subjectIds = is_string($subjectIdsRaw) ? array_map('intval', explode(',', $subjectIdsRaw)) : array_map('intval', $subjectIdsRaw);
+                    $vals = [];
+                    foreach ($subjectIds as $sid) { if ($sid > 0) $vals[] = "($planId, $sid)"; }
+                    if (!empty($vals)) $db->exec("INSERT INTO discount_plan_subjects (plan_id, subject_id) VALUES " . implode(', ', $vals));
+                }
+
+                $db->commit();
+                json(['message' => '优惠方案创建成功', 'id' => $planId]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '创建失败: ' . $e->getMessage()]);
+            }
+            break;
+
+        case 'update_discount_plan':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $existing = $db->query("SELECT * FROM discount_plans WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) { json(['error' => '优惠方案不存在']); break; }
+
+            $name = trim($input['name'] ?? $existing['name']);
+            $planType = trim($input['plan_type'] ?? $existing['plan_type']);
+            $discountAmount = isset($input['discount_amount']) ? floatval($input['discount_amount']) : (isset($input['amount']) ? floatval($input['amount']) : floatval($existing['discount_amount']));
+            $startDate = trim($input['start_date'] ?? $existing['start_date']);
+            $endDate = trim($input['end_date'] ?? $existing['end_date']);
+            $campusIdsRaw = $input['campus_ids'] ?? null;
+            $subjectIdsRaw = $input['subject_ids'] ?? null;
+
+            if ($name === '') { json(['error' => '方案名称不能为空']); break; }
+            if (!in_array($planType, ['新报', '续费'])) { json(['error' => '类型无效']); break; }
+            if ($discountAmount <= 0) { json(['error' => '优惠金额必须大于0']); break; }
+            if ($endDate < $startDate) { json(['error' => '结束日期不能早于开始日期']); break; }
+
+            $dup = $db->query("SELECT COUNT(*) FROM discount_plans WHERE name=" . $db->quote($name) . " AND plan_type=" . $db->quote($planType) . " AND id!=$id")->fetchColumn();
+            if ($dup > 0) { json(['error' => '同类型下方案名称已存在']); break; }
+
+            $db->beginTransaction();
+            try {
+                $db->exec("UPDATE discount_plans SET name=" . $db->quote($name) . ", plan_type=" . $db->quote($planType) . ", discount_amount=$discountAmount, start_date=" . $db->quote($startDate) . ", end_date=" . $db->quote($endDate) . ", updated_at='" . now() . "' WHERE id=$id");
+
+                if ($campusIdsRaw !== null) {
+                    $db->exec("DELETE FROM discount_plan_campuses WHERE plan_id=$id");
+                    if (!empty($campusIdsRaw)) {
+                        $campusIds = is_string($campusIdsRaw) ? array_map('intval', explode(',', $campusIdsRaw)) : array_map('intval', $campusIdsRaw);
+                        $vals = [];
+                        foreach ($campusIds as $cid) { if ($cid > 0) $vals[] = "($id, $cid)"; }
+                        if (!empty($vals)) $db->exec("INSERT INTO discount_plan_campuses (plan_id, campus_id) VALUES " . implode(', ', $vals));
+                    }
+                }
+
+                if ($subjectIdsRaw !== null) {
+                    $db->exec("DELETE FROM discount_plan_subjects WHERE plan_id=$id");
+                    if (!empty($subjectIdsRaw)) {
+                        $subjectIds = is_string($subjectIdsRaw) ? array_map('intval', explode(',', $subjectIdsRaw)) : array_map('intval', $subjectIdsRaw);
+                        $vals = [];
+                        foreach ($subjectIds as $sid) { if ($sid > 0) $vals[] = "($id, $sid)"; }
+                        if (!empty($vals)) $db->exec("INSERT INTO discount_plan_subjects (plan_id, subject_id) VALUES " . implode(', ', $vals));
+                    }
+                }
+
+                $db->commit();
+                json(['message' => '优惠方案更新成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '更新失败: ' . $e->getMessage()]);
+            }
+            break;
+
+        case 'delete_discount_plan':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $existing = $db->query("SELECT * FROM discount_plans WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) { json(['error' => '优惠方案不存在']); break; }
+
+            $db->exec("DELETE FROM discount_plans WHERE id=$id");
+            json(['message' => '优惠方案已删除']);
+            break;
+
+        case 'get_discount_plan':
+            $id = intval($_GET['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $plan = $db->query("SELECT * FROM discount_plans WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$plan) { json(['error' => '优惠方案不存在']); break; }
+
+            $campusRes = $db->query("SELECT campus_id FROM discount_plan_campuses WHERE plan_id=$id ORDER BY campus_id");
+            $campusIds = [];
+            while ($cr = $campusRes->fetch(PDO::FETCH_ASSOC)) $campusIds[] = intval($cr['campus_id']);
+
+            $subjectRes = $db->query("SELECT subject_id FROM discount_plan_subjects WHERE plan_id=$id ORDER BY subject_id");
+            $subjectIds = [];
+            while ($sr = $subjectRes->fetch(PDO::FETCH_ASSOC)) $subjectIds[] = intval($sr['subject_id']);
+
+            $plan['amount'] = floatval($plan['discount_amount']);
+            unset($plan['discount_amount']);
+            $plan['campus_ids'] = $campusIds;
+            $plan['subject_ids'] = $subjectIds;
+
+            json($plan);
+            break;
+
 // ==================== 组织管理 API ====================
         case 'list_organizations':
             $res = $db->query("SELECT * FROM organizations ORDER BY sort_order, id");
@@ -5697,6 +5878,17 @@ if (intval($countBt) === 0) {
                                 <div class="tree-leaf" data-panel="panel-work-records">
                                     <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
                                     <span class="tree-label">工作记录</span>
+                                </div>
+                            </li>
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-discounts">
+                                    <span class="tree-icon-sub">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                                            <line x1="7" y1="7" x2="7.01" y2="7"/>
+                                        </svg>
+                                    </span>
+                                    <span class="tree-label">优惠管理</span>
                                 </div>
                             </li>
                             <li class="tree-node">

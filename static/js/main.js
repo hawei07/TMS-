@@ -1,6 +1,7 @@
 // ==================== 全局状态 ====================
 const API_BASE = '?action=';
 let myPage = 1, aptPage = 1, seaPage = 1, empPage = 1, coursePage = 1, studentPage = 1, orderPage = 1, refundPage = 1;
+let discountPlanPage = 1;
 let myPageSize = 15;
 let myFilterTimer = null;
 let searchTimers = {};
@@ -97,6 +98,7 @@ function refreshPanel(panelId) {
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-schedule-view'); break;
         case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
+        case 'panel-discounts': initDiscountTabs(); loadDiscountPlans(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
         case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
         case 'panel-period-settings': loadPeriodTable(); break;
@@ -564,6 +566,7 @@ function debounceSearch(tab) {
         else if (tab === 'student') { studentPage = 1; loadStudents(); }
         else if (tab === 'order') { orderPage = 1; loadOrders(); }
         else if (tab === 'refund') { refundPage = 1; loadRefundRecords(); }
+        else if (tab === 'discount') { discountPlanPage = 1; loadDiscountPlans(); }
         else if (tab === 'classroom') { loadClassrooms(); }
     }, 400);
 }
@@ -9863,4 +9866,265 @@ function toggleSidebar() {
     var overlay = document.querySelector('.sidebar-overlay');
     sidebar.classList.toggle('mobile-open');
     if (overlay) overlay.classList.toggle('active');
+}
+
+// ==================== 优惠管理 ====================
+let discountPlanEditingId = null;
+let discountSubjectCheckboxData = [];
+
+// 标签页初始化
+function initDiscountTabs() {
+    document.querySelectorAll('#panel-discounts .sec-tab').forEach(tab => {
+        tab.addEventListener('click', function() {
+            document.querySelectorAll('#panel-discounts .sec-tab').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('#panel-discounts .sec-panel').forEach(p => p.classList.remove('active'));
+            this.classList.add('active');
+            const targetId = this.dataset.tab;
+            const target = document.getElementById(targetId);
+            if (target) target.classList.add('active');
+            if (targetId === 'tab-discount-plans') {
+                discountPlanPage = 1;
+                loadDiscountPlans();
+            }
+        });
+    });
+}
+
+// 加载优惠方案列表
+async function loadDiscountPlans(page) {
+    if (page) discountPlanPage = page;
+    const keyword = document.getElementById('search-discount')?.value || '';
+    const planType = document.getElementById('filter-discount-type')?.value || '';
+    try {
+        const result = await api('list_discount_plans', {
+            page: discountPlanPage,
+            page_size: 15,
+            keyword: keyword,
+            plan_type: planType
+        }, 'GET');
+        const rows = result.data || [];
+        renderDiscountPlanTable(rows);
+        renderDiscountPagination(result.total || 0, discountPlanPage);
+    } catch (e) {
+        showToast('加载优惠方案失败', 'error');
+    }
+}
+
+// 渲染优惠方案表格
+function renderDiscountPlanTable(rows) {
+    const tbody = document.querySelector('#table-discount-plans tbody');
+    if (!tbody) return;
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:30px;">暂无优惠方案</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const campusText = r.campus_names || '全部校区';
+        const subjectText = r.subject_names || '全部学科';
+        return `
+        <tr>
+            <td>${esc(r.name)}</td>
+            <td><span class="tag tag-${r.plan_type === '新报' ? 'green' : 'blue'}">${esc(r.plan_type)}</span></td>
+            <td style="text-align:right;font-weight:600;color:#DC2626;">¥${Number(r.amount).toFixed(2)}</td>
+            <td>${r.start_date || '-'}</td>
+            <td>${r.end_date || '-'}</td>
+            <td title="${esc(campusText)}">${esc(campusText.length > 16 ? campusText.substring(0, 16) + '...' : campusText)}</td>
+            <td title="${esc(subjectText)}">${esc(subjectText.length > 16 ? subjectText.substring(0, 16) + '...' : subjectText)}</td>
+            <td>${(r.created_at || '').substring(0, 16)}</td>
+            <td>
+                <div class="action-btns">
+                    <button class="btn-link" onclick="showDiscountPlanForm(${r.id})">编辑</button>
+                    <button class="btn-link-danger" onclick="deleteDiscountPlan(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')">删除</button>
+                </div>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// 分页渲染
+function renderDiscountPagination(total, page) {
+    const container = document.getElementById('pagination-discount');
+    if (!container) return;
+    if (total <= 15) { container.innerHTML = ''; return; }
+    const totalPages = Math.ceil(total / 15);
+    let html = '';
+    html += `<button ${page <= 1 ? 'disabled' : ''} onclick="loadDiscountPlans(${page - 1})">上一页</button>`;
+    for (let i = 1; i <= totalPages; i++) {
+        html += `<button class="${i === page ? 'active' : ''}" onclick="loadDiscountPlans(${i})">${i}</button>`;
+    }
+    html += `<button ${page >= totalPages ? 'disabled' : ''} onclick="loadDiscountPlans(${page + 1})">下一页</button>`;
+    container.innerHTML = html;
+}
+
+// 打开新增/编辑弹窗
+async function showDiscountPlanForm(id) {
+    discountPlanEditingId = id || null;
+    document.getElementById('edit-plan-id').value = id || '';
+    document.getElementById('modal-discount-title').textContent = id ? '编辑优惠方案' : '新增优惠方案';
+    // 清空表单
+    document.getElementById('discount-name').value = '';
+    document.getElementById('discount-plan-type').value = '新报';
+    document.getElementById('discount-amount').value = '';
+    document.getElementById('discount-start-date').value = '';
+    document.getElementById('discount-end-date').value = '';
+    // 加载树
+    loadCampusTree('discount-campus-tree');
+    loadDiscountSubjectTree();
+    openModal('modal-discount-plan');
+    // 编辑模式：回填数据
+    if (id) {
+        try {
+            const detail = await api('get_discount_plan', { id: id }, 'GET');
+            document.getElementById('discount-name').value = detail.name || '';
+            document.getElementById('discount-plan-type').value = detail.plan_type || '新报';
+            document.getElementById('discount-amount').value = detail.amount || '';
+            document.getElementById('discount-start-date').value = detail.start_date || '';
+            document.getElementById('discount-end-date').value = detail.end_date || '';
+            // 勾选校区（延迟等待树渲染完成）
+            setTimeout(() => {
+                (detail.campus_ids || []).forEach(cid => {
+                    const cb = document.querySelector('#discount-campus-tree .campus-tree-node[data-id="' + cid + '"] .campus-tree-check');
+                    if (cb) { cb.checked = true; toggleCampusTreeNode(cb); }
+                });
+                (detail.subject_ids || []).forEach(sid => {
+                    const cb = document.querySelector('#discount-subject-tree .campus-tree-node[data-id="' + sid + '"] .campus-tree-check');
+                    if (cb) { cb.checked = true; onDiscountSubjectCheck(cb); }
+                });
+            }, 500);
+        } catch (e) {
+            showToast('加载方案详情失败', 'error');
+        }
+    }
+}
+
+// 保存方案（新增/编辑）
+async function saveDiscountPlan() {
+    const id = document.getElementById('edit-plan-id').value;
+    const name = document.getElementById('discount-name').value.trim();
+    const planType = document.getElementById('discount-plan-type').value;
+    const amount = parseFloat(document.getElementById('discount-amount').value);
+    const startDate = document.getElementById('discount-start-date').value;
+    const endDate = document.getElementById('discount-end-date').value;
+    const campusIds = getSelectedDiscountCampuses();
+    const subjectIds = getSelectedDiscountSubjects();
+
+    // 校验
+    if (!name) { showToast('请输入方案名称', 'error'); return; }
+    if (!planType) { showToast('请选择类型', 'error'); return; }
+    if (!amount || amount <= 0) { showToast('优惠金额必须大于0', 'error'); return; }
+    if (!startDate) { showToast('请选择开始日期', 'error'); return; }
+    if (!endDate) { showToast('请选择结束日期', 'error'); return; }
+    if (endDate < startDate) { showToast('结束日期不能早于开始日期', 'error'); return; }
+
+    const payload = {
+        name: name,
+        plan_type: planType,
+        amount: amount,
+        start_date: startDate,
+        end_date: endDate,
+        campus_ids: campusIds,
+        subject_ids: subjectIds
+    };
+    if (id) payload.id = parseInt(id);
+
+    try {
+        const action = id ? 'update_discount_plan' : 'add_discount_plan';
+        const result = await api(action, payload);
+        showToast(result.message || '保存成功');
+        closeModal('modal-discount-plan');
+        loadDiscountPlans();
+    } catch (e) {
+        showToast('保存失败', 'error');
+    }
+}
+
+// 删除方案
+function deleteDiscountPlan(id, name) {
+    showCustomConfirm('确定要删除优惠方案「' + name + '」吗？删除后不可恢复。', async function() {
+        try {
+            const result = await api('delete_discount_plan', { id: id });
+            showToast(result.message || '已删除');
+            loadDiscountPlans();
+        } catch (e) {
+            showToast('删除失败', 'error');
+        }
+    });
+}
+
+// ==================== 折扣学科树 ====================
+async function loadDiscountSubjectTree() {
+    const container = document.getElementById('discount-subject-tree');
+    if (!container) return;
+    container.innerHTML = '<span style="color:#999;font-size:13px;">加载中...</span>';
+    try {
+        const result = await api('list_subjects', {}, 'GET');
+        const tree = result.tree || [];
+        discountSubjectCheckboxData = result.flat || [];
+        if (tree.length === 0) {
+            container.innerHTML = '<span style="color:#999;font-size:13px;">暂无学科数据</span>';
+            return;
+        }
+        container.innerHTML = tree.map(node => renderDiscountSubjectNode(node, 0)).join('');
+    } catch (e) {
+        container.innerHTML = '<span style="color:#e6a23c;font-size:13px;">加载学科失败</span>';
+    }
+}
+
+function renderDiscountSubjectNode(node, level) {
+    const hasChildren = node.children && node.children.length > 0;
+    let html = '<div class="campus-tree-node" data-id="' + node.id + '" data-has-children="' + !!hasChildren + '" data-expanded="' + (level === 0) + '">';
+    html += '<div class="campus-tree-row" style="padding-left:' + (level * 20 + 12) + 'px">';
+    if (hasChildren) {
+        html += '<span class="campus-tree-arrow" onclick="toggleCampusTreeExpand(this)">' + (level === 0 ? '▾' : '▸') + '</span>';
+    } else {
+        html += '<span class="campus-tree-arrow" style="visibility:hidden;">▸</span>';
+    }
+    html += '<input type="checkbox" class="campus-tree-check" onclick="onDiscountSubjectCheck(this)">';
+    html += '<span class="campus-tree-label">' + esc(node.name) + '</span>';
+    html += '</div>';
+    if (hasChildren) {
+        html += '<div class="campus-tree-children" style="display:' + (level === 0 ? 'block' : 'none') + '">';
+        node.children.forEach(child => { html += renderDiscountSubjectNode(child, level + 1); });
+        html += '</div>';
+    }
+    html += '</div>';
+    return html;
+}
+
+function onDiscountSubjectCheck(el) {
+    const node = el.closest('.campus-tree-node');
+    if (!node) return;
+    const checked = el.checked;
+    node.querySelectorAll('.campus-tree-check').forEach(c => { c.checked = checked; c.indeterminate = false; });
+    const parentNode = node.parentElement?.closest('.campus-tree-node');
+    if (parentNode) updateDiscountSubjectParentState(parentNode);
+}
+
+function updateDiscountSubjectParentState(node) {
+    const check = node.querySelector(':scope > .campus-tree-row > .campus-tree-check');
+    const childChecks = node.querySelectorAll(':scope > .campus-tree-children .campus-tree-node .campus-tree-row > .campus-tree-check');
+    if (!check || childChecks.length === 0) return;
+    const checkedCount = Array.from(childChecks).filter(c => c.checked).length;
+    if (checkedCount === 0) {
+        check.checked = false;
+        check.indeterminate = false;
+    } else if (checkedCount === childChecks.length) {
+        check.checked = true;
+        check.indeterminate = false;
+    } else {
+        check.checked = false;
+        check.indeterminate = true;
+    }
+    const parentNode = node.parentElement?.closest('.campus-tree-node');
+    if (parentNode) updateDiscountSubjectParentState(parentNode);
+}
+
+function getSelectedDiscountSubjects() {
+    const checks = document.querySelectorAll('#discount-subject-tree .campus-tree-check:checked');
+    return Array.from(checks).map(c => parseInt(c.closest('.campus-tree-node').dataset.id));
+}
+
+function getSelectedDiscountCampuses() {
+    const checks = document.querySelectorAll('#discount-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked');
+    return Array.from(checks).map(c => parseInt(c.closest('.campus-tree-node').dataset.id));
 }
