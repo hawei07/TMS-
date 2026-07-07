@@ -9965,9 +9965,15 @@ async function showDiscountPlanForm(id) {
     document.getElementById('discount-plan-amount').value = '';
     document.getElementById('discount-plan-start').value = '';
     document.getElementById('discount-plan-end').value = '';
+    // 重置 badge
+    const campusBadge = document.getElementById('dp-campus-count');
+    if (campusBadge) { campusBadge.textContent = '未选择'; campusBadge.classList.remove('has-selection'); }
+    const subjectBadge = document.getElementById('dp-subject-count');
+    if (subjectBadge) { subjectBadge.textContent = '未选择'; subjectBadge.classList.remove('has-selection'); }
     // 加载树
     loadCampusTree('discount-campus-tree');
     loadDiscountSubjectTree();
+    ensureDiscountCampusTreeListener();
     openModal('modal-discount-plan');
     // 编辑模式：回填数据
     if (id) {
@@ -9984,10 +9990,14 @@ async function showDiscountPlanForm(id) {
                     const cb = document.querySelector('#discount-campus-tree .campus-tree-node[data-id="' + cid + '"] .campus-tree-check');
                     if (cb) { cb.checked = true; toggleCampusTreeNode(cb); }
                 });
+                syncAllDiscountCampusRows();
+                updateDiscountCampusCount();
                 (detail.subject_ids || []).forEach(sid => {
                     const cb = document.querySelector('#discount-subject-tree .campus-tree-node[data-id="' + sid + '"] .campus-tree-check');
                     if (cb) { cb.checked = true; onDiscountSubjectCheck(cb); }
                 });
+                updateAllDiscountSubjectRowStates();
+                updateDiscountSubjectCount();
             }, 500);
         } catch (e) {
             showToast('加载方案详情失败', 'error');
@@ -10094,8 +10104,19 @@ function onDiscountSubjectCheck(el) {
     if (!node) return;
     const checked = el.checked;
     node.querySelectorAll('.campus-tree-check').forEach(c => { c.checked = checked; c.indeterminate = false; });
+    // 同步子节点行选中态
+    node.querySelectorAll('.campus-tree-check').forEach(c => syncTreeRowState(c));
     const parentNode = node.parentElement?.closest('.campus-tree-node');
     if (parentNode) updateDiscountSubjectParentState(parentNode);
+    // 更新父节点行选中态
+    updateAllDiscountSubjectRowStates();
+    // 更新计数 badge
+    updateDiscountSubjectCount();
+}
+
+function updateAllDiscountSubjectRowStates() {
+    var checks = document.querySelectorAll('#discount-subject-tree .campus-tree-check');
+    for (var i = 0; i < checks.length; i++) { syncTreeRowState(checks[i]); }
 }
 
 function updateDiscountSubjectParentState(node) {
@@ -10113,6 +10134,7 @@ function updateDiscountSubjectParentState(node) {
         check.checked = false;
         check.indeterminate = true;
     }
+    syncTreeRowState(check);
     const parentNode = node.parentElement?.closest('.campus-tree-node');
     if (parentNode) updateDiscountSubjectParentState(parentNode);
 }
@@ -10125,4 +10147,59 @@ function getSelectedDiscountSubjects() {
 function getSelectedDiscountCampuses() {
     const checks = document.querySelectorAll('#discount-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked');
     return Array.from(checks).map(c => parseInt(c.closest('.campus-tree-node').dataset.id));
+}
+
+// ==================== 优惠方案弹窗树选中态同步 ====================
+
+// 同步单行的选中态 class（checked / semi-checked）
+function syncTreeRowState(checkEl) {
+    const row = checkEl.closest('.campus-tree-row');
+    if (!row) return;
+    row.classList.toggle('checked', checkEl.checked);
+    row.classList.toggle('semi-checked', checkEl.indeterminate);
+}
+
+// 同步优惠方案弹窗内所有校区树行的选中态
+function syncAllDiscountCampusRows() {
+    const checks = document.querySelectorAll('#discount-campus-tree .campus-tree-check');
+    checks.forEach(function(c) { syncTreeRowState(c); });
+}
+
+// 已选校区计数更新
+function updateDiscountCampusCount() {
+    const checks = document.querySelectorAll(
+        '#discount-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked'
+    );
+    const badge = document.getElementById('dp-campus-count');
+    if (!badge) return;
+    const n = checks.length;
+    badge.textContent = n > 0 ? '已选 ' + n : '未选择';
+    badge.classList.toggle('has-selection', n > 0);
+}
+
+// 已选学科计数更新
+function updateDiscountSubjectCount() {
+    const checks = document.querySelectorAll('#discount-subject-tree .campus-tree-check:checked');
+    const badge = document.getElementById('dp-subject-count');
+    if (!badge) return;
+    const n = checks.length;
+    badge.textContent = n > 0 ? '已选 ' + n : '未选择';
+    badge.classList.toggle('has-selection', n > 0);
+}
+
+// 折扣校区树 click 委托 — 用于更新 badge 和行选中态（toggleCampusTreeNode 是共享函数，不改动）
+let _discountCampusTreeListenerBound = false;
+function ensureDiscountCampusTreeListener() {
+    if (_discountCampusTreeListenerBound) return;
+    const tree = document.getElementById('discount-campus-tree');
+    if (!tree) return;
+    tree.addEventListener('click', function(e) {
+        if (e.target.classList.contains('campus-tree-check')) {
+            setTimeout(function() {
+                syncAllDiscountCampusRows();
+                updateDiscountCampusCount();
+            }, 0);
+        }
+    });
+    _discountCampusTreeListenerBound = true;
 }

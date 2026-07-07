@@ -8641,17 +8641,75 @@ if (intval($countBt) === 0) {
                 <button class="modal-close" onclick="closeModal('modal-discount-plan')">&times;</button>
             </div>
             <div class="modal-body">
-                <div class="form-group"><label>方案名称</label><input type="text" id="discount-plan-name" class="form-input" placeholder="请输入方案名称"></div>
-                <div class="form-row">
-                    <div class="form-group" style="flex:1;"><label>类型</label><select id="discount-plan-type" class="form-input"><option value="新报">新报</option><option value="续费">续费</option></select></div>
-                    <div class="form-group" style="flex:1;"><label>优惠金额 (元)</label><input type="number" id="discount-plan-amount" class="form-input" step="0.01" min="0" placeholder="请输入优惠金额"></div>
+
+                <!-- ====== 卡片 1: 基本信息 ====== -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">📋</span> 基本信息
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-group">
+                            <label class="required">方案名称</label>
+                            <input type="text" id="discount-plan-name" class="form-input" placeholder="请输入方案名称" maxlength="50">
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label>类型</label>
+                                <select id="discount-plan-type" class="form-input">
+                                    <option value="新报">新报</option>
+                                    <option value="续费">续费</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label>优惠金额 (元)</label>
+                                <input type="number" id="discount-plan-amount" class="form-input" step="0.01" min="0" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-row">
-                    <div class="form-group" style="flex:1;"><label>有效期开始</label><input type="date" id="discount-plan-start" class="form-input"></div>
-                    <div class="form-group" style="flex:1;"><label>有效期结束</label><input type="date" id="discount-plan-end" class="form-input"></div>
+
+                <!-- ====== 卡片 2: 有效期 ====== -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">📅</span> 有效期
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label>开始日期</label>
+                                <input type="date" id="discount-plan-start" class="form-input">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label>结束日期</label>
+                                <input type="date" id="discount-plan-end" class="form-input">
+                            </div>
+                        </div>
+                    </div>
                 </div>
-                <div class="form-group"><label>适用校区</label><div id="discount-campus-tree" style="max-height:180px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:8px;"></div></div>
-                <div class="form-group"><label>适用学科</label><div id="discount-subject-tree" style="max-height:200px;overflow-y:auto;border:1px solid #e0e0e0;border-radius:8px;padding:8px;"></div></div>
+
+                <!-- ====== 卡片 3: 适用范围 ====== -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">🏫</span> 适用范围
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-group">
+                            <div class="dp-tree-header">
+                                <label>适用校区</label>
+                                <span class="dp-badge" id="dp-campus-count">未选择</span>
+                            </div>
+                            <div class="dp-tree-wrap" id="discount-campus-tree"></div>
+                        </div>
+                        <div class="form-group">
+                            <div class="dp-tree-header">
+                                <label>适用学科</label>
+                                <span class="dp-badge" id="dp-subject-count">未选择</span>
+                            </div>
+                            <div class="dp-tree-wrap" id="discount-subject-tree"></div>
+                        </div>
+                    </div>
+                </div>
+
             </div>
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-discount-plan')">取消</button>
