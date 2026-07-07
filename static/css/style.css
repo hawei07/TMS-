@@ -5326,6 +5326,9 @@ tbody td {
 }
 
 /* === 金额列对齐与字体 === */
+#table-refund-records {
+    table-layout: fixed;
+}
 #table-refund-records td:nth-child(7) {
     text-align: right;
     font-weight: 700;
@@ -5351,14 +5354,27 @@ tbody td {
 }
 
 #table-refund-records tbody tr {
-    border-left: 3px solid transparent;
+    position: relative;
     transition: all 0.18s ease;
+}
+
+#table-refund-records tbody tr::before {
+    content: '';
+    position: absolute;
+    left: 0; top: 0; bottom: 0;
+    width: 3px;
+    background: transparent;
+    border-radius: 0 2px 2px 0;
+    transition: background 0.18s ease;
 }
 
 #table-refund-records tbody tr:hover {
     background: var(--color-primary-bg) !important;
-    border-left-color: var(--color-primary-light);
     transform: translateX(2px);
+}
+
+#table-refund-records tbody tr:hover::before {
+    background: var(--color-primary-light);
 }
 
 #tab-refund-records table tbody tr:nth-child(even) {
