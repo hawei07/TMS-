@@ -10635,7 +10635,7 @@ function renderCouponRecordTable(rows) {
         <tr>
             <td>${dt.substring(0, 16)}</td>
             <td>${escHtml(r.coupon_name || '')}</td>
-            <td style="text-align:right;font-weight:600;color:#DC2626;">¥${Number(r.discount_amount || 0).toFixed(2)}</td>
+            <td style="text-align:right;font-weight:600;color:#DC2626;">¥${Number(r.amount || 0).toFixed(2)}</td>
             <td>${escHtml(r.student_name)}</td>
             <td>${escHtml(r.phone)}</td>
             <td>${escHtml(r.distributor || '')}</td>
