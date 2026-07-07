@@ -6808,3 +6808,95 @@ tbody td {
     opacity: 0.5;
     pointer-events: none;
 }
+
+/* ===== 报价单 inline 编辑 ===== */
+
+/* 可编辑单元格 hover 提示 */
+#price-item-table td.pi-editable {
+    cursor: pointer;
+    position: relative;
+}
+#price-item-table td.pi-editable:hover {
+    background: rgba(124, 58, 237, 0.04);
+}
+#price-item-table tr:hover td.pi-editable::after {
+    content: '✎';
+    position: absolute;
+    right: 4px;
+    top: 50%;
+    transform: translateY(-50%);
+    opacity: 0.3;
+    font-size: 11px;
+    color: var(--color-primary);
+    width: auto;
+    height: auto;
+}
+
+/* 编辑态行 */
+#price-item-table tbody tr.inline-editing {
+    background: #FAF5FF !important;
+    border-left: 3px solid var(--color-primary) !important;
+}
+#price-item-table tbody tr.inline-editing td {
+    padding: 4px 6px;
+}
+
+/* 编辑态下隐藏 hover 伪元素 */
+#price-item-table tr.inline-editing td.pi-editable::after {
+    display: none;
+}
+
+/* 编辑态 input */
+#price-item-table .inline-edit-input {
+    width: 100%;
+    padding: 6px 8px;
+    border: 2px solid var(--color-primary);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: inherit;
+    outline: none;
+    box-sizing: border-box;
+    background: #fff;
+    transition: border-color 0.15s;
+}
+#price-item-table .inline-edit-input:focus {
+    border-color: #6D28D9;
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+/* 编辑态 select */
+#price-item-table .inline-edit-select {
+    width: 100%;
+    padding: 6px 8px;
+    border: 2px solid var(--color-primary);
+    border-radius: 6px;
+    font-size: 12px;
+    font-family: inherit;
+    outline: none;
+    box-sizing: border-box;
+    background: #fff;
+    cursor: pointer;
+    max-width: 180px;
+}
+
+/* 实际价格只读显示 */
+#price-item-table .pi-calc-display {
+    display: inline-block;
+    padding: 6px 10px;
+    background: #F3F4F6;
+    border-radius: 4px;
+    font-weight: 700;
+    color: var(--color-primary-dark);
+    font-variant-numeric: tabular-nums;
+    min-width: 60px;
+    text-align: right;
+}
+
+/* 保存中状态 */
+#price-item-table tbody tr.inline-saving {
+    opacity: 0.6;
+    pointer-events: none;
+}
+#price-item-table tbody tr.inline-saving td {
+    position: relative;
+}

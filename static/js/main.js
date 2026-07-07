@@ -3207,12 +3207,31 @@ function selectPlan(planId) {
     currentSelectedPlanId = planId;
     renderPlanList();
     renderItemList();
+    ensureInlineEditDelegation();
+    preloadInlineDiscountData();
+}
+
+async function preloadInlineDiscountData() {
+    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+    if (!plan || !plan.plan_type || plan.plan_type === '小课包') return;
+    try {
+        const [discountRes, couponRes] = await Promise.all([
+            api('list_discount_plans', { plan_type: plan.plan_type, page_size: 200 }, 'GET'),
+            api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET')
+        ]);
+        priceItemDiscountPlans = discountRes.data || [];
+        priceItemCoupons = couponRes.data || [];
+    } catch (e) {
+        // 预加载失败不阻塞
+    }
 }
 
 function renderItemList() {
     const tbody = document.getElementById('price-item-table-body');
     const tagEl = document.getElementById('price-plan-type-tag');
     const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+    const isSmallPack = (plan && plan.plan_type === '小课包');
+
     if (!plan) {
         if (tagEl) tagEl.innerHTML = '';
         tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
@@ -3231,20 +3250,25 @@ function renderItemList() {
         tbody.innerHTML = '<tr class="price-empty-row"><td colspan="7">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
         return;
     }
-    tbody.innerHTML = items.map(item => `
-        <tr>
-            <td>${esc(item.name)}</td>
-            <td>${item.lesson_count}</td>
-            <td>${parseFloat(item.unit_price).toFixed(2)}</td>
-            <td>${parseFloat(item.actual_price).toFixed(2)}</td>
-            <td>${esc(item.discount_plan_name || '-')}</td>
-            <td>${esc(item.coupon_name || '-')}</td>
+    tbody.innerHTML = items.map(item => {
+        const isSmall = isSmallPack;
+        const discountDisplay = isSmall ? '—' : esc(item.discount_plan_name || '-');
+        const couponDisplay = isSmall ? '—' : esc(item.coupon_name || '-');
+        const discountEditable = isSmall ? '' : 'pi-editable';
+        const couponEditable = isSmall ? '' : 'pi-editable';
+        return `
+        <tr data-item-id="${item.id}">
+            <td class="pi-editable" data-field="name" data-original="${escAttr(item.name)}">${esc(item.name)}</td>
+            <td class="pi-editable" data-field="lesson_count" data-original="${item.lesson_count}">${item.lesson_count}</td>
+            <td class="pi-editable" data-field="unit_price" data-original="${Number(item.unit_price).toFixed(2)}">${Number(item.unit_price).toFixed(2)}</td>
+            <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
+            <td class="${discountEditable}" data-field="discount_plan_id" data-original="${item.discount_plan_id || ''}">${discountDisplay}</td>
+            <td class="${couponEditable}" data-field="coupon_id" data-original="${item.coupon_id || ''}">${couponDisplay}</td>
             <td>
-                <button class="btn-link" onclick="editItem(${item.id})">编辑</button>
                 <button class="btn-link-danger" onclick="deleteItem(${item.id})">删除</button>
             </td>
-        </tr>
-    `).join('');
+        </tr>`;
+    }).join('');
 
     // 总计行
     const totalLessons = items.reduce((sum, item) => sum + (parseInt(item.lesson_count) || 0), 0);
@@ -3259,6 +3283,257 @@ function renderItemList() {
             <td></td>
             <td></td>
         </tr>`;
+}
+
+// 点击事件委托：在 #price-item-table-body 上挂单击处理
+let _inlineEditClickBound = false;
+function ensureInlineEditDelegation() {
+    if (_inlineEditClickBound) return;
+    const tbody = document.getElementById('price-item-table-body');
+    if (!tbody) return;
+    tbody.addEventListener('click', (e) => {
+        // 先处理删除按钮冒泡等问题
+        const td = e.target.closest('td.pi-editable');
+        if (!td) return;
+        const tr = td.closest('tr');
+        if (!tr || !tr.dataset.itemId) return;
+        if (tr.classList.contains('inline-editing')) return; // 已在编辑态
+
+        // 如果另一行在编辑 → 先保存
+        const prev = tbody.querySelector('tr.inline-editing');
+        if (prev) {
+            e.preventDefault();
+            saveInlineEdit(prev);
+            return;
+        }
+
+        const itemId = parseInt(tr.dataset.itemId);
+        const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+        if (!plan) return;
+        const item = (plan.items || []).find(i => i.id === itemId);
+        if (!item) return;
+        enterInlineEdit(tr, item);
+    });
+    _inlineEditClickBound = true;
+}
+
+// === inline 编辑核心函数 ===
+
+function enterInlineEdit(tr, item) {
+    const isSmallPack = (() => {
+        const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+        return plan && plan.plan_type === '小课包';
+    })();
+
+    tr.classList.add('inline-editing');
+
+    // 快照原始值，用于 Esc 还原
+    tr._snapshot = {};
+
+    tr.querySelectorAll('td.pi-editable, td.pi-readonly').forEach(td => {
+        const field = td.dataset.field;
+        const original = td.dataset.original || td.textContent.trim();
+        tr._snapshot[field] = original;
+
+        if (field === 'actual_price') {
+            // 只读：灰色背景显示
+            td.innerHTML = `<span class="pi-calc-display">${esc(original)}</span>`;
+        } else if (field === 'discount_plan_id') {
+            if (isSmallPack) {
+                td.innerHTML = '<span style="color:#999;">—</span>';
+            } else {
+                td.innerHTML = buildInlineDiscountSelect(field, original);
+            }
+        } else if (field === 'coupon_id') {
+            if (isSmallPack) {
+                td.innerHTML = '<span style="color:#999;">—</span>';
+            } else {
+                td.innerHTML = buildInlineCouponSelect(field, original);
+            }
+        } else if (field === 'name') {
+            td.innerHTML = `<input type="text" class="inline-edit-input" value="${escAttr(item.name || '')}" data-field="name">`;
+        } else if (field === 'lesson_count') {
+            td.innerHTML = `<input type="number" class="inline-edit-input" value="${Number(item.lesson_count) || 0}" data-field="lesson_count" min="1" step="1">`;
+        } else if (field === 'unit_price') {
+            td.innerHTML = `<input type="number" class="inline-edit-input" value="${Number(item.unit_price).toFixed(2)}" data-field="unit_price" min="0" step="0.01">`;
+        }
+    });
+
+    // 自动 focus 第一个 input
+    const first = tr.querySelector('input.inline-edit-input');
+    if (first) first.focus();
+
+    // 绑定联动事件
+    bindInlinePriceRecalc(tr);
+    // 绑定键盘事件
+    bindInlineKeyboard(tr);
+}
+
+function buildInlineDiscountSelect(field, selectedValue) {
+    let html = `<select class="inline-edit-select" data-field="${field}">`;
+    html += '<option value="">不使用优惠方案</option>';
+    if (priceItemDiscountPlans.length > 0) {
+        html += priceItemDiscountPlans.map(d =>
+            `<option value="${d.id}"${String(d.id) === String(selectedValue) ? ' selected' : ''}>${esc(d.name)}（¥${Number(d.amount || 0).toFixed(2)}）</option>`
+        ).join('');
+    }
+    html += '</select>';
+    return html;
+}
+
+function buildInlineCouponSelect(field, selectedValue) {
+    let html = `<select class="inline-edit-select" data-field="${field}">`;
+    html += '<option value="">不使用优惠券</option>';
+    if (priceItemCoupons.length > 0) {
+        html += priceItemCoupons.map(c =>
+            `<option value="${c.id}"${String(c.id) === String(selectedValue) ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
+        ).join('');
+    }
+    html += '</select>';
+    return html;
+}
+
+function bindInlinePriceRecalc(tr) {
+    const unitPriceInput = tr.querySelector('[data-field="unit_price"]');
+    const discountSelect = tr.querySelector('[data-field="discount_plan_id"]');
+    const couponSelect = tr.querySelector('[data-field="coupon_id"]');
+    const displayEl = tr.querySelector('.pi-calc-display');
+
+    const recalc = () => {
+        const base = parseFloat(unitPriceInput?.value) || 0;
+        let discount = 0;
+        if (discountSelect?.value) {
+            const dp = priceItemDiscountPlans.find(d => d.id == discountSelect.value);
+            if (dp) discount += Number(dp.amount || 0);
+        }
+        if (couponSelect?.value) {
+            const cp = priceItemCoupons.find(c => c.id == couponSelect.value);
+            if (cp) discount += Number(cp.amount || 0);
+        }
+        if (displayEl) displayEl.textContent = Math.max(0, base - discount).toFixed(2);
+    };
+
+    unitPriceInput?.addEventListener('input', recalc);
+    discountSelect?.addEventListener('change', recalc);
+    couponSelect?.addEventListener('change', recalc);
+}
+
+function bindInlineKeyboard(tr) {
+    tr.addEventListener('keydown', async (e) => {
+        if (e.key === 'Enter' && e.target.tagName !== 'SELECT') {
+            e.preventDefault();
+            await saveInlineEdit(tr);
+        } else if (e.key === 'Escape') {
+            e.preventDefault();
+            cancelInlineEdit(tr);
+        }
+    });
+}
+
+async function saveInlineEdit(tr) {
+    if (!tr || !tr.dataset.itemId) return;
+    const itemId = parseInt(tr.dataset.itemId);
+    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+    if (!plan) return;
+
+    // 收集编辑后的值
+    const editedValues = {};
+    tr.querySelectorAll('input.inline-edit-input, select.inline-edit-select').forEach(el => {
+        editedValues[el.dataset.field] = el.value;
+    });
+
+    // 客户端校验
+    const name = (editedValues.name || '').trim();
+    if (!name) { showToast('报价单名称不能为空', 'error'); return; }
+    const lessonCount = parseInt(editedValues.lesson_count) || 0;
+    if (lessonCount <= 0) { showToast('课时数量必须大于0', 'error'); return; }
+
+    // 构建完整 items 数组（从内存 patched）
+    const unitPrice = parseFloat(editedValues.unit_price) || 0;
+    const discountPlanId = parseInt(editedValues.discount_plan_id) || 0;
+    const couponId = parseInt(editedValues.coupon_id) || 0;
+    // 计算实际价格
+    let discount = 0;
+    if (discountPlanId > 0) {
+        const dp = priceItemDiscountPlans.find(d => d.id === discountPlanId);
+        if (dp) discount += Number(dp.amount || 0);
+    }
+    if (couponId > 0) {
+        const cp = priceItemCoupons.find(c => c.id === couponId);
+        if (cp) discount += Number(cp.amount || 0);
+    }
+    const actualPrice = Math.max(0, unitPrice - discount);
+
+    const isSmallPack = plan.plan_type === '小课包';
+    const items = (plan.items || []).map((item, idx) => {
+        if (item.id === itemId) {
+            return {
+                name, lesson_count: lessonCount, unit_price: unitPrice,
+                actual_price: actualPrice,
+                discount_plan_id: discountPlanId,
+                coupon_id: couponId,
+                sort_order: idx
+            };
+        }
+        return {
+            name: item.name,
+            lesson_count: item.lesson_count,
+            unit_price: item.unit_price,
+            actual_price: item.actual_price,
+            discount_plan_id: isSmallPack ? 0 : (parseInt(item.discount_plan_id) || 0),
+            coupon_id: isSmallPack ? 0 : (parseInt(item.coupon_id) || 0),
+            sort_order: idx
+        };
+    });
+
+    // 保存中状态
+    tr.classList.add('inline-saving');
+
+    try {
+        const r = await api('save_price_plan', {
+            course_id: currentPriceCourseId,
+            plan_id: currentSelectedPlanId,
+            plan_name: plan.name,
+            plan_type: plan.plan_type || '',
+            items: items
+        }, 'POST');
+        if (r && r.error) { showToast(r.error, 'error'); return; }
+        showToast('报价单已更新', 'success');
+        await loadPricePlans(currentPriceCourseId);
+    } catch (e) {
+        showToast('保存失败', 'error');
+    } finally {
+        tr.classList.remove('inline-saving');
+    }
+}
+
+function cancelInlineEdit(tr) {
+    if (!tr || !tr._snapshot) return;
+    const isSmallPack = tr._snapshot.discount_plan_id === undefined; // 小课包行没有这些字段的 snapshot
+    tr.querySelectorAll('td.pi-editable, td.pi-readonly').forEach(td => {
+        const field = td.dataset.field;
+        const original = tr._snapshot[field];
+        if (field === 'actual_price') {
+            td.textContent = original || '0.00';
+        } else if (field === 'discount_plan_id' || field === 'coupon_id') {
+            // 还原显示名而非 ID
+            const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+            const item = plan ? (plan.items || []).find(i => i.id === parseInt(tr.dataset.itemId)) : null;
+            if (item) {
+                if (field === 'discount_plan_id') {
+                    td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.discount_plan_name || '-');
+                } else {
+                    td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.coupon_name || '-');
+                }
+            } else {
+                td.textContent = original || '-';
+            }
+        } else {
+            td.textContent = original || '';
+        }
+    });
+    tr.classList.remove('inline-editing');
+    delete tr._snapshot;
 }
 
 function addPlan() {
@@ -3368,24 +3643,6 @@ function addItem() {
     document.getElementById('price-item-coupon').value = '';
     loadPriceItemDiscountOptions();
     loadPriceItemCouponOptions();
-    openModal('modal-price-item');
-}
-
-async function editItem(itemId) {
-    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
-    if (!plan) return;
-    const item = (plan.items || []).find(i => i.id === itemId);
-    if (!item) return;
-    editingItemId = itemId;
-    document.getElementById('modal-price-item-title').textContent = '编辑报价单';
-    document.getElementById('edit-price-item-id').value = item.id;
-    document.getElementById('price-item-name').value = item.name;
-    document.getElementById('price-item-lesson-count').value = item.lesson_count;
-    document.getElementById('price-item-unit-price').value = item.unit_price;
-    document.getElementById('price-item-actual-price').value = item.actual_price;
-    await loadPriceItemDiscountOptions(item.discount_plan_id || '');
-    await loadPriceItemCouponOptions(item.coupon_id || '');
-    recalcItemActualPrice();
     openModal('modal-price-item');
 }
 
