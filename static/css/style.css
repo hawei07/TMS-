@@ -5248,3 +5248,546 @@ tbody td {
     border-radius: 4px;
     line-height: 1.5;
 }
+
+/* ==================== 退费记录页面 UI 优化 ==================== */
+
+/* === 退费记录 Badge 系统 === */
+.refund-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.4;
+    letter-spacing: 0.01em;
+    white-space: nowrap;
+    transition: all 0.15s ease;
+}
+
+.refund-badge-course {
+    background: #EDE9FE;
+    color: #7C3AED;
+}
+
+.refund-badge-account {
+    background: #FEF3C7;
+    color: #B45309;
+}
+
+.refund-badge-transfer {
+    background: #E0E7FF;
+    color: #4338CA;
+}
+
+.refund-badge-balance {
+    background: #DCFCE7;
+    color: #15803D;
+}
+
+.refund-badge:hover {
+    filter: brightness(0.96);
+    transform: translateY(-1px);
+}
+
+/* === 退费记录状态标签 — 紫色主题配色 === */
+#tab-refund-records .tag {
+    display: inline-block;
+    padding: 4px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    line-height: 1.4;
+    transition: all 0.15s ease;
+}
+
+#tab-refund-records .tag-orange {
+    background: #FFF7ED;
+    color: #C2410C;
+}
+
+#tab-refund-records .tag-blue {
+    background: #EDE9FE;
+    color: #7C3AED;
+}
+
+#tab-refund-records .tag-green {
+    background: #ECFDF5;
+    color: #059669;
+}
+
+#tab-refund-records .tag-red {
+    background: #FEF2F2;
+    color: #DC2626;
+}
+
+#tab-refund-records .tag:hover {
+    filter: brightness(0.95);
+    transform: translateY(-1px);
+}
+
+/* === 金额列对齐与字体 === */
+#table-refund-records td:nth-child(7) {
+    text-align: right;
+    font-weight: 700;
+    color: #DC2626;
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 13px;
+    letter-spacing: -0.02em;
+}
+
+#table-refund-records td:nth-child(8) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', 'JetBrains Mono', 'Consolas', 'Menlo', monospace;
+    font-size: 13px;
+    color: #6B7280;
+}
+
+/* === 表格行高与 hover 增强 === */
+#table-refund-records tbody td {
+    padding-top: 14px;
+    padding-bottom: 14px;
+}
+
+#table-refund-records tbody tr {
+    border-left: 3px solid transparent;
+    transition: all 0.18s ease;
+}
+
+#table-refund-records tbody tr:hover {
+    background: var(--color-primary-bg) !important;
+    border-left-color: var(--color-primary-light);
+    transform: translateX(2px);
+}
+
+#tab-refund-records table tbody tr:nth-child(even) {
+    background: #FAFAFE;
+}
+
+/* === 订单号列 monospace 增强 === */
+#table-refund-records td:first-child {
+    font-family: 'SF Mono', 'JetBrains Mono', 'Consolas', monospace;
+    font-size: 12px;
+    color: var(--color-text-secondary);
+    letter-spacing: 0.02em;
+}
+
+/* === 内容列长文本省略 === */
+#table-refund-records td:nth-child(4) {
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* === 表头固定 === */
+#tab-refund-records .table-wrap {
+    max-height: calc(100vh - 340px);
+    overflow-y: auto;
+}
+
+#tab-refund-records .table-wrap thead {
+    position: sticky;
+    top: 0;
+    z-index: 10;
+}
+
+#tab-refund-records .table-wrap thead th {
+    background: var(--color-bg);
+    backdrop-filter: blur(8px);
+}
+
+/* === 退费记录筛选栏优化 === */
+#tab-refund-records .toolbar {
+    padding: 14px 24px;
+    background: linear-gradient(180deg, #FFFFFF 0%, #FAFAFE 100%);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+#tab-refund-records .toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    flex-wrap: wrap;
+}
+
+#tab-refund-records .toolbar-left label {
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin: 0 2px 0 8px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+#tab-refund-records .toolbar-left label:first-child {
+    margin-left: 0;
+}
+
+#tab-refund-records .toolbar-left select {
+    padding: 7px 28px 7px 12px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 13px;
+    color: var(--color-text);
+    background: var(--color-surface);
+    cursor: pointer;
+    transition: all 0.2s ease;
+    min-width: auto;
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%239895A8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 8px center;
+}
+
+#tab-refund-records .toolbar-left select:hover {
+    border-color: var(--color-primary-light);
+}
+
+#tab-refund-records .toolbar-left select:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
+}
+
+#tab-refund-records .toolbar-right {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+#tab-refund-records .toolbar-right input[type="text"] {
+    padding: 7px 14px 7px 34px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 13px;
+    width: 200px;
+    transition: all 0.25s ease;
+    background: var(--color-surface);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='15' height='15' viewBox='0 0 24 24' fill='none' stroke='%239895A8' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='11' cy='11' r='8'%3E%3C/circle%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'%3E%3C/line%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: left 10px center;
+}
+
+#tab-refund-records .toolbar-right input[type="text"]:focus {
+    outline: none;
+    width: 250px;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
+}
+
+#tab-refund-records .toolbar-right input[type="date"] {
+    padding: 7px 10px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 13px;
+    width: 135px;
+    color: var(--color-text);
+    background: var(--color-surface);
+    transition: all 0.2s ease;
+}
+
+#tab-refund-records .toolbar-right input[type="date"]:hover {
+    border-color: var(--color-primary-light);
+}
+
+#tab-refund-records .toolbar-right input[type="date"]:focus {
+    outline: none;
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
+}
+
+#tab-refund-records .toolbar-right span {
+    color: var(--color-text-muted);
+    font-size: 12px;
+}
+
+/* === 搜索按钮紫色渐变 === */
+#tab-refund-records .btn-primary.btn-sm {
+    padding: 7px 18px;
+    font-size: 13px;
+    font-weight: 600;
+    border-radius: 8px;
+    background: linear-gradient(135deg, #7C3AED, #6D28D9);
+    border: none;
+    color: #fff;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    box-shadow: 0 1px 3px rgba(124, 58, 237, 0.25);
+}
+
+#tab-refund-records .btn-primary.btn-sm:hover {
+    background: linear-gradient(135deg, #8B5CF6, #7C3AED);
+    box-shadow: 0 3px 10px rgba(124, 58, 237, 0.35);
+    transform: translateY(-1px);
+}
+
+#tab-refund-records .btn-primary.btn-sm:active {
+    transform: translateY(0);
+    box-shadow: 0 1px 2px rgba(124, 58, 237, 0.2);
+}
+
+/* === 操作按钮组对齐 === */
+#table-refund-records td:last-child > div {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    flex-wrap: nowrap;
+}
+
+#table-refund-records .btn-primary.btn-sm {
+    padding: 4px 14px;
+    font-size: 12px;
+}
+
+#table-refund-records .btn-warn.btn-sm {
+    padding: 4px 14px;
+    font-size: 12px;
+    border-radius: 8px;
+    background: transparent;
+    color: var(--color-danger);
+    border: 1px solid transparent;
+}
+
+#table-refund-records .btn-warn.btn-sm:hover {
+    background: var(--color-danger-bg);
+    border-color: rgba(229, 62, 62, 0.2);
+    color: var(--color-danger);
+}
+
+#table-refund-records .btn-link {
+    padding: 4px 12px;
+    font-size: 12px;
+    border-radius: 8px;
+    background: transparent;
+    border: 1px solid var(--color-border);
+    color: var(--color-text-secondary);
+}
+
+#table-refund-records .btn-link:hover {
+    background: var(--color-primary-bg);
+    border-color: var(--color-primary-light);
+    color: var(--color-primary);
+}
+
+/* === Section Tabs 紫色主题 === */
+#panel-work-records .section-tabs {
+    background: linear-gradient(180deg, #FFFFFF 0%, #F8F7FE 100%);
+    border-bottom: 1px solid var(--color-border-light);
+    padding: 0 24px;
+}
+
+#panel-work-records .sec-tab {
+    padding: 12px 24px;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--color-text-muted);
+    border-bottom: 2px solid transparent;
+    transition: all 0.2s ease;
+}
+
+#panel-work-records .sec-tab:hover {
+    color: var(--color-primary);
+    background: rgba(124, 58, 237, 0.04);
+}
+
+#panel-work-records .sec-tab.active {
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 600;
+    background: transparent;
+}
+
+#panel-work-records .panel-header {
+    background: linear-gradient(135deg, #FFFFFF 0%, #F8F7FE 100%);
+}
+
+#panel-work-records .panel-header h3 {
+    color: var(--color-text);
+}
+
+/* === 面板底色微调 === */
+#tab-refund-records {
+    background: #FAFAFE;
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+}
+
+#tab-refund-records .table-wrap {
+    background: var(--color-surface);
+    border-radius: 0 0 var(--radius-xl) var(--radius-xl);
+    box-shadow:
+        0 1px 3px rgba(0, 0, 0, 0.02),
+        0 4px 16px rgba(124, 58, 237, 0.04);
+}
+
+/* === 空态设计 === */
+#table-refund-records tbody tr.empty-row td {
+    padding: 56px 20px;
+    text-align: center;
+    color: var(--color-text-muted);
+    font-size: 14px;
+}
+
+#table-refund-records tbody tr.empty-row td::before {
+    content: '';
+    display: block;
+    width: 64px;
+    height: 64px;
+    margin: 0 auto 16px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #EDE9FE, #DDD6FE);
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28' viewBox='0 0 24 24' fill='none' stroke='%237C3AED' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z'%3E%3C/path%3E%3Cpolyline points='14 2 14 8 20 8'%3E%3C/polyline%3E%3Cline x1='16' y1='13' x2='8' y2='13'%3E%3C/line%3E%3Cline x1='16' y1='17' x2='8' y2='17'%3E%3C/line%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: center;
+    background-size: 28px;
+}
+
+#table-refund-records tbody tr.empty-row td .empty-subtitle {
+    display: block;
+    font-size: 12px;
+    color: var(--color-text-muted);
+    margin-top: 4px;
+    opacity: 0.7;
+}
+
+/* === 骨架屏 === */
+#table-refund-records tbody tr.skeleton-row td {
+    padding: 14px 16px;
+}
+
+.skeleton-cell {
+    height: 14px;
+    border-radius: 4px;
+    background: linear-gradient(90deg, #F3F0FF 25%, #EDE9FE 50%, #F3F0FF 75%);
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite ease-in-out;
+}
+
+@keyframes skeleton-shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+.skeleton-sm { width: 60px; }
+.skeleton-md { width: 100px; }
+.skeleton-lg { width: 140px; }
+
+/* === 响应式：768px === */
+@media (max-width: 768px) {
+    #tab-refund-records .toolbar {
+        flex-direction: column;
+        padding: 12px 16px;
+        gap: 10px;
+    }
+
+    #tab-refund-records .toolbar-left {
+        flex-wrap: wrap;
+        gap: 6px;
+        width: 100%;
+    }
+
+    #tab-refund-records .toolbar-right {
+        margin-left: 0;
+        width: 100%;
+        flex-wrap: wrap;
+    }
+
+    #tab-refund-records .toolbar-right input[type="text"] {
+        width: 100%;
+        flex: 1 1 auto;
+    }
+
+    #tab-refund-records .toolbar-right input[type="text"]:focus {
+        width: 100%;
+    }
+
+    #tab-refund-records .toolbar-right input[type="date"] {
+        flex: 1;
+        min-width: 120px;
+    }
+
+    #tab-refund-records .btn-primary.btn-sm {
+        width: 100%;
+    }
+
+    #tab-refund-records .table-wrap {
+        overflow-x: auto;
+        -webkit-overflow-scrolling: touch;
+    }
+
+    #table-refund-records {
+        min-width: 900px;
+    }
+}
+
+/* === 响应式：1024px === */
+@media (max-width: 1024px) {
+    #tab-refund-records .toolbar {
+        padding: 12px 20px;
+    }
+
+    #tab-refund-records .toolbar-left label {
+        font-size: 11px;
+    }
+
+    #tab-refund-records .toolbar-left select,
+    #tab-refund-records .toolbar-right select {
+        font-size: 12px;
+        padding: 6px 24px 6px 10px;
+    }
+
+    #table-refund-records td:nth-child(4) {
+        max-width: 120px;
+    }
+}
+
+/* === 行入场动画 === */
+#table-refund-records tbody tr {
+    animation: rowFadeIn 0.3s ease both;
+}
+
+#table-refund-records tbody tr:nth-child(1) { animation-delay: 0.00s; }
+#table-refund-records tbody tr:nth-child(2) { animation-delay: 0.03s; }
+#table-refund-records tbody tr:nth-child(3) { animation-delay: 0.06s; }
+#table-refund-records tbody tr:nth-child(4) { animation-delay: 0.09s; }
+#table-refund-records tbody tr:nth-child(5) { animation-delay: 0.12s; }
+#table-refund-records tbody tr:nth-child(6) { animation-delay: 0.15s; }
+#table-refund-records tbody tr:nth-child(7) { animation-delay: 0.18s; }
+#table-refund-records tbody tr:nth-child(8) { animation-delay: 0.21s; }
+#table-refund-records tbody tr:nth-child(9) { animation-delay: 0.24s; }
+#table-refund-records tbody tr:nth-child(10) { animation-delay: 0.27s; }
+#table-refund-records tbody tr:nth-child(n+11) { animation-delay: 0.30s; }
+
+@keyframes rowFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(8px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+#table-refund-records.paginating tbody tr {
+    animation: none;
+}
+
+/* === 分页按钮微交互 === */
+#tab-refund-records .pagination button {
+    transition: all 0.2s ease;
+    border-radius: 8px;
+}
+
+#tab-refund-records .pagination button:hover:not(:disabled):not(.active) {
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
+    transform: translateY(-1px);
+}
+
+#tab-refund-records .pagination button.active {
+    background: linear-gradient(135deg, #7C3AED, #6D28D9);
+    color: #fff;
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.3);
+}

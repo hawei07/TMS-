@@ -7714,6 +7714,26 @@ async function loadRefundRecords() {
             }
         }
         if (campusValue) params.set('campus', campusValue);
+        // 骨架屏加载态
+        const tbody = document.querySelector('#table-refund-records tbody');
+        if (tbody) {
+            tbody.innerHTML = Array.from({length: 5}, () => `
+                <tr class="skeleton-row">
+                    <td><div class="skeleton-cell skeleton-sm"></div></td>
+                    <td><div class="skeleton-cell skeleton-md"></div></td>
+                    <td><div class="skeleton-cell skeleton-sm"></div></td>
+                    <td><div class="skeleton-cell skeleton-lg"></div></td>
+                    <td><div class="skeleton-cell skeleton-sm"></div></td>
+                    <td><div class="skeleton-cell skeleton-md"></div></td>
+                    <td><div class="skeleton-cell skeleton-md"></div></td>
+                    <td><div class="skeleton-cell skeleton-md"></div></td>
+                    <td><div class="skeleton-cell skeleton-sm"></div></td>
+                    <td><div class="skeleton-cell skeleton-md"></div></td>
+                    <td><div class="skeleton-cell skeleton-lg"></div></td>
+                    <td><div class="skeleton-cell skeleton-sm"></div></td>
+                </tr>
+            `).join('');
+        }
         const res = await fetch(API_BASE + 'list_refund_records&' + params);
         const data = await res.json();
         renderRefundRecordTable(data.data);
@@ -7728,16 +7748,16 @@ async function loadRefundRecords() {
 function renderRefundRecordTable(rows) {
     const tbody = document.querySelector('#table-refund-records tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="12">暂无退费记录<span class="empty-subtitle">退费申请将在此处显示</span></td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
         const project = r.project || '课程';
         let projectBadge = '';
         if (project === '账户') {
-            projectBadge = '<span style="display:inline-block;padding:2px 8px;background:#fef3c7;color:#d97706;border-radius:10px;font-size:12px;">账户</span>';
+            projectBadge = '<span class="refund-badge refund-badge-account">账户</span>';
         } else {
-            projectBadge = '<span style="display:inline-block;padding:2px 8px;background:#e0e7ff;color:#4f46e5;border-radius:10px;font-size:12px;">课程</span>';
+            projectBadge = '<span class="refund-badge refund-badge-course">课程</span>';
         }
         const isAccount = (project === '账户');
         const ar = parseFloat(r.actual_refund) || 0;
@@ -7746,9 +7766,9 @@ function renderRefundRecordTable(rows) {
         const refundMethod = r.refund_method || '转账';
         let methodBadge = '';
         if (refundMethod === '账户') {
-            methodBadge = '<span style="display:inline-block;padding:2px 8px;background:#dcfce7;color:#16a34a;border-radius:10px;font-size:12px;">账户</span>';
+            methodBadge = '<span class="refund-badge refund-badge-balance">账户</span>';
         } else {
-            methodBadge = '<span style="display:inline-block;padding:2px 8px;background:#e0e7ff;color:#4f46e5;border-radius:10px;font-size:12px;">转账</span>';
+            methodBadge = '<span class="refund-badge refund-badge-transfer">转账</span>';
         }
         const status = r.status || '';
         let statusHtml = '';
