@@ -3371,7 +3371,7 @@ function addItem() {
     openModal('modal-price-item');
 }
 
-function editItem(itemId) {
+async function editItem(itemId) {
     const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
     if (!plan) return;
     const item = (plan.items || []).find(i => i.id === itemId);
@@ -3383,8 +3383,9 @@ function editItem(itemId) {
     document.getElementById('price-item-lesson-count').value = item.lesson_count;
     document.getElementById('price-item-unit-price').value = item.unit_price;
     document.getElementById('price-item-actual-price').value = item.actual_price;
-    loadPriceItemDiscountOptions(item.discount_plan_id || '');
-    loadPriceItemCouponOptions(item.coupon_id || '');
+    await loadPriceItemDiscountOptions(item.discount_plan_id || '');
+    await loadPriceItemCouponOptions(item.coupon_id || '');
+    recalcItemActualPrice();
     openModal('modal-price-item');
 }
 
