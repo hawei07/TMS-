@@ -9959,14 +9959,13 @@ function renderDiscountPagination(total, page) {
 // 打开新增/编辑弹窗
 async function showDiscountPlanForm(id) {
     discountPlanEditingId = id || null;
-    document.getElementById('edit-plan-id').value = id || '';
-    document.getElementById('modal-discount-title').textContent = id ? '编辑优惠方案' : '新增优惠方案';
+    document.getElementById('discount-plan-modal-title').textContent = id ? '编辑优惠方案' : '新增优惠方案';
     // 清空表单
-    document.getElementById('discount-name').value = '';
+    document.getElementById('discount-plan-name').value = '';
     document.getElementById('discount-plan-type').value = '新报';
-    document.getElementById('discount-amount').value = '';
-    document.getElementById('discount-start-date').value = '';
-    document.getElementById('discount-end-date').value = '';
+    document.getElementById('discount-plan-amount').value = '';
+    document.getElementById('discount-plan-start').value = '';
+    document.getElementById('discount-plan-end').value = '';
     // 加载树
     loadCampusTree('discount-campus-tree');
     loadDiscountSubjectTree();
@@ -9975,11 +9974,11 @@ async function showDiscountPlanForm(id) {
     if (id) {
         try {
             const detail = await api('get_discount_plan', { id: id }, 'GET');
-            document.getElementById('discount-name').value = detail.name || '';
+            document.getElementById('discount-plan-name').value = detail.name || '';
             document.getElementById('discount-plan-type').value = detail.plan_type || '新报';
-            document.getElementById('discount-amount').value = detail.amount || '';
-            document.getElementById('discount-start-date').value = detail.start_date || '';
-            document.getElementById('discount-end-date').value = detail.end_date || '';
+            document.getElementById('discount-plan-amount').value = detail.amount || '';
+            document.getElementById('discount-plan-start').value = detail.start_date || '';
+            document.getElementById('discount-plan-end').value = detail.end_date || '';
             // 勾选校区（延迟等待树渲染完成）
             setTimeout(() => {
                 (detail.campus_ids || []).forEach(cid => {
@@ -9999,12 +9998,12 @@ async function showDiscountPlanForm(id) {
 
 // 保存方案（新增/编辑）
 async function saveDiscountPlan() {
-    const id = document.getElementById('edit-plan-id').value;
-    const name = document.getElementById('discount-name').value.trim();
+    const id = discountPlanEditingId;
+    const name = document.getElementById('discount-plan-name').value.trim();
     const planType = document.getElementById('discount-plan-type').value;
-    const amount = parseFloat(document.getElementById('discount-amount').value);
-    const startDate = document.getElementById('discount-start-date').value;
-    const endDate = document.getElementById('discount-end-date').value;
+    const amount = parseFloat(document.getElementById('discount-plan-amount').value);
+    const startDate = document.getElementById('discount-plan-start').value;
+    const endDate = document.getElementById('discount-plan-end').value;
     const campusIds = getSelectedDiscountCampuses();
     const subjectIds = getSelectedDiscountSubjects();
 
