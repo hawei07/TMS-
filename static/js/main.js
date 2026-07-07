@@ -3182,8 +3182,16 @@ function renderPlanList() {
         if (pt === '新报') typeTag = '<span class="tag tag-new-enroll">新报</span>';
         else if (pt === '续费') typeTag = '<span class="tag tag-renewal">续费</span>';
         else if (pt === '小课包') typeTag = '<span class="tag tag-small-pack">小课包</span>';
+        // 展示关联的优惠方案/优惠券标签
+        let discountBadge = '';
+        if (p.discount_plan_name) {
+            discountBadge += '<span class="tag tag-green" style="font-size:11px;margin-left:4px;">' + escHtml(p.discount_plan_name) + '(-¥' + Number(p.discount_amount || 0).toFixed(0) + ')</span>';
+        }
+        if (p.coupon_name) {
+            discountBadge += '<span class="tag tag-orange" style="font-size:11px;margin-left:4px;">' + escHtml(p.coupon_name) + '(-¥' + Number(p.coupon_amount || 0).toFixed(0) + ')</span>';
+        }
         return `<div class="price-plan-item${activeClass}" data-plan-id="${p.id}" onclick="selectPlan(${p.id})">
-            <span class="price-plan-name">${esc(p.name)}${typeTag}</span>
+            <span class="price-plan-name">${esc(p.name)}${typeTag}${discountBadge}</span>
             <span class="price-plan-actions">
                 <button class="btn-link" onclick="event.stopPropagation();editPlan(${p.id})">编辑</button>
                 <button class="btn-link-danger" onclick="event.stopPropagation();deletePlan(${p.id})">删除</button>
@@ -3246,6 +3254,41 @@ function renderItemList() {
         </tr>`;
 }
 
+// ==================== 优惠方案/优惠券下拉加载 ====================
+async function loadDiscountPlanOptions(planType) {
+    const sel = document.getElementById('price-plan-discount-select');
+    sel.innerHTML = '<option value="">不关联优惠方案</option>';
+    if (!planType || planType === '小课包') return; // 小课包不关联优惠方案
+    try {
+        const res = await api('list_discount_plans', { plan_type: planType, page_size: 200 }, 'GET');
+        const plans = (res && res.data) ? res.data : [];
+        plans.forEach(p => {
+            const label = p.name + ' (减¥' + Number(p.amount || 0).toFixed(0) + ')';
+            sel.innerHTML += '<option value="' + p.id + '">' + escHtml(label) + '</option>';
+        });
+    } catch (e) { /* 静默失败 */ }
+}
+
+async function loadCouponOptions() {
+    const sel = document.getElementById('price-plan-coupon-select');
+    sel.innerHTML = '<option value="">不关联优惠券</option>';
+    try {
+        const res = await api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET');
+        const coupons = (res && res.data) ? res.data : [];
+        coupons.forEach(c => {
+            const label = c.name + ' (减¥' + Number(c.amount || 0).toFixed(0) + ')';
+            sel.innerHTML += '<option value="' + c.id + '">' + escHtml(label) + '</option>';
+        });
+    } catch (e) { /* 静默失败 */ }
+}
+
+function onPricePlanTypeChange() {
+    const newType = document.getElementById('price-plan-type-select').value;
+    loadDiscountPlanOptions(newType);
+    // 切换方案类型时清空已选的优惠方案
+    document.getElementById('price-plan-discount-select').value = '';
+}
+
 function addPlan() {
     document.getElementById('modal-price-plan-title').textContent = '新增价格方案';
     document.getElementById('edit-price-plan-id').value = '';
@@ -3260,10 +3303,18 @@ function addPlan() {
         sel.value = '新报';
         sel.disabled = false;
     }
+    // 绑定方案类型切换事件
+    sel.onchange = onPricePlanTypeChange;
+    // 加载优惠方案和优惠券下拉
+    loadDiscountPlanOptions(sel.value);
+    loadCouponOptions();
+    // 重置为"不关联"
+    document.getElementById('price-plan-discount-select').value = '';
+    document.getElementById('price-plan-coupon-select').value = '';
     openModal('modal-price-plan');
 }
 
-function editPlan(planId) {
+async function editPlan(planId) {
     const plan = currentPlans.find(p => p.id === planId);
     if (!plan) return;
     document.getElementById('modal-price-plan-title').textContent = '编辑价格方案';
@@ -3279,6 +3330,13 @@ function editPlan(planId) {
         sel.value = plan.plan_type || '新报';
         sel.disabled = false;
     }
+    // 绑定方案类型切换事件
+    sel.onchange = onPricePlanTypeChange;
+    // 加载下拉并回填
+    await loadDiscountPlanOptions(sel.value);
+    await loadCouponOptions();
+    document.getElementById('price-plan-discount-select').value = plan.discount_plan_id || '';
+    document.getElementById('price-plan-coupon-select').value = plan.coupon_id || '';
     openModal('modal-price-plan');
 }
 
@@ -3286,6 +3344,8 @@ async function savePlan() {
     const planId = parseInt(document.getElementById('edit-price-plan-id').value) || 0;
     const planName = document.getElementById('price-plan-name-input').value.trim();
     const planType = document.getElementById('price-plan-type-select').value;
+    const discountPlanId = parseInt(document.getElementById('price-plan-discount-select').value) || 0;
+    const couponId = parseInt(document.getElementById('price-plan-coupon-select').value) || 0;
     if (!planName) { showToast('方案名称不能为空', 'error'); return; }
 
     if (planId > 0) {
@@ -3304,6 +3364,8 @@ async function savePlan() {
             plan_id: planId,
             plan_name: planName,
             plan_type: planType,
+            discount_plan_id: discountPlanId,
+            coupon_id: couponId,
             items: items
         }, 'POST');
         if (r && r.error) { showToast(r.error, 'error'); return; }
@@ -3317,6 +3379,8 @@ async function savePlan() {
             course_id: currentPriceCourseId,
             plan_name: planName2,
             plan_type: planType,
+            discount_plan_id: discountPlanId,
+            coupon_id: couponId,
             items: [{ name: '默认报价单', lesson_count: 1, unit_price: 0, actual_price: 0, sort_order: 0 }]
         }, 'POST');
         if (r && r.error) { showToast(r.error, 'error'); return; }

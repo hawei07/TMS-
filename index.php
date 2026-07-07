@@ -580,7 +580,10 @@ if (!$colRfM) {
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
         // 优惠券模块建表
-        $db->exec("CREATE TABLE IF NOT EXISTS coupons (
+        try { $db->exec("ALTER TABLE price_plans ADD COLUMN discount_plan_id INT DEFAULT NULL AFTER plan_type"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE price_plans ADD COLUMN coupon_id INT DEFAULT NULL AFTER discount_plan_id"); } catch (PDOException $e) {}
+
+$db->exec("CREATE TABLE IF NOT EXISTS coupons (
         id INT PRIMARY KEY AUTO_INCREMENT,
         name VARCHAR(200) NOT NULL DEFAULT '',
         coupon_type VARCHAR(20) NOT NULL DEFAULT '课程券',
@@ -2335,7 +2338,7 @@ $stmt->execute();
             $courseId = intval($_GET['course_id'] ?? 0);
             if (!$courseId) json(['error' => '缺少 course_id']);
             $plans = [];
-            $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
+            $planRes = $db->query("SELECT p.*, d.name AS discount_plan_name, c.name AS coupon_name FROM price_plans p LEFT JOIN discount_plans d ON p.discount_plan_id=d.id LEFT JOIN coupons c ON p.coupon_id=c.id WHERE p.course_id=$courseId ORDER BY p.sort_order, p.id");
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
@@ -2349,7 +2352,7 @@ $stmt->execute();
             $courseId = intval($_GET['course_id'] ?? 0);
             if ($courseId <= 0) json(['error' => '缺少 course_id']);
             $plans = [];
-            $planRes = $db->query("SELECT * FROM price_plans WHERE course_id=$courseId ORDER BY sort_order, id");
+            $planRes = $db->query("SELECT p.*, d.name AS discount_plan_name, c.name AS coupon_name FROM price_plans p LEFT JOIN discount_plans d ON p.discount_plan_id=d.id LEFT JOIN coupons c ON p.coupon_id=c.id WHERE p.course_id=$courseId ORDER BY p.sort_order, p.id");
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=" . intval($plan['id']) . " ORDER BY sort_order, id");
@@ -2517,6 +2520,8 @@ $stmt->execute();
             $courseId = intval($input['course_id'] ?? 0);
             $planName = trim($input['plan_name'] ?? '');
             $planType = trim($input['plan_type'] ?? '');
+            $discountPlanId = intval($input['discount_plan_id'] ?? 0);
+            $couponId = intval($input['coupon_id'] ?? 0);
             $items = $input['items'] ?? [];
             if (!$courseId) json(['error' => '课程ID无效']);
             if (!$planName) json(['error' => '方案名称不能为空']);
@@ -2527,11 +2532,11 @@ $stmt->execute();
                 // 编辑：更新方案名称，全量替换报价单
                 $existing = $db->query("SELECT * FROM price_plans WHERE id=$planId")->fetch(PDO::FETCH_ASSOC);
                 if (!$existing) json(['error' => '价格方案不存在']);
-                $db->exec("UPDATE price_plans SET name=" . $db->quote($planName) . ", plan_type=" . $db->quote($planType) . " WHERE id=$planId");
+                $db->exec("UPDATE price_plans SET name=" . $db->quote($planName) . ", plan_type=" . $db->quote($planType) . ", discount_plan_id=" . ($discountPlanId > 0 ? $discountPlanId : 'NULL') . ", coupon_id=" . ($couponId > 0 ? $couponId : 'NULL') . " WHERE id=$planId");
                 $db->exec("DELETE FROM price_items WHERE plan_id=$planId");
             } else {
                 // 新增
-                $db->exec("INSERT INTO price_plans (course_id, name, plan_type, created_at) VALUES ($courseId, " . $db->quote($planName) . ", " . $db->quote($planType) . ", '" . now() . "')");
+                $db->exec("INSERT INTO price_plans (course_id, name, plan_type, discount_plan_id, coupon_id, created_at) VALUES ($courseId, " . $db->quote($planName) . ", " . $db->quote($planType) . ", " . ($discountPlanId > 0 ? $discountPlanId : 'NULL') . ", " . ($couponId > 0 ? $couponId : 'NULL') . ", '" . now() . "')");
                 $planId = $db->lastInsertId();
             }
 
@@ -7819,6 +7824,8 @@ if (intval($countBt) === 0) {
             <input type="hidden" id="edit-price-plan-id">
             <div class="form-group"><label>方案名称 <span class="required">*</span></label><input type="text" id="price-plan-name-input" maxlength="50" placeholder="如：标准版、暑期特惠"></div>
             <div class="form-group"><label>方案类型</label><select id="price-plan-type-select"><option value="">请选择</option><option value="新报">新报</option><option value="续费">续费</option><option value="小课包">小课包</option></select></div>
+            <div class="form-group"><label>优惠方案</label><select id="price-plan-discount-select"><option value="">不关联优惠方案</option></select></div>
+            <div class="form-group"><label>课时优惠券</label><select id="price-plan-coupon-select"><option value="">不关联优惠券</option></select></div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-price-plan')">取消</button><button class="btn btn-primary" onclick="savePlan()">保存</button></div></div>
     </div>
