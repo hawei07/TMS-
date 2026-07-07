@@ -1538,3 +1538,19 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | chore | **导航顺序调整**：市场管理→教务管理→数据中心→员工管理 | index.php | 0758bdc |
 | chore | **Product Manager 加入开发工作流** | .hermes/project.md | 0758bdc |
 | chore | **账户充值标签颜色区分**：蓝色 #2563EB | style.css | 0758bdc |
+
+### 2026-07-07（续）— 优惠管理模块 + 报价单优惠关联 + inline 编辑
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **优惠管理模块**：侧边栏新增「优惠管理」导航；优惠方案 CRUD（discount_plans 表+校区/学科关联表）；5 个 API + 16 个 JS 函数；表格/分页/搜索/类型筛选 | index.php main.js style.css | f51df13 / 59fbfd2 / 575fb22 / 003d478 |
+| style | **优惠方案弹窗 UI 优化**：三卡片布局（基本信息/有效期/适用范围）；树选择强化（选中态+计数 badge）；输入控件统一 8px 圆角+focus 紫光晕 | index.php style.css main.js | e59d914 / f135c4a / 4d9680f |
+| feat | **优惠券+发放记录模块**：coupons 表+coupon_records 表；优惠券 CRUD 5 API + 发放记录 3 API；标签页2「优惠券」+标签页3「发放记录」 | index.php main.js | dded0fa / 8d05c02 |
+| feat | **报价单关联优惠方案+优惠券**：price_items 新增 discount_plan_id + coupon_id；报价单弹窗新增优惠方案下拉（按 plan_type 筛选）+优惠券下拉（仅课程券）；save/get API LEFT JOIN 回显名称 | index.php main.js | 7c5bdf3 / a6169d3 |
+| fix | **优惠下拉字段映射修复**：api() 双问号→对象传参；discount_amount→amount；列表金额字段统一 | main.js | b60f2bd / a1b05dc / 2254ad8 |
+| feat | **报价单实际支付价格自动扣减**：recalcItemActualPrice() 联动计算；改课时价格/优惠方案/优惠券任一实时更新实付 | main.js | a6169d3 / 5764262 |
+| feat | **报价单列表 inline 编辑**：单击任意可编辑列→整行进入编辑态；text→input、优惠→select、实付只读联动；Enter 保存/Esc 取消/点击行外保存；去掉编辑按钮，新增保留弹窗 | main.js style.css | 12b0152 / 8d87f9e / 118cde1 / 2d7f338 |
+| style | **价格方案弹窗 UI 重设计**：左右面板现代化（950px/500px）；报价单列表 sticky thead+hover；弹窗卡片式布局+紫色主题 | index.php style.css main.js | 7c5bdf3 |
+| refactor | **审批弹窗退款方式不可变更**：去掉财务确认 radio 组+退余额分支；展示退费方式（退银行卡/退学员账户） | index.php main.js | 26b1c96 / c09542d |
+| style | **退费申请弹窗 UI 优化**：5 张卡片式分组；计算流视觉（剩余→−扣减→=实退紫色渐变）；银行区展开动画；提交按钮 loading spinner | index.php style.css main.js | 46f0c74 |
+| docs | **更新 PROJECT_SUMMARY** | PROJECT_SUMMARY.md | c45cc4b |
