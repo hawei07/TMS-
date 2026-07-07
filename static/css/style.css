@@ -5998,3 +5998,26 @@ tbody td {
     color: var(--color-danger);
     font-weight: 600;
 }
+
+/* === 优惠方案弹窗输入样式 === */
+#modal-discount-plan .form-input,
+#modal-discount-plan input[type="text"],
+#modal-discount-plan input[type="number"],
+#modal-discount-plan input[type="date"],
+#modal-discount-plan select {
+    width: 100%;
+    padding: 9px 14px;
+    border: 1px solid var(--color-border);
+    border-radius: 8px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s, box-shadow 0.2s;
+}
+#modal-discount-plan .form-input:focus,
+#modal-discount-plan input:focus,
+#modal-discount-plan select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.08);
+}
+#modal-discount-plan .form-group { margin-bottom: 16px; }
+#modal-discount-plan .form-row { display: flex; gap: 16px; }
