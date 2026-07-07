@@ -570,7 +570,11 @@ function debounceSearch(tab) {
 
 // ==================== 弹窗 ====================
 function closeModal(id) { document.getElementById(id).classList.remove('show'); }
-function openModal(id) { document.getElementById(id).classList.add('show'); }
+function openModal(id) {
+    // 关闭所有已打开的弹窗
+    document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+    document.getElementById(id).classList.add('show');
+}
 
 // ==================== 归属人下拉加载 ====================
 async function populateAssignedToSelect(selectedValue) {
