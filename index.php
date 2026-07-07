@@ -8285,6 +8285,7 @@ if (intval($countBt) === 0) {
                     <h5 style="margin:0 0 12px;font-size:14px;color:#666;">退费原因</h5>
                     <textarea id="refund-apply-reason" class="form-input" rows="3" placeholder="请输入退费原因"></textarea>
                 </div>
+            </div>
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-refund-apply')">取消</button>
                 <button class="btn btn-primary" onclick="submitRefundApply()">提交申请</button>
