@@ -6775,7 +6775,7 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-refund-records">
                                 <thead><tr>
-                                    <th width="80">订单号</th><th>学员</th><th width="60">项目</th><th>内容</th><th>学科</th><th>校区</th><th>剩余课时</th><th>实退金额</th><th>扣减金额</th><th>退费方式</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
+                                    <th width="80">订单号</th><th>学员</th><th width="60">项目</th><th>内容</th><th>学科</th><th>校区</th><th>实退金额</th><th>扣减金额</th><th>退费方式</th><th width="80">状态</th><th width="120">申请时间</th><th width="100">操作</th>
                                 </tr></thead>
                                 <tbody></tbody>
                             </table>

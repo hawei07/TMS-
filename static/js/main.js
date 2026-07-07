@@ -7699,7 +7699,7 @@ async function loadRefundRecords() {
 function renderRefundRecordTable(rows) {
     const tbody = document.querySelector('#table-refund-records tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;padding:30px;">暂无退费记录</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -7711,7 +7711,6 @@ function renderRefundRecordTable(rows) {
             projectBadge = '<span style="display:inline-block;padding:2px 8px;background:#e0e7ff;color:#4f46e5;border-radius:10px;font-size:12px;">课程</span>';
         }
         const isAccount = (project === '账户');
-        const rl = parseInt(r.remaining_lessons) || 0;
         const ar = parseFloat(r.actual_refund) || 0;
         const da = parseFloat(r.consumed_amount) || 0;
         const subject = r.subject_level1 || '-';
@@ -7750,7 +7749,6 @@ function renderRefundRecordTable(rows) {
             <td>${esc(r.content || r.course_name || '')}</td>
             <td>${esc(subject)}</td>
             <td>${esc(r.campus || '')}</td>
-            <td>${isAccount ? '-' : rl}</td>
             <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
             <td>${isAccount ? '-' : '¥'+da.toFixed(2)}</td>
             <td>${methodBadge}</td>
