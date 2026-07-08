@@ -6240,13 +6240,12 @@ function selectEnrollPlan(planId) {
     tbody.innerHTML = plan.items.map(item => {
         const dpAmount = parseFloat(item.discount_plan_amount) || 0;
         const cAmount = parseFloat(item.coupon_amount) || 0;
-        const effectivePrice = parseFloat(item.unit_price) - dpAmount - cAmount;
-        const unitPrice = item.lesson_count > 0 ? (effectivePrice / item.lesson_count) : 0;
+        const unitPrice = item.lesson_count > 0 ? (item.unit_price - dpAmount - cAmount) / item.lesson_count : 0;
         total += parseFloat(item.actual_price) || 0;
         return `<tr>
             <td>${esc(item.name)}</td>
             <td class="col-num">${item.lesson_count || 0}</td>
-            <td class="col-num">¥${unitPrice.toFixed(2)}</td>
+            <td class="col-num">¥${Number(item.unit_price).toFixed(2)}</td>
             <td>${esc(item.discount_plan_name || '-')}</td>
             <td>${esc(item.coupon_name || '-')}</td>
             <td>${esc(item.teaching_aid_name || '-')}</td>
