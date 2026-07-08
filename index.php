@@ -4241,6 +4241,8 @@ $sumStmt->execute();
                     'actual_price' => number_format(floatval($it['actual_price'] ?? 0), 2, '.', ''),
                     'discount_plan_name' => $it['discount_plan_name'] ?? null,
                     'coupon_name' => $it['coupon_name'] ?? null,
+                    'teaching_aid_name' => $it['teaching_aid_name'] ?? null,
+                    'product_coupon_name' => null,
                     'cash_amount' => number_format(floatval($it['cash_amount'] ?? 0), 2, '.', ''),
                     'meituan_amount' => number_format(floatval($it['meituan_amount'] ?? 0), 2, '.', ''),
                     'account_amount' => number_format(floatval($it['account_amount'] ?? 0), 2, '.', ''),
@@ -7507,9 +7509,9 @@ if (intval($countBt) === 0) {
                                                                      <th class="col-num">单价</th>
                                                                      <th class="col-num">实际价格</th>
                                                                      <th>优惠方案</th>
-                                                                     <th>教材包</th>
-                                                                     <th>课时优惠券</th>
-                                                                     <th>商品券</th>
+                                                                                                         <th>课时优惠券</th>
+                                                                                                         <th>教材包</th>
+                                                                                                         <th>商品券</th>
                                 </tr></thead>
                                 <tbody id="enroll-items-tbody"></tbody>
                             </table>
@@ -8234,7 +8236,7 @@ if (intval($countBt) === 0) {
                 <div class="price-detail-header">报价单列表 <span id="price-plan-type-tag"></span></div>
                 <div class="price-detail-table-wrap">
                     <table id="price-item-table" class="price-item-table">
-                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>优惠方案</th><th>教材包</th><th>课时优惠券</th><th>商品券</th><th>实际价格</th><th width="120">操作</th></tr></thead>
+                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>商品券</th><th>实际价格</th><th width="120">操作</th></tr></thead>
                         <tbody id="price-item-table-body"></tbody>
                     </table>
                 </div>

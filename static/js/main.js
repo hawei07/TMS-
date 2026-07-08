@@ -3271,8 +3271,8 @@ function renderItemList() {
             <td class="pi-editable" data-field="lesson_count" data-original="${item.lesson_count}">${item.lesson_count}</td>
             <td class="pi-editable" data-field="unit_price" data-original="${Number(item.unit_price).toFixed(2)}">${Number(item.unit_price).toFixed(2)}</td>
             <td class="${discountEditable}" data-field="discount_plan_id" data-original="${item.discount_plan_id || ''}">${discountDisplay}</td>
-            <td class="${teachingAidEditable}" data-field="teaching_aid_id" data-original="${item.teaching_aid_id || ''}">${teachingAidDisplay}</td>
             <td class="${courseCouponEditable}" data-field="coupon_id" data-original="${item.coupon_id || ''}">${courseCouponDisplay}</td>
+            <td class="${teachingAidEditable}" data-field="teaching_aid_id" data-original="${item.teaching_aid_id || ''}">${teachingAidDisplay}</td>
             <td class="${productCouponEditable}" data-field="product_coupon_id" data-original="${item.product_coupon_id || ''}">${productCouponDisplay}</td>
             <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
             <td>
@@ -6169,8 +6169,8 @@ function selectEnrollPlan(planId) {
             <td class="col-num">¥${unitPrice.toFixed(2)}</td>
             <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
             <td>${esc(item.discount_plan_name || '-')}</td>
-            <td>${esc(item.teaching_aid_name || '-')}</td>
             <td>${esc(item.coupon_name || '-')}</td>
+            <td>${esc(item.teaching_aid_name || '-')}</td>
             <td>${esc(item.product_coupon_name || '-')}</td>
         </tr>`;
     }).join('');
@@ -7037,6 +7037,8 @@ function renderOrderDetail(data) {
             '<td class="col-num">' + (item.unit_price != null ? '¥' + Number(item.unit_price).toFixed(2) : '-') + '</td>' +
             '<td>' + escHtml(item.discount_plan_name || '-') + '</td>' +
             '<td>' + escHtml(item.coupon_name || '-') + '</td>' +
+            '<td>' + escHtml(item.teaching_aid_name || '-') + '</td>' +
+            '<td>' + escHtml(item.product_coupon_name || '-') + '</td>' +
             '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
         '</tr>';
     });
@@ -7052,12 +7054,14 @@ function renderOrderDetail(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">单价</th><th>优惠方案</th><th>优惠券</th><th class="col-num">实际价格</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">单价</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>商品券</th><th class="col-num">实际价格</th>' +
     '</tr></thead><tbody>';
-    html += itemsHtml || '<tr><td colspan="6" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
+    html += itemsHtml || '<tr><td colspan="8" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
         '<td style="text-align:right;font-weight:bold;">合计</td>' +
         '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
+        '<td></td>' +
+        '<td></td>' +
         '<td></td>' +
         '<td></td>' +
         '<td></td>' +
