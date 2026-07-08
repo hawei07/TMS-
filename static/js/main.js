@@ -11259,8 +11259,8 @@ function deleteTeachingAid(id, name) {
 
 // ===== 校区树辅助 =====
 function getTaSelectedCampuses() {
-    const checks = document.querySelectorAll('#teaching-aid-campus-tree input[type="checkbox"]:checked');
-    return Array.from(checks).map(cb => parseInt(cb.value)).filter(v => v > 0);
+    const checks = document.querySelectorAll('#teaching-aid-campus-tree .campus-tree-node[data-type="校区"] .campus-tree-check:checked');
+    return Array.from(checks).map(c => parseInt(c.closest('.campus-tree-node').dataset.id)).filter(v => v > 0);
 }
 
 function updateTaCampusCount() {
