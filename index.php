@@ -3958,6 +3958,8 @@ $stmt->execute();
                     $r['remaining_lessons'] = 0;
                     $r['remaining_amount'] = 0;
                 }
+                // 报读课程实际价格排除教材包和商品券（与课耗算法一致）
+                $r['actual_price'] = round($ap - $taPrice + $pcAmount, 2);
                 $rows[] = $r;
             }
             json(['data' => $rows]);
