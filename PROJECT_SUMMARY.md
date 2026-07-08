@@ -1554,3 +1554,25 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | refactor | **审批弹窗退款方式不可变更**：去掉财务确认 radio 组+退余额分支；展示退费方式（退银行卡/退学员账户） | index.php main.js | 26b1c96 / c09542d |
 | style | **退费申请弹窗 UI 优化**：5 张卡片式分组；计算流视觉（剩余→−扣减→=实退紫色渐变）；银行区展开动画；提交按钮 loading spinner | index.php style.css main.js | 46f0c74 |
 | docs | **更新 PROJECT_SUMMARY** | PROJECT_SUMMARY.md | c45cc4b |
+
+### 2026-07-08 — 画具管理 + 报价单优惠扩展 + 退费/考勤统一修复
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **画具管理模块**：teaching_aids 表+teaching_aid_campuses 关联表；5 个 API；导航「画具管理」；校区树多选；类型字段（教材包/画具） | index.php main.js style.css | - |
+| feat | **订单详情弹窗→独立页面**：新增 panel-order-detail + 面包屑导航；get_order_detail 支持 order_no 参数 | index.php main.js | - |
+| feat | **报价单/录单新增教材包+商品券列**：price_items 加 teaching_aid_id+product_coupon_id；优惠关联卡片4列（优惠方案/教材包/课时优惠券/商品券） | index.php main.js | - |
+| feat | **录单自动发券+查重复用**：pay_enroll 写优惠快照到 orders 表（8字段）；get_order_detail 直接读 orders 不再 JOIN | index.php | - |
+| fix | **实际价格公式统一**：max(0, 课时价格 - 优惠方案 - 课时优惠券 + 教材包原价 - 商品券)；4个保存函数全量重算 | main.js | - |
+| fix | **课耗/退费金额排除教材包+商品券**：classPrice=actualPrice-teachingAidPrice+productCouponAmount；student_summary+order_detail 全量统一 | index.php | - |
+| fix | **考勤退费拦截统一**：旧考勤关联订单有退费（待审批/审批中/已退费）→禁止修改；仅 delta≠0 或状态变化时触发 | index.php | - |
+| fix | **扣课时上限保护**：所有 UPDATE 加 AND consumed_lessons+delta≤lesson_count；历史超扣数据归位 | index.php | - |
+| fix | **追加扣课三级优先级**：同课程→同二级学科→同一级学科；排除退费中/已退费订单 | index.php | - |
+| feat | **退费审批弹窗加手机号+学号** | index.php main.js | - |
+| feat | **学员列表加分班按钮** | main.js | - |
+| fix | **课表考勤按钮直接弹出考勤弹窗**：月视图补 class_id | index.php main.js | - |
+| fix | **出勤→缺勤检查优化**：用旧 deduction_json 的订单ID检查退费状态 | index.php | - |
+| fix | **退费金额前端展示与存储一致性**：排除教材包和商品券 | index.php | - |
+| fix | **pay_enroll 命名参数重复** :ca→:coa | index.php | - |
+| fix | **扣课时排除已退费订单**：退款/退款中订单过滤 | index.php | - |
+
