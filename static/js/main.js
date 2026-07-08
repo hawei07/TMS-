@@ -3239,7 +3239,7 @@ function renderItemList() {
 
     if (!plan) {
         if (tagEl) tagEl.innerHTML = '';
-        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
         return;
     }
     // 在报价单列表标题旁展示方案类型标签
@@ -3252,7 +3252,7 @@ function renderItemList() {
     }
     const items = plan.items || [];
     if (!items.length) {
-        tbody.innerHTML = '<tr class="price-empty-row"><td colspan="9">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
+        tbody.innerHTML = '<tr class="price-empty-row"><td colspan="10">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
         return;
     }
     tbody.innerHTML = items.map(item => {
@@ -3273,6 +3273,7 @@ function renderItemList() {
             <td class="${discountEditable}" data-field="discount_plan_id" data-original="${item.discount_plan_id || ''}">${discountDisplay}</td>
             <td class="${courseCouponEditable}" data-field="coupon_id" data-original="${item.coupon_id || ''}">${courseCouponDisplay}</td>
             <td class="${teachingAidEditable}" data-field="teaching_aid_id" data-original="${item.teaching_aid_id || ''}">${teachingAidDisplay}</td>
+            <td class="pi-readonly">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
             <td class="${productCouponEditable}" data-field="product_coupon_id" data-original="${item.product_coupon_id || ''}">${productCouponDisplay}</td>
             <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
             <td>
@@ -3288,6 +3289,7 @@ function renderItemList() {
         <tr class="price-total-row">
             <td style="font-weight:bold;">总计</td>
             <td style="font-weight:bold;">${totalLessons}</td>
+            <td></td>
             <td></td>
             <td></td>
             <td></td>
@@ -6171,6 +6173,7 @@ function selectEnrollPlan(planId) {
             <td>${esc(item.discount_plan_name || '-')}</td>
             <td>${esc(item.coupon_name || '-')}</td>
             <td>${esc(item.teaching_aid_name || '-')}</td>
+            <td class="col-num">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
             <td>${esc(item.product_coupon_name || '-')}</td>
         </tr>`;
     }).join('');
@@ -7038,6 +7041,7 @@ function renderOrderDetail(data) {
             '<td>' + escHtml(item.discount_plan_name || '-') + '</td>' +
             '<td>' + escHtml(item.coupon_name || '-') + '</td>' +
             '<td>' + escHtml(item.teaching_aid_name || '-') + '</td>' +
+            '<td class="col-num">' + (item.teaching_aid_price != null ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-') + '</td>' +
             '<td>' + escHtml(item.product_coupon_name || '-') + '</td>' +
             '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
         '</tr>';
@@ -7054,12 +7058,13 @@ function renderOrderDetail(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">单价</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>商品券</th><th class="col-num">实际价格</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">单价</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
     '</tr></thead><tbody>';
-    html += itemsHtml || '<tr><td colspan="8" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
+    html += itemsHtml || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
         '<td style="text-align:right;font-weight:bold;">合计</td>' +
         '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
+        '<td></td>' +
         '<td></td>' +
         '<td></td>' +
         '<td></td>' +
