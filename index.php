@@ -5891,13 +5891,16 @@ $stmt->execute();
                     }
                     // 退还已扣课时（改状态为缺勤/请假时，按 deduction_json 逐笔归还）
                     // 必须在计算新扣课时之前执行，否则新扣课时计算会基于错误的 consumed_lessons 值
-                    $oldAtt = $db->query("SELECT id, deducted_lessons, deduction_json FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId")->fetch(PDO::FETCH_ASSOC);
+                    $oldAtt = $db->query("SELECT id, deducted_lessons, deduction_json, status FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId")->fetch(PDO::FETCH_ASSOC);
                     // 查所有旧记录（不止一条时用 fetchAll 检查）
                     $oldAttAll = $db->query("SELECT id, deducted_lessons, deduction_json FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId")->fetchAll(PDO::FETCH_ASSOC);
                     $logLine = date('Y-m-d H:i:s') . " SCHED=$scheduleId DATE=$sessionDate SID=$studentId CID=$courseId\n";
                     $snapBefore = $db->query("SELECT id, consumed_lessons FROM orders WHERE student_id = $studentId AND course_id = $courseId")->fetchAll(PDO::FETCH_ASSOC);
                     $logLine .= "BEFORE_REVERT: " . json_encode($snapBefore) . "\n";
                     $logLine .= "REVERT oldAtt_count=" . count($oldAttAll) . " oldAtt_ids=" . implode(',', array_column($oldAttAll, 'id')) . " oldAtt_json=" . json_encode($oldAttAll) . "\n";
+                    $oldAttStatusFromCA = $oldAtt ? ($oldAtt['status'] ?? '') : '';
+                    $logLine .= "oldAttStatusFromCA=$oldAttStatusFromCA newStatus=$status\n";
+                    if (!($oldAttStatusFromCA === '出勤' && $status === '出勤')) {
                     if ($oldAtt && !empty($oldAtt['deduction_json'])) {
                         $oldEntries = json_decode($oldAtt['deduction_json'], true);
                         if (is_array($oldEntries)) {
@@ -6027,6 +6030,43 @@ $stmt->execute();
                         file_put_contents('D:/market-system-php/debug_save.log', $logLine, FILE_APPEND);
                     } else {
                         $deductionJson = '';
+                    }
+                    } else {
+                        // 出勤→出勤：保持原扣课不变，不退还也不重新扣
+                        $deductionJson = $oldAtt['deduction_json'] ?? '';
+                        $deductionEntries = json_decode($deductionJson, true) ?: [];
+                        if (!empty($deductionEntries)) {
+                            $deductedOrderId = intval($deductionEntries[0]['order_id'] ?? 0);
+                        }
+                        // 如果 deducted_lessons 值变了，调整 consumed_lessons 差分
+                        $oldDeductedLessons = intval($oldAtt['deducted_lessons'] ?? 0);
+                        if ($deductedLessons !== $oldDeductedLessons && !empty($deductionEntries)) {
+                            $delta = $deductedLessons - $oldDeductedLessons;
+                            $totalOldAmt = 0;
+                            foreach ($deductionEntries as $e) { $totalOldAmt += intval($e['amount'] ?? 0); }
+                            if ($totalOldAmt > 0) {
+                                $remainingDelta = $delta;
+                                $cnt = count($deductionEntries);
+                                foreach ($deductionEntries as $idx => &$en) {
+                                    $eoid = intval($en['order_id'] ?? 0);
+                                    if ($eoid <= 0) continue;
+                                    if ($idx === $cnt - 1) {
+                                        $adj = $remainingDelta;
+                                    } else {
+                                        $adj = intval(round($delta * intval($en['amount']) / $totalOldAmt));
+                                    }
+                                    $remainingDelta -= $adj;
+                                    if ($adj !== 0) {
+                                        $stmtAdj = $db->prepare("UPDATE orders SET consumed_lessons = consumed_lessons + $adj WHERE id = $eoid");
+                                        $stmtAdj->execute();
+                                        $en['amount'] = intval($en['amount']) + $adj;
+                                    }
+                                }
+                                $deductionJson = json_encode($deductionEntries);
+                            }
+                        }
+                        $logLine .= "SKIP_REVERT_DEDUCT: old_status=出勤 new_status=出勤 kept_deductionJson=$deductionJson\n";
+                        file_put_contents('D:/market-system-php/debug_save.log', $logLine, FILE_APPEND);
                     }
                     // 删除旧的考勤记录
                     $db->exec("DELETE FROM class_attendance WHERE class_id=$classId AND schedule_id=$scheduleId AND session_date='$sessionDate' AND student_id=$studentId");
