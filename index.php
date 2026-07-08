@@ -7149,9 +7149,11 @@ if (intval($countBt) === 0) {
                             <table class="enroll-items-table">
                                 <thead><tr>
                                     <th>报价项名称</th>
-                                    <th class="col-num">课时数</th>
-                                    <th class="col-num">单价</th>
-                                    <th class="col-num">实际价格</th>
+                                                                        <th class="col-num">课时数</th>
+                                                                        <th class="col-num">单价</th>
+                                                                        <th class="col-num">实际价格</th>
+                                                                        <th>优惠方案</th>
+                                                                        <th>优惠券</th>
                                 </tr></thead>
                                 <tbody id="enroll-items-tbody"></tbody>
                             </table>

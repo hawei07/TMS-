@@ -6037,6 +6037,8 @@ function selectEnrollPlan(planId) {
             <td class="col-num">${item.lesson_count || 0}</td>
             <td class="col-num">¥${unitPrice.toFixed(2)}</td>
             <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
+            <td>${esc(item.discount_plan_name || '-')}</td>
+            <td>${esc(item.coupon_name || '-')}</td>
         </tr>`;
     }).join('');
     document.getElementById('enroll-total-price').textContent = '¥' + total.toFixed(2);
