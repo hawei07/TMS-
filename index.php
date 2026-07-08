@@ -3000,7 +3000,7 @@ $stmt->execute();
             $sql = "SELECT cr.id, cr.coupon_id, cr.student_name, cr.phone, cr.issuer AS distributor, cr.issued_at AS distributed_at, cr.created_at,
                 COALESCE(cr.coupon_name, c.name) AS coupon_name,
                 c.coupon_type,
-                c.discount_amount,
+                c.discount_amount AS amount,
                 cr.usage_status
             FROM coupon_records cr
             LEFT JOIN coupons c ON cr.coupon_id=c.id
@@ -3010,7 +3010,7 @@ $stmt->execute();
             $res = $db->query($sql);
             $rows = [];
             while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
-                $r['discount_amount'] = floatval($r['discount_amount']);
+                $r['amount'] = floatval($r['amount']);
                 $rows[] = $r;
             }
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
