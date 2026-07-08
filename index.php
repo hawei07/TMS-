@@ -6161,8 +6161,10 @@ $stmt->execute();
                     $totalRemaining = intval($sumRow['total_remaining'] ?? 0);
                 }
             }
-            $enrollable = $totalRemaining > 0;
-            json(['enrollable' => $enrollable, 'remaining_lessons' => $totalRemaining]);
+            // 检查是否已在班
+            $alreadyInClass = $db->query("SELECT COUNT(*) FROM class_students WHERE class_id=$classId AND student_id=$studentId AND left_at=''")->fetchColumn() > 0;
+            $enrollable = !$alreadyInClass && $totalRemaining > 0;
+            json(['enrollable' => $enrollable, 'remaining_lessons' => $totalRemaining, 'already_enrolled' => $alreadyInClass]);
             break;
 
         // ==================== 考勤管理（按日期-全量） API ====================

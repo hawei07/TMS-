@@ -7593,18 +7593,25 @@ async function showClassEnrollModal(studentId) {
         for (const c of classes) {
             let enrollable = false;
             let remaining = 0;
+            let alreadyEnrolled = false;
             try {
                 const r2 = await fetch(API_BASE + 'get_class_enrollable&class_id=' + c.id + '&student_id=' + studentId);
                 const d2 = await r2.json();
                 enrollable = !!d2.enrollable;
                 remaining = d2.remaining_lessons || 0;
+                alreadyEnrolled = !!d2.already_enrolled;
             } catch (e) { /* ignore */ }
-            rows.push({ ...c, enrollable, remaining });
+            rows.push({ ...c, enrollable, remaining, already_enrolled: alreadyEnrolled });
         }
         tbody.innerHTML = rows.map(c => {
-            const btnHtml = c.enrollable
-                ? `<button class="btn btn-sm btn-primary" onclick="enrollStudentToClass(${c.id}, '${esc(c.name).replace(/'/g, "\\'")}')">分班</button>`
-                : '<span style="color:#e74c3c;font-size:12px;">不可分入</span>';
+            let btnHtml;
+            if (c.already_enrolled) {
+                btnHtml = '<span style="color:#999;font-size:12px;cursor:not-allowed;">已在班</span>';
+            } else if (c.enrollable) {
+                btnHtml = `<button class="btn btn-sm btn-primary" onclick="enrollStudentToClass(${c.id}, '${esc(c.name).replace(/'/g, "\\\\'")}')">分班</button>`;
+            } else {
+                btnHtml = '<span style="color:#e74c3c;font-size:12px;">不可分入</span>';
+            }
             return `<tr>
                 <td>${esc(c.name)}</td>
                 <td>${esc(c.course_name || '')}</td>
