@@ -6081,6 +6081,16 @@ $stmt->execute();
                     $oldAttRec = $db->query("SELECT id, status FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'")->fetch(PDO::FETCH_ASSOC);
                     $oldAttStatus = $oldAttRec ? $oldAttRec['status'] : '';
                     $oldAttRecId = $oldAttRec ? intval($oldAttRec['id']) : 0;
+                    // 由出勤改为缺勤时，检查订单是否已退费或退费中
+                    if ($oldAttStatus === '出勤' && $status === '缺勤' && $deductedOrderId > 0) {
+                        $refundCheck = $db->query("SELECT status FROM refund_records WHERE order_id=$deductedOrderId AND status NOT IN ('审批驳回') ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+                        if ($refundCheck && $refundCheck['status'] !== '已退费') {
+                            json(['error' => '该课时的订单正在退费审批中，无法改为缺勤']); break;
+                        }
+                        if ($refundCheck && $refundCheck['status'] === '已退费') {
+                            json(['error' => '该课时的订单已退费，无法改为缺勤']); break;
+                        }
+                    }
                     $db->exec("DELETE FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
                     // 删除旧的缺勤记录（无论旧状态是什么，先清理）
                     if ($oldAttRecId > 0) {
