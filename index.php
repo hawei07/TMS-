@@ -285,6 +285,27 @@ if (!in_array('account_amount', $existingCols)) {
     $db->exec("ALTER TABLE orders ADD COLUMN account_amount REAL DEFAULT 0");
 }
 
+// 订单优惠金额快照列（v2.x）
+$snapshotCols = [
+    'discount_plan_name' => "VARCHAR(200) DEFAULT ''",
+    'discount_plan_amount' => 'DECIMAL(10,2) DEFAULT 0.00',
+    'coupon_name' => "VARCHAR(200) DEFAULT ''",
+    'coupon_amount' => 'DECIMAL(10,2) DEFAULT 0.00',
+    'teaching_aid_name' => "VARCHAR(200) DEFAULT ''",
+    'teaching_aid_price' => 'DECIMAL(10,2) DEFAULT 0.00',
+    'product_coupon_name' => "VARCHAR(200) DEFAULT ''",
+    'product_coupon_amount' => 'DECIMAL(10,2) DEFAULT 0.00',
+];
+foreach ($snapshotCols as $col => $def) {
+    $exists = $db->query("SHOW COLUMNS FROM orders LIKE '$col'")->fetch();
+    if (!$exists) $db->exec("ALTER TABLE orders ADD COLUMN $col $def");
+}
+
+// 历史数据回填：通过 price_items JOIN 重建已有订单的优惠快照
+if ($db->query("SELECT COUNT(*) FROM orders WHERE (discount_plan_name IS NULL OR discount_plan_name='') AND lesson_count > 0 LIMIT 1")->fetchColumn() > 0) {
+    $db->exec("UPDATE orders o LEFT JOIN price_plans pp ON pp.name = o.plan_name AND pp.course_id = o.course_id LEFT JOIN price_items pi ON pi.plan_id = pp.id AND pi.name = o.item_name LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id LEFT JOIN coupons c ON pi.coupon_id = c.id LEFT JOIN teaching_aids ta ON pi.teaching_aid_id = ta.id LEFT JOIN coupons pc ON pi.product_coupon_id = pc.id SET o.discount_plan_name = COALESCE(d.name,''), o.discount_plan_amount = COALESCE(d.discount_amount,0), o.coupon_name = COALESCE(c.name,''), o.coupon_amount = COALESCE(c.discount_amount,0), o.teaching_aid_name = COALESCE(ta.name,''), o.teaching_aid_price = COALESCE(ta.price,0), o.product_coupon_name = COALESCE(pc.name,''), o.product_coupon_amount = COALESCE(pc.discount_amount,0) WHERE (o.discount_plan_name IS NULL OR o.discount_plan_name='')");
+}
+
 // 兼容已有数据库：学生表添加学号字段
 $existingColsS = [];
 $colResS = $db->query("SHOW COLUMNS FROM students");
@@ -2478,7 +2499,11 @@ $stmt->execute();
             $orderIds = [];
             $childOrderNos = [];
             $totalLessons = 0;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv)");
+            // 预查所有报价单的优惠信息（一次 JOIN 查询，避免 looping N+1）
+            $itemDiscounts = [];
+            $itemRes2 = $db->query("SELECT pi.id, d.name AS dp_name, COALESCE(d.discount_amount,0) AS dp_amount, c.name AS cp_name, COALESCE(c.discount_amount,0) AS cp_amount, ta.name AS ta_name, COALESCE(ta.price,0) AS ta_price, pc.name AS pc_name, COALESCE(pc.discount_amount,0) AS pc_amount FROM price_items pi LEFT JOIN discount_plans d ON pi.discount_plan_id=d.id LEFT JOIN coupons c ON pi.coupon_id=c.id LEFT JOIN teaching_aids ta ON pi.teaching_aid_id=ta.id LEFT JOIN coupons pc ON pi.product_coupon_id=pc.id WHERE pi.plan_id=$planId");
+            while ($row = $itemRes2->fetch(PDO::FETCH_ASSOC)) $itemDiscounts[$row['id']] = $row;
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, discount_plan_name, discount_plan_amount, coupon_name, coupon_amount, teaching_aid_name, teaching_aid_price, product_coupon_name, product_coupon_amount, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :dpn, :dpa, :cn, :ca, :tan, :tap, :pcn, :pca, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
@@ -2511,6 +2536,16 @@ $stmt->execute();
                 $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
                 $stmt->bindValue(':ps', '已支付', PDO::PARAM_STR);
                 $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
+                // 优惠快照绑定
+                $di = $itemDiscounts[$item['id']] ?? [];
+                $stmt->bindValue(':dpn', $di['dp_name'] ?? '', PDO::PARAM_STR);
+                $stmt->bindValue(':dpa', floatval($di['dp_amount'] ?? 0), PDO::PARAM_STR);
+                $stmt->bindValue(':cn', $di['cp_name'] ?? '', PDO::PARAM_STR);
+                $stmt->bindValue(':ca', floatval($di['cp_amount'] ?? 0), PDO::PARAM_STR);
+                $stmt->bindValue(':tan', $di['ta_name'] ?? '', PDO::PARAM_STR);
+                $stmt->bindValue(':tap', floatval($di['ta_price'] ?? 0), PDO::PARAM_STR);
+                $stmt->bindValue(':pcn', $di['pc_name'] ?? '', PDO::PARAM_STR);
+                $stmt->bindValue(':pca', floatval($di['pc_amount'] ?? 0), PDO::PARAM_STR);
                 $stmt->execute();
                 $orderIds[] = $db->lastInsertId();
                 $childOrderNos[] = $orderNo;
@@ -4159,25 +4194,18 @@ $sumStmt->execute();
             $pono = trim($_GET['parent_order_no'] ?? '');
             if (!$pono) { json(['success' => false, 'message' => '父订单号不能为空']); break; }
 
-            // 1. 查询子订单列表（含优惠 JOIN）
+            // 1. 查询子订单列表（优惠金额直接从 orders 表快照读取，不再 JOIN）
             $itemsSql = "SELECT o.id, o.order_no, o.item_name, o.lesson_count, o.actual_price,
                                 o.cash_amount, o.meituan_amount, o.account_amount,
                                 o.pay_status, o.plan_name, o.course_id, o.campus,
                                 pi.unit_price,
-                                d.name AS discount_plan_name,
-                                d.discount_amount AS discount_plan_amount,
-                                c.name AS coupon_name,
-                                c.discount_amount AS coupon_amount,
-                                ta.name AS teaching_aid_name,
-                                ta.price AS teaching_aid_price, pc.name AS product_coupon_name,
-                                pc.discount_amount AS product_coupon_amount
+                                o.discount_plan_name, o.discount_plan_amount,
+                                o.coupon_name, o.coupon_amount,
+                                o.teaching_aid_name, o.teaching_aid_price,
+                                o.product_coupon_name, o.product_coupon_amount
                          FROM orders o
                          LEFT JOIN price_plans pp ON pp.name = o.plan_name AND pp.course_id = o.course_id
                          LEFT JOIN price_items pi ON pi.plan_id = pp.id AND pi.name = o.item_name
-                         LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
-                         LEFT JOIN coupons c ON pi.coupon_id = c.id
-                         LEFT JOIN teaching_aids ta ON pi.teaching_aid_id = ta.id
-                     LEFT JOIN coupons pc ON pi.product_coupon_id = pc.id
                          WHERE o.parent_order_no = " . $db->quote($pono) . "
                          ORDER BY o.id";
             $itemsStmt = $db->query($itemsSql);
