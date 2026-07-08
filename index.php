@@ -3538,6 +3538,7 @@ $stmt->execute();
             $price = floatval($input['price'] ?? 0);
             $status = trim($input['status'] ?? '上架');
             $remark = trim($input['remark'] ?? '');
+            $type = trim($input['type'] ?? '画具');
             $campusIdsRaw = $input['campus_ids'] ?? [];
 
             if ($name === '') { json(['error' => '画具名称不能为空']); break; }
@@ -3545,14 +3546,16 @@ $stmt->execute();
             if ($subjectId <= 0) { json(['error' => '请选择学科']); break; }
             if ($price < 0) { json(['error' => '售价不能为负数']); break; }
             if (!in_array($status, ['上架', '下架'])) { json(['error' => '状态无效']); break; }
+            if (!in_array($type, ['教材包', '画具'])) { json(['error' => '画具类型无效']); break; }
 
             $n = now();
             $db->beginTransaction();
             try {
-                $stmt = $db->prepare("INSERT INTO teaching_aids (name, unit, subject_id, price, status, remark, created_at) VALUES (:n, :u, :sid, :p, :st, :rm, :ct)");
+                $stmt = $db->prepare("INSERT INTO teaching_aids (name, unit, subject_id, type, price, status, remark, created_at) VALUES (:n, :u, :sid, :tp, :p, :st, :rm, :ct)");
                 $stmt->bindValue(':n', $name);
                 $stmt->bindValue(':u', $unit);
                 $stmt->bindValue(':sid', $subjectId, PDO::PARAM_INT);
+                $stmt->bindValue(':tp', $type);
                 $stmt->bindValue(':p', $price);
                 $stmt->bindValue(':st', $status);
                 $stmt->bindValue(':rm', $remark);
@@ -3650,6 +3653,7 @@ $stmt->execute();
             $price = isset($input['price']) ? floatval($input['price']) : floatval($existing['price']);
             $status = trim($input['status'] ?? $existing['status']);
             $remark = isset($input['remark']) ? trim($input['remark']) : $existing['remark'];
+            $type = trim($input['type'] ?? $existing['type']);
             $campusIdsRaw = $input['campus_ids'] ?? null;
 
             if ($name === '') { json(['error' => '画具名称不能为空']); break; }
@@ -3657,10 +3661,11 @@ $stmt->execute();
             if ($subjectId <= 0) { json(['error' => '请选择学科']); break; }
             if ($price < 0) { json(['error' => '售价不能为负数']); break; }
             if (!in_array($status, ['上架', '下架'])) { json(['error' => '状态无效']); break; }
+            if (!in_array($type, ['教材包', '画具'])) { json(['error' => '画具类型无效']); break; }
 
             $db->beginTransaction();
             try {
-                $db->exec("UPDATE teaching_aids SET name=" . $db->quote($name) . ", unit=" . $db->quote($unit) . ", subject_id=$subjectId, price=$price, status=" . $db->quote($status) . ", remark=" . $db->quote($remark) . ", updated_at=NOW() WHERE id=$id");
+                $db->exec("UPDATE teaching_aids SET name=" . $db->quote($name) . ", unit=" . $db->quote($unit) . ", subject_id=$subjectId, type=" . $db->quote($type) . ", price=$price, status=" . $db->quote($status) . ", remark=" . $db->quote($remark) . ", updated_at=NOW() WHERE id=$id");
 
                 if ($campusIdsRaw !== null) {
                     $db->exec("DELETE FROM teaching_aid_campuses WHERE teaching_aid_id=$id");
