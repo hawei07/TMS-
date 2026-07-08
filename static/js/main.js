@@ -6871,7 +6871,7 @@ async function showOrderDetail(parentOrderNo) {
     body.innerHTML = '<div style="text-align:center;color:#999;padding:30px;">加载中...</div>';
     try {
         const data = await api('get_order_detail', { parent_order_no: parentOrderNo }, 'GET');
-        renderOrderDetail(data);
+        renderOrderDetail(data.data || data);
     } catch (e) {
         body.innerHTML = '<div style="text-align:center;color:#e53e3e;padding:30px;">加载失败：' + escHtml(e.message) + '</div>';
     }
@@ -6886,9 +6886,9 @@ function renderOrderDetail(data) {
     const items = data.items || [];
     const payment = data.payment || {};
 
-    let cash = Number(payment.cash) || 0;
-    let meituan = Number(payment.meituan) || 0;
-    let account = Number(payment.account) || 0;
+    let cash = Number(payment.cash_amount) || 0;
+    let meituan = Number(payment.meituan_amount) || 0;
+    let account = Number(payment.account_amount) || 0;
     let totalPaid = cash + meituan + account;
 
     let itemsHtml = '';
@@ -6903,7 +6903,7 @@ function renderOrderDetail(data) {
             '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
             '<td class="col-num">' + (item.unit_price != null ? '¥' + Number(item.unit_price).toFixed(2) : '-') + '</td>' +
             '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
-            '<td>' + escHtml(item.discount_name || '-') + '</td>' +
+            '<td>' + escHtml(item.discount_plan_name || '-') + '</td>' +
             '<td>' + escHtml(item.coupon_name || '-') + '</td>' +
         '</tr>';
     });
@@ -6914,7 +6914,7 @@ function renderOrderDetail(data) {
         '<span>父订单号：<strong>' + escHtml(data.parent_order_no || '-') + '</strong></span>' +
         '<span>课程：<strong>' + escHtml(data.course_name || '-') + '</strong></span>' +
         '<span>校区：<strong>' + escHtml(data.campus || '-') + '</strong></span>' +
-        '<span>报名时间：<strong>' + (data.enroll_date || '-') + '</strong></span>' +
+        '<span>报名时间：<strong>' + (data.enroll_time || '-') + '</strong></span>' +
     '</div>';
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
