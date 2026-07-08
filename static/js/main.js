@@ -6238,7 +6238,10 @@ function selectEnrollPlan(planId) {
     const tbody = document.getElementById('enroll-items-tbody');
     let total = 0;
     tbody.innerHTML = plan.items.map(item => {
-        const unitPrice = item.lesson_count > 0 ? (item.actual_price / item.lesson_count) : 0;
+        const dpAmount = parseFloat(item.discount_plan_amount) || 0;
+        const cAmount = parseFloat(item.coupon_amount) || 0;
+        const effectivePrice = parseFloat(item.unit_price) - dpAmount - cAmount;
+        const unitPrice = item.lesson_count > 0 ? (effectivePrice / item.lesson_count) : 0;
         total += parseFloat(item.actual_price) || 0;
         return `<tr>
             <td>${esc(item.name)}</td>

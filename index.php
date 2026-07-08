@@ -2374,7 +2374,7 @@ $stmt->execute();
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query(
-                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name, d.discount_amount AS discount_plan_amount, c.discount_amount AS coupon_amount
                      FROM price_items pi
                      LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
                      LEFT JOIN coupons c ON pi.coupon_id = c.id
@@ -2397,7 +2397,7 @@ $stmt->execute();
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query(
-                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name, d.discount_amount AS discount_plan_amount, c.discount_amount AS coupon_amount
                      FROM price_items pi
                      LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
                      LEFT JOIN coupons c ON pi.coupon_id = c.id
