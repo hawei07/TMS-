@@ -5907,11 +5907,14 @@ $stmt->execute();
                         $oidList2 = implode(',', array_map('intval', $oldOrderIds2));
                         $refundBlock = $db->query("SELECT order_id, status FROM refund_records WHERE order_id IN ($oidList2) AND status IN ('待审批', '一级审批通过', '二级审批通过', '已退费') LIMIT 1")->fetch(PDO::FETCH_ASSOC);
                         if ($refundBlock) {
-                            $blockOid = intval($refundBlock['order_id']);
-                            $blockStatus = $refundBlock['status'];
-                            $sn = $db->query("SELECT name FROM students WHERE id=$studentId")->fetchColumn() ?: '学员';
-                            $blockMsg = $blockStatus === '已退费' ? '已退费' : '退费审批中';
-                            throw new Exception("学员「{$sn}」的订单(ID:{$blockOid}){$blockMsg}，该课次考勤不可修改");
+                            $oldDl = intval($oldAtt['deducted_lessons'] ?? 0);
+                            if ($deductedLessons !== $oldDl || $status !== $oldAttStatusFromCA) {
+                                $blockOid = intval($refundBlock['order_id']);
+                                $blockStatus = $refundBlock['status'];
+                                $sn = $db->query("SELECT name FROM students WHERE id=$studentId")->fetchColumn() ?: '学员';
+                                $blockMsg = $blockStatus === '已退费' ? '已退费' : '退费审批中';
+                                throw new Exception("学员「{$sn}」的订单(ID:{$blockOid}){$blockMsg}，该课次考勤不可修改");
+                            }
                         }
                     }
                     if (!($oldAttStatusFromCA === '出勤' && $status === '出勤')) {
