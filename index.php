@@ -7430,7 +7430,7 @@ if (intval($countBt) === 0) {
                     <div class="table-wrap">
                         <table id="table-coupon-records">
                             <thead><tr>
-                                <th>发放时间</th><th>优惠券</th><th>优惠金额</th><th>学员姓名</th><th>手机号</th><th>发放人</th><th>使用状态</th><th width="80">操作</th>
+                                <th>发放时间</th><th>优惠券</th><th style="text-align:right;">优惠金额</th><th>学员姓名</th><th>手机号</th><th>发放人</th><th>使用状态</th><th width="80">操作</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>
