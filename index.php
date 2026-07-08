@@ -7821,7 +7821,7 @@ if (intval($countBt) === 0) {
                 <div class="price-detail-header">报价单列表 <span id="price-plan-type-tag"></span></div>
                 <div class="price-detail-table-wrap">
                     <table id="price-item-table" class="price-item-table">
-                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>实际价格</th><th>优惠方案</th><th>优惠券</th><th width="120">操作</th></tr></thead>
+                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>优惠方案</th><th>优惠券</th><th>实际价格</th><th width="120">操作</th></tr></thead>
                         <tbody id="price-item-table-body"></tbody>
                     </table>
                 </div>

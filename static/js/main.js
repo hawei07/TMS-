@@ -3261,9 +3261,9 @@ function renderItemList() {
             <td class="pi-editable" data-field="name" data-original="${escAttr(item.name)}">${esc(item.name)}</td>
             <td class="pi-editable" data-field="lesson_count" data-original="${item.lesson_count}">${item.lesson_count}</td>
             <td class="pi-editable" data-field="unit_price" data-original="${Number(item.unit_price).toFixed(2)}">${Number(item.unit_price).toFixed(2)}</td>
-            <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
             <td class="${discountEditable}" data-field="discount_plan_id" data-original="${item.discount_plan_id || ''}">${discountDisplay}</td>
             <td class="${couponEditable}" data-field="coupon_id" data-original="${item.coupon_id || ''}">${couponDisplay}</td>
+            <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
             <td>
                 <button class="btn-link-danger" onclick="deleteItem(${item.id})">删除</button>
             </td>
@@ -3278,9 +3278,9 @@ function renderItemList() {
             <td style="font-weight:bold;">总计</td>
             <td style="font-weight:bold;">${totalLessons}</td>
             <td></td>
+            <td></td>
+            <td></td>
             <td style="font-weight:bold;">${totalActualPrice.toFixed(2)}</td>
-            <td></td>
-            <td></td>
             <td></td>
         </tr>`;
     ensureInlineEditDelegation();
