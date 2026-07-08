@@ -2991,6 +2991,13 @@ function showPriceModal(courseId, courseName, smallPackage) {
     currentPriceCourseName = courseName;
     currentPriceCourseSmallPackage = smallPackage || '';
     currentSelectedPlanId = 0;
+    priceItemInlineDataLoaded = false;
+    priceItemInlineDataLoading = null;
+    priceItemInlineDataPlanType = '';
+    priceItemDiscountPlans = [];
+    priceItemCourseCoupons = [];
+    priceItemCoupons = [];
+    priceItemTeachingAids = [];
     document.getElementById('modal-price-title').textContent = '设置价格 - ' + courseName;
     document.getElementById('price-plan-list').innerHTML = '<div style="padding:20px;color:#999;">加载中...</div>';
     document.getElementById('price-item-table-body').innerHTML = '';
@@ -3215,6 +3222,11 @@ async function selectPlan(planId) {
 async function preloadInlineDiscountData() {
     const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
     if (!plan || !plan.plan_type || plan.plan_type === '小课包') return;
+    if (priceItemInlineDataLoaded && priceItemInlineDataPlanType === plan.plan_type) return;
+    if (priceItemInlineDataLoading && priceItemInlineDataPlanType === plan.plan_type) return priceItemInlineDataLoading;
+    priceItemInlineDataLoaded = false;
+    priceItemInlineDataPlanType = plan.plan_type;
+    priceItemInlineDataLoading = (async () => {
     try {
         const [discountRes, courseCouponRes, productCouponRes, teachingAidRes] = await Promise.all([
             api('list_discount_plans', { plan_type: plan.plan_type, page_size: 200 }, 'GET'),
@@ -3228,7 +3240,12 @@ async function preloadInlineDiscountData() {
         priceItemTeachingAids = (teachingAidRes.data || []).filter(a => a.type === '教材包');
     } catch (e) {
         console.error('preloadInlineDiscountData failed:', e);
+    } finally {
+        priceItemInlineDataLoaded = true;
+        priceItemInlineDataLoading = null;
     }
+    })();
+    return priceItemInlineDataLoading;
 }
 
 function renderItemList() {
@@ -3342,7 +3359,7 @@ function enterInlineEdit(tr, item) {
     })();
 
     // 如果数据未加载，先加载再进入编辑
-    if (!isSmallPack && priceItemDiscountPlans.length === 0 && priceItemCoupons.length === 0) {
+    if (!isSmallPack && !priceItemInlineDataLoaded) {
         preloadInlineDiscountData().then(() => enterInlineEdit(tr, item));
         return;
     }
@@ -3902,6 +3919,9 @@ let priceItemDiscountPlans = [];
 let priceItemCourseCoupons = [];
 let priceItemCoupons = [];
 let priceItemTeachingAids = [];
+let priceItemInlineDataLoaded = false;
+let priceItemInlineDataLoading = null;
+let priceItemInlineDataPlanType = '';
 
 function recalcItemActualPrice() {
     const unitPriceEl = document.getElementById('price-item-unit-price');
@@ -7357,6 +7377,23 @@ document.addEventListener('click', function(e) {
     if (e.target.classList.contains('att-tab')) {
         switchAttendanceTab(e.target.dataset.tab);
     }
+    const attendanceBtn = e.target.closest('.js-attendance-session-btn');
+    if (attendanceBtn) {
+        e.preventDefault();
+        showAttendanceSessionModal(
+            parseInt(attendanceBtn.dataset.classId, 10),
+            parseInt(attendanceBtn.dataset.scheduleId, 10),
+            attendanceBtn.dataset.sessionDate || '',
+            attendanceBtn.dataset.className || '',
+            attendanceBtn.dataset.campus || '',
+            attendanceBtn.dataset.courseName || '',
+            attendanceBtn.dataset.teacher || '',
+            attendanceBtn.dataset.classroom || '',
+            attendanceBtn.dataset.sessionDateDisplay || '',
+            attendanceBtn.dataset.dayOfWeek || '',
+            attendanceBtn.dataset.time || ''
+        );
+    }
 });
 
 async function switchAttendanceTab(tabId) {
@@ -7921,7 +7958,18 @@ async function loadAttendanceSessions(page = 1) {
                 <td>${esc(s.classroom)}</td>
                 <td>${esc(s.campus)}</td>
                 <td>${attLabel}</td>
-                <td><button class="btn-link" onclick="showAttendanceSessionModal(${s.class_id}, ${s.schedule_id}, '${s.session_date}', '${escJs(s.class_name)}', '${escJs(s.campus)}', '${escJs(s.course_name)}', '${escJs(s.teacher)}', '${escJs(s.classroom)}', '${s.session_date}', '${s.day_of_week}', '${timeStr}')">考勤</button></td>
+                <td><button type="button" class="btn-link js-attendance-session-btn"
+                    data-class-id="${s.class_id}"
+                    data-schedule-id="${s.schedule_id}"
+                    data-session-date="${escAttr(s.session_date)}"
+                    data-class-name="${escAttr(s.class_name)}"
+                    data-campus="${escAttr(s.campus)}"
+                    data-course-name="${escAttr(s.course_name)}"
+                    data-teacher="${escAttr(s.teacher)}"
+                    data-classroom="${escAttr(s.classroom)}"
+                    data-session-date-display="${escAttr(s.session_date)}"
+                    data-day-of-week="${escAttr(s.day_of_week)}"
+                    data-time="${escAttr(timeStr)}">考勤</button></td>
             </tr>`;
         }).join('');
         // 分页
@@ -8052,16 +8100,10 @@ async function showAttendanceSessionModal(classId, scheduleId, sessionDate, clas
                 </td>
             </tr>`;
         }).join('');
-        // 初始化缺勤状态或未考勤状态的步进器（禁用并置0）
+        // 初始化步进器状态
         document.querySelectorAll('#as-attendance-tbody tr').forEach(row => {
             const activeChip = row.querySelector('.att-status-chip.active');
-            if (activeChip) return; // 已选出勤，步进器启用，跳过
-            const stepper = row.querySelector('.att-deduct-stepper');
-            const valSpan = stepper ? stepper.querySelector('.stepper-val') : null;
-            if (stepper && valSpan) {
-                valSpan.textContent = '0';
-                stepper.classList.add('disabled');
-            }
+            syncAttendanceStepperState(row, activeChip ? activeChip.dataset.val : '', false);
         });
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-danger);padding:20px;">加载失败</td></tr>';
@@ -8113,13 +8155,7 @@ async function reloadAttendanceSession() {
         }).join('');
         document.querySelectorAll('#as-attendance-tbody tr').forEach(row => {
             const activeChip = row.querySelector('.att-status-chip.active');
-            if (activeChip) return;
-            const stepper = row.querySelector('.att-deduct-stepper');
-            const valSpan = stepper ? stepper.querySelector('.stepper-val') : null;
-            if (stepper && valSpan) {
-                valSpan.textContent = '0';
-                stepper.classList.add('disabled');
-            }
+            syncAttendanceStepperState(row, activeChip ? activeChip.dataset.val : '', false);
         });
     } catch (e) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:var(--color-danger);padding:20px;">刷新失败</td></tr>';
@@ -8148,7 +8184,7 @@ async function removeAttendanceStudent(studentId, csId) {
 
 function attDeductChange(btn, delta) {
     const stepper = btn.closest('.att-deduct-stepper');
-    if (stepper.classList.contains('disabled')) return;
+    if (!stepper || stepper.classList.contains('disabled') || btn.disabled) return;
     const valSpan = stepper.querySelector('.stepper-val');
     let val = parseInt(valSpan.textContent) || 0;
     const max = parseInt(valSpan.dataset.max) || 0;
@@ -8157,23 +8193,35 @@ function attDeductChange(btn, delta) {
     valSpan.textContent = val;
 }
 
+function syncAttendanceStepperState(row, status, resetToClassHours) {
+    const stepper = row.querySelector('.att-deduct-stepper');
+    const valSpan = stepper ? stepper.querySelector('.stepper-val') : null;
+    if (!stepper || !valSpan) return;
+    const buttons = stepper.querySelectorAll('.stepper-btn');
+
+    if (status !== '出勤') {
+        valSpan.textContent = '0';
+        stepper.classList.add('disabled');
+        buttons.forEach(btn => { btn.disabled = true; });
+        return;
+    }
+
+    stepper.classList.remove('disabled');
+    buttons.forEach(btn => { btn.disabled = false; });
+    if (resetToClassHours) {
+        let lessonHours = parseInt(valSpan.dataset.lessonHours) || 0;
+        const max = parseInt(valSpan.dataset.max) || 0;
+        if (max > 0 && lessonHours > max) lessonHours = max;
+        valSpan.textContent = Math.max(0, lessonHours).toString();
+    }
+}
+
 function attStatusToggle(el, status) {
     const group = el.closest('.att-status-group');
     group.querySelectorAll('.att-status-chip').forEach(t => t.classList.remove('active'));
     el.classList.add('active');
     const row = el.closest('tr');
-    const stepper = row.querySelector('.att-deduct-stepper');
-    const valSpan = stepper.querySelector('.stepper-val');
-    if (status === '缺勤') {
-        valSpan.textContent = '0';
-        stepper.classList.add('disabled');
-    } else {
-        stepper.classList.remove('disabled');
-        let lh = parseInt(valSpan.dataset.lessonHours) || 2;
-        const max = parseInt(valSpan.dataset.max) || 0;
-        if (max > 0 && lh > max) lh = max;
-        valSpan.textContent = lh;
-    }
+    syncAttendanceStepperState(row, status, true);
 }
 
 async function saveAttendanceSession() {
@@ -8838,6 +8886,14 @@ async function cancelRefund(id) {
         showToast(data.message || '撤销成功');
         loadRefundRecords();
         if (currentViewStudentId) loadStudentCourses(currentViewStudentId);
+        const attendanceModal = document.getElementById('modal-attendance-session');
+        if (attendanceModal && attendanceModal.classList.contains('show')) {
+            reloadAttendanceSession();
+        }
+        const attendancePanel = document.getElementById('tab-attendance-operations');
+        if (attendancePanel && attendancePanel.classList.contains('active')) {
+            loadAttendanceSessions(attendanceSessionPage);
+        }
     } catch (e) {
         showToast('网络错误，请重试', 'error');
     }

@@ -1170,17 +1170,53 @@ function isSmallPackage(val) {
 **上课记录列顺序**（学员详情 → 上课记录标签页）：校区 → 课程 → 一级学科 → 二级学科 → 班级 → 授课教师 → 上课日期 → 上课时间 → 考勤时间 → 出勤状态 → 消耗课时 → 课耗金额。校区列置于最前方便按校区分组查看。
 
 **考勤写入逻辑**（`save_class_attendance`）：
-- 上课记录中的课程/一级学科/二级学科取自扣课时订单对应的课程信息，而非班级所属课程
-- 若本次未扣课时（`$deductedOrderId = 0`），则回退使用班级所属课程的学科信息
-- 校区字段从班级表查询后写入 attendance_records.campus
-- 班级名称（class_name）始终保持班级原名不变
+- `class_attendance` 是班级考勤主记录；`class_attendance.deduction_json` 是跨订单扣课时的明细来源，格式为 `[{order_id, amount}]`
+- `attendance_records` 是上课记录/课耗展示用明细；当一次考勤跨多个订单扣课时，查询详情时必须按 `deduction_json` 拆成多条订单级记录展示，不能只看 `attendance_records.order_id`
+- 上课记录中的课程/一级学科/二级学科取自实际扣课时订单对应的课程信息，而非简单取班级所属课程
+- 若本次未扣课时（如缺勤，`$deductedOrderId = 0`），则回退使用班级所属课程的学科信息
+- 校区字段从班级表查询后写入 `attendance_records.campus`
+- 班级名称（`class_name`）始终保持班级原名不变
+
+**扣课时候选订单条件**：
+- 只扣该学员已报读课程中的订单
+- 只扣与本次班级相同校区的订单
+- 只扣未作废订单：`is_voided='否'`
+- 只扣未完成退费订单：`refund_status` 不能为 `已退费`
+- 只扣剩余课时大于 0 的订单：`lesson_count - consumed_lessons > 0`
+- 退费申请中的订单默认冻结，不参与新的扣课；唯一例外见下方“与退费的关系”
 
 **扣课时优先级规则**（三级优先级，跨订单连续扣，限定同校区）：
-1. 优先扣同一 `course_id` 的订单（同校区），多个时按报名时间 `created_at ASC` 优先
-2. 未扣满则继续扣同一二级学科的订单（同校区，排除已处理），报名时间优先
-3. 仍未扣满则继续扣同一级学科的订单（同校区，排除已处理），报名时间优先
+1. 优先扣同一 `course_id` 的订单，多个时按报名时间 `created_at ASC, id ASC`，先报名优先
+2. 同课程未扣满时，继续扣同一二级学科的订单，多个时按报名时间 `created_at ASC, id ASC`，先报名优先
+3. 同二级学科仍未扣满时，继续扣同一级学科的订单，多个时按报名时间 `created_at ASC, id ASC`，先报名优先
 
-每级内部独立查询，逐级递减 `$remainingToDeduct`，扣完即止。已处理订单通过 `$processedOrderIds` 数组在后续级别查询中排除，避免低优先级层级的早期订单插队到高优先级层级的后期订单前面。扣课时明细记录为 `deduction_json` JSON 数组（`[{order_id, amount}]`），用于退课时逐笔还原。
+每级内部独立查询，逐级递减 `$remainingToDeduct`，扣完即止。已处理订单通过 `$processedOrderIds` 数组在后续级别查询中排除，避免同一个订单在不同优先级层级重复扣课，也避免低优先级层级的早期订单插队到高优先级层级的后期订单前面。
+
+**保存与重算规则**：
+- 每次保存考勤时，先读取该条旧 `class_attendance.deduction_json`
+- 先按旧明细逐笔归还课时：`orders.consumed_lessons = GREATEST(0, consumed_lessons - amount)`
+- 再按当前状态、当前扣课时数、当前优先级重新计算并写入新的 `deduction_json`
+- 如果当前可用课时不足以扣完本次出勤课时，整次保存失败并回滚事务
+- 不再使用全局 `attendance_records` 汇总去重算 `orders.consumed_lessons`；跨订单扣课以后，订单课耗应以 `class_attendance.deduction_json` 的逐笔扣还为准
+
+**与退费的关系**：
+- 提交课程退费后，订单进入 `refund_status='退费申请中'`，并写入待审批/审批中的 `refund_records`，该订单剩余课时在考勤中视为冻结
+- 退费申请中的订单不参与新的考勤扣课，防止退费金额和可退课时被后续考勤改变
+- 例外：如果某订单已经存在于当前这条考勤的旧 `deduction_json` 中，编辑/重算同一条考勤时允许临时把这部分旧扣课时纳入可用课时，以便“先还旧扣课，再按优先级重扣”不会误报课时不足
+- 当旧 `deduction_json` 中涉及退费申请中或已退费订单时，不允许通过修改状态/扣课时数改变这些订单已参与的课耗，避免退费审批期间课时和金额口径漂移
+- 撤销退费申请（`cancel_refund`）会恢复 `orders.refund_status='正常'` 并删除对应退费记录；前端会刷新打开中的考勤弹窗和考勤列表，撤销前被冻结的剩余课时重新变成可扣课时
+- 退费审批完成后，订单进入 `refund_status='已退费'`，并将 `orders.consumed_lessons=lesson_count`，该订单剩余课时归零，不再参与考勤扣课
+
+**还课时逻辑**：
+- 出勤改为缺勤/请假、降低扣课时数、删除旧扣课分配、或重新保存同一条考勤时，都先按旧 `deduction_json` 把课时还回原订单
+- 归还只还到旧明细中的原 `order_id`，不按当前优先级重新寻找订单
+- 还课时发生在重新计算可用课时之前，因此同一条考勤原本占用的课时可以被本次重算继续使用
+- 缺勤记录不扣课时；对应步进器值为 0，保存时不会生成新的扣课 `deduction_json`
+
+**前端交互规则**：
+- 考勤状态为缺勤或未选择时，扣课时步进器固定为 0，置灰不可点击
+- 从缺勤切换回出勤时，扣课时步进器默认恢复为该班级的授课课时（`classes.lesson_hours`），并受当前可扣课时上限限制
+- 点击已消耗课时数字查看明细时，应按 `deduction_json` 展示完整订单级扣课明细，不能只展示第一条订单
 
 **涉及文件**：
 - `index.php`：attendance_records 表 campus/class_name/subject_level1/subject_level2/teacher/class_time/deducted_order_id/deducted_lessons/consumed_amount 字段、`save_class_attendance` / `add_attendance` / `update_attendance` / `list_attendance` / `list_all_attendance` API
@@ -1367,7 +1403,7 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | 类型 | 描述 | 涉及文件 | 提交 |
 |------|------|----------|------|
 | fix | **考勤扣课时三级优先级排除退费订单**：三级 SELECT（3471/3497/3525 行）和三级 UPDATE 新增 `AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))` 子查询，防止退费申请中订单被继续扣课时；退还阶段增加详细诊断日志（revert/deduct 前后快照、rowCount 验证）和二次保护子句 | `index.php` | — |
-| fix | **全局 consumed_lessons 重算排除退费订单**：263 行初始化重算逻辑新增 `AND o.id NOT IN (SELECT order_id FROM refund_records WHERE ...)` 子查询，防止退费申请中订单的 consumed_lessons 被重算归零 | `index.php` | — |
+| fix | **历史实现：全局 consumed_lessons 重算排除退费订单**：263 行初始化重算逻辑曾新增 `AND o.id NOT IN (SELECT order_id FROM refund_records WHERE ...)` 子查询，防止退费申请中订单的 consumed_lessons 被重算归零；现行考勤逻辑已改为以 `class_attendance.deduction_json` 逐笔扣还为准，不再依赖全局 `attendance_records` 汇总重算订单课耗 | `index.php` | — |
 | fix | **attendance_records 写入补全 order_id**：3617 行考勤 INSERT 新增 `order_id` 列 + `:oid` 绑定（`$deductedOrderId`），修复页面加载时 JOIN 回填随机匹配错误订单的 Bug | `index.php` | — |
 | fix | **退费申请中学员剩余课时显示为 0**：`get_student_courses` API 新增 pendingRefundIds 收集逻辑，退费申请中订单课时冻结显示为 0，防止继续扣课 | `index.php` | — |
 | fix | **多处剩余课时查询排除退费/作废订单**：`add_student_to_class` 分班校验、考勤编辑剩余课时上限、考勤后自动移班判断，三处 `SUM(lesson_count - consumed_lessons)` 查询统一添加 `AND is_voided='否' AND id NOT IN (...)` 过滤 | `index.php` | — |
@@ -1554,6 +1590,25 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | refactor | **审批弹窗退款方式不可变更**：去掉财务确认 radio 组+退余额分支；展示退费方式（退银行卡/退学员账户） | index.php main.js | 26b1c96 / c09542d |
 | style | **退费申请弹窗 UI 优化**：5 张卡片式分组；计算流视觉（剩余→−扣减→=实退紫色渐变）；银行区展开动画；提交按钮 loading spinner | index.php style.css main.js | 46f0c74 |
 | docs | **更新 PROJECT_SUMMARY** | PROJECT_SUMMARY.md | c45cc4b |
+
+### 2026-07-09 — 考勤扣课时 / 退费 / 还课时规则文档化
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| fix | **本地启动兼容 MySQL 密码**：数据库连接改为优先尝试 `root/root`，失败后回退空密码；保留统一 PDO 选项和 `utf8mb4`，便于在 `C:\php8\` + `E:\MySQL` 本机环境启动 | index.php | - |
+| fix | **订单优惠快照回填增加表存在保护**：启动时回填 discount/coupon/teaching aid 快照前先检查 `price_items`、`discount_plans`、`coupons`、`teaching_aids` 表是否存在，避免空库/迁移中因缺表 fatal | index.php | - |
+| fix | **报价单设置价格弹窗可编辑性修复**：行内编辑优惠数据增加 loaded/loading 状态和 plan_type 缓存；当优惠/券列表为空但接口已加载完成时，仍允许点击报价单进入编辑态 | static/js/main.js | - |
+| style | **设置价格弹窗删除按钮可见性修复**：价格明细表最后一列设为 sticky 操作列，并补齐 hover/偶数行/合计行背景，避免横向滚动时删除按钮被遮住 | static/css/style.css | - |
+| fix | **操作考勤按钮事件修复**：课表/考勤操作按钮从内联 `onclick` 改为 `.js-attendance-session-btn` 委托事件，并通过 `data-*` 传递班级、排课、日期、教师、教室、时间等参数 | static/js/main.js | - |
+| fix | **考勤扣课时优先级重写**：保存考勤时不再保留旧出勤分配，而是先按旧 `deduction_json` 还课时，再按同校区、剩余课时 > 0、同课程→同二级学科→同一级学科、先报名优先重新扣课；课时不足时事务回滚并提示学员姓名 | index.php | - |
+| fix | **退费中旧扣课订单可在同一考勤内复用**：退费申请中订单默认冻结不可新增扣课；若订单已存在于当前考勤旧 `deduction_json`，本次重算可先还后扣，避免撤销/编辑同一考勤时误报可扣课时不足 | index.php | - |
+| fix | **取消全局 consumed_lessons 重算**：移除启动时按 `attendance_records` 汇总覆盖订单 `consumed_lessons` 的逻辑，避免跨订单扣课被单订单明细覆盖；订单课耗以 `class_attendance.deduction_json` 逐笔扣还为准 | index.php | - |
+| fix | **学员报读课程已消耗课时口径修复**：`get_student_courses` 优先汇总 `class_attendance.deduction_json`，并跳过同一班级/排课/日期下的聚合 `attendance_records`，避免跨订单扣课重复或漏算 | index.php | - |
+| fix | **已消耗课时明细完整拆分**：`list_attendance` 对班级考勤的 `deduction_json` 按 `order_id` 拆成多条上课记录，并按对应订单课程、课时单价、扣课金额展示；跳过匹配的聚合 `attendance_records` 行 | index.php | - |
+| fix | **考勤候选学员与自动移班剩余课时口径调整**：分班/考勤可选学员、考勤后自动移班判断改为按班级同校区 + 同一级学科统计有效订单剩余课时，排除作废、已退费和退费申请中的冻结订单 | index.php | - |
+| fix | **缺勤步进器交互修复**：考勤状态为缺勤或未选择时，扣课时步进器固定为 0 且按钮禁用；从缺勤切回出勤时默认恢复班级授课课时，并受当前可扣课时上限限制 | static/js/main.js | - |
+| fix | **撤销退费后刷新考勤可扣课时**：课程退费撤销成功后，若考勤弹窗正在打开则重新加载当前考勤；若考勤列表页处于激活状态则刷新列表，使刚解除冻结的剩余课时立即可见 | static/js/main.js | - |
+| docs | **补充考勤扣课时 / 退费 / 还课时完整规则**：明确 `deduction_json` 来源、候选订单条件、三级优先级、保存重算、退费冻结例外、撤销退费恢复、还课时和前端步进器规则 | PROJECT_SUMMARY.md | - |
 
 ### 2026-07-08 — 画具管理 + 报价单优惠扩展 + 退费/考勤统一修复
 

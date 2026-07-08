@@ -6439,6 +6439,7 @@ tbody td {
     overflow-y: auto;
     overflow-x: auto;
     padding: 0;
+    position: relative;
 }
 
 /* 表格滚动条 */
@@ -6529,6 +6530,33 @@ tbody td {
 #price-item-table th:last-child {
     text-align: center;
     width: 120px;
+    min-width: 120px;
+    position: sticky;
+    right: 0;
+    z-index: 8;
+    background: var(--color-surface);
+    box-shadow: -8px 0 14px rgba(17, 24, 39, 0.08);
+}
+
+#price-item-table th:last-child {
+    z-index: 18;
+    background: var(--color-bg);
+}
+
+#price-item-table tbody tr:hover td:last-child {
+    background: var(--color-primary-hover);
+}
+
+#price-item-table tbody tr:nth-child(even) td:last-child {
+    background: #fbf9ff;
+}
+
+#price-item-table tbody tr:nth-child(even):hover td:last-child {
+    background: var(--color-primary-hover);
+}
+
+#price-item-table .price-total-row td:last-child {
+    background: rgba(245,240,255,0.92);
 }
 
 /* ===== 总计行 ===== */
