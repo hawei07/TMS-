@@ -5939,7 +5939,7 @@ $stmt->execute();
                         $debugExcluded = $db->query("SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')")->fetchAll(PDO::FETCH_COLUMN);
                         $logLine .= "excluded_ids=" . json_encode($debugExcluded) . "\n";
                         $logLine .= "AFTER_REVERT: " . json_encode($db->query("SELECT id, consumed_lessons FROM orders WHERE student_id = $studentId AND course_id = $courseId")->fetchAll(PDO::FETCH_ASSOC)) . "\n";
-                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons AND (o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
+                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
                         while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) {
                             if ($remainingToDeduct <= 0) break;
                             $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
@@ -5965,7 +5965,7 @@ $stmt->execute();
                             while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
                             if (count($sameSecondCourses) > 0) {
                                 $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
-                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons AND (o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') $excludeClause AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
+                                $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') $excludeClause AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
                                 while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) {
                                     if ($remainingToDeduct <= 0) break;
                                     $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
@@ -5993,7 +5993,7 @@ $stmt->execute();
                             while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
                             if (count($firstLevelCourses) > 0) {
                                 $excludeClause = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
-                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons AND (o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') $excludeClause AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
+                                $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') $excludeClause AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
                                 while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) {
                                     if ($remainingToDeduct <= 0) break;
                                     $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
