@@ -6902,3 +6902,102 @@ tbody td {
 #price-item-table tbody tr.inline-saving td {
     position: relative;
 }
+
+/* ==================== 订单详情弹窗样式 ==================== */
+.order-detail-info {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 12px 24px;
+    padding: 12px 16px;
+    background: #f9f7ff;
+    border-radius: 8px;
+    margin-bottom: 16px;
+    font-size: 13px;
+    color: #555;
+}
+.order-detail-info span strong {
+    color: #333;
+    margin-left: 4px;
+}
+
+.order-detail-section-title {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+    margin: 16px 0 8px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid #eee;
+}
+
+.order-detail-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+    margin-bottom: 8px;
+}
+.order-detail-table thead {
+    background: #f7f5fa;
+}
+.order-detail-table th {
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    color: #555;
+    border-bottom: 2px solid #e0d8f0;
+    white-space: nowrap;
+}
+.order-detail-table th.col-num,
+.order-detail-table td.col-num {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.order-detail-table td {
+    padding: 7px 10px;
+    border-bottom: 1px solid #f0edf8;
+}
+.order-detail-table tbody tr:hover {
+    background: #faf8ff;
+}
+.order-detail-table .order-detail-total-row td {
+    background: #f9f7ff;
+    font-weight: 600;
+    border-top: 2px solid #e0d8f0;
+}
+
+.order-detail-payment-row {
+    display: flex;
+    gap: 12px;
+    flex-wrap: wrap;
+    margin-top: 8px;
+}
+.order-detail-payment-card {
+    flex: 1;
+    min-width: 120px;
+    padding: 14px 16px;
+    background: #fff;
+    border: 1px solid #e8e3f0;
+    border-radius: 8px;
+    text-align: center;
+    transition: box-shadow 0.2s;
+}
+.order-detail-payment-card:hover {
+    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12);
+}
+.order-detail-payment-card .payment-label {
+    font-size: 12px;
+    color: #888;
+    margin-bottom: 6px;
+}
+.order-detail-payment-card .payment-amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: #333;
+    font-variant-numeric: tabular-nums;
+}
+.order-detail-payment-card.payment-total {
+    background: #f9f7ff;
+    border-color: #c4b5fd;
+}
+.order-detail-payment-card.payment-total .payment-amount {
+    color: #7c3aed;
+}
