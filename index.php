@@ -3000,7 +3000,8 @@ $stmt->execute();
             $sql = "SELECT cr.id, cr.coupon_id, cr.student_name, cr.phone, cr.issuer AS distributor, cr.issued_at AS distributed_at, cr.created_at,
                 COALESCE(cr.coupon_name, c.name) AS coupon_name,
                 c.coupon_type,
-                c.discount_amount
+                c.discount_amount,
+                cr.usage_status
             FROM coupon_records cr
             LEFT JOIN coupons c ON cr.coupon_id=c.id
             WHERE $whereStr
@@ -7429,7 +7430,7 @@ if (intval($countBt) === 0) {
                     <div class="table-wrap">
                         <table id="table-coupon-records">
                             <thead><tr>
-                                <th>发放时间</th><th>优惠券</th><th>优惠金额</th><th>学员姓名</th><th>手机号</th><th>发放人</th><th width="80">操作</th>
+                                <th>发放时间</th><th>优惠券</th><th>优惠金额</th><th>学员姓名</th><th>手机号</th><th>发放人</th><th>使用状态</th><th width="80">操作</th>
                             </tr></thead>
                             <tbody></tbody>
                         </table>

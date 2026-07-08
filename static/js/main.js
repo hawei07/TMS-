@@ -10919,12 +10919,12 @@ async function loadCouponRecords(page) {
     }
 }
 
-// 渲染发放记录表格（7列）
+// 渲染发放记录表格（8列）
 function renderCouponRecordTable(rows) {
     const tbody = document.querySelector('#table-coupon-records tbody');
     if (!tbody) return;
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#999;padding:30px;">暂无发放记录</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无发放记录</td></tr>';
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -10937,6 +10937,7 @@ function renderCouponRecordTable(rows) {
             <td>${escHtml(r.student_name)}</td>
             <td>${escHtml(r.phone)}</td>
             <td>${escHtml(r.distributor || '')}</td>
+            <td><span class="tag tag-${r.usage_status === '已使用' ? 'green' : 'default'}">${escHtml(r.usage_status || '未使用')}</span></td>
             <td>
                 <button class="btn-link-danger" onclick="deleteCouponRecord(${r.id})">删除</button>
             </td>
