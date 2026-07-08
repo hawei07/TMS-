@@ -583,6 +583,7 @@ if (!$colRfM) {
         try { $db->exec("ALTER TABLE price_items ADD COLUMN discount_plan_id INT DEFAULT NULL AFTER actual_price"); } catch (PDOException $e) {}
 try { $db->exec("ALTER TABLE price_items ADD COLUMN coupon_id INT DEFAULT NULL AFTER discount_plan_id"); } catch (PDOException $e) {}
 try { $db->exec("ALTER TABLE price_items ADD COLUMN teaching_aid_id INT DEFAULT NULL AFTER coupon_id"); } catch (PDOException $e) {}
+try { $db->exec("ALTER TABLE price_items ADD COLUMN product_coupon_id INT DEFAULT NULL AFTER teaching_aid_id"); } catch (PDOException $e) {}
 
 $db->exec("CREATE TABLE IF NOT EXISTS coupons (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -2778,6 +2779,9 @@ $stmt->execute();
                     }
                 }
 
+                // 同步更新关联报价单的实际价格
+                $db->exec("UPDATE price_items SET actual_price = GREATEST(0, unit_price - COALESCE((SELECT discount_amount FROM discount_plans WHERE id=price_items.discount_plan_id),0) - COALESCE((SELECT discount_amount FROM coupons WHERE id=price_items.coupon_id),0) + COALESCE((SELECT price FROM teaching_aids WHERE id=price_items.teaching_aid_id),0) - COALESCE((SELECT discount_amount FROM coupons WHERE id=price_items.product_coupon_id),0)) WHERE discount_plan_id=$id");
+
                 $db->commit();
                 json(['message' => '优惠方案更新成功']);
             } catch (Exception $e) {
@@ -2960,6 +2964,9 @@ $stmt->execute();
                         if (!empty($vals)) $db->exec("INSERT INTO coupon_subjects (coupon_id, subject_id) VALUES " . implode(', ', $vals));
                     }
                 }
+
+                // 同步更新关联报价单的实际价格（课程券+商品券）
+                $db->exec("UPDATE price_items SET actual_price = GREATEST(0, unit_price - COALESCE((SELECT discount_amount FROM discount_plans WHERE id=price_items.discount_plan_id),0) - COALESCE((SELECT discount_amount FROM coupons WHERE id=price_items.coupon_id),0) + COALESCE((SELECT price FROM teaching_aids WHERE id=price_items.teaching_aid_id),0) - COALESCE((SELECT discount_amount FROM coupons WHERE id=price_items.product_coupon_id),0)) WHERE coupon_id=$id OR product_coupon_id=$id");
 
                 $db->commit();
                 json(['message' => '优惠券更新成功']);
