@@ -3465,11 +3465,13 @@ function bindInlinePriceRecalc(tr) {
     const discountSelect = tr.querySelector('[data-field="discount_plan_id"]');
     const courseCouponSelect = tr.querySelector('[data-field="coupon_id"]');
     const productCouponSelect = tr.querySelector('[data-field="product_coupon_id"]');
+    const teachingAidSelect = tr.querySelector('[data-field="teaching_aid_id"]');
     const displayEl = tr.querySelector('.pi-calc-display');
 
     const recalc = () => {
         const base = parseFloat(unitPriceInput?.value) || 0;
         let discount = 0;
+        let teachingAidPrice = 0;
         if (discountSelect?.value) {
             const dp = priceItemDiscountPlans.find(d => d.id == discountSelect.value);
             if (dp) discount += Number(dp.amount || 0);
@@ -3482,13 +3484,18 @@ function bindInlinePriceRecalc(tr) {
             const cp = priceItemCoupons.find(c => c.id == productCouponSelect.value);
             if (cp) discount += Number(cp.amount || 0);
         }
-        if (displayEl) displayEl.textContent = Math.max(0, base - discount).toFixed(2);
+        if (teachingAidSelect?.value) {
+            const ta = priceItemTeachingAids.find(a => a.id == teachingAidSelect.value);
+            if (ta) teachingAidPrice = Number(ta.price) || 0;
+        }
+        if (displayEl) displayEl.textContent = Math.max(0, base - discount + teachingAidPrice).toFixed(2);
     };
 
     unitPriceInput?.addEventListener('input', recalc);
     discountSelect?.addEventListener('change', recalc);
     courseCouponSelect?.addEventListener('change', recalc);
     productCouponSelect?.addEventListener('change', recalc);
+    teachingAidSelect?.addEventListener('change', recalc);
 }
 
 function bindInlineKeyboard(tr) {
@@ -3541,7 +3548,13 @@ async function saveInlineEdit(tr) {
         const cp = priceItemCoupons.find(c => c.id === productCouponId);
         if (cp) discount += Number(cp.amount || 0);
     }
-    const actualPrice = Math.max(0, unitPrice - discount);
+    // 教材包原价
+    let teachingAidPrice = 0;
+    if (teachingAidId > 0) {
+        const ta = priceItemTeachingAids.find(a => a.id === teachingAidId);
+        if (ta) teachingAidPrice = Number(ta.price) || 0;
+    }
+    const actualPrice = Math.max(0, unitPrice - discount + teachingAidPrice);
 
     const isSmallPack = plan.plan_type === '小课包';
     const items = (plan.items || []).map((item, idx) => {
@@ -3868,7 +3881,13 @@ function recalcItemActualPrice() {
         const cp = priceItemCoupons.find(c => c.id == couponSelect.value);
         if (cp) discount += Number(cp.amount || 0);
     }
-    actualPriceEl.value = Math.max(0, basePrice - discount).toFixed(2);
+    let teachingAidPrice = 0;
+    const taSelect = document.getElementById('price-item-teaching-aid');
+    if (taSelect && taSelect.value) {
+        const ta = priceItemTeachingAids.find(a => a.id == taSelect.value);
+        if (ta) teachingAidPrice = Number(ta.price) || 0;
+    }
+    actualPriceEl.value = Math.max(0, basePrice - discount + teachingAidPrice).toFixed(2);
 }
 
 function onUnitPriceChange() {
@@ -3973,6 +3992,7 @@ async function loadPriceItemTeachingAidOptions(selectedValue) {
         priceItemTeachingAids = (res.data || []).filter(a => a.type === '教材包');
         select.innerHTML = '<option value="">不使用教材包</option>' +
             priceItemTeachingAids.map(a => `<option value="${a.id}">${esc(a.name)}（¥${Number(a.price).toFixed(2)}）</option>`).join('');
+        select.onchange = recalcItemActualPrice;
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
             select.value = selectedValue;
         }
