@@ -8141,6 +8141,17 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
             </section>
+            <!-- 面板：订单详情 -->
+            <section class="content-panel" id="panel-order-detail">
+                <div class="class-detail-breadcrumb">
+                    <a href="javascript:void(0)" onclick="switchToOrders()" class="breadcrumb-back">← 返回订单列表</a>
+                    <span class="breadcrumb-sep">|</span>
+                    <span class="breadcrumb-title" id="order-detail-title">订单详情</span>
+                </div>
+                <div class="order-detail-page-content" id="order-detail-page-body">
+                    加载中...
+                </div>
+            </section>
         </main>
     </div>
 

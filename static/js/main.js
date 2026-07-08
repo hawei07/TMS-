@@ -7063,7 +7063,7 @@ function renderOrderTable(rows) {
             <td>${renderVoidedStatus(r.is_voided)}</td>
             <td>
                 ${r.is_voided === '否' ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button> ` : ''}
-                <button class="btn btn-link btn-sm" onclick="showOrderDetail('${esc(r.parent_order_no)}')" style="font-size:11px;padding:1px 6px;color:#7c3aed;">详情</button>
+                <button class="btn btn-link btn-sm" onclick="viewOrderDetail('${esc(r.parent_order_no)}')" style="font-size:11px;padding:1px 6px;color:#7c3aed;">详情</button>
             </td>
         </tr>`;
     }).join('');
@@ -7160,6 +7160,96 @@ function renderOrderDetail(data) {
     '</div>';
 
     body.innerHTML = html;
+}
+async function viewOrderDetail(parentOrderNo) {
+    activatePanel('panel-order-detail');
+    highlightLeafByPanel('panel-orders');
+    const body = document.getElementById('order-detail-page-body');
+    body.innerHTML = '<div style="text-align:center;color:#999;padding:30px;">加载中...</div>';
+    try {
+        const data = await api('get_order_detail', { parent_order_no: parentOrderNo }, 'GET');
+        renderOrderDetailPage(data.data || data);
+    } catch (e) {
+        body.innerHTML = '<div style="text-align:center;color:#e53e3e;padding:30px;">加载失败：' + escHtml(e.message) + '</div>';
+    }
+}
+
+function renderOrderDetailPage(data) {
+    const body = document.getElementById('order-detail-page-body');
+    if (!data) {
+        body.innerHTML = '<div style="text-align:center;color:#999;padding:30px;">暂无数据</div>';
+        return;
+    }
+    const items = data.items || [];
+    const payment = data.payment || {};
+
+    let cash = Number(payment.cash_amount) || 0;
+    let meituan = Number(payment.meituan_amount) || 0;
+    let account = Number(payment.account_amount) || 0;
+    let totalPaid = cash + meituan + account;
+
+    let itemsHtml = '';
+    let totalLesson = 0, totalActualPrice = 0;
+    items.forEach(function(item) {
+        const lc = Number(item.lesson_count) || 0;
+        const ap = Number(item.actual_price) || 0;
+        totalLesson += lc;
+        totalActualPrice += ap;
+        itemsHtml += '<tr>' +
+            '<td>' + escHtml(item.item_name || '-') + '</td>' +
+            '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
+            '<td class="col-num">' + (item.unit_price != null ? '¥' + Number(item.unit_price).toFixed(2) : '-') + '</td>' +
+            '<td>' + (item.discount_plan_name ? escHtml(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
+            '<td>' + (item.coupon_name ? escHtml(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
+            '<td>' + escHtml(item.teaching_aid_name || '-') + '</td>' +
+            '<td class="col-num">' + (item.teaching_aid_price != null ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-') + '</td>' +
+            '<td>' + (item.product_coupon_name ? escHtml(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
+            '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
+        '</tr>';
+    });
+
+    let html = '<div class="order-detail-info">' +
+        '<span>学员：<strong>' + escHtml(data.student_name || '-') + '</strong></span>' +
+        '<span>学号：<strong>' + escHtml(data.student_no || '-') + '</strong></span>' +
+        '<span>父订单号：<strong>' + escHtml(data.parent_order_no || '-') + '</strong></span>' +
+        '<span>课程：<strong>' + escHtml(data.course_name || '-') + '</strong></span>' +
+        '<span>校区：<strong>' + escHtml(data.campus || '-') + '</strong></span>' +
+        '<span>报名时间：<strong>' + (data.enroll_time || '-') + '</strong></span>' +
+    '</div>';
+
+    html += '<div class="order-detail-section-title">📋 报价明细</div>';
+    html += '<table class="order-detail-table"><thead><tr>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
+    '</tr></thead><tbody>';
+    html += itemsHtml || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
+    html += '<tr class="order-detail-total-row">' +
+        '<td style="text-align:right;font-weight:bold;">合计</td>' +
+        '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
+        '<td></td>' +
+        '<td></td>' +
+        '<td></td>' +
+        '<td></td>' +
+        '<td></td>' +
+        '<td></td>' +
+        '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalActualPrice.toFixed(2) + '</td>' +
+    '</tr>';
+    html += '</tbody></table>';
+
+    html += '<div class="order-detail-section-title">💰 支付详情</div>';
+    html += '<div class="order-detail-payment-row">' +
+        '<div class="order-detail-payment-card"><div class="payment-label">💵 现金</div><div class="payment-amount">¥' + cash.toFixed(2) + '</div></div>' +
+        '<div class="order-detail-payment-card"><div class="payment-label">🟡 美团</div><div class="payment-amount">¥' + meituan.toFixed(2) + '</div></div>' +
+        '<div class="order-detail-payment-card"><div class="payment-label">💳 账户</div><div class="payment-amount">¥' + account.toFixed(2) + '</div></div>' +
+        '<div class="order-detail-payment-card payment-total"><div class="payment-label">📊 合计</div><div class="payment-amount">¥' + totalPaid.toFixed(2) + '</div></div>' +
+    '</div>';
+
+    body.innerHTML = html;
+}
+
+function switchToOrders() {
+    activatePanel('panel-orders');
+    highlightLeafByPanel('panel-orders');
+    loadOrders();
 }
 
 async function voidOrder(orderId) {
