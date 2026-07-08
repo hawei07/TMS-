@@ -6100,11 +6100,28 @@ $stmt->execute();
                                     $deductionJson = json_encode($deductionEntries);
                                 }
                             } else {
-                                // 追加扣课（delta > 0）：保持原扣课不变，从下一个课包追加扣
-                                // 排除已扣过的订单ID，通过三级优先级查询下一个可用课包
+                                // 追加扣课（delta > 0）：优先从已扣订单追加，再找新订单
+                                // 若已扣订单余量不足，通过三级优先级查询新订单（排除已处理的订单ID）
                                 $processedOrderIds = array_unique(array_column($deductionEntries, 'order_id'));
                                 $remainingDelta = $delta;
                                 $newEntries = [];
+                                // 优先从已扣订单追加扣（如果还有剩余课时）
+                                foreach ($deductionEntries as &$en) {
+                                    if ($remainingDelta <= 0) break;
+                                    $eoid = intval($en['order_id'] ?? 0);
+                                    if ($eoid <= 0) continue;
+                                    $oCheck = $db->query("SELECT lesson_count, consumed_lessons FROM orders WHERE id = $eoid AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))")->fetch(PDO::FETCH_ASSOC);
+                                    if (!$oCheck) continue;
+                                    $available = intval($oCheck['lesson_count']) - intval($oCheck['consumed_lessons']);
+                                    if ($available <= 0) continue;
+                                    $toAdd = min($remainingDelta, $available);
+                                    $newConsumed = intval($oCheck['consumed_lessons']) + $toAdd;
+                                    $stmtAdd = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $eoid");
+                                    $stmtAdd->execute();
+                                    $en['amount'] = intval($en['amount']) + $toAdd;
+                                    $remainingDelta -= $toAdd;
+                                }
+                                unset($en);
 
                                 // 优先级1：同一course_id的订单（排除已扣过的）
                                 $excludeClause1 = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
