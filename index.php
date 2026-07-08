@@ -6082,8 +6082,15 @@ $stmt->execute();
                     $oldAttStatus = $oldAttRec ? $oldAttRec['status'] : '';
                     $oldAttRecId = $oldAttRec ? intval($oldAttRec['id']) : 0;
                     // 由出勤改为缺勤时，检查订单是否已退费或退费中
-                    if ($oldAttStatus === '出勤' && $status === '缺勤' && $deductedOrderId > 0) {
-                        $refundCheck = $db->query("SELECT status FROM refund_records WHERE order_id=$deductedOrderId AND status NOT IN ('审批驳回') ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+                    // 从旧的扣课记录中提取订单ID
+                    $oldDeductionJson = $oldAtt ? json_decode($oldAtt['deduction_json'] ?? '[]', true) : [];
+                    $oldOrderId = 0;
+                    if (is_array($oldDeductionJson) && !empty($oldDeductionJson)) {
+                        $firstEntry = $oldDeductionJson[0] ?? [];
+                        $oldOrderId = intval($firstEntry['order_id'] ?? 0);
+                    }
+                    if ($oldAttStatus === '出勤' && $status === '缺勤' && $oldOrderId > 0) {
+                        $refundCheck = $db->query("SELECT status FROM refund_records WHERE order_id=$oldOrderId AND status NOT IN ('审批驳回') ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
                         if ($refundCheck && $refundCheck['status'] !== '已退费') {
                             json(['error' => '该课时的订单正在退费审批中，无法改为缺勤']); break;
                         }
