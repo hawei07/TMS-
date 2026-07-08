@@ -3677,6 +3677,10 @@ async function savePlan() {
             actual_price: item.actual_price,
             discount_plan_id: parseInt(item.discount_plan_id) || 0,
             coupon_id: parseInt(item.coupon_id) || 0,
+        teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
+        product_coupon_id: parseInt(item.product_coupon_id) || 0,
+            teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
+            product_coupon_id: parseInt(item.product_coupon_id) || 0,
             sort_order: idx
         })) : [];
 
@@ -3758,6 +3762,10 @@ async function saveItem() {
         actual_price: item.actual_price,
         discount_plan_id: parseInt(item.discount_plan_id) || 0,
         coupon_id: parseInt(item.coupon_id) || 0,
+        teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
+        product_coupon_id: parseInt(item.product_coupon_id) || 0,
+            teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
+            product_coupon_id: parseInt(item.product_coupon_id) || 0,
         sort_order: idx
     }));
 
@@ -3820,6 +3828,10 @@ async function deleteItem(itemId) {
                 actual_price: item.actual_price,
                 discount_plan_id: parseInt(item.discount_plan_id) || 0,
                 coupon_id: parseInt(item.coupon_id) || 0,
+        teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
+        product_coupon_id: parseInt(item.product_coupon_id) || 0,
+            teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
+            product_coupon_id: parseInt(item.product_coupon_id) || 0,
                 sort_order: idx
             }))
         }, 'POST');

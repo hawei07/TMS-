@@ -2373,11 +2373,12 @@ $stmt->execute();
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query(
-                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name
                      FROM price_items pi
                      LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
                      LEFT JOIN coupons c ON pi.coupon_id = c.id
                      LEFT JOIN teaching_aids ta ON pi.teaching_aid_id = ta.id
+                     LEFT JOIN coupons pc ON pi.product_coupon_id = pc.id
                      WHERE pi.plan_id=" . intval($plan['id']) . "
                      ORDER BY pi.sort_order, pi.id"
                 );
@@ -2395,11 +2396,12 @@ $stmt->execute();
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query(
-                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name
                      FROM price_items pi
                      LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
                      LEFT JOIN coupons c ON pi.coupon_id = c.id
                      LEFT JOIN teaching_aids ta ON pi.teaching_aid_id = ta.id
+                     LEFT JOIN coupons pc ON pi.product_coupon_id = pc.id
                      WHERE pi.plan_id=" . intval($plan['id']) . "
                      ORDER BY pi.sort_order, pi.id"
                 );
@@ -2618,13 +2620,15 @@ $stmt->execute();
                 $actualPrice = floatval($item['actual_price'] ?? $unitPrice);
                 $sortOrder = intval($item['sort_order'] ?? $idx);
                 $discountPlanId = intval($item['discount_plan_id'] ?? 0);
+                $productCouponId = intval($item['product_coupon_id'] ?? 0);
                 $couponId = intval($item['coupon_id'] ?? 0);
                 $teachingAidId = intval($item['teaching_aid_id'] ?? 0);
                 if (!$itemName || $lessonCount <= 0) continue;
-                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, discount_plan_id, coupon_id, teaching_aid_id, sort_order) VALUES ($planId, " . $db->quote($itemName) . ", $lessonCount, $unitPrice, $actualPrice, "
+                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, discount_plan_id, coupon_id, teaching_aid_id, product_coupon_id, sort_order) VALUES ($planId, " . $db->quote($itemName) . ", $lessonCount, $unitPrice, $actualPrice, "
                     . ($discountPlanId > 0 ? $discountPlanId : 'NULL') . ", "
                     . ($couponId > 0 ? $couponId : 'NULL') . ", "
-                    . ($teachingAidId > 0 ? $teachingAidId : 'NULL') . ", $sortOrder)");
+                    . ($teachingAidId > 0 ? $teachingAidId : 'NULL') . ", "
+                    . ($productCouponId > 0 ? $productCouponId : 'NULL') . ", $sortOrder)");
             }
             json(['id' => $planId, 'message' => $planId ? '价格方案保存成功' : '价格方案保存成功']);
 
@@ -4156,13 +4160,14 @@ $sumStmt->execute();
                                 d.name AS discount_plan_name,
                                 c.name AS coupon_name,
                                 ta.name AS teaching_aid_name,
-                                ta.price AS teaching_aid_price
+                                ta.price AS teaching_aid_price, pc.name AS product_coupon_name
                          FROM orders o
                          LEFT JOIN price_plans pp ON pp.name = o.plan_name AND pp.course_id = o.course_id
                          LEFT JOIN price_items pi ON pi.plan_id = pp.id AND pi.name = o.item_name
                          LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
                          LEFT JOIN coupons c ON pi.coupon_id = c.id
                          LEFT JOIN teaching_aids ta ON pi.teaching_aid_id = ta.id
+                     LEFT JOIN coupons pc ON pi.product_coupon_id = pc.id
                          WHERE o.parent_order_no = " . $db->quote($pono) . "
                          ORDER BY o.id";
             $itemsStmt = $db->query($itemsSql);
