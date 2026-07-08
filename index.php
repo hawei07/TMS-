@@ -6099,10 +6099,12 @@ $stmt->execute();
                     if ($oldAttStatus === '出勤' && $status === '缺勤' && $oldOrderId > 0) {
                         $refundCheck = $db->query("SELECT status FROM refund_records WHERE order_id=$oldOrderId AND status NOT IN ('审批驳回') ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
                         if ($refundCheck && $refundCheck['status'] !== '已退费') {
-                            json(['error' => '该课时的订单正在退费审批中，无法改为缺勤']); break;
+                            $sn = $db->query("SELECT name FROM students WHERE id=$studentId")->fetchColumn() ?: '学员';
+                    json(['error' => $sn . '的课时订单正在退费审批中，无法改为缺勤']); break;
                         }
                         if ($refundCheck && $refundCheck['status'] === '已退费') {
-                            json(['error' => '该课时的订单已退费，无法改为缺勤']); break;
+                            $sn2 = $db->query("SELECT name FROM students WHERE id=$studentId")->fetchColumn() ?: '学员';
+                    json(['error' => $sn2 . '的课时订单已退费，无法改为缺勤']); break;
                         }
                     }
                     $db->exec("DELETE FROM attendance_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
