@@ -3903,7 +3903,7 @@ $stmt->execute();
             $pendingRefundIds = [];
             $refStmt = $db->query("SELECT DISTINCT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')");
             while ($refR = $refStmt->fetch(PDO::FETCH_ASSOC)) $pendingRefundIds[$refR['order_id']] = true;
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
             $orderRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
             // 批量查询考勤记录获取真实消耗课时
@@ -3919,8 +3919,12 @@ $stmt->execute();
                 $ap = floatval($r['actual_price'] ?? 0);
                 $taPrice = floatval($r['teaching_aid_price'] ?? 0);
                 $pcAmount = floatval($r['product_coupon_amount'] ?? 0);
-                // 纯课时单价 = (actual_price - teaching_aid_price + product_coupon_amount) / lesson_count
-                $classUnitPrice = $lc > 0 ? round(($ap - $taPrice + $pcAmount) / $lc, 2) : 0;
+                $dpAmount = floatval($r['discount_plan_amount'] ?? 0);
+                $cpAmount = floatval($r['coupon_amount'] ?? 0);
+                // unit_price = actual_price + discounts - products（反推原始课时总价）
+                $rawUnitPrice = $ap + $dpAmount + $cpAmount - $taPrice + $pcAmount;
+                // 课耗单价 = (unit_price - 优惠方案 - 课时优惠券) / 课时数
+                $classUnitPrice = $lc > 0 ? round(($rawUnitPrice - $dpAmount - $cpAmount) / $lc, 2) : 0;
                 $realConsumed = $attMap[$r['order_id']] ?? 0;
                 $refundStatus = $r['refund_status'] ?? '正常';
                 if ($refundStatus === '已退费') {
