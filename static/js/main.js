@@ -6247,12 +6247,12 @@ function selectEnrollPlan(planId) {
             <td>${esc(item.name)}</td>
             <td class="col-num">${item.lesson_count || 0}</td>
             <td class="col-num">¥${unitPrice.toFixed(2)}</td>
-            <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
             <td>${esc(item.discount_plan_name || '-')}</td>
             <td>${esc(item.coupon_name || '-')}</td>
             <td>${esc(item.teaching_aid_name || '-')}</td>
             <td class="col-num">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
             <td>${esc(item.product_coupon_name || '-')}</td>
+            <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
         </tr>`;
     }).join('');
     document.getElementById('enroll-total-price').textContent = '¥' + total.toFixed(2);

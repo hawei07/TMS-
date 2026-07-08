@@ -7519,13 +7519,13 @@ if (intval($countBt) === 0) {
                                 <thead><tr>
                                  <th>报价项名称</th>
                                                                      <th class="col-num">课时数</th>
-                                                                     <th class="col-num">单价</th>
-                                                                     <th class="col-num">实际价格</th>
+                                                                     <th class="col-num">课时价格</th>
                                                                      <th>优惠方案</th>
                                                                                                          <th>课时优惠券</th>
                                                                                                          <th>教材包</th>
                                                                                                          <th>教材包原价</th>
                                                                                                          <th>商品券</th>
+                                                                                                         <th class="col-num">实际价格</th>
                                 </tr></thead>
                                 <tbody id="enroll-items-tbody"></tbody>
                             </table>
