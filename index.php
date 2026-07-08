@@ -3950,7 +3950,7 @@ $stmt->execute();
                     $r['consumed_amount'] = round($classUnitPrice * $realConsumed, 2);
                     $rl = $lc - $realConsumed;
                     $r['remaining_lessons'] = $rl > 0 ? $rl : 0;
-                    $r['remaining_amount'] = round($classUnitPrice * $r['remaining_lessons'], 2);
+                    $r['remaining_amount'] = $lc > 0 ? round((($ap - $taPrice + $pcAmount) / $lc) * $r['remaining_lessons'], 2) : 0;
                 } else {
                     $r['consumed_lessons'] = $realConsumed;
                     $r['refunded_lessons'] = 0;
@@ -5275,6 +5275,7 @@ $stmt->execute();
                                 if (!isset($dateSlots[$curDate])) $dateSlots[$curDate] = [];
                                 $dateSlots[$curDate][] = [
                                     'schedule_id' => $sch['id'],
+                                    'class_id' => $sch['class_id'],
                                     'class_name' => $sch['class_name'],
                                     'course_name' => $sch['course_name'],
                                     'teacher' => $sch['teacher'],
@@ -5284,6 +5285,7 @@ $stmt->execute();
                                     'end' => trim($end),
                                     'course_id' => $sch['course_id'],
                                     'student_count' => intval($sch['student_count']),
+                                    'date' => $curDate,
                                 ];
                             }
                         }
@@ -5373,6 +5375,7 @@ $stmt->execute();
                             'end' => trim($end),
                             'course_id' => $sch['course_id'],
                             'student_count' => intval($sch['student_count']),
+                            'date' => $grid[$dayLabel]['date'],
                         ];
                     }
                 }

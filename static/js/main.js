@@ -9821,14 +9821,32 @@ function renderMonthView(d) {
 }
 
 // ===== 排课详情弹窗（增强版） =====
-function takeAttendanceFromSchedule(scheduleId, classId, className, campus, courseName, teacher, classroom) {
+function takeAttendanceFromSchedule(scheduleId, classId, className, campus, courseName, teacher, classroom, sessionDate, startTime, endTime) {
+    if (!sessionDate || !classId) {
+        showToast('无法确定考勤信息，请先补全班级数据', 'error');
+        return;
+    }
     document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
-    switchPanel('panel-classes');
-    showToast('请在班级列表中点击「考勤」进行操作', 'info');
+    var d = new Date(sessionDate + 'T00:00:00');
+    var weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+    var dayOfWeek = weekdays[d.getDay()];
+    var parts = sessionDate.split('-');
+    var sessionDateDisplay = parts[0] + '/' + parts[1] + '/' + parts[2] + ' ' + dayOfWeek;
+    var timeStr = startTime + '-' + endTime;
+    showAttendanceSessionModal(classId, scheduleId, sessionDate, className, campus, courseName, teacher, classroom, sessionDateDisplay, dayOfWeek, timeStr);
 }
 
-function deleteScheduleEntry(scheduleId, className) {
-    showCustomConfirm('确定删除课次「' + className + '」吗？此操作不可恢复。', function() {
+function deleteScheduleEntry(scheduleId, className, dateStr, startTime, endTime, teacher) {
+    var msg = '确定删除课次「' + className + '」吗？';
+    if (dateStr) {
+        var d = new Date(dateStr + 'T00:00:00');
+        var weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
+        msg += ' 日期:' + dateStr + '(' + weekdays[d.getDay()] + ')';
+    }
+    msg += ' 时段:' + startTime + '-' + endTime;
+    if (teacher) msg += ' 教师:' + teacher;
+    msg += ' 此操作不可恢复，已产生的考勤记录不受影响。';
+    showCustomConfirm(msg, function() {
         api('delete_schedule', { id: scheduleId }, 'POST').then(function(res) {
             if (res.error) { showToast(res.error, 'error'); return; }
             document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
@@ -9851,9 +9869,9 @@ function showScheduleDetail(s) {
     let actions = '<div style="display:flex;gap:8px;margin-top:16px;">';
     if (s.class_id) {
         actions += '<button class="btn btn-sm" onclick="this.closest(\'.modal-overlay\').remove(); switchPanel(\'panel-classes\');" style="padding:6px 12px;">查看班级</button>';
-        actions += '<button class="btn btn-sm" onclick="takeAttendanceFromSchedule(' + s.schedule_id + ',' + s.class_id + ',\'' + escAttr(s.class_name) + '\',\'' + escAttr(s.campus || '') + '\',\'' + escAttr(s.course_name) + '\',\'' + escAttr(s.teacher || '') + '\',\'' + escAttr(s.classroom || '') + '\');" style="padding:6px 12px;background:#1890ff;color:#fff;border:none;border-radius:4px;">📋 考勤</button>';
+        actions += '<button class="btn btn-sm" onclick="takeAttendanceFromSchedule(' + s.schedule_id + ',' + s.class_id + ',\'' + escAttr(s.class_name) + '\',\'' + escAttr(s.campus || '') + '\',\'' + escAttr(s.course_name) + '\',\'' + escAttr(s.teacher || '') + '\',\'' + escAttr(s.classroom || '') + '\',\'' + escAttr(s.date || '') + '\',\'' + escAttr(s.start || '') + '\',\'' + escAttr(s.end || '') + '\');" style="padding:6px 12px;background:#1890ff;color:#fff;border:none;border-radius:4px;">📋 考勤</button>';
     }
-    actions += '<button class="btn btn-sm btn-danger" onclick="deleteScheduleEntry(' + s.schedule_id + ',\'' + escAttr(s.class_name) + '\');" style="padding:6px 12px;">删除课次</button>';
+    actions += '<button class="btn btn-sm btn-danger" onclick="deleteScheduleEntry(' + s.schedule_id + ',\'' + escAttr(s.class_name) + '\',\'' + escAttr(s.date || '') + '\',\'' + escAttr(s.start || '') + '\',\'' + escAttr(s.end || '') + '\',\'' + escAttr(s.teacher || '') + '\');" style="padding:6px 12px;">删除课次</button>';
     actions += '<button class="btn btn-primary btn-sm" onclick="this.closest(\'.modal-overlay\').remove()" style="padding:6px 14px;margin-left:auto;">关闭</button>';
     actions += '</div>';
 
