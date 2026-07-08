@@ -3216,13 +3216,15 @@ async function preloadInlineDiscountData() {
     const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
     if (!plan || !plan.plan_type || plan.plan_type === '小课包') return;
     try {
-        const [discountRes, couponRes, teachingAidRes] = await Promise.all([
+        const [discountRes, courseCouponRes, productCouponRes, teachingAidRes] = await Promise.all([
             api('list_discount_plans', { plan_type: plan.plan_type, page_size: 200 }, 'GET'),
+            api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET'),
             api('list_coupons', { coupon_type: '商品券', page_size: 200 }, 'GET'),
             api('list_teaching_aids', { page_size: 200 }, 'GET')
         ]);
         priceItemDiscountPlans = discountRes.data || [];
-        priceItemCoupons = couponRes.data || [];
+        priceItemCourseCoupons = courseCouponRes.data || [];
+        priceItemCoupons = productCouponRes.data || [];
         priceItemTeachingAids = (teachingAidRes.data || []).filter(a => a.type === '教材包');
     } catch (e) {
         console.error('preloadInlineDiscountData failed:', e);
@@ -3237,7 +3239,7 @@ function renderItemList() {
 
     if (!plan) {
         if (tagEl) tagEl.innerHTML = '';
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
         return;
     }
     // 在报价单列表标题旁展示方案类型标签
@@ -3250,17 +3252,19 @@ function renderItemList() {
     }
     const items = plan.items || [];
     if (!items.length) {
-        tbody.innerHTML = '<tr class="price-empty-row"><td colspan="8">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
+        tbody.innerHTML = '<tr class="price-empty-row"><td colspan="9">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
         return;
     }
     tbody.innerHTML = items.map(item => {
         const isSmall = isSmallPack;
         const discountDisplay = isSmall ? '—' : esc(item.discount_plan_name || '-');
         const teachingAidDisplay = isSmall ? '—' : esc(item.teaching_aid_name || '-');
-        const couponDisplay = isSmall ? '—' : esc(item.coupon_name || '-');
+        const courseCouponDisplay = isSmall ? '—' : esc(item.coupon_name || '-');
+        const productCouponDisplay = isSmall ? '—' : esc(item.product_coupon_name || '-');
         const discountEditable = isSmall ? '' : 'pi-editable';
         const teachingAidEditable = isSmall ? '' : 'pi-editable';
-        const couponEditable = isSmall ? '' : 'pi-editable';
+        const courseCouponEditable = isSmall ? '' : 'pi-editable';
+        const productCouponEditable = isSmall ? '' : 'pi-editable';
         return `
         <tr data-item-id="${item.id}">
             <td class="pi-editable" data-field="name" data-original="${escAttr(item.name)}">${esc(item.name)}</td>
@@ -3268,7 +3272,8 @@ function renderItemList() {
             <td class="pi-editable" data-field="unit_price" data-original="${Number(item.unit_price).toFixed(2)}">${Number(item.unit_price).toFixed(2)}</td>
             <td class="${discountEditable}" data-field="discount_plan_id" data-original="${item.discount_plan_id || ''}">${discountDisplay}</td>
             <td class="${teachingAidEditable}" data-field="teaching_aid_id" data-original="${item.teaching_aid_id || ''}">${teachingAidDisplay}</td>
-            <td class="${couponEditable}" data-field="coupon_id" data-original="${item.coupon_id || ''}">${couponDisplay}</td>
+            <td class="${courseCouponEditable}" data-field="coupon_id" data-original="${item.coupon_id || ''}">${courseCouponDisplay}</td>
+            <td class="${productCouponEditable}" data-field="product_coupon_id" data-original="${item.product_coupon_id || ''}">${productCouponDisplay}</td>
             <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
             <td>
                 <button class="btn-link-danger" onclick="deleteItem(${item.id})">删除</button>
@@ -3283,6 +3288,7 @@ function renderItemList() {
         <tr class="price-total-row">
             <td style="font-weight:bold;">总计</td>
             <td style="font-weight:bold;">${totalLessons}</td>
+            <td></td>
             <td></td>
             <td></td>
             <td></td>
@@ -3368,7 +3374,13 @@ function enterInlineEdit(tr, item) {
             if (isSmallPack) {
                 td.innerHTML = '<span style="color:#999;">—</span>';
             } else {
-                td.innerHTML = buildInlineCouponSelect(field, original);
+                td.innerHTML = buildInlineCourseCouponSelect(field, original);
+            }
+        } else if (field === 'product_coupon_id') {
+            if (isSmallPack) {
+                td.innerHTML = '<span style="color:#999;">—</span>';
+            } else {
+                td.innerHTML = buildInlineProductCouponSelect(field, original);
             }
         } else if (field === 'name') {
             td.innerHTML = `<input type="text" class="inline-edit-input" value="${escAttr(item.name || '')}" data-field="name">`;
@@ -3410,7 +3422,19 @@ function buildInlineDiscountSelect(field, selectedValue) {
     return html;
 }
 
-function buildInlineCouponSelect(field, selectedValue) {
+function buildInlineCourseCouponSelect(field, selectedValue) {
+    let html = `<select class="inline-edit-select" data-field="${field}">`;
+    html += '<option value="">不使用课时优惠券</option>';
+    if (priceItemCourseCoupons.length > 0) {
+        html += priceItemCourseCoupons.map(c =>
+            `<option value="${c.id}"${String(c.id) === String(selectedValue) ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
+        ).join('');
+    }
+    html += '</select>';
+    return html;
+}
+
+function buildInlineProductCouponSelect(field, selectedValue) {
     let html = `<select class="inline-edit-select" data-field="${field}">`;
     html += '<option value="">不使用商品券</option>';
     if (priceItemCoupons.length > 0) {
@@ -3437,7 +3461,8 @@ function buildInlineTeachingAidSelect(field, selectedValue) {
 function bindInlinePriceRecalc(tr) {
     const unitPriceInput = tr.querySelector('[data-field="unit_price"]');
     const discountSelect = tr.querySelector('[data-field="discount_plan_id"]');
-    const couponSelect = tr.querySelector('[data-field="coupon_id"]');
+    const courseCouponSelect = tr.querySelector('[data-field="coupon_id"]');
+    const productCouponSelect = tr.querySelector('[data-field="product_coupon_id"]');
     const displayEl = tr.querySelector('.pi-calc-display');
 
     const recalc = () => {
@@ -3447,8 +3472,12 @@ function bindInlinePriceRecalc(tr) {
             const dp = priceItemDiscountPlans.find(d => d.id == discountSelect.value);
             if (dp) discount += Number(dp.amount || 0);
         }
-        if (couponSelect?.value) {
-            const cp = priceItemCoupons.find(c => c.id == couponSelect.value);
+        if (courseCouponSelect?.value) {
+            const cc = priceItemCourseCoupons.find(c => c.id == courseCouponSelect.value);
+            if (cc) discount += Number(cc.amount || 0);
+        }
+        if (productCouponSelect?.value) {
+            const cp = priceItemCoupons.find(c => c.id == productCouponSelect.value);
             if (cp) discount += Number(cp.amount || 0);
         }
         if (displayEl) displayEl.textContent = Math.max(0, base - discount).toFixed(2);
@@ -3456,7 +3485,8 @@ function bindInlinePriceRecalc(tr) {
 
     unitPriceInput?.addEventListener('input', recalc);
     discountSelect?.addEventListener('change', recalc);
-    couponSelect?.addEventListener('change', recalc);
+    courseCouponSelect?.addEventListener('change', recalc);
+    productCouponSelect?.addEventListener('change', recalc);
 }
 
 function bindInlineKeyboard(tr) {
@@ -3494,6 +3524,7 @@ async function saveInlineEdit(tr) {
     const discountPlanId = parseInt(editedValues.discount_plan_id) || 0;
     const teachingAidId = parseInt(editedValues.teaching_aid_id) || 0;
     const couponId = parseInt(editedValues.coupon_id) || 0;
+    const productCouponId = parseInt(editedValues.product_coupon_id) || 0;
     // 计算实际价格
     let discount = 0;
     if (discountPlanId > 0) {
@@ -3501,7 +3532,11 @@ async function saveInlineEdit(tr) {
         if (dp) discount += Number(dp.amount || 0);
     }
     if (couponId > 0) {
-        const cp = priceItemCoupons.find(c => c.id === couponId);
+        const cc = priceItemCourseCoupons.find(c => c.id === couponId);
+        if (cc) discount += Number(cc.amount || 0);
+    }
+    if (productCouponId > 0) {
+        const cp = priceItemCoupons.find(c => c.id === productCouponId);
         if (cp) discount += Number(cp.amount || 0);
     }
     const actualPrice = Math.max(0, unitPrice - discount);
@@ -3515,6 +3550,7 @@ async function saveInlineEdit(tr) {
                 discount_plan_id: discountPlanId,
                 teaching_aid_id: teachingAidId,
                 coupon_id: couponId,
+                product_coupon_id: productCouponId,
                 sort_order: idx
             };
         }
@@ -3526,6 +3562,7 @@ async function saveInlineEdit(tr) {
             discount_plan_id: isSmallPack ? 0 : (parseInt(item.discount_plan_id) || 0),
             teaching_aid_id: isSmallPack ? 0 : (parseInt(item.teaching_aid_id) || 0),
             coupon_id: isSmallPack ? 0 : (parseInt(item.coupon_id) || 0),
+            product_coupon_id: isSmallPack ? 0 : (parseInt(item.product_coupon_id) || 0),
             sort_order: idx
         };
     });
@@ -3560,7 +3597,7 @@ function cancelInlineEdit(tr) {
         const original = tr._snapshot[field];
         if (field === 'actual_price') {
             td.textContent = original || '0.00';
-        } else if (field === 'discount_plan_id' || field === 'teaching_aid_id' || field === 'coupon_id') {
+        } else if (field === 'discount_plan_id' || field === 'teaching_aid_id' || field === 'coupon_id' || field === 'product_coupon_id') {
             // 还原显示名而非 ID
             const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
             const item = plan ? (plan.items || []).find(i => i.id === parseInt(tr.dataset.itemId)) : null;
@@ -3569,8 +3606,10 @@ function cancelInlineEdit(tr) {
                     td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.discount_plan_name || '-');
                 } else if (field === 'teaching_aid_id') {
                     td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.teaching_aid_name || '-');
-                } else {
+                } else if (field === 'coupon_id') {
                     td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.coupon_name || '-');
+                } else {
+                    td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.product_coupon_name || '-');
                 }
             } else {
                 td.textContent = original || '-';
@@ -3689,9 +3728,11 @@ function addItem() {
     document.getElementById('price-item-actual-price').value = '';
     document.getElementById('price-item-discount-plan').value = '';
     document.getElementById('price-item-teaching-aid').value = '';
+    document.getElementById('price-item-course-coupon').value = '';
     document.getElementById('price-item-coupon').value = '';
     loadPriceItemDiscountOptions();
     loadPriceItemTeachingAidOptions();
+    loadPriceItemCourseCouponOptions();
     loadPriceItemCouponOptions();
     openModal('modal-price-item');
 }
@@ -3725,7 +3766,8 @@ async function saveItem() {
         actual_price: actualPrice,
         discount_plan_id: parseInt(document.getElementById('price-item-discount-plan').value) || 0,
         teaching_aid_id: parseInt(document.getElementById('price-item-teaching-aid').value) || 0,
-        coupon_id: parseInt(document.getElementById('price-item-coupon').value) || 0,
+        coupon_id: parseInt(document.getElementById('price-item-course-coupon').value) || 0,
+        product_coupon_id: parseInt(document.getElementById('price-item-coupon').value) || 0,
         sort_order: items.length
     };
 
@@ -3787,6 +3829,7 @@ async function deleteItem(itemId) {
 
 // 课时价格变化时自动同步实际支付价格
 let priceItemDiscountPlans = [];
+let priceItemCourseCoupons = [];
 let priceItemCoupons = [];
 let priceItemTeachingAids = [];
 
@@ -3794,6 +3837,7 @@ function recalcItemActualPrice() {
     const unitPriceEl = document.getElementById('price-item-unit-price');
     const actualPriceEl = document.getElementById('price-item-actual-price');
     const discountSelect = document.getElementById('price-item-discount-plan');
+    const courseCouponSelect = document.getElementById('price-item-course-coupon');
     const couponSelect = document.getElementById('price-item-coupon');
     if (!unitPriceEl || !actualPriceEl) return;
     const basePrice = parseFloat(unitPriceEl.value) || 0;
@@ -3801,6 +3845,10 @@ function recalcItemActualPrice() {
     if (discountSelect && discountSelect.value) {
         const dp = priceItemDiscountPlans.find(d => d.id == discountSelect.value);
         if (dp) discount += Number(dp.amount || 0);
+    }
+    if (courseCouponSelect && courseCouponSelect.value) {
+        const cc = priceItemCourseCoupons.find(c => c.id == courseCouponSelect.value);
+        if (cc) discount += Number(cc.amount || 0);
     }
     if (couponSelect && couponSelect.value) {
         const cp = priceItemCoupons.find(c => c.id == couponSelect.value);
@@ -3861,6 +3909,31 @@ async function loadPriceItemCouponOptions(selectedValue) {
         priceItemCoupons = res.data || [];
         select.innerHTML = '<option value="">不使用商品券</option>' +
             priceItemCoupons.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`).join('');
+        select.onchange = recalcItemActualPrice;
+        if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
+            select.value = selectedValue;
+        }
+    } catch (e) {
+        select.innerHTML = '<option value="">加载失败</option>';
+    } finally {
+        select.classList.remove('loading');
+    }
+}
+
+// 加载课时优惠券下拉
+async function loadPriceItemCourseCouponOptions(selectedValue) {
+    const select = document.getElementById('price-item-course-coupon');
+    if (!select) return;
+
+    // loading 态
+    select.classList.add('loading');
+    select.innerHTML = '<option value="">加载中...</option>';
+
+    try {
+        const res = await api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET');
+        priceItemCourseCoupons = res.data || [];
+        select.innerHTML = '<option value="">不使用课时优惠券</option>' +
+            priceItemCourseCoupons.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`).join('');
         select.onchange = recalcItemActualPrice;
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
             select.value = selectedValue;
@@ -6098,6 +6171,7 @@ function selectEnrollPlan(planId) {
             <td>${esc(item.discount_plan_name || '-')}</td>
             <td>${esc(item.teaching_aid_name || '-')}</td>
             <td>${esc(item.coupon_name || '-')}</td>
+            <td>${esc(item.product_coupon_name || '-')}</td>
         </tr>`;
     }).join('');
     document.getElementById('enroll-total-price').textContent = '¥' + total.toFixed(2);

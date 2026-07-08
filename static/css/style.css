@@ -6806,6 +6806,7 @@ tbody td {
 
 /* ===== 优惠方案/优惠券下拉加载态 ===== */
 #price-item-discount-plan.loading,
+#price-item-course-coupon.loading,
 #price-item-coupon.loading {
     opacity: 0.5;
     pointer-events: none;
