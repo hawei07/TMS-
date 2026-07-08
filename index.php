@@ -9800,7 +9800,7 @@ if (intval($countBt) === 0) {
 
     <!-- 订单详情弹窗 -->
     <div class="modal-overlay" id="modal-order-detail">
-        <div class="modal modal-lg" style="max-width:700px;">
+        <div class="modal modal-lg" style="max-width:900px;">
             <div class="modal-header">
                 <h3>订单详情</h3>
                 <button class="modal-close" onclick="closeModal('modal-order-detail')">&times;</button>
