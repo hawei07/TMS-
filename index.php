@@ -6052,9 +6052,13 @@ $stmt->execute();
                     $consumedAmount = 0;
                     if (!empty($deductionEntries)) {
                         foreach ($deductionEntries as $de) {
-                            $orderRow = $db->query("SELECT actual_price, lesson_count FROM orders WHERE id={$de['order_id']}")->fetch(PDO::FETCH_ASSOC);
+                            $orderRow = $db->query("SELECT actual_price, teaching_aid_price, product_coupon_amount, lesson_count FROM orders WHERE id={$de['order_id']}")->fetch(PDO::FETCH_ASSOC);
                             if ($orderRow && $orderRow['lesson_count'] > 0) {
-                                $unitPrice = floatval($orderRow['actual_price']) / intval($orderRow['lesson_count']);
+                                $ap = floatval($orderRow['actual_price']);
+                                $ta = floatval($orderRow['teaching_aid_price'] ?? 0);
+                                $pc = floatval($orderRow['product_coupon_amount'] ?? 0);
+                                $classPrice = $ap - $ta + $pc;
+                                $unitPrice = $classPrice / intval($orderRow['lesson_count']);
                                 $consumedAmount += $unitPrice * floatval($de['amount']);
                             }
                         }
