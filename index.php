@@ -609,6 +609,10 @@ $db->exec("CREATE TABLE IF NOT EXISTS coupons (
         INDEX idx_cr_coupon (coupon_id), FOREIGN KEY (coupon_id) REFERENCES coupons(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // 兼容已有数据库：coupon_records 添加 usage_status 字段
+        $colCR = $db->query("SHOW COLUMNS FROM coupon_records LIKE 'usage_status'")->fetch();
+        if (!$colCR) $db->exec("ALTER TABLE coupon_records ADD COLUMN usage_status VARCHAR(20) DEFAULT '未使用' AFTER phone");
+
         $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(200) NOT NULL DEFAULT '',
@@ -2480,8 +2484,33 @@ $stmt->execute();
                 $childOrderNos[] = $orderNo;
                 $totalLessons += intval($item['lesson_count']);
             }
-            // 写入父订单汇总
+            // 查学员信息
             $student = $db->query("SELECT name, phone, student_no FROM students WHERE id=$studentId")->fetch(PDO::FETCH_ASSOC);
+            // ============ 自动发券+用券 ============
+            if ($student) {
+                foreach ($items as $item) {
+                    $itemCouponId = intval($item['coupon_id'] ?? 0);
+                    if ($itemCouponId <= 0) continue;
+                    if ($orderType === '小课包') continue;
+                    $exist = $db->query("SELECT id FROM coupon_records WHERE coupon_id=$itemCouponId AND student_name=" . $db->quote($student['name']) . " AND usage_status='未使用' ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+                    if ($exist) {
+                        $db->exec("UPDATE coupon_records SET usage_status='已使用', issued_at='$n' WHERE id=" . $exist['id']);
+                    } else {
+                        $cp = $db->query("SELECT name FROM coupons WHERE id=$itemCouponId")->fetch(PDO::FETCH_ASSOC);
+                        if (!$cp) continue;
+                        $s = $db->prepare("INSERT INTO coupon_records (coupon_id, coupon_name, student_name, phone, issuer, issued_at, usage_status, created_at) VALUES (:cid, :cn, :sn, :ph, '系统自动', :ia, '已使用', :ct)");
+                        $s->bindValue(':cid', $itemCouponId, PDO::PARAM_INT);
+                        $s->bindValue(':cn', $cp['name'], PDO::PARAM_STR);
+                        $s->bindValue(':sn', $student['name'] ?? '', PDO::PARAM_STR);
+                        $s->bindValue(':ph', $student['phone'] ?? '', PDO::PARAM_STR);
+                        $s->bindValue(':ia', $n, PDO::PARAM_STR);
+                        $s->bindValue(':ct', $n, PDO::PARAM_STR);
+                        $s->execute();
+                    }
+                }
+            }
+            // ============ 自动发券结束 ============
+            // 写入父订单汇总
             $course = $db->query("SELECT name FROM courses WHERE id=$courseId")->fetch(PDO::FETCH_ASSOC);
             $childNosStr = implode(',', $childOrderNos);
             $stmtParent = $db->prepare("INSERT INTO parent_orders (parent_order_no, child_order_nos, course_name, total_lessons, student_name, phone, student_no, enroll_time, total_price, cash_amount, meituan_amount, created_at, campus) VALUES (:pono, :cnos, :cname, :tl, :sname, :phone, :sno, :etime, :tp, :ca, :ma, :ct, :campus)");
