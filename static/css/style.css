@@ -6266,7 +6266,7 @@ tbody td {
 
 /* ===== 价格方案弹窗容器 ===== */
 #modal-price .modal {
-    width: 960px;
+    width: 1200px;
     max-width: 95vw;
 }
 
@@ -6437,6 +6437,7 @@ tbody td {
 .price-detail-table-wrap {
     flex: 1;
     overflow-y: auto;
+    overflow-x: auto;
     padding: 0;
 }
 
@@ -6480,6 +6481,7 @@ tbody td {
     padding: 10px 14px;
     border-bottom: 1px solid var(--color-border-light);
     transition: background 0.15s;
+    white-space: nowrap;
 }
 
 /* 行 hover — 左紫竖线 */
