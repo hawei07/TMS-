@@ -6038,34 +6038,133 @@ $stmt->execute();
                         if (!empty($deductionEntries)) {
                             $deductedOrderId = intval($deductionEntries[0]['order_id'] ?? 0);
                         }
-                        // 如果 deducted_lessons 值变了，调整 consumed_lessons 差分
+                        // 如果 deducted_lessons 值变了（delta扣课）
                         $oldDeductedLessons = intval($oldAtt['deducted_lessons'] ?? 0);
+                        $delta = 0;
                         if ($deductedLessons !== $oldDeductedLessons && !empty($deductionEntries)) {
                             $delta = $deductedLessons - $oldDeductedLessons;
-                            $totalOldAmt = 0;
-                            foreach ($deductionEntries as $e) { $totalOldAmt += intval($e['amount'] ?? 0); }
-                            if ($totalOldAmt > 0) {
-                                $remainingDelta = $delta;
-                                $cnt = count($deductionEntries);
-                                foreach ($deductionEntries as $idx => &$en) {
-                                    $eoid = intval($en['order_id'] ?? 0);
-                                    if ($eoid <= 0) continue;
-                                    if ($idx === $cnt - 1) {
-                                        $adj = $remainingDelta;
-                                    } else {
-                                        $adj = intval(round($delta * intval($en['amount']) / $totalOldAmt));
+                            if ($delta < 0) {
+                                // 减扣课时：检查原订单是否在退费中，若是则拦截
+                                $deltaOrderIds = array_unique(array_column($deductionEntries, 'order_id'));
+                                $deltaOrderIdsStr = implode(',', array_map('intval', $deltaOrderIds));
+                                if (!empty($deltaOrderIdsStr)) {
+                                    $refundCheck = $db->query("SELECT order_id, status FROM refund_records WHERE order_id IN ($deltaOrderIdsStr) AND status NOT IN ('审批驳回') ORDER BY id DESC")->fetchAll(PDO::FETCH_ASSOC);
+                                    $blockedOrderIds = [];
+                                    foreach ($refundCheck as $rc) {
+                                        if ($rc['status'] !== '已退费') {
+                                            $blockedOrderIds[] = $rc['order_id'];
+                                        }
                                     }
-                                    $remainingDelta -= $adj;
-                                    if ($adj !== 0) {
-                                        $stmtAdj = $db->prepare("UPDATE orders SET consumed_lessons = consumed_lessons + $adj WHERE id = $eoid");
-                                        $stmtAdj->execute();
-                                        $en['amount'] = intval($en['amount']) + $adj;
+                                    if (!empty($blockedOrderIds)) {
+                                        throw new Exception("学员「{$rec['student_name']}」的订单(ID:" . implode(',', $blockedOrderIds) . ")正在退费处理中，无法减少扣课时数");
                                     }
                                 }
+                                // 减扣：按比例从现有条目中减少（delta为负数）
+                                $totalOldAmt = 0;
+                                foreach ($deductionEntries as $e) { $totalOldAmt += intval($e['amount'] ?? 0); }
+                                if ($totalOldAmt > 0) {
+                                    $remainingDelta = $delta; // negative
+                                    $cnt = count($deductionEntries);
+                                    foreach ($deductionEntries as $idx => &$en) {
+                                        $eoid = intval($en['order_id'] ?? 0);
+                                        if ($eoid <= 0) continue;
+                                        if ($idx === $cnt - 1) {
+                                            $adj = $remainingDelta;
+                                        } else {
+                                            $adj = intval(round($delta * intval($en['amount']) / $totalOldAmt));
+                                        }
+                                        $remainingDelta -= $adj;
+                                        if ($adj !== 0) {
+                                            $stmtAdj = $db->prepare("UPDATE orders SET consumed_lessons = consumed_lessons + $adj WHERE id = $eoid");
+                                            $stmtAdj->execute();
+                                            $en['amount'] = intval($en['amount']) + $adj;
+                                        }
+                                    }
+                                    $deductionJson = json_encode($deductionEntries);
+                                }
+                            } else {
+                                // 追加扣课（delta > 0）：保持原扣课不变，从下一个课包追加扣
+                                // 排除已扣过的订单ID，通过三级优先级查询下一个可用课包
+                                $processedOrderIds = array_unique(array_column($deductionEntries, 'order_id'));
+                                $remainingDelta = $delta;
+                                $newEntries = [];
+
+                                // 优先级1：同一course_id的订单（排除已扣过的）
+                                $excludeClause1 = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
+                                $quotedCampus = $db->quote($classCampus);
+                                $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND campus = $quotedCampus $excludeClause1 AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
+                                while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) {
+                                    if ($remainingDelta <= 0) break;
+                                    $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                                    if ($available <= 0) continue;
+                                    $toDeduct = min($remainingDelta, $available);
+                                    $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                    $oid = intval($o['id']);
+                                    $stmtD = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                                    $stmtD->execute();
+                                    $newEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                    $remainingDelta -= $toDeduct;
+                                    $processedOrderIds[] = $oid;
+                                }
+
+                                // 优先级2：同一二级学科的订单
+                                if ($remainingDelta > 0 && $courseSubjId > 0 && $firstSubjectId > 0 && $courseSubjId != $firstSubjectId) {
+                                    $sameSecondCourses = [];
+                                    $sr2 = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE id = $courseSubjId)");
+                                    while ($c = $sr2->fetch(PDO::FETCH_ASSOC)) $sameSecondCourses[] = $c['id'];
+                                    if (count($sameSecondCourses) > 0) {
+                                        $excludeClause2 = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
+                                        $oRes2 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $sameSecondCourses) . ") AND lesson_count > consumed_lessons AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') $excludeClause2 AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
+                                        while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) {
+                                            if ($remainingDelta <= 0) break;
+                                            $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                                            if ($available <= 0) continue;
+                                            $toDeduct = min($remainingDelta, $available);
+                                            $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                            $oid = intval($o['id']);
+                                            $stmtDx = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                                            $stmtDx->execute();
+                                            $newEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                            $remainingDelta -= $toDeduct;
+                                            $processedOrderIds[] = $oid;
+                                        }
+                                    }
+                                }
+
+                                // 优先级3：同一级学科的订单
+                                if ($remainingDelta > 0 && $firstSubjectId > 0) {
+                                    $firstLevelCourses = [];
+                                    $sr3 = $db->query("SELECT id FROM courses WHERE subject_level1 IN (SELECT name FROM subjects WHERE parent_id = $firstSubjectId OR id = $firstSubjectId)");
+                                    while ($c = $sr3->fetch(PDO::FETCH_ASSOC)) $firstLevelCourses[] = $c['id'];
+                                    if (count($firstLevelCourses) > 0) {
+                                        $excludeClause3 = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
+                                        $oRes3 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id IN (" . implode(',', $firstLevelCourses) . ") AND lesson_count > consumed_lessons AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') $excludeClause3 AND campus = $quotedCampus AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
+                                        while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) {
+                                            if ($remainingDelta <= 0) break;
+                                            $available = intval($o['lesson_count']) - intval($o['consumed_lessons']);
+                                            if ($available <= 0) continue;
+                                            $toDeduct = min($remainingDelta, $available);
+                                            $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                            $oid = intval($o['id']);
+                                            $stmtDx = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid");
+                                            $stmtDx->execute();
+                                            $newEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                            $remainingDelta -= $toDeduct;
+                                            $processedOrderIds[] = $oid;
+                                        }
+                                    }
+                                }
+
+                                if ($remainingDelta > 0) {
+                                    throw new Exception("学员「{$rec['student_name']}」剩余课时不足：需追加 {$delta} 课时，但仅能从剩余课包中扣 " . ($delta - $remainingDelta) . " 课时");
+                                }
+
+                                // 合并新扣课条目到现有条目
+                                $deductionEntries = array_merge($deductionEntries, $newEntries);
                                 $deductionJson = json_encode($deductionEntries);
                             }
                         }
-                        $logLine .= "SKIP_REVERT_DEDUCT: old_status=出勤 new_status=出勤 kept_deductionJson=$deductionJson\n";
+                        $logLine .= "SKIP_REVERT_DEDUCT: old_status=出勤 new_status=出勤 delta=$delta kept_deductionJson=$deductionJson\n";
                         file_put_contents('D:/market-system-php/debug_save.log', $logLine, FILE_APPEND);
                     }
                     // 删除旧的考勤记录
