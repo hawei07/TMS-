@@ -7064,7 +7064,7 @@ function renderOrderTable(rows) {
             <td>${renderVoidedStatus(r.is_voided)}</td>
             <td>
                 ${r.is_voided === '否' ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button> ` : ''}
-                <button class="btn btn-link btn-sm" onclick="viewOrderDetail('${esc(r.parent_order_no)}')" style="font-size:11px;padding:1px 6px;color:#7c3aed;">详情</button>
+                <button class="btn btn-link btn-sm" onclick="viewOrderDetail('${esc(r.order_no)}')" style="font-size:11px;padding:1px 6px;color:#7c3aed;">详情</button>
             </td>
         </tr>`;
     }).join('');
@@ -7162,13 +7162,13 @@ function renderOrderDetail(data) {
 
     body.innerHTML = html;
 }
-async function viewOrderDetail(parentOrderNo) {
+async function viewOrderDetail(orderNo) {
     activatePanel('panel-order-detail');
     highlightLeafByPanel('panel-orders');
     const body = document.getElementById('order-detail-page-body');
     body.innerHTML = '<div style="text-align:center;color:#999;padding:30px;">加载中...</div>';
     try {
-        const data = await api('get_order_detail', { parent_order_no: parentOrderNo }, 'GET');
+        const data = await api('get_order_detail', { order_no: orderNo }, 'GET');
         renderOrderDetailPage(data.data || data);
     } catch (e) {
         body.innerHTML = '<div style="text-align:center;color:#e53e3e;padding:30px;">加载失败：' + escHtml(e.message) + '</div>';

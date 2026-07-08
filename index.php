@@ -4202,7 +4202,10 @@ $sumStmt->execute();
 
         case 'get_order_detail':
             $pono = trim($_GET['parent_order_no'] ?? '');
-            if (!$pono) { json(['success' => false, 'message' => '父订单号不能为空']); break; }
+            $ono = trim($_GET['order_no'] ?? '');
+            if (!$pono && !$ono) { json(['success' => false, 'message' => '订单号不能为空']); break; }
+
+            $whereClause = $ono ? "o.order_no = " . $db->quote($ono) : "o.parent_order_no = " . $db->quote($pono);
 
             // 1. 查询子订单列表（优惠金额直接从 orders 表快照读取，不再 JOIN）
             $itemsSql = "SELECT o.id, o.order_no, o.item_name, o.lesson_count, o.actual_price,
@@ -4216,14 +4219,20 @@ $sumStmt->execute();
                          FROM orders o
                          LEFT JOIN price_plans pp ON pp.name = o.plan_name AND pp.course_id = o.course_id
                          LEFT JOIN price_items pi ON pi.plan_id = pp.id AND pi.name = o.item_name
-                         WHERE o.parent_order_no = " . $db->quote($pono) . "
+                         WHERE $whereClause
                          ORDER BY o.id";
             $itemsStmt = $db->query($itemsSql);
             $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
 
-            // 2. 查询父订单基本信息
-            $poStmt = $db->query("SELECT * FROM parent_orders WHERE parent_order_no = " . $db->quote($pono));
-            $parentOrder = $poStmt->fetch(PDO::FETCH_ASSOC);
+            // 2. 查询父订单基本信息（若用 order_no 则从订单中取 parent_order_no）
+            if ($ono && !$pono && !empty($items)) {
+                $pono = $items[0]['parent_order_no'] ?? '';
+            }
+            $parentOrder = null;
+            if ($pono) {
+                $poStmt = $db->query("SELECT * FROM parent_orders WHERE parent_order_no = " . $db->quote($pono));
+                $parentOrder = $poStmt->fetch(PDO::FETCH_ASSOC);
+            }
 
             // 3. 组装数据
             $studentName = '';
