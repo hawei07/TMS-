@@ -3573,7 +3573,19 @@ async function saveInlineEdit(tr) {
             name: item.name,
             lesson_count: item.lesson_count,
             unit_price: item.unit_price,
-            actual_price: item.actual_price,
+            actual_price: (() => {
+                if (isSmallPack) return parseFloat(item.actual_price) || 0;
+                let d = 0, taPrice = 0;
+                const dpId = parseInt(item.discount_plan_id) || 0;
+                const cId = parseInt(item.coupon_id) || 0;
+                const taId = parseInt(item.teaching_aid_id) || 0;
+                const pcId = parseInt(item.product_coupon_id) || 0;
+                if (dpId > 0) { const dp = priceItemDiscountPlans.find(x => x.id === dpId); if (dp) d += Number(dp.amount || 0); }
+                if (cId > 0) { const cc = priceItemCourseCoupons.find(x => x.id === cId); if (cc) d += Number(cc.amount || 0); }
+                if (taId > 0) { const ta = priceItemTeachingAids.find(x => x.id === taId); if (ta) taPrice = Number(ta.price) || 0; }
+                if (pcId > 0) { const cp = priceItemCoupons.find(x => x.id === pcId); if (cp) d += Number(cp.amount || 0); }
+                return Math.max(0, parseFloat(item.unit_price) || 0 - d + taPrice);
+            })(),
             discount_plan_id: isSmallPack ? 0 : (parseInt(item.discount_plan_id) || 0),
             teaching_aid_id: isSmallPack ? 0 : (parseInt(item.teaching_aid_id) || 0),
             coupon_id: isSmallPack ? 0 : (parseInt(item.coupon_id) || 0),
@@ -3772,13 +3784,24 @@ async function saveItem() {
         name: item.name,
         lesson_count: item.lesson_count,
         unit_price: item.unit_price,
-        actual_price: item.actual_price,
+        actual_price: (() => {
+            const isSmall = (plan.plan_type === '小课包');
+            if (isSmall) return parseFloat(item.actual_price) || 0;
+            let d = 0, taPrice = 0;
+            const dpId = parseInt(item.discount_plan_id) || 0;
+            const cId = parseInt(item.coupon_id) || 0;
+            const taId = parseInt(item.teaching_aid_id) || 0;
+            const pcId = parseInt(item.product_coupon_id) || 0;
+            if (dpId > 0) { const dp = priceItemDiscountPlans.find(x => x.id === dpId); if (dp) d += Number(dp.amount || 0); }
+            if (cId > 0) { const cc = priceItemCourseCoupons.find(x => x.id === cId); if (cc) d += Number(cc.amount || 0); }
+            if (taId > 0) { const ta = priceItemTeachingAids.find(x => x.id === taId); if (ta) taPrice = Number(ta.price) || 0; }
+            if (pcId > 0) { const cp = priceItemCoupons.find(x => x.id === pcId); if (cp) d += Number(cp.amount || 0); }
+            return Math.max(0, parseFloat(item.unit_price) || 0 - d + taPrice);
+        })(),
         discount_plan_id: parseInt(item.discount_plan_id) || 0,
         coupon_id: parseInt(item.coupon_id) || 0,
         teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
         product_coupon_id: parseInt(item.product_coupon_id) || 0,
-            teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
-            product_coupon_id: parseInt(item.product_coupon_id) || 0,
         sort_order: idx
     }));
 
