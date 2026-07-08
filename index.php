@@ -626,6 +626,10 @@ $db->exec("CREATE TABLE IF NOT EXISTS coupons (
             updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        // 兼容已有数据库：teaching_aids 添加 type 字段（教材包/画具）
+        $colTA = $db->query("SHOW COLUMNS FROM teaching_aids LIKE 'type'")->fetch();
+        if (!$colTA) $db->exec("ALTER TABLE teaching_aids ADD COLUMN type VARCHAR(20) DEFAULT '画具' AFTER subject_id");
+
         $db->exec("CREATE TABLE IF NOT EXISTS teaching_aid_campuses (
             id INT PRIMARY KEY AUTO_INCREMENT,
             teaching_aid_id INT NOT NULL,
@@ -7800,6 +7804,7 @@ if (intval($countBt) === 0) {
                                 <tr>
                                     <th style="width:50px;">#</th>
                                     <th>画具名称</th>
+                                    <th style="width:80px;">类型</th>
                                     <th style="width:80px;">计量单位</th>
                                     <th>学科</th>
                                     <th style="width:100px;text-align:right;">售价</th>
@@ -7810,7 +7815,7 @@ if (intval($countBt) === 0) {
                                 </tr>
                             </thead>
                             <tbody id="ta-tbody">
-                                <tr><td colspan="9"><div class="empty-state">暂无画具数据</div></td></tr>
+                                <tr><td colspan="10"><div class="empty-state">暂无画具数据</div></td></tr>
                             </tbody>
                         </table>
                     </div>
@@ -9548,6 +9553,19 @@ if (intval($countBt) === 0) {
                                     <option value="包">包</option>
                                     <option value="本">本</option>
                                 </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label class="required">画具类型</label>
+                                <div style="display:flex;gap:24px;padding-top:6px;">
+                                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                        <input type="radio" name="ta-type" value="教材包" checked> 教材包
+                                    </label>
+                                    <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                        <input type="radio" name="ta-type" value="画具"> 画具
+                                    </label>
+                                </div>
                             </div>
                         </div>
                         <div class="form-row">

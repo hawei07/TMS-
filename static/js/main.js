@@ -11131,7 +11131,7 @@ async function loadTeachingAids(page = 1) {
 function renderTeachingAidTable(rows) {
     const tbody = document.getElementById('ta-tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无画具数据</div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">暂无画具数据</div></td></tr>';
         return;
     }
     tbody.innerHTML = rows.map((r, i) => {
@@ -11140,10 +11140,14 @@ function renderTeachingAidTable(rows) {
             ? campusNames.slice(0, 3).join(', ') + ` 等${campusNames.length}个校区`
             : (r.campus_names || '—');
         const statusClass = r.status === '上架' ? 'tag-green' : 'tag-gray';
+        const typeTag = r.type === '画具' 
+            ? '<span class="tag-blue">画具</span>' 
+            : '<span class="tag-orange">教材包</span>';
         return `
         <tr>
             <td>${(teachingAidPage - 1) * 20 + i + 1}</td>
             <td><strong>${esc(r.name)}</strong></td>
+            <td>${typeTag}</td>
             <td>${esc(r.unit)}</td>
             <td>${esc(r.subject_name || '—')}</td>
             <td style="text-align:right;color:#DC2626;font-weight:600;">¥${Number(r.price).toFixed(2)}</td>
@@ -11169,6 +11173,7 @@ async function showTeachingAidForm(id) {
     document.getElementById('ta-price').value = '';
     document.getElementById('ta-remark').value = '';
     document.querySelector('input[name="ta-status"][value="上架"]').checked = true;
+    document.querySelector('input[name="ta-type"][value="教材包"]').checked = true;
     
     // 加载学科下拉（一级学科）
     await loadTeachingAidSubjects();
@@ -11188,6 +11193,7 @@ async function showTeachingAidForm(id) {
         document.getElementById('ta-subject').value = r.subject_id;
         document.getElementById('ta-price').value = r.price;
         document.querySelector(`input[name="ta-status"][value="${r.status}"]`).checked = true;
+        if (r.type) document.querySelector(`input[name="ta-type"][value="${r.type}"]`).checked = true;
         document.getElementById('ta-remark').value = r.remark || '';
         
         // 回填校区树选中
@@ -11226,6 +11232,7 @@ async function saveTeachingAid() {
     const subjectId = parseInt(document.getElementById('ta-subject').value) || 0;
     const price = parseFloat(document.getElementById('ta-price').value);
     const status = document.querySelector('input[name="ta-status"]:checked')?.value || '上架';
+    const type = document.querySelector('input[name="ta-type"]:checked')?.value || '教材包';
     const remark = document.getElementById('ta-remark').value.trim();
     const campusIds = getTaSelectedCampuses();
     
@@ -11237,7 +11244,7 @@ async function saveTeachingAid() {
     if (campusIds.length === 0) { showToast('请选择适用校区', 'error'); return; }
     
     const action = isEdit ? 'update_teaching_aid' : 'add_teaching_aid';
-    const body = { name, unit, subject_id: subjectId, price, status, remark, campus_ids: campusIds };
+    const body = { name, unit, subject_id: subjectId, price, status, type, remark, campus_ids: campusIds };
     if (isEdit) body.id = parseInt(id);
     
     const result = await api(action, body, 'POST');
