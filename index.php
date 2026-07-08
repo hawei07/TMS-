@@ -613,6 +613,28 @@ $db->exec("CREATE TABLE IF NOT EXISTS coupons (
         $colCR = $db->query("SHOW COLUMNS FROM coupon_records LIKE 'usage_status'")->fetch();
         if (!$colCR) $db->exec("ALTER TABLE coupon_records ADD COLUMN usage_status VARCHAR(20) DEFAULT '未使用' AFTER phone");
 
+        // 画具管理
+        $db->exec("CREATE TABLE IF NOT EXISTS teaching_aids (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            name VARCHAR(200) NOT NULL DEFAULT '',
+            unit VARCHAR(20) NOT NULL DEFAULT '个',
+            subject_id INT NOT NULL DEFAULT 0,
+            price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            status VARCHAR(10) NOT NULL DEFAULT '上架',
+            remark TEXT,
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        $db->exec("CREATE TABLE IF NOT EXISTS teaching_aid_campuses (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            teaching_aid_id INT NOT NULL,
+            campus_id INT NOT NULL,
+            INDEX idx_tac_aid (teaching_aid_id),
+            INDEX idx_tac_campus (campus_id),
+            FOREIGN KEY (teaching_aid_id) REFERENCES teaching_aids(id) ON DELETE CASCADE
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
         $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(200) NOT NULL DEFAULT '',
@@ -3503,6 +3525,157 @@ $stmt->execute();
             json(['message' => '删除成功']);
             break;
 
+// ==================== 画具管理 API ====================
+        case 'add_teaching_aid':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $name = trim($input['name'] ?? '');
+            $unit = trim($input['unit'] ?? '个');
+            $subjectId = intval($input['subject_id'] ?? 0);
+            $price = floatval($input['price'] ?? 0);
+            $status = trim($input['status'] ?? '上架');
+            $remark = trim($input['remark'] ?? '');
+            $campusIdsRaw = $input['campus_ids'] ?? [];
+
+            if ($name === '') { json(['error' => '画具名称不能为空']); break; }
+            if ($unit === '') { json(['error' => '计量单位不能为空']); break; }
+            if ($subjectId <= 0) { json(['error' => '请选择学科']); break; }
+            if ($price < 0) { json(['error' => '售价不能为负数']); break; }
+            if (!in_array($status, ['上架', '下架'])) { json(['error' => '状态无效']); break; }
+
+            $n = now();
+            $db->beginTransaction();
+            try {
+                $stmt = $db->prepare("INSERT INTO teaching_aids (name, unit, subject_id, price, status, remark, created_at) VALUES (:n, :u, :sid, :p, :st, :rm, :ct)");
+                $stmt->bindValue(':n', $name);
+                $stmt->bindValue(':u', $unit);
+                $stmt->bindValue(':sid', $subjectId, PDO::PARAM_INT);
+                $stmt->bindValue(':p', $price);
+                $stmt->bindValue(':st', $status);
+                $stmt->bindValue(':rm', $remark);
+                $stmt->bindValue(':ct', $n);
+                $stmt->execute();
+                $aid = $db->lastInsertId();
+
+                if (!empty($campusIdsRaw)) {
+                    $campusIds = is_string($campusIdsRaw) ? array_map('intval', explode(',', $campusIdsRaw)) : array_map('intval', $campusIdsRaw);
+                    $vals = [];
+                    foreach ($campusIds as $cid) { if ($cid > 0) $vals[] = "($aid, $cid)"; }
+                    if (!empty($vals)) $db->exec("INSERT INTO teaching_aid_campuses (teaching_aid_id, campus_id) VALUES " . implode(', ', $vals));
+                }
+
+                $db->commit();
+                json(['id' => $aid, 'message' => '画具添加成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '添加失败：' . $e->getMessage()]);
+            }
+            break;
+
+        case 'delete_teaching_aid':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $exists = $db->query("SELECT id FROM teaching_aids WHERE id=$id")->fetch();
+            if (!$exists) { json(['error' => '画具不存在']); break; }
+
+            $db->exec("DELETE FROM teaching_aids WHERE id=$id");
+            json(['message' => '画具已删除']);
+            break;
+
+        case 'get_teaching_aid':
+            $id = intval($_GET['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $aid = $db->query("SELECT ta.*, s.name AS subject_name FROM teaching_aids ta LEFT JOIN subjects s ON ta.subject_id=s.id WHERE ta.id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$aid) { json(['error' => '画具不存在']); break; }
+
+            $campusRes = $db->query("SELECT campus_id FROM teaching_aid_campuses WHERE teaching_aid_id=$id ORDER BY campus_id");
+            $campusIds = [];
+            while ($cr = $campusRes->fetch(PDO::FETCH_ASSOC)) $campusIds[] = intval($cr['campus_id']);
+
+            $aid['price'] = floatval($aid['price']);
+            $aid['campus_ids'] = $campusIds;
+            json(['data' => $aid]);
+            break;
+
+        case 'list_teaching_aids':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = trim($_GET['keyword'] ?? '');
+            $offset = ($page - 1) * $pageSize;
+
+            $where = ['1=1'];
+            if ($keyword !== '') {
+                $where[] = 'ta.name LIKE ' . $db->quote('%' . $keyword . '%');
+            }
+            $whereStr = implode(' AND ', $where);
+
+            $cnt = $db->query("SELECT COUNT(*) FROM teaching_aids ta WHERE $whereStr")->fetchColumn();
+            $total = intval($cnt);
+
+            $sql = "SELECT ta.*,
+                s.name AS subject_name,
+                (SELECT GROUP_CONCAT(DISTINCT tac2.campus_id ORDER BY tac2.campus_id SEPARATOR ',') FROM teaching_aid_campuses tac2 WHERE tac2.teaching_aid_id=ta.id) AS campus_ids,
+                (SELECT GROUP_CONCAT(DISTINCT o.name ORDER BY o.name SEPARATOR ', ') FROM teaching_aid_campuses tac2 LEFT JOIN organizations o ON tac2.campus_id=o.id WHERE tac2.teaching_aid_id=ta.id) AS campus_names
+            FROM teaching_aids ta
+            LEFT JOIN subjects s ON ta.subject_id=s.id
+            WHERE $whereStr
+            ORDER BY ta.id DESC
+            LIMIT $offset, $pageSize";
+            $res = $db->query($sql);
+            $rows = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+                $r['price'] = floatval($r['price']);
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        case 'update_teaching_aid':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if ($id <= 0) { json(['error' => 'ID无效']); break; }
+
+            $existing = $db->query("SELECT * FROM teaching_aids WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) { json(['error' => '画具不存在']); break; }
+
+            $name = trim($input['name'] ?? $existing['name']);
+            $unit = trim($input['unit'] ?? $existing['unit']);
+            $subjectId = isset($input['subject_id']) ? intval($input['subject_id']) : intval($existing['subject_id']);
+            $price = isset($input['price']) ? floatval($input['price']) : floatval($existing['price']);
+            $status = trim($input['status'] ?? $existing['status']);
+            $remark = isset($input['remark']) ? trim($input['remark']) : $existing['remark'];
+            $campusIdsRaw = $input['campus_ids'] ?? null;
+
+            if ($name === '') { json(['error' => '画具名称不能为空']); break; }
+            if ($unit === '') { json(['error' => '计量单位不能为空']); break; }
+            if ($subjectId <= 0) { json(['error' => '请选择学科']); break; }
+            if ($price < 0) { json(['error' => '售价不能为负数']); break; }
+            if (!in_array($status, ['上架', '下架'])) { json(['error' => '状态无效']); break; }
+
+            $db->beginTransaction();
+            try {
+                $db->exec("UPDATE teaching_aids SET name=" . $db->quote($name) . ", unit=" . $db->quote($unit) . ", subject_id=$subjectId, price=$price, status=" . $db->quote($status) . ", remark=" . $db->quote($remark) . ", updated_at=NOW() WHERE id=$id");
+
+                if ($campusIdsRaw !== null) {
+                    $db->exec("DELETE FROM teaching_aid_campuses WHERE teaching_aid_id=$id");
+                    if (!empty($campusIdsRaw)) {
+                        $campusIds = is_string($campusIdsRaw) ? array_map('intval', explode(',', $campusIdsRaw)) : array_map('intval', $campusIdsRaw);
+                        $vals = [];
+                        foreach ($campusIds as $cid) { if ($cid > 0) $vals[] = "($id, $cid)"; }
+                        if (!empty($vals)) $db->exec("INSERT INTO teaching_aid_campuses (teaching_aid_id, campus_id) VALUES " . implode(', ', $vals));
+                    }
+                }
+
+                $db->commit();
+                json(['message' => '画具更新成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '更新失败：' . $e->getMessage()]);
+            }
+            break;
+
         case 'enroll_course':
             $studentId = intval($input['student_id'] ?? 0);
             $courseId = intval($input['course_id'] ?? 0);
@@ -6356,6 +6529,17 @@ if (intval($countBt) === 0) {
                                     <span class="tree-label">优惠管理</span>
                                 </div>
                             </li>
+                            <!-- 画具管理 -->
+                            <li class="tree-node">
+                                <div class="tree-leaf" data-panel="panel-teaching-aids">
+                                    <span class="tree-icon-sub">
+                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
+                                        </svg>
+                                    </span>
+                                    <span class="tree-label">画具管理</span>
+                                </div>
+                            </li>
                             <li class="tree-node">
                                 <div class="tree-parent sub-parent">
                                     <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
@@ -7579,6 +7763,60 @@ if (intval($countBt) === 0) {
                             <div class="org-tree-loading">加载中...</div>
                         </div>
                     </div>
+                </div>
+            </section>
+
+            <!-- 面板：画具管理 -->
+            <section class="content-panel" id="panel-teaching-aids">
+                <div class="panel-header"><h3>画具管理</h3></div>
+                <div class="section-tabs">
+                    <span class="sec-tab active" data-tab="tab-teaching-aids">画具列表</span>
+                </div>
+                <div id="tab-teaching-aids">
+                    <!-- 工具栏 -->
+                    <div class="toolbar">
+                        <div class="toolbar-left">
+                            <button class="btn btn-primary" onclick="showTeachingAidForm()">+ 新增画具</button>
+                            <span style="color:#888;font-size:13px;margin-left:12px;" id="ta-total-count"></span>
+                        </div>
+                        <div class="toolbar-right">
+                            <input type="text" id="ta-search" class="form-input" 
+                                   placeholder="搜索画具名称" 
+                                   onkeyup="if(event.key==='Enter'){teachingAidPage=1;loadTeachingAids();}"
+                                   style="width:220px;">
+                            <button class="btn btn-search" onclick="teachingAidPage=1;loadTeachingAids();">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                                搜索
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- 表格 -->
+                    <div class="table-wrap">
+                        <table id="table-teaching-aids">
+                            <thead>
+                                <tr>
+                                    <th style="width:50px;">#</th>
+                                    <th>画具名称</th>
+                                    <th style="width:80px;">计量单位</th>
+                                    <th>学科</th>
+                                    <th style="width:100px;text-align:right;">售价</th>
+                                    <th>适用校区</th>
+                                    <th style="width:80px;">状态</th>
+                                    <th>备注</th>
+                                    <th style="width:120px;">操作</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ta-tbody">
+                                <tr><td colspan="9"><div class="empty-state">暂无画具数据</div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- 分页 -->
+                    <div class="pagination" id="pagination-teaching-aids"></div>
                 </div>
             </section>
 
@@ -9278,6 +9516,106 @@ if (intval($countBt) === 0) {
             </div>
         </div>
     </div>
+
+    <!-- 画具弹窗 -->
+    <div class="modal-overlay" id="modal-teaching-aid">
+        <div class="modal modal-lg" style="max-width:680px;">
+            <div class="modal-header">
+                <h4 id="teaching-aid-modal-title">新增画具</h4>
+                <button class="modal-close" onclick="closeModal('modal-teaching-aid')">&times;</button>
+            </div>
+            <div class="modal-body">
+                <!-- ====== 卡片 1: 基本信息 ====== -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">📋</span> 基本信息
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-row">
+                            <div class="form-group" style="flex:2;">
+                                <label class="required">画具名称</label>
+                                <input type="text" id="ta-name" class="form-input" 
+                                       placeholder="请输入画具名称" maxlength="50">
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label class="required">计量单位</label>
+                                <select id="ta-unit" class="form-input">
+                                    <option value="个">个</option>
+                                    <option value="件">件</option>
+                                    <option value="套">套</option>
+                                    <option value="支">支</option>
+                                    <option value="盒">盒</option>
+                                    <option value="包">包</option>
+                                    <option value="本">本</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div class="form-row">
+                            <div class="form-group" style="flex:1;">
+                                <label class="required">学科</label>
+                                <select id="ta-subject" class="form-input">
+                                    <option value="">请选择学科</option>
+                                    <!-- JS 动态填充 -->
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
+                                <label class="required">售价 (元)</label>
+                                <input type="number" id="ta-price" class="form-input" 
+                                       step="0.01" min="0" placeholder="0.00">
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====== 卡片 2: 适用范围 ====== -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">🏫</span> 适用范围
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-group">
+                            <div class="dp-tree-header">
+                                <label class="required">适用校区</label>
+                                <span class="dp-badge" id="ta-campus-count">未选择</span>
+                            </div>
+                            <div class="dp-tree-wrap" id="teaching-aid-campus-tree"></div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ====== 卡片 3: 其他信息 ====== -->
+                <div class="dp-card">
+                    <div class="dp-card-title">
+                        <span class="dp-card-icon">⚙️</span> 其他信息
+                    </div>
+                    <div class="dp-card-body">
+                        <div class="form-group">
+                            <label>状态</label>
+                            <div class="radio-group" style="display:flex;gap:24px;padding-top:6px;">
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                    <input type="radio" name="ta-status" value="上架" checked> 上架
+                                </label>
+                                <label style="display:flex;align-items:center;gap:6px;cursor:pointer;">
+                                    <input type="radio" name="ta-status" value="下架"> 下架
+                                </label>
+                            </div>
+                        </div>
+                        <div class="form-group">
+                            <label>备注</label>
+                            <textarea id="ta-remark" class="form-input" rows="3" 
+                                      placeholder="选填，补充说明信息" maxlength="500"></textarea>
+                        </div>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-default" onclick="closeModal('modal-teaching-aid')">取消</button>
+                <button class="btn btn-primary" id="btn-ta-save" onclick="saveTeachingAid()">保存</button>
+            </div>
+        </div>
+    </div>
+    <!-- 隐藏域：编辑时的画具 ID -->
+    <input type="hidden" id="edit-ta-id">
 
     <!-- 优惠券弹窗 -->
     <div class="modal-overlay" id="modal-coupon">

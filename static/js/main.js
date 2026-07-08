@@ -102,6 +102,7 @@ function refreshPanel(panelId) {
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
         case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
         case 'panel-period-settings': loadPeriodTable(); break;
+        case 'panel-teaching-aids': loadTeachingAids(); break;
     }
 }
 
@@ -11100,7 +11101,7 @@ async function saveCouponRecord() {
 
 // 删除发放记录
 function deleteCouponRecord(id) {
-    showCustomConfirm('确定要删除这条发放记录吗？删除后不可恢复。', async function() {
+    showCustomConfirm(`确定删除这条发放记录吗？`, async () => {
         try {
             const result = await api('delete_coupon_record', { id: id });
             showToast(result.message || '已删除');
@@ -11110,4 +11111,180 @@ function deleteCouponRecord(id) {
             showToast('删除失败', 'error');
         }
     });
+}
+
+// ==================== 画具管理 ====================
+
+let teachingAidPage = 1;
+let teachingAidEditingId = null;
+
+// ===== 列表加载 =====
+async function loadTeachingAids(page = 1) {
+    teachingAidPage = page;
+    const keyword = document.getElementById('ta-search')?.value || '';
+    const data = await api('list_teaching_aids', { keyword, page, page_size: 20 }, 'GET');
+    renderTeachingAidTable(data.data);
+    renderPagination('pagination-teaching-aids', data.total, page, 20, 'loadTeachingAids');
+    document.getElementById('ta-total-count').textContent = `共 ${data.total} 条`;
+}
+
+function renderTeachingAidTable(rows) {
+    const tbody = document.getElementById('ta-tbody');
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9"><div class="empty-state">暂无画具数据</div></td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map((r, i) => {
+        const campusNames = (r.campus_names || '').split(', ').filter(Boolean);
+        const campusDisplay = campusNames.length > 3 
+            ? campusNames.slice(0, 3).join(', ') + ` 等${campusNames.length}个校区`
+            : (r.campus_names || '—');
+        const statusClass = r.status === '上架' ? 'tag-green' : 'tag-gray';
+        return `
+        <tr>
+            <td>${(teachingAidPage - 1) * 20 + i + 1}</td>
+            <td><strong>${esc(r.name)}</strong></td>
+            <td>${esc(r.unit)}</td>
+            <td>${esc(r.subject_name || '—')}</td>
+            <td style="text-align:right;color:#DC2626;font-weight:600;">¥${Number(r.price).toFixed(2)}</td>
+            <td title="${esc(r.campus_names || '')}">${esc(campusDisplay)}</td>
+            <td><span class="${statusClass}">${r.status}</span></td>
+            <td title="${esc(r.remark || '')}">${esc((r.remark || '').substring(0, 20))}${(r.remark || '').length > 20 ? '...' : ''}</td>
+            <td>
+                <button class="btn btn-sm btn-outline" onclick="showTeachingAidForm(${r.id})">编辑</button>
+                <button class="btn btn-sm btn-outline btn-danger" onclick="deleteTeachingAid(${r.id}, '${esc(r.name)}')">删除</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+// ===== 弹窗 =====
+async function showTeachingAidForm(id) {
+    // 关闭其他弹窗
+    document.querySelectorAll('.modal-overlay.show').forEach(m => m.classList.remove('show'));
+    
+    document.getElementById('edit-ta-id').value = '';
+    document.getElementById('ta-name').value = '';
+    document.getElementById('ta-unit').value = '个';
+    document.getElementById('ta-price').value = '';
+    document.getElementById('ta-remark').value = '';
+    document.querySelector('input[name="ta-status"][value="上架"]').checked = true;
+    
+    // 加载学科下拉（一级学科）
+    await loadTeachingAidSubjects();
+    
+    // 加载校区树
+    await loadCampusTree('teaching-aid-campus-tree');
+    ensureTaCampusTreeListener();
+    
+    if (id) {
+        // 编辑模式
+        document.getElementById('teaching-aid-modal-title').textContent = '编辑画具';
+        document.getElementById('edit-ta-id').value = id;
+        const data = await api('get_teaching_aid', { id }, 'GET');
+        const r = data.data;
+        document.getElementById('ta-name').value = r.name;
+        document.getElementById('ta-unit').value = r.unit;
+        document.getElementById('ta-subject').value = r.subject_id;
+        document.getElementById('ta-price').value = r.price;
+        document.querySelector(`input[name="ta-status"][value="${r.status}"]`).checked = true;
+        document.getElementById('ta-remark').value = r.remark || '';
+        
+        // 回填校区树选中
+        if (r.campus_ids && r.campus_ids.length > 0) {
+            setTimeout(() => {
+                r.campus_ids.forEach(cid => {
+                    const cb = document.querySelector(`#teaching-aid-campus-tree input[type="checkbox"][value="${cid}"]`);
+                    if (cb) { cb.checked = true; cb.dispatchEvent(new Event('change', {bubbles: true})); }
+                });
+                updateTaCampusCount();
+            }, 300);
+        }
+    } else {
+        document.getElementById('teaching-aid-modal-title').textContent = '新增画具';
+        updateTaCampusCount();
+    }
+    
+    openModal('modal-teaching-aid');
+}
+
+async function loadTeachingAidSubjects() {
+    const select = document.getElementById('ta-subject');
+    select.innerHTML = '<option value="">加载中...</option>';
+    const result = await api('list_subjects', {}, 'GET');
+    // 筛选 parent_id=0（一级学科）
+    const level1 = result.flat.filter(s => parseInt(s.parent_id) === 0);
+    select.innerHTML = '<option value="">请选择学科</option>' + 
+        level1.map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('');
+}
+
+async function saveTeachingAid() {
+    const id = document.getElementById('edit-ta-id').value;
+    const isEdit = !!id;
+    const name = document.getElementById('ta-name').value.trim();
+    const unit = document.getElementById('ta-unit').value.trim();
+    const subjectId = parseInt(document.getElementById('ta-subject').value) || 0;
+    const price = parseFloat(document.getElementById('ta-price').value);
+    const status = document.querySelector('input[name="ta-status"]:checked')?.value || '上架';
+    const remark = document.getElementById('ta-remark').value.trim();
+    const campusIds = getTaSelectedCampuses();
+    
+    // 校验
+    if (!name) { showToast('请输入画具名称', 'error'); return; }
+    if (!unit) { showToast('请选择计量单位', 'error'); return; }
+    if (subjectId <= 0) { showToast('请选择学科', 'error'); return; }
+    if (isNaN(price) || price < 0) { showToast('请输入有效售价', 'error'); return; }
+    if (campusIds.length === 0) { showToast('请选择适用校区', 'error'); return; }
+    
+    const action = isEdit ? 'update_teaching_aid' : 'add_teaching_aid';
+    const body = { name, unit, subject_id: subjectId, price, status, remark, campus_ids: campusIds };
+    if (isEdit) body.id = parseInt(id);
+    
+    const result = await api(action, body, 'POST');
+    if (result.error) { showToast(result.error, 'error'); return; }
+    
+    showToast(isEdit ? '画具更新成功' : '画具添加成功', 'success');
+    closeModal('modal-teaching-aid');
+    loadTeachingAids(teachingAidPage);
+}
+
+function deleteTeachingAid(id, name) {
+    showCustomConfirm(`确定删除画具「${name}」吗？此操作不可恢复。`, async () => {
+        const result = await api('delete_teaching_aid', { id }, 'POST');
+        if (result.error) { showToast(result.error, 'error'); return; }
+        showToast('画具已删除', 'success');
+        loadTeachingAids(teachingAidPage);
+    });
+}
+
+// ===== 校区树辅助 =====
+function getTaSelectedCampuses() {
+    const checks = document.querySelectorAll('#teaching-aid-campus-tree input[type="checkbox"]:checked');
+    return Array.from(checks).map(cb => parseInt(cb.value)).filter(v => v > 0);
+}
+
+function updateTaCampusCount() {
+    const count = getTaSelectedCampuses().length;
+    const badge = document.getElementById('ta-campus-count');
+    if (badge) badge.textContent = count > 0 ? `已选 ${count} 个校区` : '未选择';
+}
+
+function ensureTaCampusTreeListener() {
+    const tree = document.getElementById('teaching-aid-campus-tree');
+    if (!tree) return;
+    // 移除旧监听器，重新绑定（避免重复）
+    tree.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+        cb.removeEventListener('change', updateTaCampusCount);
+        cb.addEventListener('change', updateTaCampusCount);
+    });
+    // 使用 MutationObserver 监听新节点（校区树异步加载）
+    const observer = new MutationObserver(() => {
+        tree.querySelectorAll('input[type="checkbox"]').forEach(cb => {
+            if (!cb._taBound) { 
+                cb.addEventListener('change', updateTaCampusCount);
+                cb._taBound = true;
+            }
+        });
+    });
+    observer.observe(tree, { childList: true, subtree: true });
 }
