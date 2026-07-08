@@ -4399,12 +4399,16 @@ $stmt->execute();
                 $consumedLessons = intval($order['consumed_lessons'] ?? 0);
                 if ($consumedLessons >= $lessonCount) { json(['error' => '该课程已全部消耗，无法退费']); break; }
                 $actualPrice = floatval($order['actual_price'] ?? 0);
-                // 计算剩余可退课时和金额
-                $remainingLessons = $lessonCount - $consumedLessons;
-                $remainingAmount = 0;
-                if ($lessonCount > 0) {
-                    $remainingAmount = round($actualPrice * $remainingLessons / $lessonCount, 2);
-                }
+                                // 退费金额排除教材包和商品券（与课耗算法一致）
+                                $taPrice = floatval($order['teaching_aid_price'] ?? 0);
+                                $pcAmount = floatval($order['product_coupon_amount'] ?? 0);
+                                $classPrice = $actualPrice - $taPrice + $pcAmount;
+                                // 计算剩余可退课时和金额
+                                $remainingLessons = $lessonCount - $consumedLessons;
+                                $remainingAmount = 0;
+                                if ($lessonCount > 0) {
+                                    $remainingAmount = round($classPrice * $remainingLessons / $lessonCount, 2);
+                                }
                 $customDeduction = floatval($input['custom_deduction'] ?? 0);
                 if ($customDeduction < 0) { json(['error' => '扣减金额不能为负']); break; }
                 $actualRefund = round($remainingAmount - $customDeduction, 2);
@@ -4427,7 +4431,7 @@ $stmt->execute();
                     $db->quote($order['campus'] ?? '') . ", " .
                     $db->quote($courseName) . ", " .
                     "$lessonCount, " .
-                    "$actualPrice, " .
+                    "$classPrice, " .
                     "$consumedLessons, " .
                     round($actualPrice * $consumedLessons / max($lessonCount, 1), 2) . ", " .
                     "$remainingLessons, " .
