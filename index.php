@@ -7502,12 +7502,13 @@ if (intval($countBt) === 0) {
                         <div class="enroll-table-wrap">
                             <table class="enroll-items-table">
                                 <thead><tr>
-                                    <th>报价项名称</th>
-                                                                        <th class="col-num">课时数</th>
-                                                                        <th class="col-num">单价</th>
-                                                                        <th class="col-num">实际价格</th>
-                                                                        <th>优惠方案</th>
-                                                                        <th>优惠券</th>
+                                 <th>报价项名称</th>
+                                                                     <th class="col-num">课时数</th>
+                                                                     <th class="col-num">单价</th>
+                                                                     <th class="col-num">实际价格</th>
+                                                                     <th>优惠方案</th>
+                                                                     <th>教材包</th>
+                                                                     <th>商品券</th>
                                 </tr></thead>
                                 <tbody id="enroll-items-tbody"></tbody>
                             </table>
@@ -8232,7 +8233,7 @@ if (intval($countBt) === 0) {
                 <div class="price-detail-header">报价单列表 <span id="price-plan-type-tag"></span></div>
                 <div class="price-detail-table-wrap">
                     <table id="price-item-table" class="price-item-table">
-                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>优惠方案</th><th>优惠券</th><th>实际价格</th><th width="120">操作</th></tr></thead>
+                        <thead><tr><th>报价单名称</th><th>课时数量</th><th>课时价格</th><th>优惠方案</th><th>教材包</th><th>商品券</th><th>实际价格</th><th width="120">操作</th></tr></thead>
                         <tbody id="price-item-table-body"></tbody>
                     </table>
                 </div>
@@ -8303,8 +8304,12 @@ if (intval($countBt) === 0) {
                             <select id="price-item-discount-plan"><option value="">不使用优惠方案</option></select>
                         </div>
                         <div class="form-group">
-                            <label>课时优惠券</label>
-                            <select id="price-item-coupon"><option value="">不使用优惠券</option></select>
+                            <label>教材包</label>
+                            <select id="price-item-teaching-aid"><option value="">不使用教材包</option></select>
+                        </div>
+                        <div class="form-group">
+                            <label>商品券</label>
+                            <select id="price-item-coupon"><option value="">不使用商品券</option></select>
                         </div>
                     </div>
                 </div>
