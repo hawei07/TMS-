@@ -5118,6 +5118,7 @@ function renderStudentTable(rows) {
             <td>
                 <div class="action-btns">
                     <button class="btn btn-primary btn-sm" onclick="goEnroll(${r.id})">报名</button>
+                    <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${r.id})">分班</button>
                     <button class="btn btn-outline-gray btn-sm" onclick="editStudent(${r.id})">编辑</button>
                 </div>
             </td>
