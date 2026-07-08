@@ -3957,6 +3957,130 @@ $sumStmt->execute();
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize, 'payment_summary' => $paymentSummary]);
             break;
 
+        case 'get_order_detail':
+            $pono = trim($_GET['parent_order_no'] ?? '');
+            if (!$pono) { json(['success' => false, 'message' => '父订单号不能为空']); break; }
+
+            // 1. 查询子订单列表（含优惠 JOIN）
+            $itemsSql = "SELECT o.id, o.order_no, o.item_name, o.lesson_count, o.actual_price,
+                                o.cash_amount, o.meituan_amount, o.account_amount,
+                                o.pay_status, o.plan_name, o.course_id, o.campus,
+                                pi.unit_price,
+                                d.name AS discount_plan_name,
+                                c.name AS coupon_name
+                         FROM orders o
+                         LEFT JOIN price_plans pp ON pp.name = o.plan_name AND pp.course_id = o.course_id
+                         LEFT JOIN price_items pi ON pi.plan_id = pp.id AND pi.name = o.item_name
+                         LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
+                         LEFT JOIN coupons c ON pi.coupon_id = c.id
+                         WHERE o.parent_order_no = " . $db->quote($pono) . "
+                         ORDER BY o.id";
+            $itemsStmt = $db->query($itemsSql);
+            $items = $itemsStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 2. 查询父订单基本信息
+            $poStmt = $db->query("SELECT * FROM parent_orders WHERE parent_order_no = " . $db->quote($pono));
+            $parentOrder = $poStmt->fetch(PDO::FETCH_ASSOC);
+
+            // 3. 组装数据
+            $studentName = '';
+            $studentNo = '';
+            $courseName = '';
+            $campus = '';
+            $enrollTime = $parentOrder['enroll_time'] ?? '';
+
+            if (!empty($items)) {
+                // 从子订单关联查询 student_name / student_no / course_name
+                $firstItem = $items[0];
+                $sid = intval($firstItem['course_id'] ?? 0);
+                // 从第一条子订单的 student_id 查学生信息
+                $oid = intval($firstItem['id'] ?? 0);
+                $studentInfo = $db->query("SELECT s.name AS student_name, s.student_no FROM orders o LEFT JOIN students s ON o.student_id = s.id WHERE o.id = $oid")->fetch(PDO::FETCH_ASSOC);
+                if ($studentInfo) {
+                    $studentName = $studentInfo['student_name'] ?? '';
+                    $studentNo = $studentInfo['student_no'] ?? '';
+                }
+                // 优先用 parent_orders 中的值
+                if ($parentOrder) {
+                    $studentName = $parentOrder['student_name'] ?: $studentName;
+                    $studentNo = $parentOrder['student_no'] ?: $studentNo;
+                    $courseName = $parentOrder['course_name'] ?: '';
+                    $campus = $parentOrder['campus'] ?: ($firstItem['campus'] ?? '');
+                } else {
+                    $campus = $firstItem['campus'] ?? '';
+                }
+                // 如果 parent_orders 没有 course_name，从子订单联查
+                if (!$courseName && $sid > 0) {
+                    $c = $db->query("SELECT name FROM courses WHERE id = $sid")->fetch(PDO::FETCH_ASSOC);
+                    $courseName = $c['name'] ?? '';
+                }
+            } elseif ($parentOrder) {
+                $studentName = $parentOrder['student_name'] ?? '';
+                $studentNo = $parentOrder['student_no'] ?? '';
+                $courseName = $parentOrder['course_name'] ?? '';
+                $campus = $parentOrder['campus'] ?? '';
+            }
+
+            // 4. 计算支付汇总 + total_price + total_lessons
+            $totalPrice = 0;
+            $totalLessons = 0;
+            $cashTotal = 0;
+            $meituanTotal = 0;
+            $accountTotal = 0;
+            foreach ($items as $it) {
+                $totalPrice += floatval($it['actual_price'] ?? 0);
+                $totalLessons += intval($it['lesson_count'] ?? 0);
+                $cashTotal += floatval($it['cash_amount'] ?? 0);
+                $meituanTotal += floatval($it['meituan_amount'] ?? 0);
+                $accountTotal += floatval($it['account_amount'] ?? 0);
+            }
+            // 优先使用 parent_orders 的汇总值
+            if ($parentOrder) {
+                $totalPrice = floatval($parentOrder['total_price'] ?? $totalPrice);
+                $totalLessons = intval($parentOrder['total_lessons'] ?? $totalLessons);
+            }
+
+            // 5. 构建 items 返回数据
+            $resultItems = [];
+            foreach ($items as $it) {
+                $resultItems[] = [
+                    'order_id' => intval($it['id']),
+                    'order_no' => $it['order_no'] ?? '',
+                    'item_name' => $it['item_name'] ?? '',
+                    'lesson_count' => intval($it['lesson_count'] ?? 0),
+                    'unit_price' => number_format(floatval($it['unit_price'] ?? 0), 2, '.', ''),
+                    'actual_price' => number_format(floatval($it['actual_price'] ?? 0), 2, '.', ''),
+                    'discount_plan_name' => $it['discount_plan_name'] ?? null,
+                    'coupon_name' => $it['coupon_name'] ?? null,
+                    'cash_amount' => number_format(floatval($it['cash_amount'] ?? 0), 2, '.', ''),
+                    'meituan_amount' => number_format(floatval($it['meituan_amount'] ?? 0), 2, '.', ''),
+                    'account_amount' => number_format(floatval($it['account_amount'] ?? 0), 2, '.', ''),
+                    'pay_status' => $it['pay_status'] ?? '',
+                ];
+            }
+
+            json([
+                'success' => true,
+                'data' => [
+                    'parent_order_no' => $pono,
+                    'student_name' => $studentName,
+                    'student_no' => $studentNo,
+                    'course_name' => $courseName,
+                    'campus' => $campus,
+                    'enroll_time' => $enrollTime,
+                    'total_price' => number_format($totalPrice, 2, '.', ''),
+                    'total_lessons' => $totalLessons,
+                    'payment' => [
+                        'cash_amount' => number_format($cashTotal, 2, '.', ''),
+                        'meituan_amount' => number_format($meituanTotal, 2, '.', ''),
+                        'account_amount' => number_format($accountTotal, 2, '.', ''),
+                        'total' => number_format($cashTotal + $meituanTotal + $accountTotal, 2, '.', ''),
+                    ],
+                    'items' => $resultItems,
+                ],
+            ]);
+            break;
+
         case 'void_order':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $oid = intval($input['order_id'] ?? 0);
@@ -9274,6 +9398,19 @@ if (intval($countBt) === 0) {
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-coupon-record')">取消</button>
                 <button class="btn btn-primary" id="btn-cr-save" onclick="saveCouponRecord()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 订单详情弹窗 -->
+    <div class="modal-overlay" id="modal-order-detail">
+        <div class="modal modal-lg" style="max-width:700px;">
+            <div class="modal-header">
+                <h3>订单详情</h3>
+                <button class="modal-close" onclick="closeModal('modal-order-detail')">&times;</button>
+            </div>
+            <div class="modal-body" id="order-detail-body">
+                <div style="text-align:center;color:#999;padding:30px;">加载中...</div>
             </div>
         </div>
     </div>
