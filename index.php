@@ -6100,30 +6100,12 @@ $stmt->execute();
                                     $deductionJson = json_encode($deductionEntries);
                                 }
                             } else {
-                                // 追加扣课（delta > 0）：优先从已扣订单追加，再找新订单
-                                // 若已扣订单余量不足，通过三级优先级查询新订单（排除已处理的订单ID）
-                                $processedOrderIds = array_unique(array_column($deductionEntries, 'order_id'));
+                                // 追加扣课（delta > 0）：使用三级优先级（与初始扣课一致）
                                 $remainingDelta = $delta;
                                 $newEntries = [];
-                                // 优先从已扣订单追加扣（如果还有剩余课时）
-                                foreach ($deductionEntries as &$en) {
-                                    if ($remainingDelta <= 0) break;
-                                    $eoid = intval($en['order_id'] ?? 0);
-                                    if ($eoid <= 0) continue;
-                                    $oCheck = $db->query("SELECT lesson_count, consumed_lessons FROM orders WHERE id = $eoid AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))")->fetch(PDO::FETCH_ASSOC);
-                                    if (!$oCheck) continue;
-                                    $available = intval($oCheck['lesson_count']) - intval($oCheck['consumed_lessons']);
-                                    if ($available <= 0) continue;
-                                    $toAdd = min($remainingDelta, $available);
-                                    $newConsumed = intval($oCheck['consumed_lessons']) + $toAdd;
-                                    $stmtAdd = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $eoid AND $newConsumed <= lesson_count");
-                                    $stmtAdd->execute();
-                                    $en['amount'] = intval($en['amount']) + $toAdd;
-                                    $remainingDelta -= $toAdd;
-                                }
-                                unset($en);
+                                $processedOrderIds = [];
 
-                                // 优先级1：同一course_id的订单（排除已扣过的）
+                                // 优先级1：同一course_id的订单（先报名优先）
                                 $excludeClause1 = count($processedOrderIds) > 0 ? "AND id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
                                 $quotedCampus = $db->quote($classCampus);
                                 $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons AND (refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND campus = $quotedCampus $excludeClause1 AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) ORDER BY created_at ASC, id ASC");
@@ -6193,8 +6175,21 @@ $stmt->execute();
                                     throw new Exception("学员「{$rec['student_name']}」剩余课时不足：需追加 {$delta} 课时，但仅能从剩余课包中扣 " . ($delta - $remainingDelta) . " 课时");
                                 }
 
-                                // 合并新扣课条目到现有条目
-                                $deductionEntries = array_merge($deductionEntries, $newEntries);
+                                // 合并新扣课条目到现有条目（同订单合并amount，避免重复order_id）
+                                foreach ($newEntries as $ne) {
+                                    $found = false;
+                                    foreach ($deductionEntries as &$de) {
+                                        if (intval($de['order_id']) === intval($ne['order_id'])) {
+                                            $de['amount'] = intval($de['amount']) + intval($ne['amount']);
+                                            $found = true;
+                                            break;
+                                        }
+                                    }
+                                    unset($de);
+                                    if (!$found) {
+                                        $deductionEntries[] = $ne;
+                                    }
+                                }
                                 $deductionJson = json_encode($deductionEntries);
                             }
                         }
