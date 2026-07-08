@@ -2374,7 +2374,7 @@ $stmt->execute();
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query(
-                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name, d.discount_amount AS discount_plan_amount, c.discount_amount AS coupon_amount
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name, d.discount_amount AS discount_plan_amount, c.discount_amount AS coupon_amount, pc.discount_amount AS product_coupon_amount
                      FROM price_items pi
                      LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
                      LEFT JOIN coupons c ON pi.coupon_id = c.id
@@ -2397,7 +2397,7 @@ $stmt->execute();
             while ($plan = $planRes->fetch(PDO::FETCH_ASSOC)) {
                 $items = [];
                 $itemRes = $db->query(
-                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name, d.discount_amount AS discount_plan_amount, c.discount_amount AS coupon_amount
+                    "SELECT pi.*, d.name AS discount_plan_name, c.name AS coupon_name, ta.name AS teaching_aid_name, ta.price AS teaching_aid_price, pc.name AS product_coupon_name, d.discount_amount AS discount_plan_amount, c.discount_amount AS coupon_amount, pc.discount_amount AS product_coupon_amount
                      FROM price_items pi
                      LEFT JOIN discount_plans d ON pi.discount_plan_id = d.id
                      LEFT JOIN coupons c ON pi.coupon_id = c.id
@@ -4165,9 +4165,12 @@ $sumStmt->execute();
                                 o.pay_status, o.plan_name, o.course_id, o.campus,
                                 pi.unit_price,
                                 d.name AS discount_plan_name,
+                                d.discount_amount AS discount_plan_amount,
                                 c.name AS coupon_name,
+                                c.discount_amount AS coupon_amount,
                                 ta.name AS teaching_aid_name,
-                                ta.price AS teaching_aid_price, pc.name AS product_coupon_name
+                                ta.price AS teaching_aid_price, pc.name AS product_coupon_name,
+                                pc.discount_amount AS product_coupon_amount
                          FROM orders o
                          LEFT JOIN price_plans pp ON pp.name = o.plan_name AND pp.course_id = o.course_id
                          LEFT JOIN price_items pi ON pi.plan_id = pp.id AND pi.name = o.item_name
@@ -4253,10 +4256,13 @@ $sumStmt->execute();
                     'unit_price' => number_format(floatval($it['unit_price'] ?? 0), 2, '.', ''),
                     'actual_price' => number_format(floatval($it['actual_price'] ?? 0), 2, '.', ''),
                     'discount_plan_name' => $it['discount_plan_name'] ?? null,
+                    'discount_plan_amount' => $it['discount_plan_amount'] ? number_format(floatval($it['discount_plan_amount']), 2, '.', '') : null,
                     'coupon_name' => $it['coupon_name'] ?? null,
+                    'coupon_amount' => $it['coupon_amount'] ? number_format(floatval($it['coupon_amount']), 2, '.', '') : null,
                     'teaching_aid_name' => $it['teaching_aid_name'] ?? null,
                     'teaching_aid_price' => $it['teaching_aid_price'] ? number_format(floatval($it['teaching_aid_price']), 2, '.', '') : null,
                     'product_coupon_name' => $it['product_coupon_name'] ?? null,
+                    'product_coupon_amount' => $it['product_coupon_amount'] ? number_format(floatval($it['product_coupon_amount']), 2, '.', '') : null,
                     'cash_amount' => number_format(floatval($it['cash_amount'] ?? 0), 2, '.', ''),
                     'meituan_amount' => number_format(floatval($it['meituan_amount'] ?? 0), 2, '.', ''),
                     'account_amount' => number_format(floatval($it['account_amount'] ?? 0), 2, '.', ''),

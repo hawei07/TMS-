@@ -3257,10 +3257,10 @@ function renderItemList() {
     }
     tbody.innerHTML = items.map(item => {
         const isSmall = isSmallPack;
-        const discountDisplay = isSmall ? '—' : esc(item.discount_plan_name || '-');
+        const discountDisplay = isSmall ? '—' : (item.discount_plan_name ? esc(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-');
         const teachingAidDisplay = isSmall ? '—' : esc(item.teaching_aid_name || '-');
-        const courseCouponDisplay = isSmall ? '—' : esc(item.coupon_name || '-');
-        const productCouponDisplay = isSmall ? '—' : esc(item.product_coupon_name || '-');
+        const courseCouponDisplay = isSmall ? '—' : (item.coupon_name ? esc(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-');
+        const productCouponDisplay = isSmall ? '—' : (item.product_coupon_name ? esc(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-');
         const discountEditable = isSmall ? '' : 'pi-editable';
         const teachingAidEditable = isSmall ? '' : 'pi-editable';
         const courseCouponEditable = isSmall ? '' : 'pi-editable';
@@ -6246,11 +6246,11 @@ function selectEnrollPlan(planId) {
             <td>${esc(item.name)}</td>
             <td class="col-num">${item.lesson_count || 0}</td>
             <td class="col-num">¥${Number(item.unit_price).toFixed(2)}</td>
-            <td>${esc(item.discount_plan_name || '-')}</td>
-            <td>${esc(item.coupon_name || '-')}</td>
+            <td>${item.discount_plan_name ? esc(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-'}</td>
+            <td>${item.coupon_name ? esc(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-'}</td>
             <td>${esc(item.teaching_aid_name || '-')}</td>
             <td class="col-num">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
-            <td>${esc(item.product_coupon_name || '-')}</td>
+            <td>${item.product_coupon_name ? esc(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-'}</td>
             <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
         </tr>`;
     }).join('');
@@ -7115,11 +7115,11 @@ function renderOrderDetail(data) {
             '<td>' + escHtml(item.item_name || '-') + '</td>' +
             '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
             '<td class="col-num">' + (item.unit_price != null ? '¥' + Number(item.unit_price).toFixed(2) : '-') + '</td>' +
-            '<td>' + escHtml(item.discount_plan_name || '-') + '</td>' +
-            '<td>' + escHtml(item.coupon_name || '-') + '</td>' +
+            '<td>' + (item.discount_plan_name ? escHtml(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
+            '<td>' + (item.coupon_name ? escHtml(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
             '<td>' + escHtml(item.teaching_aid_name || '-') + '</td>' +
             '<td class="col-num">' + (item.teaching_aid_price != null ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-') + '</td>' +
-            '<td>' + escHtml(item.product_coupon_name || '-') + '</td>' +
+            '<td>' + (item.product_coupon_name ? escHtml(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
             '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
         '</tr>';
     });
