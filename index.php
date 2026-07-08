@@ -3903,7 +3903,7 @@ $stmt->execute();
             $pendingRefundIds = [];
             $refStmt = $db->query("SELECT DISTINCT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')");
             while ($refR = $refStmt->fetch(PDO::FETCH_ASSOC)) $pendingRefundIds[$refR['order_id']] = true;
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
             $orderRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
             // 批量查询考勤记录获取真实消耗课时
@@ -3917,6 +3917,10 @@ $stmt->execute();
             foreach ($orderRows as $r) {
                 $lc = intval($r['lesson_count'] ?? 0);
                 $ap = floatval($r['actual_price'] ?? 0);
+                $taPrice = floatval($r['teaching_aid_price'] ?? 0);
+                $pcAmount = floatval($r['product_coupon_amount'] ?? 0);
+                // 纯课时单价 = (actual_price - teaching_aid_price + product_coupon_amount) / lesson_count
+                $classUnitPrice = $lc > 0 ? round(($ap - $taPrice + $pcAmount) / $lc, 2) : 0;
                 $realConsumed = $attMap[$r['order_id']] ?? 0;
                 $refundStatus = $r['refund_status'] ?? '正常';
                 if ($refundStatus === '已退费') {
@@ -3924,14 +3928,14 @@ $stmt->execute();
                     $refundedLessons = max(0, $lc - $realConsumed);
                     $r['consumed_lessons'] = $realConsumed;
                     $r['refunded_lessons'] = $refundedLessons;
-                    $r['consumed_amount'] = $lc > 0 ? round(($ap / $lc) * $realConsumed, 2) : 0;
+                    $r['consumed_amount'] = round($classUnitPrice * $realConsumed, 2);
                     $r['remaining_lessons'] = 0;
                     $r['remaining_amount'] = 0;
                 } elseif (isset($pendingRefundIds[$r['order_id']])) {
                     // 退费申请中：课时冻结，剩余=0
                     $r['consumed_lessons'] = $realConsumed;
                     $r['refunded_lessons'] = 0;
-                    $r['consumed_amount'] = $lc > 0 ? round(($ap / $lc) * $realConsumed, 2) : 0;
+                    $r['consumed_amount'] = round($classUnitPrice * $realConsumed, 2);
                     $r['remaining_lessons'] = 0;
                     $r['remaining_amount'] = 0;
                 } elseif ($lc > 0) {
@@ -3939,10 +3943,10 @@ $stmt->execute();
                     $r['consumed_lessons'] = $realConsumed;
                     $r['refunded_lessons'] = 0;
                     $unitPrice = $ap / $lc;
-                    $r['consumed_amount'] = round($unitPrice * $realConsumed, 2);
+                    $r['consumed_amount'] = round($classUnitPrice * $realConsumed, 2);
                     $rl = $lc - $realConsumed;
                     $r['remaining_lessons'] = $rl > 0 ? $rl : 0;
-                    $r['remaining_amount'] = round($unitPrice * $r['remaining_lessons'], 2);
+                    $r['remaining_amount'] = round($classUnitPrice * $r['remaining_lessons'], 2);
                 } else {
                     $r['consumed_lessons'] = $realConsumed;
                     $r['refunded_lessons'] = 0;
