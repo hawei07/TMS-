@@ -8722,6 +8722,8 @@ async function showApproveModal(id) {
             <div class="approve-info-card">
                 <div class="card-title">📋 学员信息</div>
                 <div class="info-row"><span class="info-label">学员</span><span class="info-value">${esc(rr.student_name || '')}</span></div>
+                <div class="info-row"><span class="info-label">手机号</span><span class="info-value">${esc(rr.student_phone || '-')}</span></div>
+                <div class="info-row"><span class="info-label">学号</span><span class="info-value mono">${esc(rr.student_no || '-')}</span></div>
                 <div class="info-row"><span class="info-label">校区</span><span class="info-value">${esc(rr.campus || '-')}</span></div>
                 <div class="info-row"><span class="info-label">课程</span><span class="info-value">${esc(rr.course_name || '')}</span></div>
             </div>

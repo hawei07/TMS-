@@ -4752,7 +4752,7 @@ $stmt->execute();
         case 'get_refund_record':
             $id = intval($_GET['id'] ?? 0);
             if ($id <= 0) { json(['error' => 'ID无效']); break; }
-            $rr = $db->query("SELECT rr.*, s.name AS student_name, s.phone AS student_phone, o.order_no
+            $rr = $db->query("SELECT rr.*, s.name AS student_name, s.phone AS student_phone, o.order_no, s.student_no
                 FROM refund_records rr
                 LEFT JOIN students s ON rr.student_id = s.id
                 LEFT JOIN orders o ON rr.order_id = o.id
