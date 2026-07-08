@@ -6902,9 +6902,9 @@ function renderOrderDetail(data) {
             '<td>' + escHtml(item.item_name || '-') + '</td>' +
             '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
             '<td class="col-num">' + (item.unit_price != null ? '¥' + Number(item.unit_price).toFixed(2) : '-') + '</td>' +
-            '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
             '<td>' + escHtml(item.discount_plan_name || '-') + '</td>' +
             '<td>' + escHtml(item.coupon_name || '-') + '</td>' +
+            '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
         '</tr>';
     });
 
@@ -6919,15 +6919,16 @@ function renderOrderDetail(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">单价</th><th class="col-num">实际价格</th><th>优惠方案</th><th>优惠券</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">单价</th><th>优惠方案</th><th>优惠券</th><th class="col-num">实际价格</th>' +
     '</tr></thead><tbody>';
     html += itemsHtml || '<tr><td colspan="6" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
         '<td style="text-align:right;font-weight:bold;">合计</td>' +
         '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
         '<td></td>' +
+        '<td></td>' +
+        '<td></td>' +
         '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalActualPrice.toFixed(2) + '</td>' +
-        '<td colspan="2"></td>' +
     '</tr>';
     html += '</tbody></table>';
 
