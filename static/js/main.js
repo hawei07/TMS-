@@ -7135,7 +7135,7 @@ function renderOrderDetail(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">单价</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
     '</tr></thead><tbody>';
     html += itemsHtml || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
