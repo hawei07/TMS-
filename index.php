@@ -4326,6 +4326,9 @@ $sumStmt->execute();
                     'course_name' => $courseName,
                     'campus' => $campus,
                     'enroll_time' => $enrollTime,
+                    'created_at' => $items[0]['created_at'] ?? '',
+                    'paid_at' => $items[0]['paid_at'] ?? '',
+
                     'total_price' => number_format($totalPrice, 2, '.', ''),
                     'total_lessons' => $totalLessons,
                     'payment' => [

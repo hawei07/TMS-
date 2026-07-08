@@ -7129,6 +7129,8 @@ function renderOrderDetail(data) {
         '<span>学员：<strong>' + escHtml(data.student_name || '-') + '</strong></span>' +
         '<span>学号：<strong>' + escHtml(data.student_no || '-') + '</strong></span>' +
         '<span>父订单号：<strong>' + escHtml(data.parent_order_no || '-') + '</strong></span>' +
+        '<span>创建时间：<strong>' + (data.created_at ? data.created_at.slice(0, 16) : '-') + '</strong></span>' +
+        '<span>支付时间：<strong>' + (data.paid_at ? data.paid_at.slice(0, 16) : '-') + '</strong></span>' +
         '<span>课程：<strong>' + escHtml(data.course_name || '-') + '</strong></span>' +
         '<span>校区：<strong>' + escHtml(data.campus || '-') + '</strong></span>' +
         '<span>报名时间：<strong>' + (data.enroll_time || '-') + '</strong></span>' +
@@ -7213,6 +7215,8 @@ function renderOrderDetailPage(data) {
         '<span>学员：<strong>' + escHtml(data.student_name || '-') + '</strong></span>' +
         '<span>学号：<strong>' + escHtml(data.student_no || '-') + '</strong></span>' +
         '<span>父订单号：<strong>' + escHtml(data.parent_order_no || '-') + '</strong></span>' +
+        '<span>创建时间：<strong>' + (data.created_at ? data.created_at.slice(0, 16) : '-') + '</strong></span>' +
+        '<span>支付时间：<strong>' + (data.paid_at ? data.paid_at.slice(0, 16) : '-') + '</strong></span>' +
         '<span>课程：<strong>' + escHtml(data.course_name || '-') + '</strong></span>' +
         '<span>校区：<strong>' + escHtml(data.campus || '-') + '</strong></span>' +
         '<span>报名时间：<strong>' + (data.enroll_time || '-') + '</strong></span>' +
