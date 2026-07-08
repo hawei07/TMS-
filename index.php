@@ -7523,7 +7523,7 @@ if (intval($countBt) === 0) {
                                                                      <th>优惠方案</th>
                                                                                                          <th>课时优惠券</th>
                                                                                                          <th>教材包</th>
-                                                                                                         <th>教材包原价</th>
+                                                                                                         <th class="col-num">教材包原价</th>
                                                                                                          <th>商品券</th>
                                                                                                          <th class="col-num">实际价格</th>
                                 </tr></thead>
