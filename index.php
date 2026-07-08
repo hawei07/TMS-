@@ -4433,7 +4433,7 @@ $stmt->execute();
                     "$lessonCount, " .
                     "$classPrice, " .
                     "$consumedLessons, " .
-                    round($actualPrice * $consumedLessons / max($lessonCount, 1), 2) . ", " .
+                    round($classPrice * $consumedLessons / max($lessonCount, 1), 2) . ", " .
                     "$remainingLessons, " .
                     "$remainingAmount, " .
                     "$customDeduction, " .
