@@ -3864,7 +3864,7 @@ async function saveItem() {
         items: items
     }, 'POST');
     if (r && r.error) { showToast(r.error, 'error'); return; }
-    openModal('modal-price-plan');
+    openModal('modal-price');
     showToast(itemId > 0 ? '报价单更新成功' : '报价单添加成功');
     loadPricePlans(currentPriceCourseId);
 }
