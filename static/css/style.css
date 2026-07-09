@@ -877,7 +877,7 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 
 .custom-dialog-body .dialog-message {
     font-size: 15px; color: var(--color-text); line-height: 1.65;
-    word-break: break-word;
+    word-break: break-word; white-space: pre-wrap;
 }
 
 .custom-dialog-input {

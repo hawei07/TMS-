@@ -12081,7 +12081,7 @@ async function confirmPurchase() {
     const studentName = taPurchaseStudent.name;
     const itemList = Object.values(taCartItems).map(i => i.name + ' ×' + i.quantity).join('、');
     
-    showCustomConfirm(`确认为学员「${studentName}」购买以下商品？<br><br><strong>${itemList}</strong><br>总金额：<strong>¥${total.toFixed(2)}</strong><br>现金：¥${cash.toFixed(2)} | 美团：¥${meituan.toFixed(2)} | 账户：¥${account.toFixed(2)}`, async () => {
+    showCustomConfirm(`确认为学员「${studentName}」购买以下商品？\n\n${itemList}\n总金额：¥${total.toFixed(2)}\n现金 ¥${cash.toFixed(2)} | 美团 ¥${meituan.toFixed(2)} | 账户 ¥${account.toFixed(2)}`, async () => {
         const result = await api('create_teaching_aid_sale', {
             student_id: taPurchaseStudent.id,
             items: items,
