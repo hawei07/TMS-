@@ -5623,11 +5623,12 @@ function renderStudentCoursesTable(rows) {
         } else if (lc <= cl) {
             optHtml = '<span style="color:#999;font-size:12px;">无剩余课时</span>';
         }
-        // 检测赠课记录并获取对应付费课包课时数
+        // 检测是否有赠课，付费视图也需知道 paidLessonCount 以过滤赠课部分
         const isGifted = r.actual_price === 0 && r.lesson_count > 0 && (r.item_name || '').includes('（赠送）');
         let paidLessonCount = 0;
-        if (isGifted) {
-            const allRows = studentCoursesAllRows || rows;
+        const allRows = studentCoursesAllRows || rows;
+        const giftRow = allRows.find(rr => rr.order_id === r.order_id && rr.actual_price === 0 && rr.lesson_count > 0 && (rr.item_name || '').includes('（赠送）'));
+        if (giftRow) {
             const paidRow = allRows.find(rr => rr.order_id === r.order_id && !(rr.actual_price === 0 && rr.lesson_count > 0 && (rr.item_name || '').includes('（赠送）')));
             paidLessonCount = paidRow ? (parseInt(paidRow.lesson_count) || 0) : 0;
         }
@@ -5711,6 +5712,35 @@ async function showConsumptionDetail(orderId, courseId, courseName, isGifted = f
                 list.innerHTML = '<div class="consumption-empty">暂未产生赠课课耗记录</div>';
                 return;
             }
+        }
+        // 付费模式（但有赠课）：过滤掉赠课消耗部分，只展示付费部分
+        if (!isGifted && paidLessonCount > 0) {
+            const sorted = [...rows].sort((a, b) => (a.lesson_date || '').localeCompare(b.lesson_date || ''));
+            let cumulativeConsumed = 0;
+            const displayRows = [];
+            for (const r of sorted) {
+                const deducted = parseFloat(r.deducted_lessons) || 0;
+                if (r.status === '出勤' && deducted > 0) {
+                    if (cumulativeConsumed + deducted <= paidLessonCount) {
+                        displayRows.push(r);
+                        cumulativeConsumed += deducted;
+                        continue;
+                    }
+                    if (cumulativeConsumed >= paidLessonCount) {
+                        cumulativeConsumed += deducted;
+                        continue;
+                    }
+                    // 跨边界：只取付费部分
+                    const paidPortion = paidLessonCount - cumulativeConsumed;
+                    displayRows.push({...r, deducted_lessons: paidPortion});
+                    cumulativeConsumed += deducted;
+                } else {
+                    if (cumulativeConsumed < paidLessonCount) {
+                        displayRows.push(r);
+                    }
+                }
+            }
+            rows = displayRows;
         }
         // 汇总
         let totalLessons = 0, totalAmount = 0;
