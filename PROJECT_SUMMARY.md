@@ -1631,3 +1631,17 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | fix | **pay_enroll 命名参数重复** :ca→:coa | index.php | - |
 | fix | **扣课时排除已退费订单**：退款/退款中订单过滤 | index.php | - |
 
+### 2026-07-09 — 赠课功能（报价单 + 录单 + 学员展示 + 扣课优化）
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **报价单赠课功能**：price_items + orders 新增 gifted_lessons 字段；报价单表单新增赠送课时步进器（偶数步进，小课包隐藏）；save_price_plan INSERT 支持赠课；pay_enroll 录单带入赠课；get_student_courses 虚拟拆分赠课包（付费+赠课两条，同 order_no，赠课实付¥0） | index.php static/js/main.js static/css/style.css | 41b5c79 |
+| feat | **报价单列表 inline 编辑赠课**：renderItemList 赠课列加 pi-editable；enterInlineEdit 新增 −/+ 步进按钮分支；saveInlineEdit 读取 editedValues | main.js | c5fccb2 |
+| style | **设置价格弹窗加宽至1500px**：去横向滚动条，减 td/th padding 至 8px/10px | style.css | fc231a2 |
+| fix | **扣课改为两轮机制**：先扣付费课时（lesson_count - consumed_lessons），三轮优先级走完后第二轮才扣赠课，修复同父订单赠课被优先消耗的 bug | index.php | 6ccb307 |
+| fix | **课耗明细弹窗分离**：付费课包和赠课课包分开展示；赠课金额恒为 ¥0.00；付费弹窗过滤赠课消耗部分 | main.js | 7f5c1a6 |
+| fix | **课耗金额精度修复**：去掉中间 round(classPrice/lc, 2)，改为一步 round(classPrice/lc * consumed, 2)，消除 0.10 误差 | index.php | 51ae286 |
+| fix | **Code Review 修复**：selectEnrollPlan 列对齐、退费 remaining_lessons 负数保护（min(consumed, lessonCount)）、renderItemList 总计行多余 td | index.php main.js | 99d10be |
+| fix | **保存报价单后回到设置价格主弹窗**：saveItem 改用 openModal('modal-price') 而非 closeModal('modal-price-item') | main.js | 94a2ef4 |
+
+*（内容由AI生成，仅供参考）*
