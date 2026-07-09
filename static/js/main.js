@@ -3414,7 +3414,11 @@ function enterInlineEdit(tr, item) {
                 td.innerHTML = '<span style="color:#999;">—</span>';
             } else {
                 const giftedVal = parseInt(item.gifted_lessons) || 0;
-                td.innerHTML = `<input type="number" class="inline-edit-input" value="${giftedVal}" data-field="gifted_lessons" min="0" step="2">`;
+                td.innerHTML = `<div class="stepper-group" style="justify-content:center;">
+                    <button type="button" class="stepper-btn" onclick="(function(el){var v=parseInt(el.value)||0;v=Math.max(0,v-2);el.value=v;})(this.nextElementSibling)">−</button>
+                    <input type="number" class="inline-edit-input" value="${giftedVal}" data-field="gifted_lessons" min="0" step="2" readonly style="width:60px;">
+                    <button type="button" class="stepper-btn" onclick="(function(el){var v=parseInt(el.value)||0;v=v+2;el.value=v;})(this.previousElementSibling)">+</button>
+                </div>`;
             }
         }
     });
