@@ -8468,9 +8468,9 @@ if (intval($countBt) === 0) {
                             <label style="font-size:13px;">商品：</label>
                             <input type="text" id="ta-sales-aid" class="form-input" placeholder="商品名称" style="width:120px;">
                             <label style="font-size:13px;">日期：</label>
-                            <input type="date" id="ta-sales-date-from" style="width:135px;">
+                            <input type="date" id="ta-sales-date-from" style="width:145px;">
                             <span style="color:#999;">至</span>
-                            <input type="date" id="ta-sales-date-to" style="width:135px;">
+                            <input type="date" id="ta-sales-date-to" style="width:145px;">
                             <button class="btn btn-search" onclick="taSalesPage=1;loadTeachingAidSales();">
                                 <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
                                     <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
