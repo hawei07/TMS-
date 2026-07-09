@@ -7709,8 +7709,7 @@ tbody td {
 /* 各筛选组颜色主题 */
 .ta-filter-student:focus-within { border-color: #74B9FF; box-shadow: 0 0 0 3px rgba(116,185,255,0.15); }
 .ta-filter-product:focus-within { border-color: #55EFC4; box-shadow: 0 0 0 3px rgba(85,239,196,0.15); }
-  .ta-filter-date-from:focus-within  { border-color: #FFE066; box-shadow: 0 0 0 3px rgba(255,224,102,0.2); }
-  .ta-filter-date-to:focus-within    { border-color: #FF7675; box-shadow: 0 0 0 3px rgba(255,118,117,0.2); }
+.ta-filter-date:focus-within    { border-color: #FFE066; box-shadow: 0 0 0 3px rgba(255,224,102,0.15); }
 
 /* 筛选图标 */
 .ta-filter-icon {
@@ -7725,9 +7724,8 @@ tbody td {
 }
 
 .ta-filter-student:focus-within .ta-filter-icon { color: #74B9FF; }
-  .ta-filter-date-from:focus-within  .ta-filter-icon { color: #e6c800; }
-.ta-filter-product:focus-within    .ta-filter-icon { color: #55EFC4; }
-  .ta-filter-date-to:focus-within    .ta-filter-icon { color: #ff5e5d; }
+.ta-filter-product:focus-within .ta-filter-icon { color: #55EFC4; }
+.ta-filter-date:focus-within    .ta-filter-icon { color: #FFE066; }
 
 /* 筛选输入框 */
 .ta-filter-input {
@@ -7750,37 +7748,23 @@ tbody td {
 .ta-filter-student .ta-filter-input { width: 110px; }
 .ta-filter-product .ta-filter-input { width: 110px; }
 
-
 /* 日期输入 */
-.ta-filter-date-from,
-.ta-filter-date-to {
-    border-color: #e8e8e8;
-}
-.ta-filter-date-from { border-color: #FFE066; }  /* 鹅黄边框 */
-.ta-filter-date-to   { border-color: #FF7675; }  /* 珊瑚边框 */
-
-.ta-filter-date-from .ta-filter-input,
-.ta-filter-date-to   .ta-filter-input {
-    width: 135px;
+.ta-filter-date {
+    width: 145px;
     cursor: pointer;
     color: #555;
 }
 
-.ta-filter-date-from .ta-filter-input::-webkit-calendar-picker-indicator,
-.ta-filter-date-to   .ta-filter-input::-webkit-calendar-picker-indicator {
-    opacity: 0.5;
+.ta-filter-date::-webkit-calendar-picker-indicator {
+    opacity: 0.4;
     cursor: pointer;
 }
 
-/* 日期图标颜色 */
-.ta-filter-date-from .ta-filter-icon { color: #FFE066; }
-.ta-filter-date-to   .ta-filter-icon { color: #FF7675; }
 /* 日期分隔符 */
 .ta-filter-date-sep {
-    color: #bbb;
+    color: #ccc;
     font-size: 13px;
-    font-weight: 600;
-    padding: 0 6px;
+    padding: 0 4px;
     user-select: none;
 }
 
