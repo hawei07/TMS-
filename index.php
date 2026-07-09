@@ -4562,7 +4562,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.teaching_aid_price, o.product_coupon_amount, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.account_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.teaching_aid_price, o.product_coupon_amount, o.discount_plan_amount, o.coupon_amount, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.account_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -4573,7 +4573,14 @@ $stmt->execute();
             foreach ($rows as &$row) {
                 $tap = floatval($row['teaching_aid_price'] ?? 0);
                 $pc = floatval($row['product_coupon_amount'] ?? 0);
-                $row['course_amount'] = round(floatval($row['actual_price'] ?? 0) - $tap + $pc, 2);
+                $dp = floatval($row['discount_plan_amount'] ?? 0);
+                $cp = floatval($row['coupon_amount'] ?? 0);
+                $ap = floatval($row['actual_price'] ?? 0);
+                // 课时价格 = actual_price - teaching_aid + product_coupon + discount_plan + coupon
+                $unitPrice = $ap - $tap + $pc + $dp + $cp;
+                // 课程金额 = 课时价格 - 优惠方案 - 课时优惠券
+                $row['course_amount'] = round($unitPrice - $dp - $cp, 2);
+                // 商品金额 = 教材包 - 商品券
                 $row['product_amount'] = round($tap - $pc, 2);
             }
             unset($row);
@@ -4707,7 +4714,7 @@ $sumStmt->execute();
                     'meituan_amount' => number_format(floatval($it['meituan_amount'] ?? 0), 2, '.', ''),
                     'account_amount' => number_format(floatval($it['account_amount'] ?? 0), 2, '.', ''),
                     'pay_status' => $it['pay_status'] ?? '',
-                    'course_amount' => round(floatval($it['actual_price'] ?? 0) - floatval($it['teaching_aid_price'] ?? 0) + floatval($it['product_coupon_amount'] ?? 0), 2),
+                    'course_amount' => round((floatval($it['actual_price'] ?? 0) - floatval($it['teaching_aid_price'] ?? 0) + floatval($it['product_coupon_amount'] ?? 0) + floatval($it['discount_plan_amount'] ?? 0) + floatval($it['coupon_amount'] ?? 0)) - floatval($it['discount_plan_amount'] ?? 0) - floatval($it['coupon_amount'] ?? 0), 2),
                     'product_amount' => round(floatval($it['teaching_aid_price'] ?? 0) - floatval($it['product_coupon_amount'] ?? 0), 2),
                 ];
             }
