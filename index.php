@@ -10797,7 +10797,7 @@ if (intval($countBt) === 0) {
                 <div id="activity-adult-deduct-section" style="display:none;">
                     <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
                     <div id="activity-adult-deduct-rows"></div>
-                    <button type="button" class="btn btn-sm btn-outline" onclick="addActivityDeductRow('adult')" style="margin-top:6px;">+ 添加学科扣课</button>
+                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('adult')">+ 添加学科扣课</button>
                 </div>
 
                 <!-- 学员收费 -->
@@ -10818,7 +10818,7 @@ if (intval($countBt) === 0) {
                 <div id="activity-student-deduct-section" style="display:none;">
                     <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
                     <div id="activity-student-deduct-rows"></div>
-                    <button type="button" class="btn btn-sm btn-outline" onclick="addActivityDeductRow('student')" style="margin-top:6px;">+ 添加学科扣课</button>
+                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('student')">+ 添加学科扣课</button>
                 </div>
 
                 <!-- 适用校区 -->
@@ -10826,7 +10826,7 @@ if (intval($countBt) === 0) {
                 <div id="activity-campus-rows">
                     <span style="color:#999;font-size:13px;">加载中...</span>
                 </div>
-                <button type="button" class="btn btn-sm btn-outline" onclick="addActivityCampusRow()" style="margin-top:6px;">+ 添加校区</button>
+                <button type="button" class="deduct-add-btn" onclick="addActivityCampusRow()" style="margin-top:6px;">+ 添加校区</button>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-outline" onclick="closeModal('modal-activity')">取消</button>

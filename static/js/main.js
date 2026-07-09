@@ -3236,10 +3236,10 @@ async function addActivityDeductRow(type, subjectId, subjectName, deductLessons)
     const row = document.createElement('div');
     row.className = 'deduct-row';
     row.innerHTML = '<select class="deduct-subject" data-type="' + type + '">' + optionsHtml + '</select>' +
-        '<span style="font-size:13px;color:#666;">扣课数：</span>' +
-        '<input type="number" class="deduct-lessons" min="0" value="' + deductLessons + '" style="width:70px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;">' +
-        '<span style="font-size:13px;color:#666;">课时</span>' +
-        '<button type="button" class="btn btn-sm" style="color:#E53E3E;padding:2px 8px;" onclick="this.closest(\'.deduct-row\').remove()">删除</button>';
+        '<span class="deduct-label">扣课数：</span>' +
+        '<input type="number" class="deduct-lessons" min="0" value="' + deductLessons + '">' +
+        '<span class="deduct-label">课时</span>' +
+        '<button type="button" class="btn-remove-deduct" onclick="this.closest(\'.deduct-row\').remove()">删除</button>';
     rowsEl.appendChild(row);
 }
 
@@ -3258,13 +3258,13 @@ function renderActivityCampusRows(campuses) {
         const checked = existing ? ' checked' : '';
         const capacity = existing ? (existing.max_capacity || 0) : '';
         html += '<div class="campus-capacity-row">' +
-            '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;min-width:120px;">' +
+            '<label>' +
             '<input type="checkbox" class="activity-campus-check" value="' + c.id + '"' + checked + '>' +
             esc(c.name) +
             '</label>' +
-            '<span style="font-size:13px;color:#666;">上限人数：</span>' +
-            '<input type="number" class="activity-campus-capacity" value="' + capacity + '" min="0" placeholder="0=不限" style="width:70px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;">' +
-            '<span style="font-size:12px;color:#999;">(0=不限)</span>' +
+            '<span class="deduct-label">上限人数：</span>' +
+            '<input type="number" class="activity-campus-capacity" value="' + capacity + '" min="0" placeholder="0">' +
+            '<span class="campus-capacity-hint">(0=不限)</span>' +
             '</div>';
     });
     container.innerHTML = html || '<span style="color:#999;font-size:13px;">暂无校区数据</span>';
