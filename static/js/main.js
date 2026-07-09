@@ -3292,7 +3292,7 @@ function renderItemList() {
             <td class="${teachingAidEditable}" data-field="teaching_aid_id" data-original="${item.teaching_aid_id || ''}">${teachingAidDisplay}</td>
             <td class="pi-readonly">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
             <td class="${productCouponEditable}" data-field="product_coupon_id" data-original="${item.product_coupon_id || ''}">${productCouponDisplay}</td>
-            <td>${isSmall ? '—' : (item.gifted_lessons || 0)}</td>
+            <td class="pi-editable" data-field="gifted_lessons" data-original="${item.gifted_lessons || 0}">${isSmall ? '—' : (item.gifted_lessons || 0)}</td>
             <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
             <td>
                 <button class="btn-link-danger" onclick="deleteItem(${item.id})">删除</button>
@@ -3409,6 +3409,13 @@ function enterInlineEdit(tr, item) {
             td.innerHTML = `<input type="number" class="inline-edit-input" value="${Number(item.lesson_count) || 0}" data-field="lesson_count" min="1" step="1">`;
         } else if (field === 'unit_price') {
             td.innerHTML = `<input type="number" class="inline-edit-input" value="${Number(item.unit_price).toFixed(2)}" data-field="unit_price" min="0" step="0.01">`;
+        } else if (field === 'gifted_lessons') {
+            if (isSmallPack) {
+                td.innerHTML = '<span style="color:#999;">—</span>';
+            } else {
+                const giftedVal = parseInt(item.gifted_lessons) || 0;
+                td.innerHTML = `<input type="number" class="inline-edit-input" value="${giftedVal}" data-field="gifted_lessons" min="0" step="2">`;
+            }
         }
     });
 
@@ -3585,7 +3592,7 @@ async function saveInlineEdit(tr) {
                 teaching_aid_id: teachingAidId,
                 coupon_id: couponId,
                 product_coupon_id: productCouponId,
-                gifted_lessons: parseInt(item.gifted_lessons) || 0,
+                gifted_lessons: parseInt(editedValues.gifted_lessons) || 0,
                 sort_order: idx
             };
         }
