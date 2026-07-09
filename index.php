@@ -8392,11 +8392,30 @@ if (intval($countBt) === 0) {
                         <div id="ta-no-student-hint" style="color:#999;font-size:13px;margin-top:8px;">请先选择学员</div>
                     </div>
 
-                    <!-- 商品卡片网格 -->
-                    <div id="ta-product-grid-wrap" style="margin-top:16px;">
-                        <h4 style="margin:0 0 10px 0;font-size:14px;">可选商品</h4>
-                        <div class="ta-product-grid" id="ta-product-grid">
-                            <div style="grid-column:1/-1;text-align:center;color:#999;padding:20px;">请先选择学员后加载商品</div>
+                    <!-- 搜索商品区 -->
+                    <div id="ta-product-search-wrap" style="margin-top:16px;display:none;">
+                        <h4 style="margin:0 0 10px 0;font-size:14px;">搜索商品</h4>
+                        <div class="ta-student-search">
+                            <div style="position:relative;flex:1;max-width:400px;">
+                                <input type="text" id="ta-product-search-input" class="form-input"
+                                       placeholder="输入商品名称搜索..."
+                                       oninput="searchPurchaseProduct(this.value)"
+                                       style="width:100%;">
+                                <div class="ta-student-dropdown" id="ta-product-dropdown" style="display:none;"></div>
+                            </div>
+                        </div>
+                        <!-- 选中商品信息 -->
+                        <div id="ta-selected-product" style="display:none;margin-top:12px;">
+                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
+                                <span style="font-weight:600;">已选：</span>
+                                <span id="ta-selected-product-info" style="color:#1a73e8;font-weight:600;"></span>
+                                <span class="ta-cart-item-qty" style="display:inline-flex;align-items:center;">
+                                    <button class="ta-qty-btn" onclick="changeSelectedQty(-1)">−</button>
+                                    <span class="ta-qty-val" id="ta-selected-qty">1</span>
+                                    <button class="ta-qty-btn" onclick="changeSelectedQty(1)">+</button>
+                                </span>
+                                <button class="btn btn-primary" onclick="addSelectedToCart()" style="font-size:12px;">加入购物车</button>
+                            </div>
                         </div>
                     </div>
 

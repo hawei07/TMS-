@@ -11836,23 +11836,20 @@ function switchTaTab(tab) {
 // ===== 购买画具 =====
 let taPurchaseStudent = null;   // 选中学员 {id, name, student_no, campus_name}
 let taCartItems = {};           // {teaching_aid_id: {id, name, unit, price, type, quantity}}
-let taAvailableAids = [];       // 可用商品列表
+let taSelectedProduct = null;   // 当前搜索选中商品 {id, name, price, type, unit}
+let taSelectedQty = 1;          // 当前选中商品数量
 
 async function initPurchaseTab() {
     const studentSelected = taPurchaseStudent !== null;
     document.getElementById('tab-ta-purchase').querySelector('#ta-no-student-hint').style.display = studentSelected ? 'none' : 'block';
     document.getElementById('ta-selected-student').style.display = studentSelected ? 'block' : 'none';
     document.getElementById('ta-cart-section').style.display = studentSelected ? 'block' : 'none';
-    document.getElementById('ta-product-grid').innerHTML = studentSelected
-        ? '<div style="grid-column:1/-1;text-align:center;color:#999;padding:20px;">加载中...</div>'
-        : '<div style="grid-column:1/-1;text-align:center;color:#999;padding:20px;">请先选择学员后加载商品</div>';
+    document.getElementById('ta-product-search-wrap').style.display = studentSelected ? 'block' : 'none';
 
     if (studentSelected) {
         document.getElementById('ta-student-info').textContent = taPurchaseStudent.name + ' | ' + taPurchaseStudent.student_no + ' | ' + (taPurchaseStudent.campus_name || '无校区');
         // 加载账户余额
         loadStudentBalance();
-        // 加载可用商品
-        await loadAvailableAids();
         // 重置支付金额
         document.getElementById('ta-pay-cash').value = '0';
         document.getElementById('ta-pay-meituan').value = '0';
@@ -11882,29 +11879,35 @@ async function searchPurchaseStudent(keyword) {
 function selectPurchaseStudent(id, name, studentNo, campusName) {
     taPurchaseStudent = { id, name, student_no: studentNo, campus_name: campusName };
     taCartItems = {};
+    taSelectedProduct = null;
+    taSelectedQty = 1;
     document.getElementById('ta-student-info').textContent = name + ' | ' + studentNo + ' | ' + campusName;
     document.getElementById('ta-selected-student').style.display = 'block';
     document.getElementById('ta-no-student-hint').style.display = 'none';
     document.getElementById('ta-student-dropdown').style.display = 'none';
     document.getElementById('ta-purchase-student-search').value = '';
     document.getElementById('ta-cart-section').style.display = 'block';
-    document.getElementById('ta-product-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#999;padding:20px;">加载中...</div>';
+    document.getElementById('ta-product-search-wrap').style.display = 'block';
+    document.getElementById('ta-product-search-input').value = '';
+    document.getElementById('ta-product-dropdown').style.display = 'none';
+    document.getElementById('ta-selected-product').style.display = 'none';
     document.getElementById('ta-pay-cash').value = '0';
     document.getElementById('ta-pay-meituan').value = '0';
     document.getElementById('ta-pay-account').value = '0';
     renderCart();
     updatePurchaseBtn();
     loadStudentBalance();
-    loadAvailableAids();
 }
 
 function clearPurchaseStudent() {
     taPurchaseStudent = null;
     taCartItems = {};
+    taSelectedProduct = null;
+    taSelectedQty = 1;
     document.getElementById('ta-selected-student').style.display = 'none';
     document.getElementById('ta-no-student-hint').style.display = 'block';
     document.getElementById('ta-cart-section').style.display = 'none';
-    document.getElementById('ta-product-grid').innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#999;padding:20px;">请先选择学员后加载商品</div>';
+    document.getElementById('ta-product-search-wrap').style.display = 'none';
     renderCart();
     updatePurchaseBtn();
 }
@@ -11916,59 +11919,71 @@ async function loadStudentBalance() {
     document.getElementById('ta-account-balance').textContent = '¥' + balance.toFixed(2);
 }
 
-async function loadAvailableAids() {
+async function searchPurchaseProduct(keyword) {
     if (!taPurchaseStudent) return;
-    const data = await api('list_available_teaching_aids', {}, 'GET');
-    taAvailableAids = data.data || [];
-    renderProductGrid();
-}
-
-function renderProductGrid() {
-    const grid = document.getElementById('ta-product-grid');
-    if (taAvailableAids.length === 0) {
-        grid.innerHTML = '<div style="grid-column:1/-1;text-align:center;color:#999;padding:20px;">暂无可用商品</div>';
+    const dropdown = document.getElementById('ta-product-dropdown');
+    if (!keyword || keyword.trim().length < 1) {
+        dropdown.style.display = 'none';
         return;
     }
-    grid.innerHTML = taAvailableAids.map(a => {
-        const selected = taCartItems[a.id] !== undefined;
-        const typeTag = a.type === '画具'
-            ? '<span class="tag-blue">画具</span>'
-            : '<span class="tag-orange">教材包</span>';
-        const selectedClass = selected ? ' ta-product-card-selected' : '';
-        const checkMark = selected ? '<div class="ta-product-check">✓</div>' : '';
-        return `
-            <div class="ta-product-card${selectedClass}" onclick="toggleCartItem(${a.id})" data-aid="${a.id}">
-                ${checkMark}
-                <div class="ta-product-card-name">${esc(a.name)}</div>
-                <div class="ta-product-card-meta">
-                    ${typeTag}
-                    <span style="margin-left:6px;">${esc(a.unit)}</span>
-                </div>
-                <div class="ta-product-card-price">¥${a.price.toFixed(2)}</div>
-                <div class="ta-product-card-campus">${esc(a.campus_names || '—')}</div>
-            </div>
-        `;
-    }).join('');
+    const data = await api('list_available_teaching_aids', { keyword: keyword.trim() }, 'GET');
+    const products = data.data || [];
+    if (products.length === 0) {
+        dropdown.innerHTML = '<div class="ta-student-dropdown-item" style="color:#999;">未找到匹配商品</div>';
+    } else {
+        dropdown.innerHTML = products.map(p =>
+            `<div class="ta-student-dropdown-item" onclick="selectPurchaseProduct(${p.id}, '${esc(p.name)}', ${p.price}, '${esc(p.type || '')}', '${esc(p.unit || '')}')">${esc(p.name)} — ¥${p.price.toFixed(2)} — ${esc(p.type || '')} / ${esc(p.unit || '')}</div>`
+        ).join('');
+    }
+    dropdown.style.display = 'block';
+}
+
+function selectPurchaseProduct(id, name, price, type, unit) {
+    taSelectedProduct = { id, name, price, type, unit };
+    taSelectedQty = 1;
+    document.getElementById('ta-selected-product-info').textContent = name + ' ¥' + price.toFixed(2);
+    document.getElementById('ta-selected-qty').textContent = '1';
+    document.getElementById('ta-selected-product').style.display = 'block';
+    document.getElementById('ta-product-dropdown').style.display = 'none';
+    document.getElementById('ta-product-search-input').value = '';
+}
+
+function changeSelectedQty(delta) {
+    if (!taSelectedProduct) return;
+    taSelectedQty = Math.max(1, taSelectedQty + delta);
+    document.getElementById('ta-selected-qty').textContent = taSelectedQty;
+}
+
+function addSelectedToCart() {
+    if (!taSelectedProduct || !taPurchaseStudent) return;
+    const aid = taSelectedProduct.id;
+    if (taCartItems[aid]) {
+        // 已存在则增加数量
+        taCartItems[aid].quantity += taSelectedQty;
+    } else {
+        taCartItems[aid] = {
+            id: taSelectedProduct.id,
+            name: taSelectedProduct.name,
+            unit: taSelectedProduct.unit,
+            price: taSelectedProduct.price,
+            type: taSelectedProduct.type,
+            quantity: taSelectedQty
+        };
+    }
+    // 重置选中状态
+    taSelectedProduct = null;
+    taSelectedQty = 1;
+    document.getElementById('ta-selected-product').style.display = 'none';
+    renderCart();
+    updatePurchaseBtn();
+    showToast('已加入购物车', 'success');
 }
 
 function toggleCartItem(aid) {
     if (!taPurchaseStudent) return;
     if (taCartItems[aid]) {
         delete taCartItems[aid];
-    } else {
-        const product = taAvailableAids.find(a => a.id === aid);
-        if (product) {
-            taCartItems[aid] = {
-                id: product.id,
-                name: product.name,
-                unit: product.unit,
-                price: product.price,
-                type: product.type,
-                quantity: 1
-            };
-        }
     }
-    renderProductGrid();
     renderCart();
     updatePurchaseBtn();
 }
@@ -11986,7 +12001,7 @@ function renderCart() {
     const cartKeys = Object.keys(taCartItems);
     
     if (cartKeys.length === 0) {
-        cartContainer.innerHTML = '<div style="color:#999;font-size:13px;padding:8px;">购物车为空，请点击上方商品卡片添加</div>';
+        cartContainer.innerHTML = '<div style="color:#999;font-size:13px;padding:8px;">购物车为空，请搜索商品并加入购物车</div>';
         summaryDiv.style.display = 'none';
         document.getElementById('ta-cart-total').textContent = '¥0.00';
         return;
@@ -12096,7 +12111,6 @@ async function confirmPurchase() {
         showToast('购买成功', 'success');
         // 清空购物车
         taCartItems = {};
-        renderProductGrid();
         renderCart();
         document.getElementById('ta-pay-cash').value = '0';
         document.getElementById('ta-pay-meituan').value = '0';
