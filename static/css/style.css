@@ -6266,8 +6266,8 @@ tbody td {
 
 /* ===== 价格方案弹窗容器 ===== */
 #modal-price .modal {
-    width: 1300px;
-    max-width: 95vw;
+    width: 1500px;
+    max-width: 97vw;
 }
 
 #modal-price .modal-body.price-body {
@@ -6437,7 +6437,7 @@ tbody td {
 .price-detail-table-wrap {
     flex: 1;
     overflow-y: auto;
-    overflow-x: auto;
+    overflow-x: visible;
     padding: 0;
     position: relative;
 }
@@ -6464,7 +6464,7 @@ tbody td {
 }
 
 #price-item-table th {
-    padding: 12px 14px;
+    padding: 8px 10px;
     text-align: left;
     font-weight: 600;
     font-size: 12px;
@@ -6479,7 +6479,7 @@ tbody td {
 
 /* 表格单元格 */
 #price-item-table td {
-    padding: 10px 14px;
+    padding: 8px 10px;
     border-bottom: 1px solid var(--color-border-light);
     transition: background 0.15s;
     white-space: nowrap;
