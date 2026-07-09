@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 error_reporting(E_ALL);
 // PHP 内置服务器：静态文件直接返回，不经过 PHP 处理
 if (php_sapi_name() === 'cli-server') {
@@ -4771,7 +4771,7 @@ $sumStmt->execute();
             $whereClause = $ono ? "o.order_no = " . $db->quote($ono) : "o.parent_order_no = " . $db->quote($pono);
 
             // 1. 查询子订单列表（优惠金额直接从 orders 表快照读取，不再 JOIN）
-            $itemsSql = "SELECT o.id, o.order_no, o.item_name, o.lesson_count, o.actual_price,
+            $itemsSql = "SELECT o.id, o.order_no, o.parent_order_no, o.created_at, o.paid_at, o.item_name, o.lesson_count, o.actual_price,
                                 o.cash_amount, o.meituan_amount, o.account_amount,
                                 o.pay_status, o.plan_name, o.course_id, o.campus,
                                 pi.unit_price,
@@ -4861,6 +4861,13 @@ $sumStmt->execute();
                 $totalLessons = intval($parentOrder['total_lessons'] ?? $totalLessons);
             }
 
+            $createdAt = $parentOrder['created_at'] ?? '';
+            $paidAt = '';
+            foreach ($items as $it) {
+                if (!$createdAt && !empty($it['created_at'])) $createdAt = $it['created_at'];
+                if (!$paidAt && !empty($it['paid_at'])) $paidAt = $it['paid_at'];
+            }
+
             // 5. 构建 items 返回数据
             $resultItems = [];
             foreach ($items as $it) {
@@ -4898,8 +4905,8 @@ $sumStmt->execute();
                     'course_name' => $courseName,
                     'campus' => $campus,
                     'enroll_time' => $enrollTime,
-                    'created_at' => $items[0]['created_at'] ?? '',
-                    'paid_at' => $items[0]['paid_at'] ?? '',
+                    'created_at' => $createdAt,
+                    'paid_at' => $paidAt,
 
                     'total_price' => number_format($totalPrice, 2, '.', ''),
                     'total_lessons' => $totalLessons,
@@ -7828,46 +7835,142 @@ if (intval($countBt) === 0) {
                 <div class="pagination" id="pagination-course"></div>
                     </div>
                     <div class="sec-panel" id="tab-activities-panel">
-                        <div class="action-button-group">
-                            <button class="action-btn" onclick="showActivityModal()" title="新增活动">
-                                <span class="action-btn-icon">
-                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                                </span>
-                                <span class="action-btn-label">新增活动</span>
-                            </button>
+                        <!-- 活动列表区域 -->
+                        <div id="activity-list-wrap">
+                            <div class="action-button-group">
+                                <button class="action-btn" onclick="showActivityForm()" title="新增活动">
+                                    <span class="action-btn-icon">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                                    </span>
+                                    <span class="action-btn-label">新增活动</span>
+                                </button>
+                            </div>
+                            <div class="filter-bar" id="filter-bar-activity">
+                                <div class="filter-item filter-item-search">
+                                    <label class="filter-label">活动名称</label>
+                                    <div class="filter-search-wrap">
+                                        <svg class="filter-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                        <input type="text" id="search-activity" placeholder="搜索活动名称..." onkeyup="debounceSearch('activity')">
+                                    </div>
+                                </div>
+                                <div class="filter-item">
+                                    <label class="filter-label">一级学科</label>
+                                    <select id="filter-activity-subject1" onchange="loadActivities()"><option value="">全部</option></select>
+                                </div>
+                                <div class="filter-item">
+                                    <label class="filter-label">状态</label>
+                                    <select id="filter-activity-status" onchange="loadActivities()">
+                                        <option value="">全部</option>
+                                        <option value="进行中">进行中</option>
+                                        <option value="已结束">已结束</option>
+                                        <option value="已取消">已取消</option>
+                                    </select>
+                                </div>
+                                <button class="filter-reset-btn" onclick="resetActivityFilters()" title="重置筛选">重置</button>
+                            </div>
+                            <div class="table-wrap">
+                                <table id="table-activities">
+                                    <thead><tr>
+                                        <th>活动名称</th><th width="100">一级学科</th><th width="140">报名日期</th><th width="120">成人费用模式</th><th width="100">成人价格</th><th width="120">学员费用模式</th><th width="100">学员价格</th><th width="140">适用校区</th><th width="120">操作</th>
+                                    </tr></thead>
+                                    <tbody><tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">暂无活动数据</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div class="pagination" id="pagination-activity"></div>
                         </div>
-                        <div class="filter-bar" id="filter-bar-activity">
-                            <div class="filter-item filter-item-search">
-                                <label class="filter-label">活动名称</label>
-                                <div class="filter-search-wrap">
-                                    <svg class="filter-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-                                    <input type="text" id="search-activity" placeholder="搜索活动名称..." onkeyup="debounceSearch('activity')">
+
+                        <!-- 内嵌表单面板 -->
+                        <div id="tab-activity-form" style="display:none;">
+                            <div class="action-button-group" style="margin-bottom:16px;">
+                                <button class="action-btn" onclick="backToActivityList()" title="返回列表" style="background:#6c757d;">
+                                    <span class="action-btn-icon">
+                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                                    </span>
+                                    <span class="action-btn-label">返回列表</span>
+                                </button>
+                                <h3 id="tab-activity-form-title" style="margin:0;margin-left:12px;font-size:16px;">新增活动</h3>
+                            </div>
+
+                            <div class="form-panel-body" style="max-width:750px;">
+                                <input type="hidden" id="edit-activity-id">
+
+                                <div class="form-group">
+                                    <label>活动名称 <span class="required">*</span></label>
+                                    <input type="text" id="activity-name" maxlength="100" placeholder="请输入活动名称" autocomplete="off">
+                                </div>
+
+                                <div class="form-group">
+                                    <label>一级学科</label>
+                                    <select id="activity-subject-level1"><option value="">请选择一级学科</option></select>
+                                </div>
+
+                                <div class="form-row">
+                                    <div class="form-group form-group-half">
+                                        <label>报名开始日期 <span class="required">*</span></label>
+                                        <input type="date" id="activity-reg-start">
+                                    </div>
+                                    <div class="form-group form-group-half">
+                                        <label>报名结束日期 <span class="required">*</span></label>
+                                        <input type="date" id="activity-reg-end">
+                                    </div>
+                                </div>
+
+                                <!-- 成人收费 -->
+                                <div class="activity-section-title">成人收费</div>
+                                <div class="form-group">
+                                    <label>收费模式</label>
+                                    <select id="activity-adult-fee-mode" onchange="onActivityFeeModeChange('adult')">
+                                        <option value="">请选择</option>
+                                        <option value="fee_only">仅收费</option>
+                                        <option value="fee_and_deduct">收费+扣课时</option>
+                                        <option value="deduct_only">仅扣课时</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="activity-adult-price-row" style="display:none;">
+                                    <label>成人价格 (元) <span class="required">*</span></label>
+                                    <input type="number" id="activity-adult-price" min="0" step="0.01" placeholder="请输入价格">
+                                </div>
+                                <div id="activity-adult-deduct-section" style="display:none;">
+                                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
+                                    <div id="activity-adult-deduct-rows"></div>
+                                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('adult')">+ 添加学科扣课</button>
+                                </div>
+
+                                <!-- 学员收费 -->
+                                <div class="activity-section-title">学员收费</div>
+                                <div class="form-group">
+                                    <label>收费模式</label>
+                                    <select id="activity-student-fee-mode" onchange="onActivityFeeModeChange('student')">
+                                        <option value="">请选择</option>
+                                        <option value="fee_only">仅收费</option>
+                                        <option value="fee_and_deduct">收费+扣课时</option>
+                                        <option value="deduct_only">仅扣课时</option>
+                                    </select>
+                                </div>
+                                <div class="form-group" id="activity-student-price-row" style="display:none;">
+                                    <label>学员价格 (元) <span class="required">*</span></label>
+                                    <input type="number" id="activity-student-price" min="0" step="0.01" placeholder="请输入价格">
+                                </div>
+                                <div id="activity-student-deduct-section" style="display:none;">
+                                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
+                                    <div id="activity-student-deduct-rows"></div>
+                                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('student')">+ 添加学科扣课</button>
+                                </div>
+
+                                <!-- 适用校区 -->
+                                <div class="activity-section-title">适用校区 <span class="required">*</span></div>
+                                <div id="activity-campus-rows">
+                                    <span style="color:#999;font-size:13px;">加载中...</span>
+                                </div>
+                                <button type="button" class="deduct-add-btn" onclick="addActivityCampusRow()" style="margin-top:6px;">+ 添加校区</button>
+
+                                <!-- 操作按钮 -->
+                                <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:10px;">
+                                    <button class="btn btn-outline" onclick="backToActivityList()">取消</button>
+                                    <button class="btn btn-primary" id="btn-save-activity" onclick="saveActivity()">保存</button>
                                 </div>
                             </div>
-                            <div class="filter-item">
-                                <label class="filter-label">一级学科</label>
-                                <select id="filter-activity-subject1" onchange="loadActivities()"><option value="">全部</option></select>
-                            </div>
-                            <div class="filter-item">
-                                <label class="filter-label">状态</label>
-                                <select id="filter-activity-status" onchange="loadActivities()">
-                                    <option value="">全部</option>
-                                    <option value="进行中">进行中</option>
-                                    <option value="已结束">已结束</option>
-                                    <option value="已取消">已取消</option>
-                                </select>
-                            </div>
-                            <button class="filter-reset-btn" onclick="resetActivityFilters()" title="重置筛选">重置</button>
                         </div>
-                        <div class="table-wrap">
-                            <table id="table-activities">
-                                <thead><tr>
-                                    <th>活动名称</th><th width="100">一级学科</th><th width="140">报名日期</th><th width="120">成人费用模式</th><th width="100">成人价格</th><th width="120">学员费用模式</th><th width="100">学员价格</th><th width="140">适用校区</th><th width="120">操作</th>
-                                </tr></thead>
-                                <tbody><tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">暂无活动数据</td></tr></tbody>
-                            </table>
-                        </div>
-                        <div class="pagination" id="pagination-activity"></div>
                     </div>
                 </div>
             </section>

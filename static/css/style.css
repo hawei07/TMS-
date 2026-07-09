@@ -7998,27 +7998,33 @@ tbody td {
     flex-shrink: 0;
 }
 /* 成人收费分区 → 珊瑚装饰 */
-#modal-activity .activity-section-title:nth-of-type(1) {
+#modal-activity .activity-section-title:nth-of-type(1),
+#tab-activity-form .activity-section-title:nth-of-type(1) {
     border-left-color: #FF7675;
     background: #FFF0F0;
 }
-#modal-activity .activity-section-title:nth-of-type(1)::before {
+#modal-activity .activity-section-title:nth-of-type(1)::before,
+#tab-activity-form .activity-section-title:nth-of-type(1)::before {
     background: #FF7675;
 }
 /* 学员收费分区 → 天蓝装饰 */
-#modal-activity .activity-section-title:nth-of-type(2) {
+#modal-activity .activity-section-title:nth-of-type(2),
+#tab-activity-form .activity-section-title:nth-of-type(2) {
     border-left-color: #74B9FF;
     background: #F0F7FF;
 }
-#modal-activity .activity-section-title:nth-of-type(2)::before {
+#modal-activity .activity-section-title:nth-of-type(2)::before,
+#tab-activity-form .activity-section-title:nth-of-type(2)::before {
     background: #74B9FF;
 }
 /* 适用校区分区 → 草绿装饰 */
-#modal-activity .activity-section-title:nth-of-type(3) {
+#modal-activity .activity-section-title:nth-of-type(3),
+#tab-activity-form .activity-section-title:nth-of-type(3) {
     border-left-color: #55EFC4;
     background: #F0FFF8;
 }
-#modal-activity .activity-section-title:nth-of-type(3)::before {
+#modal-activity .activity-section-title:nth-of-type(3)::before,
+#tab-activity-form .activity-section-title:nth-of-type(3)::before {
     background: #55EFC4;
 }
 

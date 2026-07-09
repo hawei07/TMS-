@@ -3097,16 +3097,21 @@ function renderActivityTable(rows) {
             <td>${r.student_fee_mode !== 'deduct_only' ? '¥' + parseFloat(r.student_price || 0).toFixed(2) : '-'}</td>
             <td title="${esc(campusTitle)}" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(campusText)}</td>
             <td>
-                <button class="btn btn-sm btn-outline" onclick="showActivityModal(${r.id})" title="编辑">编辑</button>
+                <button class="btn btn-sm btn-outline" onclick="showActivityForm(${r.id})" title="编辑">编辑</button>
                 <button class="btn btn-sm btn-outline" style="color:#E53E3E;border-color:#E53E3E;" onclick="deleteActivity(${r.id})" title="删除">删除</button>
             </td>
         </tr>`;
     }).join('');
 }
 
-async function showActivityModal(id = null) {
-    document.getElementById('modal-activity-title').textContent = id ? '编辑活动' : '新增活动';
+async function showActivityForm(id = null) {
+    // 更新标题
+    document.getElementById('tab-activity-form-title').textContent = id ? '编辑活动' : '新增活动';
     document.getElementById('edit-activity-id').value = id || '';
+
+    // 隐藏列表，显示表单
+    document.getElementById('activity-list-wrap').style.display = 'none';
+    document.getElementById('tab-activity-form').style.display = '';
 
     // 加载学科选项
     await loadActivitySubject1Options();
@@ -3165,8 +3170,12 @@ async function showActivityModal(id = null) {
             showToast('加载活动详情失败: ' + e.message, 'error');
         }
     }
+}
 
-    openModal('modal-activity');
+function backToActivityList() {
+    // 显示列表，隐藏表单
+    document.getElementById('activity-list-wrap').style.display = '';
+    document.getElementById('tab-activity-form').style.display = 'none';
 }
 
 async function loadActivitySubject1Options() {
@@ -3329,7 +3338,7 @@ async function saveActivity() {
         const r = await api('save_activity', payload, 'POST');
         if (r && r.error) { showToast(r.error, 'error'); return; }
         showToast(id ? '活动已更新' : '活动已创建');
-        closeModal('modal-activity');
+        backToActivityList();
         loadActivities();
         loadStats();
     } catch (e) {
