@@ -5823,12 +5823,15 @@ async function loadStudentOrders(sid) {
         }
         container.innerHTML = `<span style="font-size:14px;color:#888;">共 ${rows.length} 笔订单</span>
         <div class="table-wrap" style="margin-top:8px;"><table><thead><tr>
-            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
+            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>课程金额</th><th>商品金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
         </tr></thead><tbody>
         ${rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
             const mt = Number(r.meituan_amount) || 0;
             const acct = Number(r.account_amount) || 0;
+            const taPrice = Number(r.teaching_aid_price) || 0;
+            const courseAmt = (Number(r.actual_price) || 0) - taPrice;
+            const productAmt = taPrice;
             let orderTypeHtml = '';
             const ot = (r.order_type || '').trim();
             if (ot === '新报') orderTypeHtml = '<span class="tag tag-new-enroll">新报</span>';
@@ -5849,6 +5852,8 @@ async function loadStudentOrders(sid) {
             <td>${esc(r.item_name)}</td>
             <td>${r.lesson_count || ''}</td>
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
+            <td class="col-num">${courseAmt > 0 ? '¥' + courseAmt.toFixed(2) : '¥0.00'}</td>
+            <td class="col-num">${productAmt > 0 ? '¥' + productAmt.toFixed(2) : '¥0.00'}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
                         <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
                         <td>${acct > 0 ? '¥' + acct.toFixed(2) : '-'}</td>
@@ -7152,11 +7157,11 @@ function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="22" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="24" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
-    let totalCash = 0, totalMeituan = 0, totalAccount = 0;
+    let totalCash = 0, totalMeituan = 0, totalAccount = 0, totalCourse = 0, totalProduct = 0;
         tbody.innerHTML = rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
             const mt = Number(r.meituan_amount) || 0;
@@ -7164,6 +7169,11 @@ function renderOrderTable(rows) {
             totalCash += cash;
             totalMeituan += mt;
             totalAccount += acct;
+            const taPrice = Number(r.teaching_aid_price) || 0;
+            const courseAmt = (Number(r.actual_price) || 0) - taPrice;
+            const productAmt = taPrice;
+            totalCourse += courseAmt;
+            totalProduct += productAmt;
         let orderTypeHtml = '';
         const ot = (r.order_type || '').trim();
         if (ot === '新报') orderTypeHtml = '<span class="tag tag-new-enroll">新报</span>';
@@ -7185,6 +7195,8 @@ function renderOrderTable(rows) {
             <td>${esc(r.item_name)}</td>
             <td>${r.lesson_count || ''}</td>
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
+            <td class="col-num">${courseAmt > 0 ? '¥' + courseAmt.toFixed(2) : '¥0.00'}</td>
+            <td class="col-num">${productAmt > 0 ? '¥' + productAmt.toFixed(2) : '¥0.00'}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
                         <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
                         <td>${acct > 0 ? '¥' + acct.toFixed(2) : '-'}</td>
@@ -7200,11 +7212,13 @@ function renderOrderTable(rows) {
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
-            <td colspan="14" style="text-align:right;font-weight:bold;">合计</td>
+            <td colspan="13" style="text-align:right;font-weight:bold;">合计</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalCourse.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalProduct.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalAccount.toFixed(2)}</td>
-            <td colspan="5"></td>
+            <td colspan="6"></td>
         </tr>`;
     tfoot.style.display = '';
     syncOrderTableScrollWidth();
@@ -7237,13 +7251,17 @@ function renderOrderDetail(data) {
     let totalPaid = cash + meituan + account;
 
     let itemsHtml = '';
-    let totalLesson = 0, totalActualPrice = 0;
+    let totalLesson = 0, totalActualPrice = 0, totalCourseAmount = 0, totalProductAmount = 0;
     items.forEach(function(item) {
         const lc = Number(item.lesson_count) || 0;
         const gl = Number(item.gifted_lessons) || 0;
         const ap = Number(item.actual_price) || 0;
         totalLesson += lc + gl;
         totalActualPrice += ap;
+        const itemTaPrice = Number(item.teaching_aid_price) || 0;
+        const itemCourseAmount = ap - itemTaPrice;
+        totalCourseAmount += itemCourseAmount;
+        totalProductAmount += itemTaPrice;
         itemsHtml += '<tr>' +
             '<td>' + escHtml(item.item_name || '-') + '</td>' +
             '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
@@ -7255,6 +7273,8 @@ function renderOrderDetail(data) {
             '<td class="col-num">' + (item.teaching_aid_price != null ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-') + '</td>' +
             '<td>' + (item.product_coupon_name ? escHtml(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
             '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
+            '<td class="col-num">¥' + itemCourseAmount.toFixed(2) + '</td>' +
+            '<td class="col-num">' + (itemTaPrice > 0 ? '¥' + itemTaPrice.toFixed(2) : '¥0.00') + '</td>' +
         '</tr>';
     });
 
@@ -7271,9 +7291,9 @@ function renderOrderDetail(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">赠送课时</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">赠送课时</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th><th class="col-num">课程金额</th><th class="col-num">商品金额</th>' +
     '</tr></thead><tbody>';
-    html += itemsHtml || '<tr><td colspan="10" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
+    html += itemsHtml || '<tr><td colspan="12" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
         '<td style="text-align:right;font-weight:bold;">合计</td>' +
         '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
@@ -7285,6 +7305,8 @@ function renderOrderDetail(data) {
         '<td></td>' +
         '<td></td>' +
         '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalActualPrice.toFixed(2) + '</td>' +
+        '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalCourseAmount.toFixed(2) + '</td>' +
+        '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalProductAmount.toFixed(2) + '</td>' +
     '</tr>';
     html += '</tbody></table>';
 
@@ -7326,13 +7348,17 @@ function renderOrderDetailPage(data) {
     let totalPaid = cash + meituan + account;
 
     let itemsHtml = '';
-    let totalLesson = 0, totalActualPrice = 0;
+    let totalLesson = 0, totalActualPrice = 0, totalCourseAmount = 0, totalProductAmount = 0;
     items.forEach(function(item) {
         const lc = Number(item.lesson_count) || 0;
         const gl = Number(item.gifted_lessons) || 0;
         const ap = Number(item.actual_price) || 0;
         totalLesson += lc + gl;
         totalActualPrice += ap;
+        const itemTaPrice = Number(item.teaching_aid_price) || 0;
+        const itemCourseAmount = ap - itemTaPrice;
+        totalCourseAmount += itemCourseAmount;
+        totalProductAmount += itemTaPrice;
         itemsHtml += '<tr>' +
             '<td>' + escHtml(item.item_name || '-') + '</td>' +
             '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
@@ -7344,6 +7370,8 @@ function renderOrderDetailPage(data) {
             '<td class="col-num">' + (item.teaching_aid_price != null ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-') + '</td>' +
             '<td>' + (item.product_coupon_name ? escHtml(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
             '<td class="col-num">' + (item.actual_price != null ? '¥' + Number(item.actual_price).toFixed(2) : '-') + '</td>' +
+            '<td class="col-num">¥' + itemCourseAmount.toFixed(2) + '</td>' +
+            '<td class="col-num">' + (itemTaPrice > 0 ? '¥' + itemTaPrice.toFixed(2) : '¥0.00') + '</td>' +
         '</tr>';
     });
 
@@ -7360,9 +7388,9 @@ function renderOrderDetailPage(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">赠送课时</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">赠送课时</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th><th class="col-num">课程金额</th><th class="col-num">商品金额</th>' +
     '</tr></thead><tbody>';
-    html += itemsHtml || '<tr><td colspan="10" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
+    html += itemsHtml || '<tr><td colspan="12" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
         '<td style="text-align:right;font-weight:bold;">合计</td>' +
         '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
@@ -7374,6 +7402,8 @@ function renderOrderDetailPage(data) {
         '<td></td>' +
         '<td></td>' +
         '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalActualPrice.toFixed(2) + '</td>' +
+        '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalCourseAmount.toFixed(2) + '</td>' +
+        '<td class="col-num" style="font-weight:bold;color:#7c3aed;">¥' + totalProductAmount.toFixed(2) + '</td>' +
     '</tr>';
     html += '</tbody></table>';
 
