@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 error_reporting(E_ALL);
 // PHP 内置服务器：静态文件直接返回，不经过 PHP 处理
 if (php_sapi_name() === 'cli-server') {
@@ -2539,7 +2539,12 @@ $stmt->execute();
             $deductStmt = $db->prepare("SELECT * FROM activity_subject_deductions WHERE activity_id = :aid");
             $deductStmt->bindValue(':aid', $id, PDO::PARAM_INT);
             $deductStmt->execute();
-            $activity['deductions'] = $deductStmt->fetchAll(PDO::FETCH_ASSOC);
+            $deductions = ['adult' => [], 'student' => []];
+            foreach ($deductStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                $ft = $d['fee_type'] ?? 'student';
+                $deductions[$ft === 'adult' ? 'adult' : 'student'][] = $d;
+            }
+            $activity['deductions'] = $deductions;
 
             json($activity);
 
@@ -2584,8 +2589,15 @@ $stmt->execute();
                 $db->exec("DELETE FROM activity_campuses WHERE activity_id = $id");
                 foreach ($campuses as $campus) {
                     $campusName = trim($campus['campus_name'] ?? $campus['name'] ?? '');
+                    // 兼容前端传 campus_id，从 organizations 查名称
+                    $campusId = intval($campus['campus_id'] ?? 0);
+                    if ($campusId > 0 && !$campusName) {
+                        $campusName = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetchColumn() ?: '';
+                    }
                     $maxCapacity = intval($campus['max_capacity'] ?? 0);
-                    $db->exec("INSERT INTO activity_campuses (activity_id, campus_name, max_capacity) VALUES ($id, " . $db->quote($campusName) . ", $maxCapacity)");
+                    if ($campusName) {
+                        $db->exec("INSERT INTO activity_campuses (activity_id, campus_name, max_capacity) VALUES ($id, " . $db->quote($campusName) . ", $maxCapacity)");
+                    }
                 }
 
                 // 替换 deductions
