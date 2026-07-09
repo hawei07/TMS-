@@ -7689,7 +7689,7 @@ tbody td {
     transition: all 0.2s;
 }
 #tab-ta-sales .toolbar input[type="date"]::-webkit-calendar-picker-indicator {
-    margin-left: -4px;
+    display: none;
 }
 #tab-ta-sales .toolbar input[type="text"]:focus,
 #tab-ta-sales .toolbar input[type="date"]:focus {
