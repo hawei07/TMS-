@@ -7600,24 +7600,23 @@ tbody td {
 
 /* -- 销售记录表格 -- */
 #table-ta-sales {
-    border-collapse: separate;
-    border-spacing: 0;
+    width: 100%;
+    border-collapse: collapse;
 }
 #table-ta-sales thead th {
-    background: linear-gradient(180deg, #fffef9 0%, #fff9e0 100%);
+    background: #fff9e0;
     color: #e67e22;
     font-weight: 700;
     font-size: 12px;
-    text-transform: uppercase;
-    letter-spacing: 0.5px;
-    padding: 12px 10px;
-    border-bottom: 3px solid #FFE066;
+    padding: 10px 10px;
+    border-bottom: 2px solid #FFE066;
     position: sticky;
     top: 0;
     z-index: 5;
+    text-align: left;
 }
 #table-ta-sales tbody td {
-    padding: 11px 10px;
+    padding: 10px 10px;
     border-bottom: 1px solid #fef5e7;
     font-size: 13px;
     vertical-align: middle;
@@ -7630,21 +7629,17 @@ tbody td {
     background: #fffdf5 !important;
     border-left-color: #FFE066;
 }
-/* 金额列 */
+/* 金额列右对齐 */
 #table-ta-sales td:nth-child(7),
 #table-ta-sales td:nth-child(8),
 #table-ta-sales td:nth-child(9),
-#table-ta-sales td:nth-child(10) {
+#table-ta-sales td:nth-child(10),
+#table-ta-sales td:nth-child(11) {
     text-align: right;
 }
 /* 类型列不换行 */
 #table-ta-sales td:nth-child(5) {
     white-space: nowrap;
-}
-/* 支付方式彩色标签 */
-#table-ta-sales td:nth-child(9) {
-    font-size: 12px;
-    line-height: 1.6;
 }
 
 /* -- 销售记录筛选栏 -- */
