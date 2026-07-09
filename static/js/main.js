@@ -3256,7 +3256,7 @@ function renderItemList() {
 
     if (!plan) {
         if (tagEl) tagEl.innerHTML = '';
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="11" style="text-align:center;color:#999;">请选择左侧价格方案</td></tr>';
         return;
     }
     // 在报价单列表标题旁展示方案类型标签
@@ -3269,7 +3269,7 @@ function renderItemList() {
     }
     const items = plan.items || [];
     if (!items.length) {
-        tbody.innerHTML = '<tr class="price-empty-row"><td colspan="10">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
+        tbody.innerHTML = '<tr class="price-empty-row"><td colspan="11">暂无报价单<span class="price-empty-subtitle">请点击下方按钮新增</span></td></tr>';
         return;
     }
     tbody.innerHTML = items.map(item => {
@@ -3292,6 +3292,7 @@ function renderItemList() {
             <td class="${teachingAidEditable}" data-field="teaching_aid_id" data-original="${item.teaching_aid_id || ''}">${teachingAidDisplay}</td>
             <td class="pi-readonly">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
             <td class="${productCouponEditable}" data-field="product_coupon_id" data-original="${item.product_coupon_id || ''}">${productCouponDisplay}</td>
+            <td>${isSmall ? '—' : (item.gifted_lessons || 0)}</td>
             <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
             <td>
                 <button class="btn-link-danger" onclick="deleteItem(${item.id})">删除</button>
@@ -3306,6 +3307,8 @@ function renderItemList() {
         <tr class="price-total-row">
             <td style="font-weight:bold;">总计</td>
             <td style="font-weight:bold;">${totalLessons}</td>
+            <td></td>
+            <td></td>
             <td></td>
             <td></td>
             <td></td>
@@ -3583,6 +3586,7 @@ async function saveInlineEdit(tr) {
                 teaching_aid_id: teachingAidId,
                 coupon_id: couponId,
                 product_coupon_id: productCouponId,
+                gifted_lessons: parseInt(item.gifted_lessons) || 0,
                 sort_order: idx
             };
         }
@@ -3607,6 +3611,7 @@ async function saveInlineEdit(tr) {
             teaching_aid_id: isSmallPack ? 0 : (parseInt(item.teaching_aid_id) || 0),
             coupon_id: isSmallPack ? 0 : (parseInt(item.coupon_id) || 0),
             product_coupon_id: isSmallPack ? 0 : (parseInt(item.product_coupon_id) || 0),
+            gifted_lessons: parseInt(item.gifted_lessons) || 0,
             sort_order: idx
         };
     });
@@ -3732,6 +3737,7 @@ async function savePlan() {
             coupon_id: parseInt(item.coupon_id) || 0,
             teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
             product_coupon_id: parseInt(item.product_coupon_id) || 0,
+            gifted_lessons: parseInt(item.gifted_lessons) || 0,
             sort_order: idx
         })) : [];
 
@@ -3774,6 +3780,16 @@ async function deletePlan(planId) {
     });
 }
 
+// ==================== 赠送课时步进器 ====================
+function stepGiftedLessons(delta) {
+    const el = document.getElementById('price-item-gifted-lessons');
+    let val = parseInt(el.value) || 0;
+    val = Math.max(0, val + delta);
+    // 确保为偶数
+    if (val % 2 !== 0) val = Math.max(0, val + (delta > 0 ? 1 : -1));
+    el.value = val;
+}
+
 function addItem() {
     if (!currentSelectedPlanId) { showToast('请先选择左侧价格方案', 'error'); return; }
     editingItemId = 0;
@@ -3787,10 +3803,16 @@ function addItem() {
     document.getElementById('price-item-teaching-aid').value = '';
     document.getElementById('price-item-course-coupon').value = '';
     document.getElementById('price-item-coupon').value = '';
+    document.getElementById('price-item-gifted-lessons').value = '0';
     loadPriceItemDiscountOptions();
     loadPriceItemTeachingAidOptions();
     loadPriceItemCourseCouponOptions();
     loadPriceItemCouponOptions();
+    // 小课包时隐藏赠送课时卡片
+    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+    const isSmall = plan && plan.plan_type === '小课包';
+    const giftCard = document.getElementById('pi-gift-card');
+    if (giftCard) giftCard.style.display = isSmall ? 'none' : '';
     openModal('modal-price-item');
 }
 
@@ -3828,6 +3850,7 @@ async function saveItem() {
         coupon_id: parseInt(item.coupon_id) || 0,
         teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
         product_coupon_id: parseInt(item.product_coupon_id) || 0,
+        gifted_lessons: parseInt(item.gifted_lessons) || 0,
         sort_order: idx
     }));
 
@@ -3840,6 +3863,7 @@ async function saveItem() {
         teaching_aid_id: parseInt(document.getElementById('price-item-teaching-aid').value) || 0,
         coupon_id: parseInt(document.getElementById('price-item-course-coupon').value) || 0,
         product_coupon_id: parseInt(document.getElementById('price-item-coupon').value) || 0,
+        gifted_lessons: parseInt(document.getElementById('price-item-gifted-lessons').value) || 0,
         sort_order: items.length
     };
 
@@ -3905,6 +3929,7 @@ async function deleteItem(itemId) {
                 coupon_id: parseInt(item.coupon_id) || 0,
                 teaching_aid_id: parseInt(item.teaching_aid_id) || 0,
                 product_coupon_id: parseInt(item.product_coupon_id) || 0,
+                gifted_lessons: parseInt(item.gifted_lessons) || 0,
                 sort_order: idx
             }))
         }, 'POST');
@@ -6266,6 +6291,7 @@ function selectEnrollPlan(planId) {
         return `<tr>
             <td>${esc(item.name)}</td>
             <td class="col-num">${item.lesson_count || 0}</td>
+            <td class="col-num">${item.gifted_lessons || 0}</td>
             <td class="col-num">¥${Number(item.unit_price).toFixed(2)}</td>
             <td>${item.discount_plan_name ? esc(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-'}</td>
             <td>${item.coupon_name ? esc(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-'}</td>
@@ -7129,12 +7155,14 @@ function renderOrderDetail(data) {
     let totalLesson = 0, totalActualPrice = 0;
     items.forEach(function(item) {
         const lc = Number(item.lesson_count) || 0;
+        const gl = Number(item.gifted_lessons) || 0;
         const ap = Number(item.actual_price) || 0;
-        totalLesson += lc;
+        totalLesson += lc + gl;
         totalActualPrice += ap;
         itemsHtml += '<tr>' +
             '<td>' + escHtml(item.item_name || '-') + '</td>' +
             '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
+            '<td class="col-num">' + (item.gifted_lessons || 0) + '</td>' +
             '<td class="col-num">' + (item.unit_price != null ? '¥' + Number(item.unit_price).toFixed(2) : '-') + '</td>' +
             '<td>' + (item.discount_plan_name ? escHtml(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
             '<td>' + (item.coupon_name ? escHtml(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
@@ -7158,12 +7186,13 @@ function renderOrderDetail(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">赠送课时</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
     '</tr></thead><tbody>';
-    html += itemsHtml || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
+    html += itemsHtml || '<tr><td colspan="10" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
         '<td style="text-align:right;font-weight:bold;">合计</td>' +
         '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
+        '<td></td>' +
         '<td></td>' +
         '<td></td>' +
         '<td></td>' +
@@ -7215,12 +7244,14 @@ function renderOrderDetailPage(data) {
     let totalLesson = 0, totalActualPrice = 0;
     items.forEach(function(item) {
         const lc = Number(item.lesson_count) || 0;
+        const gl = Number(item.gifted_lessons) || 0;
         const ap = Number(item.actual_price) || 0;
-        totalLesson += lc;
+        totalLesson += lc + gl;
         totalActualPrice += ap;
         itemsHtml += '<tr>' +
             '<td>' + escHtml(item.item_name || '-') + '</td>' +
             '<td class="col-num">' + (item.lesson_count != null ? item.lesson_count : '-') + '</td>' +
+            '<td class="col-num">' + (item.gifted_lessons || 0) + '</td>' +
             '<td class="col-num">' + (item.unit_price != null ? '¥' + Number(item.unit_price).toFixed(2) : '-') + '</td>' +
             '<td>' + (item.discount_plan_name ? escHtml(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
             '<td>' + (item.coupon_name ? escHtml(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-') + '</td>' +
@@ -7244,12 +7275,13 @@ function renderOrderDetailPage(data) {
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
     html += '<table class="order-detail-table"><thead><tr>' +
-        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
+        '<th>报价项名称</th><th class="col-num">课时数</th><th class="col-num">赠送课时</th><th class="col-num">课时价格</th><th>优惠方案</th><th>课时优惠券</th><th>教材包</th><th>教材包原价</th><th>商品券</th><th class="col-num">实际价格</th>' +
     '</tr></thead><tbody>';
-    html += itemsHtml || '<tr><td colspan="9" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
+    html += itemsHtml || '<tr><td colspan="10" style="text-align:center;color:#999;">暂无报价明细</td></tr>';
     html += '<tr class="order-detail-total-row">' +
         '<td style="text-align:right;font-weight:bold;">合计</td>' +
         '<td class="col-num" style="font-weight:bold;">' + totalLesson + '</td>' +
+        '<td></td>' +
         '<td></td>' +
         '<td></td>' +
         '<td></td>' +
