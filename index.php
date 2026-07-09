@@ -8319,6 +8319,7 @@ if (intval($countBt) === 0) {
                     <button class="sec-tab" onclick="switchTaTab('sales')">销售记录</button>
                 </div>
 
+                <div class="section-tab-content">
                 <!-- Tab 1: 画具列表（原有内容） -->
                 <div class="sec-panel active" id="tab-ta-list">
                     <!-- 工具栏 -->
@@ -8482,7 +8483,7 @@ if (intval($countBt) === 0) {
                     </div>
                     <div class="pagination" id="pagination-ta-sales"></div>
                 </div>
-            </section>
+                </div>
             </section>
 
             <!-- 面板：教室管理 -->
