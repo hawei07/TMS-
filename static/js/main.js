@@ -123,26 +123,58 @@ function highlightLeafByPanel(panelId) {
 }
 
 // ==================== API ====================
+const apiCache = new Map();
+const API_CACHE_TTL = 120000;
+const API_CACHEABLE_ACTIONS = new Set([
+    'list_channels',
+    'list_intention_levels',
+    'list_basic_types',
+    'list_positions',
+    'list_organizations',
+    'list_subjects',
+    'get_employees',
+    'list_class_periods'
+]);
+
+function cloneApiData(data) {
+    return data == null ? data : JSON.parse(JSON.stringify(data));
+}
+
 async function api(action, data = null, method = null) {
     let url = API_BASE + action;
     const opts = { headers: { 'Content-Type': 'application/json' } };
+    let requestMethod = 'GET';
     if (data) {
         if (method === 'GET') {
-            // GET 请求将参数拼接到 URL 上，确保 PHP $_GET 能正确读取
             const params = new URLSearchParams();
             for (const [key, value] of Object.entries(data)) {
-                params.append(key, String(value));
+                if (value !== undefined && value !== null) params.append(key, String(value));
             }
-            url += '&' + params.toString();
+            const paramString = params.toString();
+            if (paramString) url += '&' + paramString;
         } else {
-            opts.method = method || 'POST';
+            requestMethod = method || 'POST';
+            opts.method = requestMethod;
             opts.body = JSON.stringify(data);
         }
     }
-    const res = await fetch(url, opts);
-    return res.json();
-}
 
+    const baseAction = action.split('&')[0];
+    const cacheable = requestMethod === 'GET' && API_CACHEABLE_ACTIONS.has(baseAction);
+    const cacheKey = cacheable ? url : '';
+    const nowTs = Date.now();
+    if (cacheable && apiCache.has(cacheKey)) {
+        const cached = apiCache.get(cacheKey);
+        if (nowTs - cached.time < API_CACHE_TTL) return cloneApiData(cached.data);
+        apiCache.delete(cacheKey);
+    }
+
+    const res = await fetch(url, opts);
+    const json = await res.json();
+    if (cacheable) apiCache.set(cacheKey, { time: nowTs, data: cloneApiData(json) });
+    if (requestMethod !== 'GET') apiCache.clear();
+    return json;
+}
 // ==================== 统计 ====================
 async function loadStats() {
     const data = await api('get_stats');

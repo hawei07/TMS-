@@ -35,7 +35,22 @@ if (!$db) {
     die("数据库连接失败: " . end($dbErrors));
 }
 
-// 初始化表
+// 初始化表（带缓存）：避免每个 API 请求都重复执行建表/迁移检查
+$schemaCacheVersion = '2026-07-09-perf-v1';
+$schemaCacheFile = __DIR__ . '/temp/schema_init.cache';
+$forceSchemaInit = isset($_GET['migrate']) && $_GET['migrate'] === '1';
+$schemaReady = false;
+if (!$forceSchemaInit && is_file($schemaCacheFile)) {
+    $schemaReady = trim((string)@file_get_contents($schemaCacheFile)) === $schemaCacheVersion;
+    if ($schemaReady) {
+        try {
+            $schemaReady = (bool)$db->query("SHOW TABLES LIKE 'orders'")->fetch();
+        } catch (PDOException $e) {
+            $schemaReady = false;
+        }
+    }
+}
+if (!$schemaReady) {
 $db->exec("CREATE TABLE IF NOT EXISTS channels (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(500) NOT NULL DEFAULT '',
@@ -774,6 +789,39 @@ $db->exec("CREATE TABLE IF NOT EXISTS activity_subject_deductions (
     deduct_lessons INT NOT NULL DEFAULT 1,
     FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+// 常用列表/详情查询索引（重复创建会被捕获忽略）
+foreach ([
+    ['orders', 'idx_orders_parent_order_no', 'parent_order_no'],
+    ['orders', 'idx_orders_order_no', 'order_no'],
+    ['orders', 'idx_orders_created_at', 'created_at'],
+    ['orders', 'idx_orders_paid_at', 'paid_at'],
+    ['orders', 'idx_orders_student_id', 'student_id'],
+    ['orders', 'idx_orders_course_id', 'course_id'],
+    ['orders', 'idx_orders_campus', 'campus'],
+    ['orders', 'idx_orders_pay_status', 'pay_status'],
+    ['students', 'idx_students_student_no', 'student_no'],
+    ['students', 'idx_students_phone', 'phone'],
+    ['students', 'idx_students_name', 'name'],
+    ['resources', 'idx_resources_phone', 'phone'],
+    ['resources', 'idx_resources_updated_at', 'updated_at'],
+    ['resources', 'idx_resources_pool_type', 'pool_type'],
+    ['employees', 'idx_employees_name', 'name'],
+    ['employees', 'idx_employees_department', 'department'],
+    ['appointments', 'idx_appointments_time', 'appointment_time'],
+    ['class_attendance', 'idx_class_attendance_session', 'class_id, schedule_id, session_date'],
+    ['teaching_aid_sales', 'idx_tas_sold_at', 'sold_at'],
+    ['teaching_aid_sales', 'idx_tas_student_name', 'student_name'],
+    ['teaching_aid_sales', 'idx_tas_teaching_aid_name', 'teaching_aid_name']
+] as $idxDef) {
+    try {
+        $db->exec("CREATE INDEX {$idxDef[1]} ON {$idxDef[0]} ({$idxDef[2]})");
+    } catch (PDOException $e) {}
+}
+$schemaCacheDir = dirname($schemaCacheFile);
+if (!is_dir($schemaCacheDir)) @mkdir($schemaCacheDir, 0777, true);
+@file_put_contents($schemaCacheFile, $schemaCacheVersion);
+}
 
 date_default_timezone_set('Asia/Shanghai');
 
