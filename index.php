@@ -7929,12 +7929,9 @@ if (intval($countBt) === 0) {
 
                         <!-- 内嵌表单面板 -->
                         <div id="tab-activity-form" style="display:none;">
-                            <div class="form-panel-header" style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:14px 0;border-bottom:2px solid #f0f0f0;">
-                                <button class="btn btn-outline btn-sm activity-back-btn" onclick="backToActivityList()" title="返回列表">
-                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-                                    返回列表
-                                </button>
-                                <h3 id="tab-activity-form-title" style="margin:0;font-size:18px;font-weight:700;color:var(--color-text);">新增活动</h3>
+                            <div class="form-panel-header panel-header" style="display:flex;align-items:center;">
+                                <h3 id="tab-activity-form-title">新增活动</h3>
+                                <button class="btn btn-outline btn-sm" onclick="backToActivityList()" style="margin-left:auto;">← 返回列表</button>
                             </div>
 
                             <div class="form-panel-body" style="max-width:750px;">
