@@ -5830,8 +5830,9 @@ async function loadStudentOrders(sid) {
             const mt = Number(r.meituan_amount) || 0;
             const acct = Number(r.account_amount) || 0;
             const taPrice = Number(r.teaching_aid_price) || 0;
-            const courseAmt = (Number(r.actual_price) || 0) - taPrice;
-            const productAmt = taPrice;
+            const pcAmt = Number(r.product_coupon_amount) || 0;
+            const courseAmt = (Number(r.actual_price) || 0) - taPrice + pcAmt;
+            const productAmt = taPrice - pcAmt;
             let orderTypeHtml = '';
             const ot = (r.order_type || '').trim();
             if (ot === '新报') orderTypeHtml = '<span class="tag tag-new-enroll">新报</span>';
@@ -7170,8 +7171,9 @@ function renderOrderTable(rows) {
             totalMeituan += mt;
             totalAccount += acct;
             const taPrice = Number(r.teaching_aid_price) || 0;
-            const courseAmt = (Number(r.actual_price) || 0) - taPrice;
-            const productAmt = taPrice;
+            const pcAmt = Number(r.product_coupon_amount) || 0;
+            const courseAmt = (Number(r.actual_price) || 0) - taPrice + pcAmt;
+            const productAmt = taPrice - pcAmt;
             totalCourse += courseAmt;
             totalProduct += productAmt;
         let orderTypeHtml = '';

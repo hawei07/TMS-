@@ -4572,8 +4572,9 @@ $stmt->execute();
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
             foreach ($rows as &$row) {
                 $tap = floatval($row['teaching_aid_price'] ?? 0);
-                $row['course_amount'] = round(floatval($row['actual_price'] ?? 0) - $tap, 2);
-                $row['product_amount'] = round($tap, 2);
+                $pc = floatval($row['product_coupon_amount'] ?? 0);
+                $row['course_amount'] = round(floatval($row['actual_price'] ?? 0) - $tap + $pc, 2);
+                $row['product_amount'] = round($tap - $pc, 2);
             }
             unset($row);
             // 支付方式汇总
@@ -4706,8 +4707,8 @@ $sumStmt->execute();
                     'meituan_amount' => number_format(floatval($it['meituan_amount'] ?? 0), 2, '.', ''),
                     'account_amount' => number_format(floatval($it['account_amount'] ?? 0), 2, '.', ''),
                     'pay_status' => $it['pay_status'] ?? '',
-                    'course_amount' => round(floatval($it['actual_price'] ?? 0) - floatval($it['teaching_aid_price'] ?? 0), 2),
-                    'product_amount' => round(floatval($it['teaching_aid_price'] ?? 0), 2),
+                    'course_amount' => round(floatval($it['actual_price'] ?? 0) - floatval($it['teaching_aid_price'] ?? 0) + floatval($it['product_coupon_amount'] ?? 0), 2),
+                    'product_amount' => round(floatval($it['teaching_aid_price'] ?? 0) - floatval($it['product_coupon_amount'] ?? 0), 2),
                 ];
             }
 
