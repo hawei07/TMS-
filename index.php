@@ -8464,9 +8464,9 @@ if (intval($countBt) === 0) {
                     <div class="toolbar">
                         <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                             <label style="font-size:13px;">学员：</label>
-                            <input type="text" id="ta-sales-student" class="form-input" placeholder="学员姓名" style="width:120px;">
+                            <input type="text" id="ta-sales-student" class="form-input" placeholder="学员姓名" style="width:140px;">
                             <label style="font-size:13px;">商品：</label>
-                            <input type="text" id="ta-sales-aid" class="form-input" placeholder="商品名称" style="width:120px;">
+                            <input type="text" id="ta-sales-aid" class="form-input" placeholder="商品名称" style="width:140px;">
                             <label style="font-size:13px;">日期：</label>
                             <input type="date" id="ta-sales-date-from" style="width:145px;">
                             <span style="color:#999;">至</span>
