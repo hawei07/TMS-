@@ -743,6 +743,38 @@ $db->exec("CREATE TABLE IF NOT EXISTS coupons (
 $colCP = $db->query("SHOW COLUMNS FROM class_periods LIKE 'campus'")->fetch();
 if (!$colCP) $db->exec("ALTER TABLE class_periods ADD COLUMN campus VARCHAR(500) NOT NULL DEFAULT ''");
 
+// ==================== 活动管理建表 ====================
+$db->exec("CREATE TABLE IF NOT EXISTS activities (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(200) NOT NULL DEFAULT '',
+    subject_level1 VARCHAR(200) NOT NULL DEFAULT '',
+    reg_start_date DATE,
+    reg_end_date DATE,
+    adult_fee_mode VARCHAR(20) NOT NULL DEFAULT 'fee_only' COMMENT '仅收费/收费+扣课时/仅扣课时',
+    student_fee_mode VARCHAR(20) NOT NULL DEFAULT 'fee_only',
+    adult_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    student_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$db->exec("CREATE TABLE IF NOT EXISTS activity_campuses (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    activity_id INT NOT NULL,
+    campus_name VARCHAR(200) NOT NULL DEFAULT '',
+    max_capacity INT NOT NULL DEFAULT 0 COMMENT '0=不限',
+    FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$db->exec("CREATE TABLE IF NOT EXISTS activity_subject_deductions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    activity_id INT NOT NULL,
+    fee_type VARCHAR(10) NOT NULL DEFAULT 'student' COMMENT 'adult/student',
+    subject_level1 VARCHAR(200) NOT NULL DEFAULT '',
+    deduct_lessons INT NOT NULL DEFAULT 1,
+    FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 date_default_timezone_set('Asia/Shanghai');
 
 $action = $_GET['action'] ?? '';
@@ -2452,6 +2484,132 @@ $stmt->execute();
             }
             fclose($output);
             exit;
+
+// ==================== 活动管理 API ====================
+        case 'list_activities':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = $_GET['keyword'] ?? '';
+
+            $where = [];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(a.name LIKE :kw1 OR a.subject_level1 LIKE :kw2)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+            }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM activities a $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $countStmt->execute(); $total = $countStmt->fetch(PDO::FETCH_NUM)[0];
+            $total = $total ? intval($total) : 0;
+            $offset = ($page - 1) * $pageSize;
+            $stmt = $db->prepare("SELECT a.* FROM activities a $whereStr ORDER BY a.id DESC LIMIT :lim OFFSET :off");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // 读取 campus 信息
+                $campusStmt = $db->prepare("SELECT id, campus_name, max_capacity FROM activity_campuses WHERE activity_id = :aid");
+                $campusStmt->bindValue(':aid', $r['id'], PDO::PARAM_INT);
+                $campusStmt->execute();
+                $r['campuses'] = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
+                $rows[] = $r;
+            }
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+
+        case 'get_activity':
+            $id = intval($_GET['id'] ?? 0);
+            if (!$id) json(['error' => '缺少活动ID']);
+            $stmt = $db->prepare("SELECT * FROM activities WHERE id = :id");
+            $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            $activity = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$activity) json(['error' => '活动不存在']);
+
+            // campuses
+            $campusStmt = $db->prepare("SELECT * FROM activity_campuses WHERE activity_id = :aid");
+            $campusStmt->bindValue(':aid', $id, PDO::PARAM_INT);
+            $campusStmt->execute();
+            $activity['campuses'] = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // deductions
+            $deductStmt = $db->prepare("SELECT * FROM activity_subject_deductions WHERE activity_id = :aid");
+            $deductStmt->bindValue(':aid', $id, PDO::PARAM_INT);
+            $deductStmt->execute();
+            $activity['deductions'] = $deductStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            json($activity);
+
+        case 'save_activity':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '活动名称不能为空']);
+            $subject_level1 = trim($input['subject_level1'] ?? '');
+            $reg_start_date = $input['reg_start_date'] ?? null;
+            $reg_end_date = $input['reg_end_date'] ?? null;
+            $adult_fee_mode = $input['adult_fee_mode'] ?? 'fee_only';
+            $student_fee_mode = $input['student_fee_mode'] ?? 'fee_only';
+            $adult_price = floatval($input['adult_price'] ?? 0);
+            $student_price = floatval($input['student_price'] ?? 0);
+            $campuses = $input['campuses'] ?? [];
+            $deductions = $input['deductions'] ?? [];
+
+            $db->beginTransaction();
+            try {
+                if ($id > 0) {
+                    // 更新
+                    $stmt = $db->prepare("UPDATE activities SET name=:name, subject_level1=:sl1, reg_start_date=:rsd, reg_end_date=:red, adult_fee_mode=:afm, student_fee_mode=:sfm, adult_price=:ap, student_price=:sp, updated_at=NOW() WHERE id=:id");
+                    $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+                } else {
+                    // 新增
+                    $stmt = $db->prepare("INSERT INTO activities (name, subject_level1, reg_start_date, reg_end_date, adult_fee_mode, student_fee_mode, adult_price, student_price, created_at, updated_at) VALUES (:name, :sl1, :rsd, :red, :afm, :sfm, :ap, :sp, NOW(), NOW())");
+                }
+                $stmt->bindValue(':name', $name, PDO::PARAM_STR);
+                $stmt->bindValue(':sl1', $subject_level1, PDO::PARAM_STR);
+                $stmt->bindValue(':rsd', $reg_start_date ?: null, $reg_start_date ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $stmt->bindValue(':red', $reg_end_date ?: null, $reg_end_date ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $stmt->bindValue(':afm', $adult_fee_mode, PDO::PARAM_STR);
+                $stmt->bindValue(':sfm', $student_fee_mode, PDO::PARAM_STR);
+                $stmt->bindValue(':ap', $adult_price);
+                $stmt->bindValue(':sp', $student_price);
+                $stmt->execute();
+
+                if ($id <= 0) $id = $db->lastInsertId();
+
+                // 替换 campuses
+                $db->exec("DELETE FROM activity_campuses WHERE activity_id = $id");
+                foreach ($campuses as $campus) {
+                    $campusName = trim($campus['campus_name'] ?? $campus['name'] ?? '');
+                    $maxCapacity = intval($campus['max_capacity'] ?? 0);
+                    $db->exec("INSERT INTO activity_campuses (activity_id, campus_name, max_capacity) VALUES ($id, " . $db->quote($campusName) . ", $maxCapacity)");
+                }
+
+                // 替换 deductions
+                $db->exec("DELETE FROM activity_subject_deductions WHERE activity_id = $id");
+                foreach ($deductions as $deduct) {
+                    $feeType = $deduct['fee_type'] ?? 'student';
+                    $subjLevel1 = trim($deduct['subject_level1'] ?? '');
+                    $deductLessons = intval($deduct['deduct_lessons'] ?? 1);
+                    $db->exec("INSERT INTO activity_subject_deductions (activity_id, fee_type, subject_level1, deduct_lessons) VALUES ($id, " . $db->quote($feeType) . ", " . $db->quote($subjLevel1) . ", $deductLessons)");
+                }
+
+                $db->commit();
+                json(['id' => $id, 'message' => $id > 0 ? '活动更新成功' : '活动创建成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '保存失败: ' . $e->getMessage()]);
+            }
+
+        case 'delete_activity':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if (!$id) json(['error' => '缺少活动ID']);
+            $db->exec("DELETE FROM activities WHERE id = $id");
+            json(['message' => '活动删除成功']);
 
 // ==================== 价格管理 API ====================
         case 'list_price_plans':
@@ -7052,7 +7210,7 @@ if (intval($countBt) === 0) {
                             <li class="tree-node">
                                 <div class="tree-leaf" data-panel="panel-courses">
                                     <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-                                    <span class="tree-label">课程管理</span>
+                                    <span class="tree-label">课程&活动</span>
                                 </div>
                             </li>
                             <li class="tree-node">
@@ -7581,10 +7739,10 @@ if (intval($countBt) === 0) {
                 </div>
             </section>
 
-            <!-- 面板：课程管理 -->
+            <!-- 面板：课程&活动 -->
             <section class="content-panel" id="panel-courses">
                 <div class="panel-header">
-                    <h3>课程管理</h3>
+                    <h3>课程&活动</h3>
                     <div class="header-stats-inline">
                         <span class="stat-badge stat-badge-courses">课程总数：<strong id="stat-courses-inline">0</strong></span>
                     </div>
