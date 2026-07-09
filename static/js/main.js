@@ -12149,33 +12149,32 @@ async function loadTeachingAidSales(page = 1) {
 function renderTeachingAidSalesTable(rows) {
     const tbody = document.getElementById('ta-sales-tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10"><div class="empty-state">暂无销售记录</div></td></tr>';
-        return;
-    }
-    tbody.innerHTML = rows.map(r => {
-        const typeTag = r.type === '画具'
-            ? '<span class="tag-blue">画具</span>'
-            : '<span class="tag-orange">教材包</span>';
-        // 支付方式展示
-        let paymentDisplay = [];
-        if (parseFloat(r.cash_amount) > 0) paymentDisplay.push('现金¥' + parseFloat(r.cash_amount).toFixed(2));
-        if (parseFloat(r.meituan_amount) > 0) paymentDisplay.push('美团¥' + parseFloat(r.meituan_amount).toFixed(2));
-        if (parseFloat(r.account_amount) > 0) paymentDisplay.push('账户¥' + parseFloat(r.account_amount).toFixed(2));
-        const paymentStr = paymentDisplay.length > 0 ? paymentDisplay.join(' + ') : '—';
+        tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">暂无销售记录</div></td></tr>';
+            return;
+        }
+        tbody.innerHTML = rows.map(r => {
+            const typeTag = r.type === '画具'
+                ? '<span class="tag-blue">画具</span>'
+                : '<span class="tag-orange">教材包</span>';
+            const cash = parseFloat(r.cash_amount) || 0;
+            const meituan = parseFloat(r.meituan_amount) || 0;
+            const account = parseFloat(r.account_amount) || 0;
         
-        return `
-        <tr>
-            <td>${esc(r.created_at || '')}</td>
-            <td>${esc(r.student_name)}</td>
-            <td>${esc(r.student_no)}</td>
-            <td><strong>${esc(r.teaching_aid_name)}</strong></td>
-            <td>${typeTag}</td>
-            <td style="text-align:center;">${r.quantity}</td>
-            <td style="text-align:right;">¥${parseFloat(r.unit_price).toFixed(2)}</td>
-            <td style="text-align:right;color:#DC2626;font-weight:600;">¥${parseFloat(r.total_amount).toFixed(2)}</td>
-            <td>${paymentStr}</td>
-            <td title="${esc(r.remark || '')}">${esc((r.remark || '').substring(0, 15))}${(r.remark || '').length > 15 ? '...' : ''}</td>
-        </tr>`;
+            return `
+            <tr>
+                <td>${esc(r.created_at || '')}</td>
+                <td>${esc(r.student_name)}</td>
+                <td>${esc(r.student_no)}</td>
+                <td><strong>${esc(r.teaching_aid_name)}</strong></td>
+                <td>${typeTag}</td>
+                <td style="text-align:center;">${r.quantity}</td>
+                <td style="text-align:right;">¥${parseFloat(r.unit_price).toFixed(2)}</td>
+                <td style="text-align:right;color:#DC2626;font-weight:600;">¥${parseFloat(r.total_amount).toFixed(2)}</td>
+                <td style="text-align:right;">${cash > 0 ? '¥' + cash.toFixed(2) : '—'}</td>
+                <td style="text-align:right;">${meituan > 0 ? '¥' + meituan.toFixed(2) : '—'}</td>
+                <td style="text-align:right;">${account > 0 ? '¥' + account.toFixed(2) : '—'}</td>
+                <td title="${esc(r.remark || '')}">${esc((r.remark || '').substring(0, 15))}${(r.remark || '').length > 15 ? '...' : ''}</td>
+            </tr>`;
     }).join('');
 }
 

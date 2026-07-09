@@ -7632,9 +7632,14 @@ tbody td {
 }
 /* 金额列 */
 #table-ta-sales td:nth-child(7),
-#table-ta-sales td:nth-child(8) {
-    font-variant-numeric: tabular-nums;
-    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+#table-ta-sales td:nth-child(8),
+#table-ta-sales td:nth-child(9),
+#table-ta-sales td:nth-child(10) {
+    text-align: right;
+}
+/* 类型列不换行 */
+#table-ta-sales td:nth-child(5) {
+    white-space: nowrap;
 }
 /* 支付方式彩色标签 */
 #table-ta-sales td:nth-child(9) {

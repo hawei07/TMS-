@@ -8491,12 +8491,14 @@ if (intval($countBt) === 0) {
                                     <th style="width:60px;">数量</th>
                                     <th style="width:80px;">单价</th>
                                     <th style="width:80px;">总金额</th>
-                                    <th>支付方式</th>
+                                    <th style="width:80px;">现金</th>
+                                    <th style="width:80px;">美团</th>
+                                    <th style="width:80px;">账户余额</th>
                                     <th>备注</th>
                                 </tr>
                             </thead>
                             <tbody id="ta-sales-tbody">
-                                <tr><td colspan="10"><div class="empty-state">暂无销售记录</div></td></tr>
+                                <tr><td colspan="12"><div class="empty-state">暂无销售记录</div></td></tr>
                             </tbody>
                         </table>
                     </div>
