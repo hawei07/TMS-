@@ -3985,21 +3985,21 @@ $stmt->execute();
                     $refundedLessons = max(0, $lc - $realConsumed);
                     $r['consumed_lessons'] = $paidConsumed;
                     $r['refunded_lessons'] = $refundedLessons;
-                    $r['consumed_amount'] = round($classUnitPrice * $paidConsumed, 2);
+                    $r['consumed_amount'] = $lc > 0 ? round((($ap - $taPrice + $pcAmount) / $lc) * $paidConsumed, 2) : 0;
                     $r['remaining_lessons'] = 0;
                     $r['remaining_amount'] = 0;
                 } elseif (isset($pendingRefundIds[$r['order_id']])) {
                     // 退费申请中：课时冻结，剩余=0
                     $r['consumed_lessons'] = $paidConsumed;
                     $r['refunded_lessons'] = 0;
-                    $r['consumed_amount'] = round($classUnitPrice * $paidConsumed, 2);
+                    $r['consumed_amount'] = $lc > 0 ? round((($ap - $taPrice + $pcAmount) / $lc) * $paidConsumed, 2) : 0;
                     $r['remaining_lessons'] = 0;
                     $r['remaining_amount'] = 0;
                 } elseif ($lc > 0) {
                     // 正常订单：以考勤记录为准
                     $r['consumed_lessons'] = $paidConsumed;
                     $r['refunded_lessons'] = 0;
-                    $r['consumed_amount'] = round($classUnitPrice * $paidConsumed, 2);
+                    $r['consumed_amount'] = $lc > 0 ? round((($ap - $taPrice + $pcAmount) / $lc) * $paidConsumed, 2) : 0;
                     $rl = $lc - $paidConsumed;
                     $r['remaining_lessons'] = $rl > 0 ? $rl : 0;
                     $r['remaining_amount'] = $lc > 0 ? round((($ap - $taPrice + $pcAmount) / $lc) * $r['remaining_lessons'], 2) : 0;
