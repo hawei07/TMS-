@@ -2511,11 +2511,13 @@ $stmt->execute();
             $plan = $db->query("SELECT * FROM price_plans WHERE id=$planId")->fetch(PDO::FETCH_ASSOC);
             if (!$plan) json(['error' => '价格方案不存在']);
             // 读取课程的小课包字段，若为非空则强制类型为小课包
-            $course = $db->query("SELECT small_package FROM courses WHERE id=$courseId")->fetch(PDO::FETCH_ASSOC);
-            $orderType = trim($plan['plan_type'] ?? '');
-            if (in_array($course['small_package'] ?? '', ['是','1','小课包'], true)) {
-                $orderType = '小课包';
-            }
+            $course = $db->query("SELECT small_package, subject_level1, subject_level2 FROM courses WHERE id=$courseId")->fetch(PDO::FETCH_ASSOC);
+                        $orderType = trim($plan['plan_type'] ?? '');
+                        if (in_array($course['small_package'] ?? '', ['是','1','小课包'], true)) {
+                            $orderType = '小课包';
+                        }
+                        $subjectL1 = $course['subject_level1'] ?? '';
+                        $subjectL2 = $course['subject_level2'] ?? '';
             $items = [];
             $itemRes = $db->query("SELECT * FROM price_items WHERE plan_id=$planId ORDER BY sort_order, id");
             while ($item = $itemRes->fetch(PDO::FETCH_ASSOC)) $items[] = $item;
@@ -2570,7 +2572,7 @@ $stmt->execute();
             $itemDiscounts = [];
             $itemRes2 = $db->query("SELECT pi.id, d.name AS dp_name, COALESCE(d.discount_amount,0) AS dp_amount, c.name AS cp_name, COALESCE(c.discount_amount,0) AS cp_amount, ta.name AS ta_name, COALESCE(ta.price,0) AS ta_price, pc.name AS pc_name, COALESCE(pc.discount_amount,0) AS pc_amount FROM price_items pi LEFT JOIN discount_plans d ON pi.discount_plan_id=d.id LEFT JOIN coupons c ON pi.coupon_id=c.id LEFT JOIN teaching_aids ta ON pi.teaching_aid_id=ta.id LEFT JOIN coupons pc ON pi.product_coupon_id=pc.id WHERE pi.plan_id=$planId");
             while ($row = $itemRes2->fetch(PDO::FETCH_ASSOC)) $itemDiscounts[$row['id']] = $row;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, discount_plan_name, discount_plan_amount, coupon_name, coupon_amount, teaching_aid_name, teaching_aid_price, product_coupon_name, product_coupon_amount, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, gifted_lessons) VALUES (:sid, :cid, :pn, :dpn, :dpa, :cn, :coa, :tan, :tap, :pcn, :pca, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv, :gl)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, discount_plan_name, discount_plan_amount, coupon_name, coupon_amount, teaching_aid_name, teaching_aid_price, product_coupon_name, product_coupon_amount, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, gifted_lessons, subject_level1, subject_level2) VALUES (:sid, :cid, :pn, :dpn, :dpa, :cn, :coa, :tan, :tap, :pcn, :pca, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv, :gl, :sl1, :sl2)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
@@ -2604,6 +2606,8 @@ $stmt->execute();
                 $stmt->bindValue(':ps', '已支付', PDO::PARAM_STR);
                 $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
                 $stmt->bindValue(':gl', intval($item['gifted_lessons'] ?? 0), PDO::PARAM_INT);
+                $stmt->bindValue(':sl1', $subjectL1, PDO::PARAM_STR);
+                $stmt->bindValue(':sl2', $subjectL2, PDO::PARAM_STR);
                 // 优惠快照绑定
                 $di = $itemDiscounts[$item['id']] ?? [];
                 $stmt->bindValue(':dpn', $di['dp_name'] ?? '', PDO::PARAM_STR);
