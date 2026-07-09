@@ -743,6 +743,38 @@ $db->exec("CREATE TABLE IF NOT EXISTS coupons (
 $colCP = $db->query("SHOW COLUMNS FROM class_periods LIKE 'campus'")->fetch();
 if (!$colCP) $db->exec("ALTER TABLE class_periods ADD COLUMN campus VARCHAR(500) NOT NULL DEFAULT ''");
 
+// ==================== 活动管理建表 ====================
+$db->exec("CREATE TABLE IF NOT EXISTS activities (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    name VARCHAR(200) NOT NULL DEFAULT '',
+    subject_level1 VARCHAR(200) NOT NULL DEFAULT '',
+    reg_start_date DATE,
+    reg_end_date DATE,
+    adult_fee_mode VARCHAR(20) NOT NULL DEFAULT 'fee_only' COMMENT '仅收费/收费+扣课时/仅扣课时',
+    student_fee_mode VARCHAR(20) NOT NULL DEFAULT 'fee_only',
+    adult_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    student_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$db->exec("CREATE TABLE IF NOT EXISTS activity_campuses (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    activity_id INT NOT NULL,
+    campus_name VARCHAR(200) NOT NULL DEFAULT '',
+    max_capacity INT NOT NULL DEFAULT 0 COMMENT '0=不限',
+    FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+$db->exec("CREATE TABLE IF NOT EXISTS activity_subject_deductions (
+    id INT PRIMARY KEY AUTO_INCREMENT,
+    activity_id INT NOT NULL,
+    fee_type VARCHAR(10) NOT NULL DEFAULT 'student' COMMENT 'adult/student',
+    subject_level1 VARCHAR(200) NOT NULL DEFAULT '',
+    deduct_lessons INT NOT NULL DEFAULT 1,
+    FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
 date_default_timezone_set('Asia/Shanghai');
 
 $action = $_GET['action'] ?? '';
@@ -2452,6 +2484,132 @@ $stmt->execute();
             }
             fclose($output);
             exit;
+
+// ==================== 活动管理 API ====================
+        case 'list_activities':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $keyword = $_GET['keyword'] ?? '';
+
+            $where = [];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(a.name LIKE :kw1 OR a.subject_level1 LIKE :kw2)";
+                $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%";
+            }
+            $whereStr = $where ? 'WHERE ' . implode(' AND ', $where) : '';
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM activities a $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $countStmt->execute(); $total = $countStmt->fetch(PDO::FETCH_NUM)[0];
+            $total = $total ? intval($total) : 0;
+            $offset = ($page - 1) * $pageSize;
+            $stmt = $db->prepare("SELECT a.* FROM activities a $whereStr ORDER BY a.id DESC LIMIT :lim OFFSET :off");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // 读取 campus 信息
+                $campusStmt = $db->prepare("SELECT id, campus_name, max_capacity FROM activity_campuses WHERE activity_id = :aid");
+                $campusStmt->bindValue(':aid', $r['id'], PDO::PARAM_INT);
+                $campusStmt->execute();
+                $r['campuses'] = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
+                $rows[] = $r;
+            }
+            json(['total' => $total, 'page' => $page, 'page_size' => $pageSize, 'data' => $rows]);
+
+        case 'get_activity':
+            $id = intval($_GET['id'] ?? 0);
+            if (!$id) json(['error' => '缺少活动ID']);
+            $stmt = $db->prepare("SELECT * FROM activities WHERE id = :id");
+            $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+            $stmt->execute();
+            $activity = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$activity) json(['error' => '活动不存在']);
+
+            // campuses
+            $campusStmt = $db->prepare("SELECT * FROM activity_campuses WHERE activity_id = :aid");
+            $campusStmt->bindValue(':aid', $id, PDO::PARAM_INT);
+            $campusStmt->execute();
+            $activity['campuses'] = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // deductions
+            $deductStmt = $db->prepare("SELECT * FROM activity_subject_deductions WHERE activity_id = :aid");
+            $deductStmt->bindValue(':aid', $id, PDO::PARAM_INT);
+            $deductStmt->execute();
+            $activity['deductions'] = $deductStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            json($activity);
+
+        case 'save_activity':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            $name = trim($input['name'] ?? '');
+            if (!$name) json(['error' => '活动名称不能为空']);
+            $subject_level1 = trim($input['subject_level1'] ?? '');
+            $reg_start_date = $input['reg_start_date'] ?? null;
+            $reg_end_date = $input['reg_end_date'] ?? null;
+            $adult_fee_mode = $input['adult_fee_mode'] ?? 'fee_only';
+            $student_fee_mode = $input['student_fee_mode'] ?? 'fee_only';
+            $adult_price = floatval($input['adult_price'] ?? 0);
+            $student_price = floatval($input['student_price'] ?? 0);
+            $campuses = $input['campuses'] ?? [];
+            $deductions = $input['deductions'] ?? [];
+
+            $db->beginTransaction();
+            try {
+                if ($id > 0) {
+                    // 更新
+                    $stmt = $db->prepare("UPDATE activities SET name=:name, subject_level1=:sl1, reg_start_date=:rsd, reg_end_date=:red, adult_fee_mode=:afm, student_fee_mode=:sfm, adult_price=:ap, student_price=:sp, updated_at=NOW() WHERE id=:id");
+                    $stmt->bindValue(':id', $id, PDO::PARAM_INT);
+                } else {
+                    // 新增
+                    $stmt = $db->prepare("INSERT INTO activities (name, subject_level1, reg_start_date, reg_end_date, adult_fee_mode, student_fee_mode, adult_price, student_price, created_at, updated_at) VALUES (:name, :sl1, :rsd, :red, :afm, :sfm, :ap, :sp, NOW(), NOW())");
+                }
+                $stmt->bindValue(':name', $name, PDO::PARAM_STR);
+                $stmt->bindValue(':sl1', $subject_level1, PDO::PARAM_STR);
+                $stmt->bindValue(':rsd', $reg_start_date ?: null, $reg_start_date ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $stmt->bindValue(':red', $reg_end_date ?: null, $reg_end_date ? PDO::PARAM_STR : PDO::PARAM_NULL);
+                $stmt->bindValue(':afm', $adult_fee_mode, PDO::PARAM_STR);
+                $stmt->bindValue(':sfm', $student_fee_mode, PDO::PARAM_STR);
+                $stmt->bindValue(':ap', $adult_price);
+                $stmt->bindValue(':sp', $student_price);
+                $stmt->execute();
+
+                if ($id <= 0) $id = $db->lastInsertId();
+
+                // 替换 campuses
+                $db->exec("DELETE FROM activity_campuses WHERE activity_id = $id");
+                foreach ($campuses as $campus) {
+                    $campusName = trim($campus['campus_name'] ?? $campus['name'] ?? '');
+                    $maxCapacity = intval($campus['max_capacity'] ?? 0);
+                    $db->exec("INSERT INTO activity_campuses (activity_id, campus_name, max_capacity) VALUES ($id, " . $db->quote($campusName) . ", $maxCapacity)");
+                }
+
+                // 替换 deductions
+                $db->exec("DELETE FROM activity_subject_deductions WHERE activity_id = $id");
+                foreach ($deductions as $deduct) {
+                    $feeType = $deduct['fee_type'] ?? 'student';
+                    $subjLevel1 = trim($deduct['subject_level1'] ?? '');
+                    $deductLessons = intval($deduct['deduct_lessons'] ?? 1);
+                    $db->exec("INSERT INTO activity_subject_deductions (activity_id, fee_type, subject_level1, deduct_lessons) VALUES ($id, " . $db->quote($feeType) . ", " . $db->quote($subjLevel1) . ", $deductLessons)");
+                }
+
+                $db->commit();
+                json(['id' => $id, 'message' => $id > 0 ? '活动更新成功' : '活动创建成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '保存失败: ' . $e->getMessage()]);
+            }
+
+        case 'delete_activity':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            if (!$id) json(['error' => '缺少活动ID']);
+            $db->exec("DELETE FROM activities WHERE id = $id");
+            json(['message' => '活动删除成功']);
 
 // ==================== 价格管理 API ====================
         case 'list_price_plans':
@@ -7052,7 +7210,7 @@ if (intval($countBt) === 0) {
                             <li class="tree-node">
                                 <div class="tree-leaf" data-panel="panel-courses">
                                     <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-                                    <span class="tree-label">课程管理</span>
+                                    <span class="tree-label">课程&活动</span>
                                 </div>
                             </li>
                             <li class="tree-node">
@@ -7581,14 +7739,21 @@ if (intval($countBt) === 0) {
                 </div>
             </section>
 
-            <!-- 面板：课程管理 -->
+            <!-- 面板：课程&活动 -->
             <section class="content-panel" id="panel-courses">
                 <div class="panel-header">
-                    <h3>课程管理</h3>
+                    <h3>课程&活动</h3>
                     <div class="header-stats-inline">
                         <span class="stat-badge stat-badge-courses">课程总数：<strong id="stat-courses-inline">0</strong></span>
+                        <span class="stat-badge stat-badge-activities">活动总数：<strong id="stat-activities-inline">0</strong></span>
                     </div>
                 </div>
+                <div class="section-tabs" id="courses-section-tabs">
+                    <button class="sec-tab active" data-tab="tab-courses-panel">课程管理</button>
+                    <button class="sec-tab" data-tab="tab-activities-panel">活动管理</button>
+                </div>
+                <div class="section-tab-content">
+                    <div class="sec-panel active" id="tab-courses-panel">
                 <div class="action-button-group">
                     <button class="action-btn" onclick="showCourseModal()" title="新增课程">
                         <span class="action-btn-icon">
@@ -7649,6 +7814,50 @@ if (intval($countBt) === 0) {
                     <div class="course-cards-empty" style="display:none;">暂无课程数据</div>
                 </div>
                 <div class="pagination" id="pagination-course"></div>
+                    </div>
+                    <div class="sec-panel" id="tab-activities-panel">
+                        <div class="action-button-group">
+                            <button class="action-btn" onclick="showActivityModal()" title="新增活动">
+                                <span class="action-btn-icon">
+                                    <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                                </span>
+                                <span class="action-btn-label">新增活动</span>
+                            </button>
+                        </div>
+                        <div class="filter-bar" id="filter-bar-activity">
+                            <div class="filter-item filter-item-search">
+                                <label class="filter-label">活动名称</label>
+                                <div class="filter-search-wrap">
+                                    <svg class="filter-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                    <input type="text" id="search-activity" placeholder="搜索活动名称..." onkeyup="debounceSearch('activity')">
+                                </div>
+                            </div>
+                            <div class="filter-item">
+                                <label class="filter-label">一级学科</label>
+                                <select id="filter-activity-subject1" onchange="loadActivities()"><option value="">全部</option></select>
+                            </div>
+                            <div class="filter-item">
+                                <label class="filter-label">状态</label>
+                                <select id="filter-activity-status" onchange="loadActivities()">
+                                    <option value="">全部</option>
+                                    <option value="进行中">进行中</option>
+                                    <option value="已结束">已结束</option>
+                                    <option value="已取消">已取消</option>
+                                </select>
+                            </div>
+                            <button class="filter-reset-btn" onclick="resetActivityFilters()" title="重置筛选">重置</button>
+                        </div>
+                        <div class="table-wrap">
+                            <table id="table-activities">
+                                <thead><tr>
+                                    <th>活动名称</th><th width="100">一级学科</th><th width="140">报名日期</th><th width="120">成人费用模式</th><th width="100">成人价格</th><th width="120">学员费用模式</th><th width="100">学员价格</th><th width="140">适用校区</th><th width="120">操作</th>
+                                </tr></thead>
+                                <tbody><tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">暂无活动数据</td></tr></tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-activity"></div>
+                    </div>
+                </div>
             </section>
 
             <!-- 面板：学员管理 -->
@@ -10539,6 +10748,93 @@ if (intval($countBt) === 0) {
     </div>
 
     <!-- 订单详情弹窗 -->
+    <!-- 活动管理弹窗 -->
+    <div class="modal-overlay" id="modal-activity">
+        <div class="modal modal-lg" style="width:750px; max-width:95vw;">
+            <div class="modal-header">
+                <h3 id="modal-activity-title">新增活动</h3>
+                <button class="modal-close" onclick="closeModal('modal-activity')">&times;</button>
+            </div>
+            <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
+                <input type="hidden" id="edit-activity-id">
+
+                <div class="form-group">
+                    <label>活动名称 <span class="required">*</span></label>
+                    <input type="text" id="activity-name" maxlength="100" placeholder="请输入活动名称" autocomplete="off">
+                </div>
+
+                <div class="form-group">
+                    <label>一级学科</label>
+                    <select id="activity-subject-level1"><option value="">请选择一级学科</option></select>
+                </div>
+
+                <div class="form-row">
+                    <div class="form-group form-group-half">
+                        <label>报名开始日期 <span class="required">*</span></label>
+                        <input type="date" id="activity-reg-start">
+                    </div>
+                    <div class="form-group form-group-half">
+                        <label>报名结束日期 <span class="required">*</span></label>
+                        <input type="date" id="activity-reg-end">
+                    </div>
+                </div>
+
+                <!-- 成人收费 -->
+                <div class="activity-section-title">成人收费</div>
+                <div class="form-group">
+                    <label>收费模式</label>
+                    <select id="activity-adult-fee-mode" onchange="onActivityFeeModeChange('adult')">
+                        <option value="">请选择</option>
+                        <option value="fee_only">仅收费</option>
+                        <option value="fee_and_deduct">收费+扣课时</option>
+                        <option value="deduct_only">仅扣课时</option>
+                    </select>
+                </div>
+                <div class="form-group" id="activity-adult-price-row" style="display:none;">
+                    <label>成人价格 (元) <span class="required">*</span></label>
+                    <input type="number" id="activity-adult-price" min="0" step="0.01" placeholder="请输入价格">
+                </div>
+                <div id="activity-adult-deduct-section" style="display:none;">
+                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
+                    <div id="activity-adult-deduct-rows"></div>
+                    <button type="button" class="btn btn-sm btn-outline" onclick="addActivityDeductRow('adult')" style="margin-top:6px;">+ 添加学科扣课</button>
+                </div>
+
+                <!-- 学员收费 -->
+                <div class="activity-section-title">学员收费</div>
+                <div class="form-group">
+                    <label>收费模式</label>
+                    <select id="activity-student-fee-mode" onchange="onActivityFeeModeChange('student')">
+                        <option value="">请选择</option>
+                        <option value="fee_only">仅收费</option>
+                        <option value="fee_and_deduct">收费+扣课时</option>
+                        <option value="deduct_only">仅扣课时</option>
+                    </select>
+                </div>
+                <div class="form-group" id="activity-student-price-row" style="display:none;">
+                    <label>学员价格 (元) <span class="required">*</span></label>
+                    <input type="number" id="activity-student-price" min="0" step="0.01" placeholder="请输入价格">
+                </div>
+                <div id="activity-student-deduct-section" style="display:none;">
+                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
+                    <div id="activity-student-deduct-rows"></div>
+                    <button type="button" class="btn btn-sm btn-outline" onclick="addActivityDeductRow('student')" style="margin-top:6px;">+ 添加学科扣课</button>
+                </div>
+
+                <!-- 适用校区 -->
+                <div class="activity-section-title">适用校区 <span class="required">*</span></div>
+                <div id="activity-campus-rows">
+                    <span style="color:#999;font-size:13px;">加载中...</span>
+                </div>
+                <button type="button" class="btn btn-sm btn-outline" onclick="addActivityCampusRow()" style="margin-top:6px;">+ 添加校区</button>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" onclick="closeModal('modal-activity')">取消</button>
+                <button class="btn btn-primary" id="btn-save-activity" onclick="saveActivity()">保存</button>
+            </div>
+        </div>
+    </div>
+
     <div class="modal-overlay" id="modal-order-detail">
         <div class="modal modal-lg" style="width:900px; max-width:95vw;">
             <div class="modal-header">

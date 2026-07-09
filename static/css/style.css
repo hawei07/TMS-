@@ -6992,7 +6992,64 @@ tbody td {
     font-weight: 600;
     border-top: 2px solid #e0d8f0;
 }
-
+/* 订单详情 - 报价明细列宽与间距优化 */
+#order-detail-page-body,
+#order-detail-body {
+    overflow-x: auto;
+}
+.order-detail-table {
+    width: 100%;
+    min-width: 1248px;
+    table-layout: fixed;
+    border-collapse: separate;
+    border-spacing: 0;
+}
+.order-detail-table th,
+.order-detail-table td {
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    vertical-align: middle;
+}
+.order-detail-table th { padding: 10px 12px; }
+.order-detail-table td { padding: 10px 12px; line-height: 1.45; }
+.order-detail-table th:nth-child(1),
+.order-detail-table td:nth-child(1) { width: 12%; }
+.order-detail-table th:nth-child(2),
+.order-detail-table td:nth-child(2) { width: 6%; }
+.order-detail-table th:nth-child(3),
+.order-detail-table td:nth-child(3) { width: 6%; }
+.order-detail-table th:nth-child(4),
+.order-detail-table td:nth-child(4) { width: 9%; }
+.order-detail-table th:nth-child(5),
+.order-detail-table td:nth-child(5) { width: 12%; }
+.order-detail-table th:nth-child(6),
+.order-detail-table td:nth-child(6) { width: 14%; }
+.order-detail-table th:nth-child(7),
+.order-detail-table td:nth-child(7) { width: 10%; }
+.order-detail-table th:nth-child(8),
+.order-detail-table td:nth-child(8) { width: 9%; }
+.order-detail-table th:nth-child(9),
+.order-detail-table td:nth-child(9) { width: 13%; }
+.order-detail-table th:nth-child(10),
+.order-detail-table td:nth-child(10) { width: 9%; }
+.order-detail-table th:nth-child(2),
+.order-detail-table th:nth-child(3),
+.order-detail-table th:nth-child(4),
+.order-detail-table th:nth-child(8),
+.order-detail-table th:nth-child(10),
+.order-detail-table td:nth-child(2),
+.order-detail-table td:nth-child(3),
+.order-detail-table td:nth-child(4),
+.order-detail-table td:nth-child(8),
+.order-detail-table td:nth-child(10) {
+    text-align: right;
+    font-variant-numeric: tabular-nums;
+}
+.order-detail-table .order-detail-total-row td:first-child {
+    text-align: left !important;
+}
 .order-detail-payment-row {
     display: flex;
     gap: 12px;
@@ -7867,4 +7924,117 @@ tbody td {
     .ta-payment-row { flex-wrap: wrap; }
     #tab-ta-sales .toolbar { flex-direction: column; gap: 8px; }
     #table-ta-sales { min-width: 700px; }
+}
+
+/* ==================== 活动管理 ==================== */
+
+/* 活动统计徽章 */
+.stat-badge-activities {
+    background: #F0FDF4;
+    color: #166534;
+    border: 1px solid #BBF7D0;
+}
+
+/* 活动管理表格 */
+#table-activities {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+#table-activities th,
+#table-activities td {
+    padding: 10px 12px;
+    text-align: left;
+    border-bottom: 1px solid var(--border-light);
+    white-space: nowrap;
+}
+#table-activities th {
+    background: #FAFAFA;
+    font-weight: 600;
+    color: var(--color-text-secondary);
+    font-size: 12px;
+    text-transform: none;
+}
+#table-activities td {
+    color: var(--color-text);
+    vertical-align: middle;
+}
+#table-activities tbody tr:hover {
+    background: #FAFAFE;
+}
+
+/* 收费模式 badge */
+.fee-badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 10px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+    line-height: 1.5;
+}
+.fee-badge.fee-free {
+    background: #ECFDF5;
+    color: #059669;
+}
+.fee-badge.fee-paid {
+    background: #FEF3C7;
+    color: #D97706;
+}
+.fee-badge.fee-mixed {
+    background: #F3E8FF;
+    color: #7C3AED;
+}
+
+/* 活动弹窗：分区标题 */
+.activity-section-title {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--color-primary);
+    margin: 16px 0 8px;
+    padding-bottom: 4px;
+    border-bottom: 1px solid var(--border);
+}
+
+/* 校区行 */
+.campus-capacity-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+    font-size: 13px;
+}
+.campus-capacity-row input[type="number"] {
+    width: 70px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* 扣课学科行 */
+.deduct-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 4px 0;
+}
+.deduct-row select {
+    min-width: 130px;
+    padding: 5px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+}
+.deduct-row input[type="number"] {
+    width: 70px;
+    padding: 4px 8px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    font-size: 13px;
+}
+
+/* 活动面板按钮组 */
+#tab-activities-panel .action-button-group {
+    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
 }
