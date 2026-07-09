@@ -3864,8 +3864,24 @@ async function saveItem() {
         items: items
     }, 'POST');
     if (r && r.error) { showToast(r.error, 'error'); return; }
-    closeModal('modal-price-item');
-    showToast(itemId > 0 ? '报价单更新成功' : '报价单添加成功');
+
+    if (itemId > 0) {
+        // 编辑已有报价单：保存后关闭弹窗
+        closeModal('modal-price-item');
+        showToast('报价单更新成功');
+    } else {
+        // 新增报价单：不关闭弹窗，清空表单让用户继续添加
+        showToast('报价单添加成功');
+        document.getElementById('edit-price-item-id').value = '0';
+        document.getElementById('price-item-name').value = '';
+        document.getElementById('price-item-lesson-count').value = '';
+        document.getElementById('price-item-unit-price').value = '';
+        document.getElementById('price-item-actual-price').value = '';
+        document.getElementById('price-item-discount-plan').value = '0';
+        document.getElementById('price-item-teaching-aid').value = '0';
+        document.getElementById('price-item-course-coupon').value = '0';
+        document.getElementById('price-item-coupon').value = '0';
+    }
     loadPricePlans(currentPriceCourseId);
 }
 
