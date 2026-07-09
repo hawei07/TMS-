@@ -11873,7 +11873,7 @@ async function searchPurchaseStudent(keyword) {
         dropdown.innerHTML = '<div class="ta-student-dropdown-item" style="color:#999;">未找到匹配学员</div>';
     } else {
         dropdown.innerHTML = students.map(s => 
-            `<div class="ta-student-dropdown-item" onclick="selectPurchaseStudent(${s.id}, '${esc(s.name)}', '${esc(s.student_no || '')}', '${esc(s.campus_name || '')}')">${esc(s.name)} — ${esc(s.student_no || '无学号')} — ${esc(s.campus_name || '无校区')}</div>`
+            `<div class="ta-student-dropdown-item" onclick="selectPurchaseStudent(${s.id}, '${esc(s.name)}', '${esc(s.student_no || '')}', '${esc(s.campus || '')}')">${esc(s.name)} — ${esc(s.student_no || '无学号')} — ${esc(s.campus || '无校区')}</div>`
         ).join('');
     }
     dropdown.style.display = 'block';
@@ -12139,7 +12139,7 @@ function renderTeachingAidSalesTable(rows) {
         return;
     }
     tbody.innerHTML = rows.map(r => {
-        const typeTag = r.teaching_aid_type === '画具'
+        const typeTag = r.type === '画具'
             ? '<span class="tag-blue">画具</span>'
             : '<span class="tag-orange">教材包</span>';
         // 支付方式展示
@@ -12158,7 +12158,7 @@ function renderTeachingAidSalesTable(rows) {
             <td>${typeTag}</td>
             <td style="text-align:center;">${r.quantity}</td>
             <td style="text-align:right;">¥${parseFloat(r.unit_price).toFixed(2)}</td>
-            <td style="text-align:right;color:#DC2626;font-weight:600;">¥${parseFloat(r.total_price).toFixed(2)}</td>
+            <td style="text-align:right;color:#DC2626;font-weight:600;">¥${parseFloat(r.total_amount).toFixed(2)}</td>
             <td>${paymentStr}</td>
             <td title="${esc(r.remark || '')}">${esc((r.remark || '').substring(0, 15))}${(r.remark || '').length > 15 ? '...' : ''}</td>
         </tr>`;

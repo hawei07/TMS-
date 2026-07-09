@@ -3807,7 +3807,7 @@ $stmt->execute();
 
         case 'search_students_for_sale':
             $keyword = trim($_GET['keyword'] ?? '');
-            if (mb_strlen($keyword) < 1) { json(['data' => []]); break; }
+            if (strlen($keyword) < 1) { json(['data' => []]); break; }
             $sql = "SELECT s.id, s.name, s.student_no,
                 (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id) AS campus
             FROM students s
