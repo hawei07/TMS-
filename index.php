@@ -681,6 +681,54 @@ $db->exec("CREATE TABLE IF NOT EXISTS coupons (
             FOREIGN KEY (teaching_aid_id) REFERENCES teaching_aids(id) ON DELETE CASCADE
         ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+        $db->exec("CREATE TABLE IF NOT EXISTS teaching_aid_sales (
+            id INT PRIMARY KEY AUTO_INCREMENT,
+            teaching_aid_id INT NOT NULL,
+            student_id INT NOT NULL,
+            student_name VARCHAR(200) NOT NULL DEFAULT '',
+            student_no VARCHAR(100) NOT NULL DEFAULT '',
+            teaching_aid_name VARCHAR(200) NOT NULL DEFAULT '',
+            type VARCHAR(50) NOT NULL DEFAULT '',
+            quantity INT NOT NULL DEFAULT 1,
+            unit_price DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            cash_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            meituan_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            account_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00,
+            campus VARCHAR(500) NOT NULL DEFAULT '',
+            sold_at DATETIME,
+            sold_by VARCHAR(100) NOT NULL DEFAULT '',
+            remark VARCHAR(500) NOT NULL DEFAULT '',
+            created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (teaching_aid_id) REFERENCES teaching_aids(id) ON DELETE RESTRICT,
+            FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
+        // teaching_aid_sales 表迁移（加列兼容块）
+        $tasCols = [];
+        $tasRes = $db->query("SHOW COLUMNS FROM teaching_aid_sales");
+        while ($c = $tasRes->fetch(PDO::FETCH_ASSOC)) $tasCols[] = $c['Field'];
+        // 重命名旧列 + 新增缺失列
+        if (in_array('teaching_aid_type', $tasCols) && !in_array('type', $tasCols))
+            try { $db->exec("ALTER TABLE teaching_aid_sales CHANGE COLUMN teaching_aid_type type VARCHAR(50) NOT NULL DEFAULT ''"); } catch (PDOException $e) {}
+        if (in_array('total_price', $tasCols) && !in_array('total_amount', $tasCols))
+            try { $db->exec("ALTER TABLE teaching_aid_sales CHANGE COLUMN total_price total_amount DECIMAL(10,2) NOT NULL DEFAULT 0.00"); } catch (PDOException $e) {}
+        if (in_array('campus_name', $tasCols) && !in_array('campus', $tasCols))
+            try { $db->exec("ALTER TABLE teaching_aid_sales CHANGE COLUMN campus_name campus VARCHAR(500) NOT NULL DEFAULT ''"); } catch (PDOException $e) {}
+        if (!in_array('sold_at', $tasCols))
+            try { $db->exec("ALTER TABLE teaching_aid_sales ADD COLUMN sold_at DATETIME"); } catch (PDOException $e) {}
+        if (!in_array('sold_by', $tasCols))
+            try { $db->exec("ALTER TABLE teaching_aid_sales ADD COLUMN sold_by VARCHAR(100) NOT NULL DEFAULT ''"); } catch (PDOException $e) {}
+        // 修改 student_name 长度
+        try { $db->exec("ALTER TABLE teaching_aid_sales MODIFY COLUMN student_name VARCHAR(200) NOT NULL DEFAULT ''"); } catch (PDOException $e) {}
+        // 修改 remark 类型
+        try { $db->exec("ALTER TABLE teaching_aid_sales MODIFY COLUMN remark VARCHAR(500) NOT NULL DEFAULT ''"); } catch (PDOException $e) {}
+        // 外键兼容（可能因历史数据失败）
+        try { $db->exec("ALTER TABLE teaching_aid_sales ADD FOREIGN KEY (teaching_aid_id) REFERENCES teaching_aids(id) ON DELETE RESTRICT"); } catch (PDOException $e) {}
+        try { $db->exec("ALTER TABLE teaching_aid_sales ADD FOREIGN KEY (student_id) REFERENCES students(id) ON DELETE RESTRICT"); } catch (PDOException $e) {}
+        // 回填 sold_at（历史数据用 created_at）
+        try { $db->exec("UPDATE teaching_aid_sales SET sold_at = created_at WHERE sold_at IS NULL"); } catch (PDOException $e) {}
+
         $db->exec("CREATE TABLE IF NOT EXISTS class_periods (
     id INT PRIMARY KEY AUTO_INCREMENT,
     name VARCHAR(200) NOT NULL DEFAULT '',
@@ -3755,6 +3803,182 @@ $stmt->execute();
                 $db->rollBack();
                 json(['error' => '更新失败：' . $e->getMessage()]);
             }
+            break;
+
+        case 'search_students_for_sale':
+            $keyword = trim($_GET['keyword'] ?? '');
+            if (mb_strlen($keyword) < 1) { json(['data' => []]); break; }
+            $sql = "SELECT s.id, s.name, s.student_no,
+                (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id) AS campus
+            FROM students s
+            WHERE (s.name LIKE " . $db->quote('%' . $keyword . '%') . " OR s.student_no LIKE " . $db->quote('%' . $keyword . '%') . ")
+            ORDER BY s.name LIMIT 20";
+            $res = $db->query($sql);
+            $rows = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+                $rows[] = $r;
+            }
+            json(['data' => $rows]);
+            break;
+
+        case 'list_available_teaching_aids':
+            $keyword = trim($_GET['keyword'] ?? '');
+            $where = ["ta.status = '上架'"];
+            if ($keyword !== '') {
+                $where[] = 'ta.name LIKE ' . $db->quote('%' . $keyword . '%');
+            }
+            $whereStr = implode(' AND ', $where);
+            $sql = "SELECT ta.id, ta.name, ta.unit, ta.price, ta.type, ta.remark, ta.subject_id, ta.status,
+                s.name AS subject_name,
+                (SELECT GROUP_CONCAT(DISTINCT o.name ORDER BY o.name SEPARATOR ', ') FROM teaching_aid_campuses tac2 LEFT JOIN organizations o ON tac2.campus_id=o.id WHERE tac2.teaching_aid_id=ta.id) AS campus_names
+            FROM teaching_aids ta
+            LEFT JOIN subjects s ON ta.subject_id=s.id
+            WHERE $whereStr
+            ORDER BY ta.id DESC";
+            $res = $db->query($sql);
+            $rows = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+                $r['price'] = floatval($r['price']);
+                $rows[] = $r;
+            }
+            json(['data' => $rows]);
+            break;
+
+        case 'create_teaching_aid_sale':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $sid = intval($input['student_id'] ?? 0);
+            if ($sid <= 0) { json(['error' => '请选择学员']); break; }
+            $student = $db->query("SELECT s.id, s.name, s.student_no, (SELECT GROUP_CONCAT(DISTINCT o.campus SEPARATOR ', ') FROM orders o WHERE o.student_id=s.id) AS campus FROM students s WHERE s.id=$sid")->fetch(PDO::FETCH_ASSOC);
+            if (!$student) { json(['error' => '学员不存在']); break; }
+            $studentCampus = $student['campus'] ?? '';
+            $items = $input['items'] ?? [];
+            if (empty($items) || !is_array($items)) { json(['error' => '请选择商品']); break; }
+            $cashAmount = floatval($input['cash_amount'] ?? 0);
+            $meituanAmount = floatval($input['meituan_amount'] ?? 0);
+            $accountAmount = floatval($input['account_amount'] ?? 0);
+            $remark = trim($input['remark'] ?? '');
+            // 计算总金额并预查画具信息
+            $totalCalc = 0;
+            $itemDetails = [];
+            foreach ($items as $it) {
+                $qty = max(1, intval($it['quantity'] ?? 1));
+                $aid = intval($it['teaching_aid_id'] ?? 0);
+                $ta = $db->query("SELECT ta.id, ta.name, ta.price, ta.type, ta.remark, (SELECT GROUP_CONCAT(DISTINCT o.name ORDER BY o.name SEPARATOR ', ') FROM teaching_aid_campuses tac LEFT JOIN organizations o ON tac.campus_id=o.id WHERE tac.teaching_aid_id=ta.id) AS campus_names FROM teaching_aids ta WHERE ta.id=$aid AND ta.status='上架'")->fetch(PDO::FETCH_ASSOC);
+                if (!$ta) { json(['error' => '画具不存在或已下架（ID:' . $aid . '）']); break 2; }
+                $unitPrice = floatval($ta['price']);
+                $totalItem = round($unitPrice * $qty, 2);
+                $totalCalc += $totalItem;
+                $itemDetails[] = ['ta' => $ta, 'qty' => $qty, 'unit_price' => $unitPrice, 'total_amount' => $totalItem];
+            }
+            // 校验支付总额
+            $paymentTotal = round($cashAmount + $meituanAmount + $accountAmount, 2);
+            if (abs($paymentTotal - $totalCalc) > 0.01) {
+                json(['error' => '支付金额与商品总价不匹配（支付：' . $paymentTotal . '，商品：' . $totalCalc . '）']); break;
+            }
+            $db->beginTransaction();
+            try {
+                // 账户支付：锁定余额并扣减
+                $newBalance = 0;
+                if ($accountAmount > 0) {
+                    $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
+                    $acct->bindValue(':sid', $sid, PDO::PARAM_INT);
+                    $acct->execute();
+                    $acctRow = $acct->fetch(PDO::FETCH_ASSOC);
+                    $currentBalance = $acctRow ? floatval($acctRow['balance']) : 0.00;
+                    if ($currentBalance < $accountAmount) {
+                        $db->rollBack();
+                        json(['error' => '账户余额不足（当前余额：¥' . number_format($currentBalance, 2) . '，需要：¥' . number_format($accountAmount, 2) . '）']); break;
+                    }
+                    $newBalance = round($currentBalance - $accountAmount, 2);
+                    $upd = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, 0, 0, 0, 0) ON DUPLICATE KEY UPDATE balance = :bal, total_consume = total_consume + :tc");
+                    $upd->bindValue(':sid', $sid, PDO::PARAM_INT);
+                    $upd->bindValue(':bal', $newBalance);
+                    $upd->bindValue(':tc', $accountAmount);
+                    $upd->execute();
+                }
+                $saleIds = [];
+                $n = now();
+                // 按比例分配支付方式到每个商品
+                foreach ($itemDetails as $itd) {
+                    $ta = $itd['ta'];
+                    $qty = $itd['qty'];
+                    $unitPrice = $itd['unit_price'];
+                    $totalItem = $itd['total_amount'];
+                    $ratio = $totalCalc > 0 ? $totalItem / $totalCalc : 0;
+                    $itemCash = round($cashAmount * $ratio, 2);
+                    $itemMeituan = round($meituanAmount * $ratio, 2);
+                    $itemAccount = round($accountAmount * $ratio, 2);
+                    // 校区优先用画具关联的校区，否则用学员校区
+                    $itemCampus = $ta['campus_names'] ?: $studentCampus;
+                    $stmt = $db->prepare("INSERT INTO teaching_aid_sales (teaching_aid_id, student_id, student_name, student_no, teaching_aid_name, type, quantity, unit_price, total_amount, cash_amount, meituan_amount, account_amount, campus, sold_at, sold_by, remark, created_at) VALUES (:aid, :sid, :sname, :sno, :taname, :tatype, :qty, :uprice, :tamt, :cash, :mt, :acct, :campus, :soldat, :soldby, :rm, :ct)");
+                    $stmt->bindValue(':aid', $ta['id'], PDO::PARAM_INT);
+                    $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
+                    $stmt->bindValue(':sname', $student['name'], PDO::PARAM_STR);
+                    $stmt->bindValue(':sno', $student['student_no'] ?? '', PDO::PARAM_STR);
+                    $stmt->bindValue(':taname', $ta['name'], PDO::PARAM_STR);
+                    $stmt->bindValue(':tatype', $ta['type'], PDO::PARAM_STR);
+                    $stmt->bindValue(':qty', $qty, PDO::PARAM_INT);
+                    $stmt->bindValue(':uprice', $unitPrice);
+                    $stmt->bindValue(':tamt', $totalItem);
+                    $stmt->bindValue(':cash', $itemCash);
+                    $stmt->bindValue(':mt', $itemMeituan);
+                    $stmt->bindValue(':acct', $itemAccount);
+                    $stmt->bindValue(':campus', $itemCampus, PDO::PARAM_STR);
+                    $stmt->bindValue(':soldat', $n, PDO::PARAM_STR);
+                    $stmt->bindValue(':soldby', '', PDO::PARAM_STR);
+                    $stmt->bindValue(':rm', $remark, PDO::PARAM_STR);
+                    $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
+                    $stmt->execute();
+                    $saleId = $db->lastInsertId();
+                    $saleIds[] = $saleId;
+                    // 写入账户流水
+                    if ($itemAccount > 0) {
+                        $stmt2 = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note) VALUES (:sid, 'consume', :amt, :ba, 'teaching_aid_sale', :rid, :campus, :note)");
+                        $stmt2->bindValue(':sid', $sid, PDO::PARAM_INT);
+                        $stmt2->bindValue(':amt', $itemAccount);
+                        $stmt2->bindValue(':ba', $newBalance);
+                        $stmt2->bindValue(':rid', $saleId, PDO::PARAM_INT);
+                        $stmt2->bindValue(':campus', $itemCampus, PDO::PARAM_STR);
+                        $stmt2->bindValue(':note', '购买画具：' . $ta['name'], PDO::PARAM_STR);
+                        $stmt2->execute();
+                    }
+                }
+                $db->commit();
+                json(['success' => true, 'sale_ids' => $saleIds, 'message' => '购买成功']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '购买失败：' . $e->getMessage()]);
+            }
+            break;
+
+        case 'list_teaching_aid_sales':
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $studentName = trim($_GET['student_name'] ?? '');
+            $taName = trim($_GET['teaching_aid_name'] ?? '');
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $offset = ($page - 1) * $pageSize;
+            $where = ['1=1'];
+            if ($studentName !== '') $where[] = 'student_name LIKE ' . $db->quote('%' . $studentName . '%');
+            if ($taName !== '') $where[] = 'teaching_aid_name LIKE ' . $db->quote('%' . $taName . '%');
+            if ($dateFrom !== '') $where[] = 'DATE(sold_at) >= ' . $db->quote($dateFrom);
+            if ($dateTo !== '') $where[] = 'DATE(sold_at) <= ' . $db->quote($dateTo);
+            $whereStr = implode(' AND ', $where);
+            $cnt = $db->query("SELECT COUNT(*) FROM teaching_aid_sales WHERE $whereStr")->fetchColumn();
+            $total = intval($cnt);
+            $sql = "SELECT * FROM teaching_aid_sales WHERE $whereStr ORDER BY sold_at DESC LIMIT $offset, $pageSize";
+            $res = $db->query($sql);
+            $rows = [];
+            while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
+                $r['unit_price'] = floatval($r['unit_price']);
+                $r['total_amount'] = floatval($r['total_amount']);
+                $r['cash_amount'] = floatval($r['cash_amount']);
+                $r['meituan_amount'] = floatval($r['meituan_amount']);
+                $r['account_amount'] = floatval($r['account_amount']);
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
         case 'enroll_course':
@@ -8089,10 +8313,14 @@ if (intval($countBt) === 0) {
             <!-- 面板：画具管理 -->
             <section class="content-panel" id="panel-teaching-aids">
                 <div class="panel-header"><h3>画具管理</h3></div>
-                <div class="section-tabs">
-                    <span class="sec-tab active" data-tab="tab-teaching-aids">画具列表</span>
+                <div class="section-tabs" id="ta-tabs">
+                    <button class="sec-tab active" onclick="switchTaTab('list')">画具列表</button>
+                    <button class="sec-tab" onclick="switchTaTab('purchase')">购买画具</button>
+                    <button class="sec-tab" onclick="switchTaTab('sales')">销售记录</button>
                 </div>
-                <div id="tab-teaching-aids">
+
+                <!-- Tab 1: 画具列表（原有内容） -->
+                <div class="sec-panel active" id="tab-ta-list">
                     <!-- 工具栏 -->
                     <div class="toolbar">
                         <div class="toolbar-left">
@@ -8139,6 +8367,122 @@ if (intval($countBt) === 0) {
                     <!-- 分页 -->
                     <div class="pagination" id="pagination-teaching-aids"></div>
                 </div>
+
+                <!-- Tab 2: 购买画具 -->
+                <div class="sec-panel" id="tab-ta-purchase">
+                    <!-- 学员选择区 -->
+                    <div class="ta-purchase-student" id="ta-purchase-student-section">
+                        <div class="ta-student-search">
+                            <label style="font-size:13px;font-weight:600;margin-right:8px;">选择学员：</label>
+                            <div style="position:relative;flex:1;max-width:320px;">
+                                <input type="text" id="ta-purchase-student-search" class="form-input"
+                                       placeholder="输入学员姓名或学号搜索..."
+                                       oninput="searchPurchaseStudent(this.value)"
+                                       style="width:100%;">
+                                <div class="ta-student-dropdown" id="ta-student-dropdown" style="display:none;"></div>
+                            </div>
+                        </div>
+                        <div id="ta-selected-student" style="display:none;margin-top:10px;">
+                            <div class="ta-student-chip">
+                                <span id="ta-student-info"></span>
+                                <span class="ta-student-chip-close" onclick="clearPurchaseStudent()" title="取消选择">×</span>
+                            </div>
+                        </div>
+                        <div id="ta-no-student-hint" style="color:#999;font-size:13px;margin-top:8px;">请先选择学员</div>
+                    </div>
+
+                    <!-- 商品卡片网格 -->
+                    <div id="ta-product-grid-wrap" style="margin-top:16px;">
+                        <h4 style="margin:0 0 10px 0;font-size:14px;">可选商品</h4>
+                        <div class="ta-product-grid" id="ta-product-grid">
+                            <div style="grid-column:1/-1;text-align:center;color:#999;padding:20px;">请先选择学员后加载商品</div>
+                        </div>
+                    </div>
+
+                    <!-- 购物车 -->
+                    <div id="ta-cart-section" style="margin-top:16px;display:none;">
+                        <h4 style="margin:0 0 10px 0;font-size:14px;">购物车</h4>
+                        <div class="ta-cart-items" id="ta-cart-items"></div>
+                        <div class="ta-cart-summary" id="ta-cart-summary" style="display:none;">
+                            <span>合计：<strong id="ta-cart-total">¥0.00</strong></span>
+                        </div>
+
+                        <!-- 支付区 -->
+                        <div class="ta-payment-section" style="margin-top:16px;">
+                            <h4 style="margin:0 0 10px 0;font-size:14px;">支付信息</h4>
+                            <div class="ta-payment-row">
+                                <label>现金：</label>
+                                <input type="number" id="ta-pay-cash" class="form-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" style="width:140px;">
+                                <span style="margin-left:4px;">元</span>
+                            </div>
+                            <div class="ta-payment-row">
+                                <label>美团：</label>
+                                <input type="number" id="ta-pay-meituan" class="form-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" style="width:140px;">
+                                <span style="margin-left:4px;">元</span>
+                            </div>
+                            <div class="ta-payment-row">
+                                <label>账户余额：</label>
+                                <input type="number" id="ta-pay-account" class="form-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" style="width:140px;">
+                                <span style="margin-left:4px;">元（可用：<strong id="ta-account-balance">¥0.00</strong>）</span>
+                            </div>
+                            <div class="ta-payment-row" style="margin-top:8px;">
+                                <label>备注：</label>
+                                <input type="text" id="ta-purchase-remark" class="form-input" placeholder="可选备注" style="width:300px;">
+                            </div>
+                            <div class="ta-payment-match" id="ta-payment-match" style="display:none;margin-top:10px;">
+                                <span id="ta-payment-match-text"></span>
+                            </div>
+                            <div style="margin-top:12px;">
+                                <button class="btn btn-primary" id="ta-purchase-btn" onclick="confirmPurchase()" disabled>确认购买</button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Tab 3: 销售记录 -->
+                <div class="sec-panel" id="tab-ta-sales">
+                    <div class="toolbar">
+                        <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                            <label style="font-size:13px;">学员：</label>
+                            <input type="text" id="ta-sales-student" class="form-input" placeholder="学员姓名" style="width:120px;">
+                            <label style="font-size:13px;">商品：</label>
+                            <input type="text" id="ta-sales-aid" class="form-input" placeholder="商品名称" style="width:120px;">
+                            <label style="font-size:13px;">日期：</label>
+                            <input type="date" id="ta-sales-date-from" style="width:135px;">
+                            <span style="color:#999;">至</span>
+                            <input type="date" id="ta-sales-date-to" style="width:135px;">
+                            <button class="btn btn-search" onclick="taSalesPage=1;loadTeachingAidSales();">
+                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+                                </svg>
+                                搜索
+                            </button>
+                        </div>
+                    </div>
+                    <div class="table-wrap">
+                        <table id="table-ta-sales">
+                            <thead>
+                                <tr>
+                                    <th style="width:140px;">销售时间</th>
+                                    <th>学员</th>
+                                    <th style="width:100px;">学号</th>
+                                    <th>商品</th>
+                                    <th style="width:70px;">类型</th>
+                                    <th style="width:60px;">数量</th>
+                                    <th style="width:80px;">单价</th>
+                                    <th style="width:80px;">总金额</th>
+                                    <th>支付方式</th>
+                                    <th>备注</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ta-sales-tbody">
+                                <tr><td colspan="10"><div class="empty-state">暂无销售记录</div></td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                    <div class="pagination" id="pagination-ta-sales"></div>
+                </div>
+            </section>
             </section>
 
             <!-- 面板：教室管理 -->
