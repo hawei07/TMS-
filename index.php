@@ -7749,7 +7749,7 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
                 <div class="section-tabs" id="courses-section-tabs">
-                    <button class="sec-tab active" data-tab="tab-courses-panel">课程&活动</button>
+                    <button class="sec-tab active" data-tab="tab-courses-panel">课程管理</button>
                     <button class="sec-tab" data-tab="tab-activities-panel">活动管理</button>
                 </div>
                 <div class="section-tab-content">

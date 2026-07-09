@@ -2,6 +2,7 @@
 const API_BASE = '?action=';
 let myPage = 1, aptPage = 1, seaPage = 1, empPage = 1, coursePage = 1, studentPage = 1, orderPage = 1, refundPage = 1;
 let discountPlanPage = 1;
+let activityPage = 1;
 let myPageSize = 15;
 let myFilterTimer = null;
 let searchTimers = {};
@@ -90,7 +91,15 @@ function refreshPanel(panelId) {
         case 'panel-employees': loadEmployees(); break;
         case 'panel-position-settings': loadPositionsTable(); break;
         case 'panel-org': loadOrgTree(); break;
-        case 'panel-courses': loadFilterSubjects(); loadCourses(); break;
+        case 'panel-courses':
+            initCourseTabs();
+            const activeTab = document.querySelector('#panel-courses .sec-tab.active');
+            if (!activeTab || activeTab.dataset.tab === 'tab-courses-panel') {
+                loadFilterSubjects(); loadCourses();
+            } else {
+                loadActivitySubject1Filter(); loadActivities();
+            }
+            break;
         case 'panel-subjects': loadSubjects(); break;
         case 'panel-classes': currentClassDetailId = null; loadClasses(); break;
         case 'panel-classrooms': loadClassrooms(); break;
@@ -2975,6 +2984,381 @@ async function deleteCourse(id) {
     } catch (e) {
         showToast('删除失败：' + e.message, 'error');
     }
+}
+
+// ==================== 课程标签页切换 ====================
+function initCourseTabs() {
+    const tabsEl = document.getElementById('courses-section-tabs');
+    if (!tabsEl || tabsEl.dataset.init) return;
+    tabsEl.dataset.init = '1';
+    tabsEl.addEventListener('click', function(e) {
+        const tab = e.target.closest('.sec-tab');
+        if (!tab) return;
+        this.querySelectorAll('.sec-tab').forEach(t => t.classList.remove('active'));
+        tab.classList.add('active');
+        const panelId = tab.dataset.tab;
+        document.querySelectorAll('#panel-courses .sec-panel').forEach(p => p.classList.remove('active'));
+        const target = document.getElementById(panelId);
+        if (target) target.classList.add('active');
+        if (panelId === 'tab-courses-panel') { loadFilterSubjects(); loadCourses(); }
+        else { loadActivitySubject1Filter(); loadActivities(); }
+    });
+}
+
+// ==================== 活动管理 ====================
+let activityCampusData = []; // 缓存的校区列表 [{id, name}]
+
+async function loadActivityCampusData() {
+    if (activityCampusData.length) return activityCampusData;
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const flat = (data && data.data && data.data.flat) ? data.data.flat : [];
+        activityCampusData = flat.filter(n => n.type === '校区').map(n => ({ id: n.id, name: n.name }));
+        return activityCampusData;
+    } catch (e) {
+        return [];
+    }
+}
+
+async function loadActivities() {
+    const keyword = document.getElementById('search-activity')?.value || '';
+    const subject1 = document.getElementById('filter-activity-subject1')?.value || '';
+    const status = document.getElementById('filter-activity-status')?.value || '';
+    try {
+        const data = await api('list_activities', {
+            page: activityPage, page_size: 15, keyword, subject_level1: subject1, status: status || undefined
+        }, 'GET');
+        if (data && data.error) { showToast(data.error, 'error'); return; }
+        renderActivityTable(data.data || []);
+        renderPagination('pagination-activity', data.total, activityPage, 15, (p) => { activityPage = p; loadActivities(); });
+        const statEl = document.getElementById('stat-activities-inline');
+        if (statEl) statEl.textContent = data.total || 0;
+    } catch (e) {
+        showToast('加载活动失败: ' + e.message, 'error');
+    }
+}
+
+async function loadActivitySubject1Filter() {
+    const select = document.getElementById('filter-activity-subject1');
+    if (!select || select.options.length > 1) return;
+    try {
+        const result = await api('list_subjects', null, 'GET');
+        if (result && result.tree) {
+            result.tree.forEach(parent => {
+                const opt = document.createElement('option');
+                opt.value = parent.name;
+                opt.textContent = parent.name;
+                select.appendChild(opt);
+            });
+        }
+    } catch (e) { /* 静默 */ }
+}
+
+function getFeeModeText(mode, price) {
+    if (mode === 'fee_only') return '仅收费 ¥' + parseFloat(price || 0).toFixed(2);
+    if (mode === 'fee_and_deduct') return '收费+扣课 ¥' + parseFloat(price || 0).toFixed(2);
+    if (mode === 'deduct_only') return '仅扣课时';
+    return '-';
+}
+
+function getFeeModeClass(mode) {
+    if (mode === 'fee_only') return 'fee-badge fee-paid';
+    if (mode === 'fee_and_deduct') return 'fee-badge fee-mixed';
+    if (mode === 'deduct_only') return 'fee-badge fee-free';
+    return 'fee-badge';
+}
+
+function renderActivityTable(rows) {
+    const tbody = document.querySelector('#table-activities tbody');
+    if (!rows || rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">暂无活动数据</td></tr>';
+        return;
+    }
+    tbody.innerHTML = rows.map(r => {
+        const adultModeText = getFeeModeText(r.adult_fee_mode, r.adult_price);
+        const studentModeText = getFeeModeText(r.student_fee_mode, r.student_price);
+        const adultClass = getFeeModeClass(r.adult_fee_mode);
+        const studentClass = getFeeModeClass(r.student_fee_mode);
+        const campuses = r.campuses || [];
+        const campusText = campuses.length > 0
+            ? campuses.map(c => esc(c.campus_name) + (c.max_capacity > 0 ? '(' + c.max_capacity + '人)' : '')).join(', ')
+            : '-';
+        const campusTitle = campuses.length > 0
+            ? campuses.map(c => esc(c.campus_name) + (c.max_capacity > 0 ? ' 上限' + c.max_capacity + '人' : ' 不限')).join('\n')
+            : '';
+        return `<tr>
+            <td><strong>${esc(r.name)}</strong></td>
+            <td>${esc(r.subject_level1) || '-'}</td>
+            <td>${esc(r.reg_start_date || '')} ~ ${esc(r.reg_end_date || '')}</td>
+            <td><span class="${adultClass}">${adultModeText}</span></td>
+            <td>${r.adult_fee_mode !== 'deduct_only' ? '¥' + parseFloat(r.adult_price || 0).toFixed(2) : '-'}</td>
+            <td><span class="${studentClass}">${studentModeText}</span></td>
+            <td>${r.student_fee_mode !== 'deduct_only' ? '¥' + parseFloat(r.student_price || 0).toFixed(2) : '-'}</td>
+            <td title="${esc(campusTitle)}" style="max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(campusText)}</td>
+            <td>
+                <button class="btn btn-sm btn-outline" onclick="showActivityModal(${r.id})" title="编辑">编辑</button>
+                <button class="btn btn-sm btn-outline" style="color:#E53E3E;border-color:#E53E3E;" onclick="deleteActivity(${r.id})" title="删除">删除</button>
+            </td>
+        </tr>`;
+    }).join('');
+}
+
+async function showActivityModal(id = null) {
+    document.getElementById('modal-activity-title').textContent = id ? '编辑活动' : '新增活动';
+    document.getElementById('edit-activity-id').value = id || '';
+
+    // 加载学科选项
+    await loadActivitySubject1Options();
+    await loadActivityCampusData();
+
+    // 重置表单
+    document.getElementById('activity-name').value = '';
+    document.getElementById('activity-subject-level1').value = '';
+    document.getElementById('activity-reg-start').value = '';
+    document.getElementById('activity-reg-end').value = '';
+    document.getElementById('activity-adult-fee-mode').value = '';
+    document.getElementById('activity-student-fee-mode').value = '';
+    document.getElementById('activity-adult-price').value = '';
+    document.getElementById('activity-student-price').value = '';
+    document.getElementById('activity-adult-price-row').style.display = 'none';
+    document.getElementById('activity-student-price-row').style.display = 'none';
+    document.getElementById('activity-adult-deduct-section').style.display = 'none';
+    document.getElementById('activity-student-deduct-section').style.display = 'none';
+    document.getElementById('activity-adult-deduct-rows').innerHTML = '';
+    document.getElementById('activity-student-deduct-rows').innerHTML = '';
+
+    // 加载校区列表
+    renderActivityCampusRows([]);
+
+    if (id) {
+        try {
+            const data = await api('get_activity', { id: id }, 'GET');
+            if (data && data.id) {
+                document.getElementById('activity-name').value = data.name || '';
+                document.getElementById('activity-subject-level1').value = data.subject_level1 || '';
+                document.getElementById('activity-reg-start').value = data.reg_start_date || '';
+                document.getElementById('activity-reg-end').value = data.reg_end_date || '';
+                document.getElementById('activity-adult-fee-mode').value = data.adult_fee_mode || '';
+                document.getElementById('activity-student-fee-mode').value = data.student_fee_mode || '';
+                document.getElementById('activity-adult-price').value = data.adult_price || 0;
+                document.getElementById('activity-student-price').value = data.student_price || 0;
+                onActivityFeeModeChange('adult');
+                onActivityFeeModeChange('student');
+                // 校区
+                renderActivityCampusRows(data.campuses || []);
+                // 扣课
+                if (data.deductions) {
+                    if (data.deductions.adult && data.deductions.adult.length > 0) {
+                        data.deductions.adult.forEach(d => {
+                            addActivityDeductRow('adult', d.subject_id, d.subject_name, d.deduct_lessons);
+                        });
+                    }
+                    if (data.deductions.student && data.deductions.student.length > 0) {
+                        data.deductions.student.forEach(d => {
+                            addActivityDeductRow('student', d.subject_id, d.subject_name, d.deduct_lessons);
+                        });
+                    }
+                }
+            }
+        } catch (e) {
+            showToast('加载活动详情失败: ' + e.message, 'error');
+        }
+    }
+
+    openModal('modal-activity');
+}
+
+async function loadActivitySubject1Options() {
+    const select = document.getElementById('activity-subject-level1');
+    if (select.options.length > 1) return; // 已加载
+    select.innerHTML = '<option value="">请选择一级学科</option>';
+    try {
+        const result = await api('list_subjects', null, 'GET');
+        if (result && result.tree) {
+            result.tree.forEach(parent => {
+                const opt = document.createElement('option');
+                opt.value = parent.name;
+                opt.textContent = parent.name;
+                select.appendChild(opt);
+            });
+        }
+    } catch (e) { /* 静默 */ }
+}
+
+async function loadActivitySubjectOptionsForSelect() {
+    try {
+        const result = await api('list_subjects', null, 'GET');
+        const subjects = [];
+        if (result && result.tree) {
+            result.tree.forEach(parent => {
+                subjects.push({ id: parent.id, name: parent.name });
+            });
+        }
+        return subjects;
+    } catch (e) { return []; }
+}
+
+function onActivityFeeModeChange(type) {
+    const mode = document.getElementById('activity-' + type + '-fee-mode').value;
+    const priceRow = document.getElementById('activity-' + type + '-price-row');
+    const deductSection = document.getElementById('activity-' + type + '-deduct-section');
+
+    if (mode === 'fee_only') {
+        if (priceRow) priceRow.style.display = '';
+        if (deductSection) deductSection.style.display = 'none';
+    } else if (mode === 'fee_and_deduct') {
+        if (priceRow) priceRow.style.display = '';
+        if (deductSection) deductSection.style.display = '';
+    } else if (mode === 'deduct_only') {
+        if (priceRow) priceRow.style.display = 'none';
+        if (deductSection) deductSection.style.display = '';
+    } else {
+        if (priceRow) priceRow.style.display = 'none';
+        if (deductSection) deductSection.style.display = 'none';
+    }
+}
+
+async function addActivityDeductRow(type, subjectId, subjectName, deductLessons) {
+    subjectId = subjectId || '';
+    subjectName = subjectName || '';
+    deductLessons = deductLessons || 0;
+    const rowsEl = document.getElementById('activity-' + type + '-deduct-rows');
+    const index = rowsEl.children.length;
+
+    const subjects = await loadActivitySubjectOptionsForSelect();
+    let optionsHtml = '<option value="">选择学科</option>';
+    subjects.forEach(s => {
+        const sel = (s.id == subjectId || s.name === subjectName) ? ' selected' : '';
+        optionsHtml += '<option value="' + s.id + '"' + sel + '>' + esc(s.name) + '</option>';
+    });
+
+    const row = document.createElement('div');
+    row.className = 'deduct-row';
+    row.innerHTML = '<select class="deduct-subject" data-type="' + type + '">' + optionsHtml + '</select>' +
+        '<span style="font-size:13px;color:#666;">扣课数：</span>' +
+        '<input type="number" class="deduct-lessons" min="0" value="' + deductLessons + '" style="width:70px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;">' +
+        '<span style="font-size:13px;color:#666;">课时</span>' +
+        '<button type="button" class="btn btn-sm" style="color:#E53E3E;padding:2px 8px;" onclick="this.closest(\'.deduct-row\').remove()">删除</button>';
+    rowsEl.appendChild(row);
+}
+
+function renderActivityCampusRows(campuses) {
+    const container = document.getElementById('activity-campus-rows');
+    if (!container) return;
+    if (!activityCampusData.length) {
+        container.innerHTML = '<span style="color:#999;font-size:13px;">正在加载校区...</span>';
+        loadActivityCampusData().then(() => renderActivityCampusRows(campuses));
+        return;
+    }
+
+    let html = '';
+    activityCampusData.forEach(c => {
+        const existing = (campuses || []).find(cp => cp.campus_id == c.id);
+        const checked = existing ? ' checked' : '';
+        const capacity = existing ? (existing.max_capacity || 0) : '';
+        html += '<div class="campus-capacity-row">' +
+            '<label style="display:flex;align-items:center;gap:4px;cursor:pointer;min-width:120px;">' +
+            '<input type="checkbox" class="activity-campus-check" value="' + c.id + '"' + checked + '>' +
+            esc(c.name) +
+            '</label>' +
+            '<span style="font-size:13px;color:#666;">上限人数：</span>' +
+            '<input type="number" class="activity-campus-capacity" value="' + capacity + '" min="0" placeholder="0=不限" style="width:70px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;">' +
+            '<span style="font-size:12px;color:#999;">(0=不限)</span>' +
+            '</div>';
+    });
+    container.innerHTML = html || '<span style="color:#999;font-size:13px;">暂无校区数据</span>';
+}
+
+function addActivityCampusRow() {
+    // 校区列表已在 renderActivityCampusRows 中完整渲染，无需单独添加
+}
+
+async function saveActivity() {
+    const id = parseInt(document.getElementById('edit-activity-id').value) || 0;
+    const name = document.getElementById('activity-name').value.trim();
+    if (!name) { showToast('请输入活动名称', 'error'); return; }
+    const subjectLevel1 = document.getElementById('activity-subject-level1').value;
+    const regStart = document.getElementById('activity-reg-start').value;
+    const regEnd = document.getElementById('activity-reg-end').value;
+    if (!regStart || !regEnd) { showToast('请选择报名日期', 'error'); return; }
+    const adultFeeMode = document.getElementById('activity-adult-fee-mode').value;
+    const studentFeeMode = document.getElementById('activity-student-fee-mode').value;
+    const adultPrice = parseFloat(document.getElementById('activity-adult-price').value) || 0;
+    const studentPrice = parseFloat(document.getElementById('activity-student-price').value) || 0;
+
+    // 收集校区
+    const campuses = [];
+    document.querySelectorAll('#activity-campus-rows .activity-campus-check:checked').forEach(cb => {
+        const row = cb.closest('.campus-capacity-row');
+        const capInput = row ? row.querySelector('.activity-campus-capacity') : null;
+        campuses.push({
+            campus_id: parseInt(cb.value),
+            max_capacity: capInput ? (parseInt(capInput.value) || 0) : 0
+        });
+    });
+    if (campuses.length === 0) { showToast('请至少选择一个适用校区', 'error'); return; }
+
+    // 收集扣课
+    const deductions = { adult: [], student: [] };
+    ['adult', 'student'].forEach(type => {
+        const rows = document.querySelectorAll('#activity-' + type + '-deduct-rows .deduct-row');
+        rows.forEach(row => {
+            const select = row.querySelector('.deduct-subject');
+            const lessonsInput = row.querySelector('.deduct-lessons');
+            const subId = select ? parseInt(select.value) : 0;
+            const lessons = lessonsInput ? (parseInt(lessonsInput.value) || 0) : 0;
+            if (subId && lessons > 0) {
+                deductions[type].push({
+                    subject_id: subId,
+                    deduct_lessons: lessons
+                });
+            }
+        });
+    });
+
+    const payload = {
+        id, name, subject_level1: subjectLevel1,
+        reg_start_date: regStart, reg_end_date: regEnd,
+        adult_fee_mode: adultFeeMode, student_fee_mode: studentFeeMode,
+        adult_price: adultPrice, student_price: studentPrice,
+        campuses, deductions
+    };
+
+    try {
+        const r = await api('save_activity', payload, 'POST');
+        if (r && r.error) { showToast(r.error, 'error'); return; }
+        showToast(id ? '活动已更新' : '活动已创建');
+        closeModal('modal-activity');
+        loadActivities();
+        loadStats();
+    } catch (e) {
+        showToast('保存失败：' + e.message, 'error');
+    }
+}
+
+async function deleteActivity(id) {
+    if (!confirm('确定删除该活动吗？')) return;
+    try {
+        const r = await api('delete_activity', { id: id }, 'POST');
+        if (r && r.error) { showToast(r.error, 'error'); return; }
+        showToast('活动已删除');
+        loadActivities();
+        loadStats();
+    } catch (e) {
+        showToast('删除失败：' + e.message, 'error');
+    }
+}
+
+function resetActivityFilters() {
+    const searchEl = document.getElementById('search-activity');
+    if (searchEl) searchEl.value = '';
+    const subjEl = document.getElementById('filter-activity-subject1');
+    if (subjEl) subjEl.value = '';
+    const statusEl = document.getElementById('filter-activity-status');
+    if (statusEl) statusEl.value = '';
+    activityPage = 1;
+    loadActivities();
 }
 
 // ==================== 价格管理 ====================
