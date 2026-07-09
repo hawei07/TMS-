@@ -8481,6 +8481,20 @@ if (intval($countBt) === 0) {
                     </div>
                     <div class="table-wrap">
                         <table id="table-ta-sales">
+                            <colgroup>
+                                <col class="ta-sales-col-time">
+                                <col class="ta-sales-col-student">
+                                <col class="ta-sales-col-no">
+                                <col class="ta-sales-col-product">
+                                <col class="ta-sales-col-type">
+                                <col class="ta-sales-col-qty">
+                                <col class="ta-sales-col-price">
+                                <col class="ta-sales-col-total">
+                                <col class="ta-sales-col-cash">
+                                <col class="ta-sales-col-meituan">
+                                <col class="ta-sales-col-account">
+                                <col class="ta-sales-col-remark">
+                            </colgroup>
                             <thead>
                                 <tr>
                                     <th style="width:140px;">销售时间</th>

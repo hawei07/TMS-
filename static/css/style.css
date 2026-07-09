@@ -7601,7 +7601,27 @@ tbody td {
 /* -- 销售记录表格 -- */
 #table-ta-sales {
     width: 100%;
+    min-width: 1200px;
+    table-layout: fixed;
     border-collapse: collapse;
+}
+#table-ta-sales .ta-sales-col-time { width: 140px; }
+#table-ta-sales .ta-sales-col-student { width: 110px; }
+#table-ta-sales .ta-sales-col-no { width: 100px; }
+#table-ta-sales .ta-sales-col-product { width: 180px; }
+#table-ta-sales .ta-sales-col-type { width: 70px; }
+#table-ta-sales .ta-sales-col-qty { width: 60px; }
+#table-ta-sales .ta-sales-col-price,
+#table-ta-sales .ta-sales-col-total,
+#table-ta-sales .ta-sales-col-cash,
+#table-ta-sales .ta-sales-col-meituan,
+#table-ta-sales .ta-sales-col-account { width: 80px; }
+#table-ta-sales .ta-sales-col-remark { width: 140px; }
+#table-ta-sales th,
+#table-ta-sales td {
+    box-sizing: border-box;
+    overflow: hidden;
+    text-overflow: ellipsis;
 }
 #table-ta-sales thead th {
     background: #fff9e0;
@@ -7622,14 +7642,24 @@ tbody td {
     vertical-align: middle;
 }
 #table-ta-sales tbody tr {
-    transition: all 0.18s;
-    border-left: 3px solid transparent;
+    transition: background 0.18s;
 }
 #table-ta-sales tbody tr:hover {
     background: #fffdf5 !important;
-    border-left-color: #FFE066;
+}
+#table-ta-sales tbody tr:hover td:first-child {
+    box-shadow: inset 3px 0 0 #FFE066;
 }
 /* 金额列右对齐 */
+#table-ta-sales th:nth-child(6),
+#table-ta-sales td:nth-child(6) {
+    text-align: center;
+}
+#table-ta-sales th:nth-child(7),
+#table-ta-sales th:nth-child(8),
+#table-ta-sales th:nth-child(9),
+#table-ta-sales th:nth-child(10),
+#table-ta-sales th:nth-child(11),
 #table-ta-sales td:nth-child(7),
 #table-ta-sales td:nth-child(8),
 #table-ta-sales td:nth-child(9),
@@ -7657,6 +7687,10 @@ tbody td {
     padding: 7px 10px;
     font-size: 13px;
     transition: all 0.2s;
+}
+#tab-ta-sales .toolbar input[type="date"] {
+    padding-right: 6px;
+    min-width: 130px;
 }
 #tab-ta-sales .toolbar input[type="text"]:focus,
 #tab-ta-sales .toolbar input[type="date"]:focus {
