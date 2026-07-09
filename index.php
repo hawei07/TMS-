@@ -4558,7 +4558,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.account_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.teaching_aid_price, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.account_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -4566,6 +4566,12 @@ $stmt->execute();
             $rows = [];
 $stmt->execute();
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
+            foreach ($rows as &$row) {
+                $tap = floatval($row['teaching_aid_price'] ?? 0);
+                $row['course_amount'] = round(floatval($row['actual_price'] ?? 0) - $tap, 2);
+                $row['product_amount'] = round($tap, 2);
+            }
+            unset($row);
             // 支付方式汇总
             $summarySql = "SELECT SUM(COALESCE(o.cash_amount,0)) AS cash_total, SUM(COALESCE(o.meituan_amount,0)) AS meituan_total, SUM(COALESCE(o.account_amount,0)) AS account_total FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where";
             $sumStmt = $db->prepare($summarySql);
@@ -4655,12 +4661,17 @@ $sumStmt->execute();
             $cashTotal = 0;
             $meituanTotal = 0;
             $accountTotal = 0;
+            $totalCourseAmount = 0;
+            $totalProductAmount = 0;
             foreach ($items as $it) {
                 $totalPrice += floatval($it['actual_price'] ?? 0);
                 $totalLessons += intval($it['lesson_count'] ?? 0);
                 $cashTotal += floatval($it['cash_amount'] ?? 0);
                 $meituanTotal += floatval($it['meituan_amount'] ?? 0);
                 $accountTotal += floatval($it['account_amount'] ?? 0);
+                $tap = floatval($it['teaching_aid_price'] ?? 0);
+                $totalCourseAmount += floatval($it['actual_price'] ?? 0) - $tap;
+                $totalProductAmount += $tap;
             }
             // 优先使用 parent_orders 的汇总值
             if ($parentOrder) {
@@ -4691,6 +4702,8 @@ $sumStmt->execute();
                     'meituan_amount' => number_format(floatval($it['meituan_amount'] ?? 0), 2, '.', ''),
                     'account_amount' => number_format(floatval($it['account_amount'] ?? 0), 2, '.', ''),
                     'pay_status' => $it['pay_status'] ?? '',
+                    'course_amount' => round(floatval($it['actual_price'] ?? 0) - floatval($it['teaching_aid_price'] ?? 0), 2),
+                    'product_amount' => round(floatval($it['teaching_aid_price'] ?? 0), 2),
                 ];
             }
 
@@ -4708,6 +4721,8 @@ $sumStmt->execute();
 
                     'total_price' => number_format($totalPrice, 2, '.', ''),
                     'total_lessons' => $totalLessons,
+                    'total_course_amount' => number_format($totalCourseAmount, 2, '.', ''),
+                    'total_product_amount' => number_format($totalProductAmount, 2, '.', ''),
                     'payment' => [
                         'cash_amount' => number_format($cashTotal, 2, '.', ''),
                         'meituan_amount' => number_format($meituanTotal, 2, '.', ''),
