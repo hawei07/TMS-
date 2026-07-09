@@ -4558,8 +4558,9 @@ $stmt->execute();
                                 $taPrice = floatval($order['teaching_aid_price'] ?? 0);
                                 $pcAmount = floatval($order['product_coupon_amount'] ?? 0);
                                 $classPrice = $actualPrice - $taPrice + $pcAmount;
-                                // 计算剩余可退课时和金额
-                                $remainingLessons = $lessonCount - $consumedLessons;
+                                // 计算剩余可退课时和金额（仅计算付费课时，不包含赠送课时）
+                                $paidConsumed = min($consumedLessons, $lessonCount);
+                                $remainingLessons = $lessonCount - $paidConsumed;
                                 $remainingAmount = 0;
                                 if ($lessonCount > 0) {
                                     $remainingAmount = round($classPrice * $remainingLessons / $lessonCount, 2);

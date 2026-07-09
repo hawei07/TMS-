@@ -3314,7 +3314,6 @@ function renderItemList() {
             <td></td>
             <td></td>
             <td></td>
-            <td></td>
             <td style="font-weight:bold;">${totalActualPrice.toFixed(2)}</td>
             <td></td>
         </tr>`;
@@ -6291,13 +6290,13 @@ function selectEnrollPlan(planId) {
         return `<tr>
             <td>${esc(item.name)}</td>
             <td class="col-num">${item.lesson_count || 0}</td>
-            <td class="col-num">${item.gifted_lessons || 0}</td>
             <td class="col-num">¥${Number(item.unit_price).toFixed(2)}</td>
             <td>${item.discount_plan_name ? esc(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-'}</td>
             <td>${item.coupon_name ? esc(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-'}</td>
             <td>${esc(item.teaching_aid_name || '-')}</td>
             <td class="col-num">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
             <td>${item.product_coupon_name ? esc(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-'}</td>
+            <td class="col-num">${item.gifted_lessons || 0}</td>
             <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
         </tr>`;
     }).join('');
