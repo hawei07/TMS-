@@ -8462,19 +8462,33 @@ if (intval($countBt) === 0) {
                 <!-- Tab 3: 销售记录 -->
                 <div class="sec-panel" id="tab-ta-sales">
                     <div class="toolbar">
-                        <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
-                            <label style="font-size:13px;">学员：</label>
-                            <input type="text" id="ta-sales-student" class="form-input" style="width:140px;">
-                            <label style="font-size:13px;">商品：</label>
-                            <input type="text" id="ta-sales-aid" class="form-input" style="width:140px;">
-                            <label style="font-size:13px;">日期：</label>
-                            <input type="date" id="ta-sales-date-from" style="width:145px;">
-                            <span style="color:#999;">至</span>
-                            <input type="date" id="ta-sales-date-to" style="width:145px;">
-                            <button class="btn btn-search" onclick="taSalesPage=1;loadTeachingAidSales();">
-                                <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
-                                </svg>
+                        <div class="ta-filter-bar">
+                            <!-- 学员搜索 -->
+                            <div class="ta-filter-group ta-filter-student">
+                                <span class="ta-filter-icon">
+                                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+                                </span>
+                                <input type="text" id="ta-sales-student" class="ta-filter-input" placeholder="学员姓名">
+                            </div>
+                            <!-- 商品搜索 -->
+                            <div class="ta-filter-group ta-filter-product">
+                                <span class="ta-filter-icon">
+                                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="7" width="20" height="14" rx="2" ry="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/></svg>
+                                </span>
+                                <input type="text" id="ta-sales-aid" class="ta-filter-input" placeholder="商品名称">
+                            </div>
+                            <!-- 日期范围 -->
+                            <div class="ta-filter-group ta-filter-date">
+                                <span class="ta-filter-icon">
+                                    <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>
+                                </span>
+                                <input type="date" id="ta-sales-date-from" class="ta-filter-input ta-filter-date">
+                                <span class="ta-filter-date-sep">—</span>
+                                <input type="date" id="ta-sales-date-to" class="ta-filter-input ta-filter-date">
+                            </div>
+                            <!-- 搜索按钮 -->
+                            <button class="btn ta-btn-search" onclick="taSalesPage=1;loadTeachingAidSales();">
+                                <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
                                 搜索
                             </button>
                         </div>
