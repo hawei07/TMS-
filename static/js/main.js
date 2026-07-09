@@ -7681,7 +7681,6 @@ function renderOrderDetail(data) {
         '<span>支付时间：<strong>' + (data.paid_at ? data.paid_at.slice(0, 16) : '-') + '</strong></span>' +
         '<span>课程：<strong>' + escHtml(data.course_name || '-') + '</strong></span>' +
         '<span>校区：<strong>' + escHtml(data.campus || '-') + '</strong></span>' +
-        '<span>报名时间：<strong>' + (data.enroll_time || '-') + '</strong></span>' +
     '</div>';
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
@@ -7778,7 +7777,6 @@ function renderOrderDetailPage(data) {
         '<span>支付时间：<strong>' + (data.paid_at ? data.paid_at.slice(0, 16) : '-') + '</strong></span>' +
         '<span>课程：<strong>' + escHtml(data.course_name || '-') + '</strong></span>' +
         '<span>校区：<strong>' + escHtml(data.campus || '-') + '</strong></span>' +
-        '<span>报名时间：<strong>' + (data.enroll_time || '-') + '</strong></span>' +
     '</div>';
 
     html += '<div class="order-detail-section-title">📋 报价明细</div>';
