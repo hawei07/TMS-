@@ -433,6 +433,29 @@ body {
 
 .btn-sm { padding: 5px 12px; font-size: 12px; border-radius: var(--radius-sm); }
 
+/* 活动表单返回按钮 — 少儿美术珊瑚色风格 */
+#tab-activity-form .activity-back-btn {
+    border-radius: 8px;
+    padding: 6px 14px;
+    font-size: 13px;
+    color: #FF7675;
+    border-color: #FF7675;
+    background: #fff;
+    transition: all 0.2s ease;
+}
+#tab-activity-form .activity-back-btn:hover {
+    background: #FFF0F0;
+    border-color: #ff5e5d;
+    color: #ff5e5d;
+    transform: translateX(-2px);
+}
+#tab-activity-form .activity-back-btn svg {
+    transition: transform 0.2s ease;
+}
+#tab-activity-form .activity-back-btn:hover svg {
+    transform: translateX(-2px);
+}
+
 .btn-warn {
     background: var(--color-surface); color: var(--color-danger);
     border-color: var(--color-danger);

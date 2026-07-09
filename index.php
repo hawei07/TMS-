@@ -7881,14 +7881,12 @@ if (intval($countBt) === 0) {
 
                         <!-- 内嵌表单面板 -->
                         <div id="tab-activity-form" style="display:none;">
-                            <div class="action-button-group" style="margin-bottom:16px;">
-                                <button class="action-btn" onclick="backToActivityList()" title="返回列表" style="background:#6c757d;">
-                                    <span class="action-btn-icon">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
-                                    </span>
-                                    <span class="action-btn-label">返回列表</span>
+                            <div class="form-panel-header" style="display:flex;align-items:center;gap:14px;margin-bottom:20px;padding:14px 0;border-bottom:2px solid #f0f0f0;">
+                                <button class="btn btn-outline btn-sm activity-back-btn" onclick="backToActivityList()" title="返回列表">
+                                    <svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor"><path d="M20 11H7.83l5.59-5.59L12 4l-8 8 8 8 1.41-1.41L7.83 13H20v-2z"/></svg>
+                                    返回列表
                                 </button>
-                                <h3 id="tab-activity-form-title" style="margin:0;margin-left:12px;font-size:16px;">新增活动</h3>
+                                <h3 id="tab-activity-form-title" style="margin:0;font-size:18px;font-weight:700;color:var(--color-text);">新增活动</h3>
                             </div>
 
                             <div class="form-panel-body" style="max-width:750px;">
@@ -10858,94 +10856,6 @@ if (intval($countBt) === 0) {
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-coupon-record')">取消</button>
                 <button class="btn btn-primary" id="btn-cr-save" onclick="saveCouponRecord()">保存</button>
-            </div>
-        </div>
-    </div>
-
-    <!-- 订单详情弹窗 -->
-    <!-- 活动管理弹窗 -->
-    <div class="modal-overlay" id="modal-activity">
-        <div class="modal modal-lg" style="width:750px; max-width:95vw;">
-            <div class="modal-header">
-                <h3 id="modal-activity-title">新增活动</h3>
-                <button class="modal-close" onclick="closeModal('modal-activity')">&times;</button>
-            </div>
-            <div class="modal-body" style="max-height:70vh;overflow-y:auto;">
-                <input type="hidden" id="edit-activity-id">
-
-                <div class="form-group">
-                    <label>活动名称 <span class="required">*</span></label>
-                    <input type="text" id="activity-name" maxlength="100" placeholder="请输入活动名称" autocomplete="off">
-                </div>
-
-                <div class="form-group">
-                    <label>一级学科</label>
-                    <select id="activity-subject-level1"><option value="">请选择一级学科</option></select>
-                </div>
-
-                <div class="form-row">
-                    <div class="form-group form-group-half">
-                        <label>报名开始日期 <span class="required">*</span></label>
-                        <input type="date" id="activity-reg-start">
-                    </div>
-                    <div class="form-group form-group-half">
-                        <label>报名结束日期 <span class="required">*</span></label>
-                        <input type="date" id="activity-reg-end">
-                    </div>
-                </div>
-
-                <!-- 成人收费 -->
-                <div class="activity-section-title">成人收费</div>
-                <div class="form-group">
-                    <label>收费模式</label>
-                    <select id="activity-adult-fee-mode" onchange="onActivityFeeModeChange('adult')">
-                        <option value="">请选择</option>
-                        <option value="fee_only">仅收费</option>
-                        <option value="fee_and_deduct">收费+扣课时</option>
-                        <option value="deduct_only">仅扣课时</option>
-                    </select>
-                </div>
-                <div class="form-group" id="activity-adult-price-row" style="display:none;">
-                    <label>成人价格 (元) <span class="required">*</span></label>
-                    <input type="number" id="activity-adult-price" min="0" step="0.01" placeholder="请输入价格">
-                </div>
-                <div id="activity-adult-deduct-section" style="display:none;">
-                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
-                    <div id="activity-adult-deduct-rows"></div>
-                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('adult')">+ 添加学科扣课</button>
-                </div>
-
-                <!-- 学员收费 -->
-                <div class="activity-section-title">学员收费</div>
-                <div class="form-group">
-                    <label>收费模式</label>
-                    <select id="activity-student-fee-mode" onchange="onActivityFeeModeChange('student')">
-                        <option value="">请选择</option>
-                        <option value="fee_only">仅收费</option>
-                        <option value="fee_and_deduct">收费+扣课时</option>
-                        <option value="deduct_only">仅扣课时</option>
-                    </select>
-                </div>
-                <div class="form-group" id="activity-student-price-row" style="display:none;">
-                    <label>学员价格 (元) <span class="required">*</span></label>
-                    <input type="number" id="activity-student-price" min="0" step="0.01" placeholder="请输入价格">
-                </div>
-                <div id="activity-student-deduct-section" style="display:none;">
-                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
-                    <div id="activity-student-deduct-rows"></div>
-                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('student')">+ 添加学科扣课</button>
-                </div>
-
-                <!-- 适用校区 -->
-                <div class="activity-section-title">适用校区 <span class="required">*</span></div>
-                <div id="activity-campus-rows">
-                    <span style="color:#999;font-size:13px;">加载中...</span>
-                </div>
-                <button type="button" class="deduct-add-btn" onclick="addActivityCampusRow()" style="margin-top:6px;">+ 添加校区</button>
-            </div>
-            <div class="modal-footer">
-                <button class="btn btn-outline" onclick="closeModal('modal-activity')">取消</button>
-                <button class="btn btn-primary" id="btn-save-activity" onclick="saveActivity()">保存</button>
             </div>
         </div>
     </div>
