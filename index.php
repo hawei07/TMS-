@@ -6060,17 +6060,20 @@ $stmt->execute();
                     if ($status === '出勤' && $deductedLessons > 0) {
                         $quotedCampus = $db->quote($classCampus);
                         $quotedSubjectLevel1 = $db->quote($subjectLevel1);
-                        $maxRow = $db->query("SELECT SUM(o.lesson_count + COALESCE(o.gifted_lessons, 0) - o.consumed_lessons) AS max_deductible FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList))")->fetch(PDO::FETCH_ASSOC);
+                        $maxRow = $db->query("SELECT SUM(GREATEST(0, o.lesson_count - o.consumed_lessons) + GREATEST(0, COALESCE(o.gifted_lessons, 0) - GREATEST(0, o.consumed_lessons - o.lesson_count))) AS max_deductible FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList))")->fetch(PDO::FETCH_ASSOC);
                         $maxDeductible = intval($maxRow['max_deductible'] ?? 0);
                         if ($deductedLessons > $maxDeductible) {
                             throw new Exception("学员「{$studentNameForMsg}」剩余课时不足：最多可扣 $maxDeductible 课时，当前请求扣 $deductedLessons 课时");
                         }
                     }
                     if ($status === '出勤' && $deductedLessons > 0) {
-                        // 扣课时逻辑（三级优先级，跨订单连续扣，限定同校区）：
-                        // 1. 优先扣同一course_id的订单（有多个时，先报名的优先）
-                        // 2. 继续扣同二级学科的订单（先报名的优先）
-                        // 3. 继续扣同一级学科的订单（先报名的优先）
+                        // 扣课时逻辑（两轮扣课：第一轮扣付费课时，第二轮扣赠课；每轮三级优先级，跨订单连续扣，限定同校区）：
+                        // 第一轮——扣付费课时：
+                        //   1. 优先扣同一course_id的订单（有多个时，先报名的优先）
+                        //   2. 继续扣同二级学科的订单（先报名的优先）
+                        //   3. 继续扣同一级学科的订单（先报名的优先）
+                        // 第二轮——扣赠课（三轮走完后仍有剩余再遍历）：
+                        //   同上三级优先级
                         $allOrderRows = [];
 
                         // 扣课时按优先级逐级扣减（每级内部先报名优先）
@@ -6080,16 +6083,16 @@ $stmt->execute();
                         $processedOrderIds = [];
                         $quotedCampus = $db->quote($classCampus);
 
-                        // 优先级1：同一course_id的订单（同校区，排除退费中/已退费）
+                        // 优先级1：同一course_id的订单（同校区，排除退费中/已退费；第一轮只扣付费课时）
                         $debugExcluded = $db->query("SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')")->fetchAll(PDO::FETCH_COLUMN);
                         $logLine .= "excluded_ids=" . json_encode($debugExcluded) . "\n";
                         $logLine .= "AFTER_REVERT: " . json_encode($db->query("SELECT id, consumed_lessons FROM orders WHERE student_id = $studentId AND course_id = $courseId")->fetchAll(PDO::FETCH_ASSOC)) . "\n";
-                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND (lesson_count + COALESCE(gifted_lessons, 0)) > consumed_lessons AND campus = $quotedCampus AND is_voided='否' AND (((refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR id IN ($oldDeductedOrderIdList)) ORDER BY created_at ASC, id ASC");
+                        $oRes = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND lesson_count > consumed_lessons AND campus = $quotedCampus AND is_voided='否' AND (((refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR id IN ($oldDeductedOrderIdList)) ORDER BY created_at ASC, id ASC");
                         while ($o = $oRes->fetch(PDO::FETCH_ASSOC)) {
                             if ($remainingToDeduct <= 0) break;
-                            $available = intval($o['lesson_count']) + intval($o['gifted_lessons'] ?? 0) - intval($o['consumed_lessons']);
-                            if ($available <= 0) continue;
-                            $toDeduct = min($remainingToDeduct, $available);
+                            $paidAvailable = max(0, intval($o['lesson_count']) - intval($o['consumed_lessons']));
+                            if ($paidAvailable <= 0) continue;
+                            $toDeduct = min($remainingToDeduct, $paidAvailable);
                             $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
                             $oid = intval($o['id']);
                             $stmtD = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid AND $newConsumed <= (lesson_count + COALESCE(gifted_lessons, 0)) AND is_voided='否' AND (id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) OR id IN ($oldDeductedOrderIdList))");
@@ -6103,16 +6106,16 @@ $stmt->execute();
                             $processedOrderIds[] = $oid;
                         }
 
-                        // 优先级2：同二级学科的订单（同校区、有剩余，先报名优先，排除已处理订单）
+                        // 优先级2：同二级学科的订单（同校区、有剩余付费课时，先报名优先，排除已处理订单）
                         if ($remainingToDeduct > 0 && trim($subjectLevel2) !== '') {
                             $excludeClause = count($processedOrderIds) > 0 ? "AND o.id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
                             $quotedSubjectLevel2 = $db->quote($subjectLevel2);
-                            $oRes2 = $db->query("SELECT o.* FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.course_id <> $courseId AND co.subject_level2 = $quotedSubjectLevel2 AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons $excludeClause AND o.campus = $quotedCampus AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList)) ORDER BY o.created_at ASC, o.id ASC");
+                            $oRes2 = $db->query("SELECT o.* FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.course_id <> $courseId AND co.subject_level2 = $quotedSubjectLevel2 AND o.lesson_count > o.consumed_lessons $excludeClause AND o.campus = $quotedCampus AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList)) ORDER BY o.created_at ASC, o.id ASC");
                             while ($o = $oRes2->fetch(PDO::FETCH_ASSOC)) {
                                 if ($remainingToDeduct <= 0) break;
-                                $available = intval($o['lesson_count']) + intval($o['gifted_lessons'] ?? 0) - intval($o['consumed_lessons']);
-                                if ($available <= 0) continue;
-                                $toDeduct = min($remainingToDeduct, $available);
+                                $paidAvailable = max(0, intval($o['lesson_count']) - intval($o['consumed_lessons']));
+                                if ($paidAvailable <= 0) continue;
+                                $toDeduct = min($remainingToDeduct, $paidAvailable);
                                 $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
                                 $oid = intval($o['id']);
                                 $stmtDx = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid AND $newConsumed <= (lesson_count + COALESCE(gifted_lessons, 0)) AND is_voided='否' AND (id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) OR id IN ($oldDeductedOrderIdList))");
@@ -6127,16 +6130,16 @@ $stmt->execute();
                             }
                         }
 
-                        // 优先级3：同一级学科的订单（同校区、有剩余，先报名优先，排除已处理订单）
+                        // 优先级3：同一级学科的订单（同校区、有剩余付费课时，先报名优先，排除已处理订单）
                         if ($remainingToDeduct > 0 && trim($subjectLevel1) !== '') {
                             $excludeClause = count($processedOrderIds) > 0 ? "AND o.id NOT IN (" . implode(',', $processedOrderIds) . ")" : "";
                             $quotedSubjectLevel1 = $db->quote($subjectLevel1);
-                            $oRes3 = $db->query("SELECT o.* FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.course_id <> $courseId AND co.subject_level1 = $quotedSubjectLevel1 AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons $excludeClause AND o.campus = $quotedCampus AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList)) ORDER BY o.created_at ASC, o.id ASC");
+                            $oRes3 = $db->query("SELECT o.* FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.course_id <> $courseId AND co.subject_level1 = $quotedSubjectLevel1 AND o.lesson_count > o.consumed_lessons $excludeClause AND o.campus = $quotedCampus AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList)) ORDER BY o.created_at ASC, o.id ASC");
                             while ($o = $oRes3->fetch(PDO::FETCH_ASSOC)) {
                                 if ($remainingToDeduct <= 0) break;
-                                $available = intval($o['lesson_count']) + intval($o['gifted_lessons'] ?? 0) - intval($o['consumed_lessons']);
-                                if ($available <= 0) continue;
-                                $toDeduct = min($remainingToDeduct, $available);
+                                $paidAvailable = max(0, intval($o['lesson_count']) - intval($o['consumed_lessons']));
+                                if ($paidAvailable <= 0) continue;
+                                $toDeduct = min($remainingToDeduct, $paidAvailable);
                                 $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
                                 $oid = intval($o['id']);
                                 $stmtDx = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid AND $newConsumed <= (lesson_count + COALESCE(gifted_lessons, 0)) AND is_voided='否' AND (id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) OR id IN ($oldDeductedOrderIdList))");
@@ -6148,6 +6151,82 @@ $stmt->execute();
                                 if ($deductedOrderId === 0) $deductedOrderId = $oid;
                                 $remainingToDeduct -= $toDeduct;
                                 $processedOrderIds[] = $oid;
+                            }
+                        }
+                        // 第二轮：扣赠课（第一轮付费课时扣完后仍有剩余待扣）
+                        if ($remainingToDeduct > 0) {
+                            $logLine .= "ROUND2_GIFT remaining=$remainingToDeduct\n";
+                            $giftProcessedOrderIds = [];
+
+                            // 第二轮优先级1：同一course_id的订单，有剩余赠课
+                            $oResG1 = $db->query("SELECT * FROM orders WHERE student_id = $studentId AND course_id = $courseId AND COALESCE(gifted_lessons, 0) > GREATEST(0, consumed_lessons - lesson_count) AND campus = $quotedCampus AND is_voided='否' AND (((refund_status IS NULL OR refund_status = '' OR refund_status = '正常') AND id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR id IN ($oldDeductedOrderIdList)) ORDER BY created_at ASC, id ASC");
+                            while ($o = $oResG1->fetch(PDO::FETCH_ASSOC)) {
+                                if ($remainingToDeduct <= 0) break;
+                                $giftConsumed = max(0, intval($o['consumed_lessons']) - intval($o['lesson_count']));
+                                $giftRemaining = intval($o['gifted_lessons'] ?? 0) - $giftConsumed;
+                                if ($giftRemaining <= 0) continue;
+                                $toDeduct = min($remainingToDeduct, $giftRemaining);
+                                $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                $oid = intval($o['id']);
+                                $stmtDG1 = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid AND $newConsumed <= (lesson_count + COALESCE(gifted_lessons, 0)) AND is_voided='否' AND (id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) OR id IN ($oldDeductedOrderIdList))");
+                                $stmtDG1->execute();
+                                $rcDG1 = $stmtDG1->rowCount();
+                                $afterDedG1 = $db->query("SELECT consumed_lessons FROM orders WHERE id = $oid")->fetch(PDO::FETCH_ASSOC);
+                                $logLine .= "DEDUCT_GIFT priority=1 order=$oid from=" . intval($o['consumed_lessons']) . " to=$newConsumed rowsAffected=$rcDG1 actualVal=" . ($afterDedG1['consumed_lessons'] ?? 'N/A') . "\n";
+                                $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                                $remainingToDeduct -= $toDeduct;
+                                $giftProcessedOrderIds[] = $oid;
+                            }
+
+                            // 第二轮优先级2：同二级学科的订单，有剩余赠课
+                            if ($remainingToDeduct > 0 && trim($subjectLevel2) !== '') {
+                                $excludeClauseG = count($giftProcessedOrderIds) > 0 ? "AND o.id NOT IN (" . implode(',', $giftProcessedOrderIds) . ")" : "";
+                                $quotedSubjectLevel2 = $db->quote($subjectLevel2);
+                                $oResG2 = $db->query("SELECT o.* FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.course_id <> $courseId AND co.subject_level2 = $quotedSubjectLevel2 AND COALESCE(o.gifted_lessons, 0) > GREATEST(0, o.consumed_lessons - o.lesson_count) $excludeClauseG AND o.campus = $quotedCampus AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList)) ORDER BY o.created_at ASC, o.id ASC");
+                                while ($o = $oResG2->fetch(PDO::FETCH_ASSOC)) {
+                                    if ($remainingToDeduct <= 0) break;
+                                    $giftConsumed = max(0, intval($o['consumed_lessons']) - intval($o['lesson_count']));
+                                    $giftRemaining = intval($o['gifted_lessons'] ?? 0) - $giftConsumed;
+                                    if ($giftRemaining <= 0) continue;
+                                    $toDeduct = min($remainingToDeduct, $giftRemaining);
+                                    $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                    $oid = intval($o['id']);
+                                    $stmtDG2 = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid AND $newConsumed <= (lesson_count + COALESCE(gifted_lessons, 0)) AND is_voided='否' AND (id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) OR id IN ($oldDeductedOrderIdList))");
+                                    $stmtDG2->execute();
+                                    $rcDG2 = $stmtDG2->rowCount();
+                                    $afterDedG2 = $db->query("SELECT consumed_lessons FROM orders WHERE id = $oid")->fetch(PDO::FETCH_ASSOC);
+                                    $logLine .= "DEDUCT_GIFT priority=2 order=$oid from=" . intval($o['consumed_lessons']) . " to=$newConsumed rowsAffected=$rcDG2 actualVal=" . ($afterDedG2['consumed_lessons'] ?? 'N/A') . "\n";
+                                    $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                    if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                                    $remainingToDeduct -= $toDeduct;
+                                    $giftProcessedOrderIds[] = $oid;
+                                }
+                            }
+
+                            // 第二轮优先级3：同一级学科的订单，有剩余赠课
+                            if ($remainingToDeduct > 0 && trim($subjectLevel1) !== '') {
+                                $excludeClauseG = count($giftProcessedOrderIds) > 0 ? "AND o.id NOT IN (" . implode(',', $giftProcessedOrderIds) . ")" : "";
+                                $quotedSubjectLevel1 = $db->quote($subjectLevel1);
+                                $oResG3 = $db->query("SELECT o.* FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.course_id <> $courseId AND co.subject_level1 = $quotedSubjectLevel1 AND COALESCE(o.gifted_lessons, 0) > GREATEST(0, o.consumed_lessons - o.lesson_count) $excludeClauseG AND o.campus = $quotedCampus AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList)) ORDER BY o.created_at ASC, o.id ASC");
+                                while ($o = $oResG3->fetch(PDO::FETCH_ASSOC)) {
+                                    if ($remainingToDeduct <= 0) break;
+                                    $giftConsumed = max(0, intval($o['consumed_lessons']) - intval($o['lesson_count']));
+                                    $giftRemaining = intval($o['gifted_lessons'] ?? 0) - $giftConsumed;
+                                    if ($giftRemaining <= 0) continue;
+                                    $toDeduct = min($remainingToDeduct, $giftRemaining);
+                                    $newConsumed = intval($o['consumed_lessons']) + $toDeduct;
+                                    $oid = intval($o['id']);
+                                    $stmtDG3 = $db->prepare("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $oid AND $newConsumed <= (lesson_count + COALESCE(gifted_lessons, 0)) AND is_voided='否' AND (id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')) OR id IN ($oldDeductedOrderIdList))");
+                                    $stmtDG3->execute();
+                                    $rcDG3 = $stmtDG3->rowCount();
+                                    $afterDedG3 = $db->query("SELECT consumed_lessons FROM orders WHERE id = $oid")->fetch(PDO::FETCH_ASSOC);
+                                    $logLine .= "DEDUCT_GIFT priority=3 order=$oid from=" . intval($o['consumed_lessons']) . " to=$newConsumed rowsAffected=$rcDG3 actualVal=" . ($afterDedG3['consumed_lessons'] ?? 'N/A') . "\n";
+                                    $deductionEntries[] = ['order_id' => $oid, 'amount' => $toDeduct];
+                                    if ($deductedOrderId === 0) $deductedOrderId = $oid;
+                                    $remainingToDeduct -= $toDeduct;
+                                    $giftProcessedOrderIds[] = $oid;
+                                }
                             }
                         }
                         if ($remainingToDeduct > 0) {
