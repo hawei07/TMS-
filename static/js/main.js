@@ -5623,6 +5623,14 @@ function renderStudentCoursesTable(rows) {
         } else if (lc <= cl) {
             optHtml = '<span style="color:#999;font-size:12px;">无剩余课时</span>';
         }
+        // 检测赠课记录并获取对应付费课包课时数
+        const isGifted = r.actual_price === 0 && r.lesson_count > 0 && (r.item_name || '').includes('（赠送）');
+        let paidLessonCount = 0;
+        if (isGifted) {
+            const allRows = studentCoursesAllRows || rows;
+            const paidRow = allRows.find(rr => rr.order_id === r.order_id && !(rr.actual_price === 0 && rr.lesson_count > 0 && (rr.item_name || '').includes('（赠送）')));
+            paidLessonCount = paidRow ? (parseInt(paidRow.lesson_count) || 0) : 0;
+        }
         return `<tr>
         <td>${esc(r.name)}</td>
         <td>${esc(r.campus || '-')}</td>
@@ -5631,7 +5639,7 @@ function renderStudentCoursesTable(rows) {
         <td>${esc(r.item_name)}</td>
         <td>${r.lesson_count || ''}</td>
         <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
-        <td>${r.consumed_lessons != null ? `<a href="javascript:void(0)" onclick="showConsumptionDetail(${r.order_id}, ${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')" style="color:#1677ff;text-decoration:underline;cursor:pointer;">${r.consumed_lessons}</a>` : 0}</td>
+        <td>${r.consumed_lessons != null ? `<a href="javascript:void(0)" onclick="showConsumptionDetail(${r.order_id}, ${r.id}, '${esc(r.name).replace(/'/g, "\\'")}', ${isGifted}, ${paidLessonCount})" style="color:#1677ff;text-decoration:underline;cursor:pointer;">${r.consumed_lessons}</a>` : 0}</td>
         <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.refunded_lessons || 0}</td>
         <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
@@ -5652,8 +5660,9 @@ function statusMap(s) {
     return { cls: 'cst-dot-green', bg: 'cst-badge-green' };
 }
 
-async function showConsumptionDetail(orderId, courseId, courseName) {
-    document.getElementById('modal-consumption-title').textContent = '课耗明细 - ' + courseName;
+async function showConsumptionDetail(orderId, courseId, courseName, isGifted = false, paidLessonCount = 0) {
+    const titleSuffix = isGifted ? '（赠送）' : '';
+    document.getElementById('modal-consumption-title').textContent = '课耗明细 - ' + courseName + titleSuffix;
     const list = document.getElementById('consumption-detail-list');
     const summary = document.getElementById('consumption-summary');
     list.innerHTML = '<div class="consumption-empty">加载中...</div>';
@@ -5662,17 +5671,53 @@ async function showConsumptionDetail(orderId, courseId, courseName) {
     try {
         const res = await fetch(API_BASE + 'list_attendance&student_id=' + currentViewStudentId);
         const data = await res.json();
-        const rows = (data.data || []).filter(r => r.order_id == orderId);
+        let rows = (data.data || []).filter(r => r.order_id == orderId);
         if (rows.length === 0) {
             list.innerHTML = '<div class="consumption-empty">暂未产生课耗记录</div>';
             return;
+        }
+        // 赠课模式：分离付费和赠课消耗记录，只展示赠课部分
+        if (isGifted && paidLessonCount > 0) {
+            const sorted = [...rows].sort((a, b) => (a.lesson_date || '').localeCompare(b.lesson_date || ''));
+            let cumulativeConsumed = 0;
+            const displayRows = [];
+            for (const r of sorted) {
+                const deducted = parseFloat(r.deducted_lessons) || 0;
+                if (r.status === '出勤' && deducted > 0) {
+                    if (cumulativeConsumed + deducted <= paidLessonCount) {
+                        // 完全在付费课时范围内，跳过
+                        cumulativeConsumed += deducted;
+                        continue;
+                    }
+                    if (cumulativeConsumed >= paidLessonCount) {
+                        // 完全在赠课范围内，金额设为0
+                        displayRows.push({...r, consumed_amount: 0});
+                        cumulativeConsumed += deducted;
+                        continue;
+                    }
+                    // 跨边界：只取赠课部分，金额为0
+                    const giftedPortion = cumulativeConsumed + deducted - paidLessonCount;
+                    displayRows.push({...r, deducted_lessons: giftedPortion, consumed_amount: 0});
+                    cumulativeConsumed += deducted;
+                } else {
+                    // 缺勤/请假等不消耗课时的记录：仅在已进入赠课范围后显示
+                    if (cumulativeConsumed >= paidLessonCount) {
+                        displayRows.push(r);
+                    }
+                }
+            }
+            rows = displayRows;
+            if (rows.length === 0) {
+                list.innerHTML = '<div class="consumption-empty">暂未产生赠课课耗记录</div>';
+                return;
+            }
         }
         // 汇总
         let totalLessons = 0, totalAmount = 0;
         rows.forEach(r => {
             if (r.status === '出勤') {
                 totalLessons += (parseFloat(r.deducted_lessons) || 0);
-                totalAmount += (parseFloat(r.consumed_amount) || 0);
+                totalAmount += isGifted ? 0 : (parseFloat(r.consumed_amount) || 0);
             }
         });
         document.getElementById('consumption-count').textContent = '共 ' + rows.length + ' 条记录';
@@ -5684,7 +5729,7 @@ async function showConsumptionDetail(orderId, courseId, courseName) {
             const st = statusMap(r.status);
             const clsTime = (r.class_time || '').replace('~', '—');
             const lessons = parseFloat(r.deducted_lessons) || 0;
-            const amount = (parseFloat(r.consumed_amount) || 0).toFixed(2);
+            const amount = isGifted ? '0.00' : (parseFloat(r.consumed_amount) || 0).toFixed(2);
             const attTime = r.attended_at ? r.attended_at.slice(0, 16).replace('T', ' ') : '—';
             return `<div class="consumption-card">
                 <div class="cst-accent ${st.cls}"></div>
