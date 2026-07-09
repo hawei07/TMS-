@@ -877,7 +877,7 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 
 .custom-dialog-body .dialog-message {
     font-size: 15px; color: var(--color-text); line-height: 1.65;
-    word-break: break-word;
+    word-break: break-word; white-space: pre-wrap;
 }
 
 .custom-dialog-input {
@@ -7056,3 +7056,671 @@ tbody td {
 #price-item-gifted-lessons { width: 80px; text-align: center; font-size: 16px; font-weight: 600; border: 1px solid #d4d4d8; border-radius: 6px; padding: 6px 0; background: #fafafa; }
 .gift-order-row { background: #fdfcf0; }
 .gift-order-tag { display: inline-block; padding: 1px 8px; border-radius: 10px; font-size: 11px; font-weight: 500; background: #fef3c7; color: #92400e; margin-left: 6px; vertical-align: middle; }
+
+
+/* ==================== 画具管理 - 购买画具 & 销售记录 ==================== */
+/* 少儿美术风格：鹅黄#FFE066 / 珊瑚#FF7675 / 天蓝#74B9FF / 草绿#55EFC4 */
+
+/* -- 面板级主题变量 -- */
+#panel-teaching-aids {
+    --ta-yellow: #FFE066;
+    --ta-coral: #FF7675;
+    --ta-sky: #74B9FF;
+    --ta-mint: #55EFC4;
+    --ta-yellow-bg: #FFF9E0;
+    --ta-coral-bg: #FFF0F0;
+    --ta-sky-bg: #F0F7FF;
+    --ta-mint-bg: #F0FFF8;
+}
+
+/* -- 面板头部装饰 -- */
+#panel-teaching-aids .panel-header {
+    position: relative;
+    overflow: hidden;
+}
+#panel-teaching-aids .panel-header::after {
+    content: '';
+    position: absolute;
+    right: 20px;
+    top: 50%;
+    transform: translateY(-50%);
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    opacity: 0.25;
+    pointer-events: none;
+}
+#panel-teaching-aids .panel-header h3 {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+/* -- Tab 按钮（少儿美术风格） -- */
+#ta-tabs {
+    display: flex;
+    gap: 4px;
+    border-bottom: 3px solid #f0f0f0;
+    margin-bottom: 20px;
+    padding: 0 4px;
+    background: linear-gradient(180deg, #fffef9 0%, #fff 100%);
+    border-radius: 14px 14px 0 0;
+}
+#ta-tabs .sec-tab {
+    padding: 12px 22px;
+    border: none;
+    background: none;
+    font-size: 14px;
+    font-weight: 500;
+    color: #999;
+    cursor: pointer;
+    border-bottom: 3px solid transparent;
+    margin-bottom: -3px;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    border-radius: 10px 10px 0 0;
+    position: relative;
+}
+#ta-tabs .sec-tab:hover {
+    color: #555;
+    background: rgba(255,224,102,0.15);
+}
+#ta-tabs .sec-tab.active {
+    color: #FF7675;
+    border-bottom-color: #FF7675;
+    font-weight: 700;
+    background: rgba(255,118,117,0.06);
+}
+/* Tab 序号装饰圆点 */
+#ta-tabs .sec-tab::before {
+    content: '';
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-right: 8px;
+    vertical-align: middle;
+    opacity: 0;
+    transition: all 0.25s;
+}
+#ta-tabs .sec-tab:nth-child(1)::before { background: #FFE066; }
+#ta-tabs .sec-tab:nth-child(2)::before { background: #FF7675; }
+#ta-tabs .sec-tab:nth-child(3)::before { background: #74B9FF; }
+#ta-tabs .sec-tab.active::before { opacity: 1; width: 8px; height: 8px; }
+#ta-tabs .sec-tab:hover::before { opacity: 0.5; }
+
+/* -- 学员搜索区 -- */
+.ta-purchase-student {
+    background: linear-gradient(135deg, #FFFEF5 0%, #FFF9E0 40%, #fff 100%);
+    border: 2px solid #FFE066;
+    border-radius: 14px;
+    padding: 18px 20px;
+    position: relative;
+    overflow: hidden;
+}
+/* 装饰小圆点 */
+.ta-purchase-student::before {
+    content: '';
+    position: absolute;
+    top: -15px;
+    right: -15px;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    background: rgba(255,224,102,0.3);
+    pointer-events: none;
+}
+.ta-student-search {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+.ta-student-search label {
+    font-size: 13px;
+    font-weight: 700;
+    color: #e67e22;
+}
+.ta-student-dropdown {
+    position: absolute;
+    top: 100%;
+    left: 0;
+    right: 0;
+    background: #fff;
+    border: 2px solid #FFE066;
+    border-radius: 10px;
+    box-shadow: 0 6px 24px rgba(255,118,117,0.12);
+    z-index: 100;
+    max-height: 240px;
+    overflow-y: auto;
+    margin-top: 4px;
+}
+.ta-student-dropdown-item {
+    padding: 11px 14px;
+    font-size: 13px;
+    cursor: pointer;
+    border-bottom: 1px solid #fef5e7;
+    transition: all 0.15s;
+    display: flex;
+    align-items: center;
+}
+.ta-student-dropdown-item:last-child { border-bottom: none; }
+.ta-student-dropdown-item:hover {
+    background: #FFF0F0;
+    color: #FF7675;
+    padding-left: 18px;
+}
+
+/* -- 选中学员 Chip（珊瑚色） -- */
+.ta-student-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    background: #FFF0F0;
+    border: 2px solid #FF7675;
+    border-radius: 24px;
+    padding: 7px 16px;
+    font-size: 13px;
+    font-weight: 600;
+    color: #FF7675;
+    box-shadow: 0 2px 8px rgba(255,118,117,0.15);
+    transition: all 0.2s;
+}
+.ta-student-chip:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 12px rgba(255,118,117,0.2);
+}
+.ta-student-chip-close {
+    cursor: pointer;
+    font-size: 18px;
+    font-weight: bold;
+    line-height: 1;
+    opacity: 0.6;
+    transition: all 0.15s;
+    width: 20px;
+    height: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 50%;
+}
+.ta-student-chip-close:hover {
+    opacity: 1;
+    background: rgba(255,118,117,0.15);
+}
+
+/* -- 商品卡片网格 -- */
+.ta-product-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
+    gap: 14px;
+    max-height: 420px;
+    overflow-y: auto;
+    padding: 4px;
+    scroll-behavior: smooth;
+}
+/* 自定义滚动条 */
+.ta-product-grid::-webkit-scrollbar { width: 6px; }
+.ta-product-grid::-webkit-scrollbar-track { background: transparent; }
+.ta-product-grid::-webkit-scrollbar-thumb { background: #ffe0d0; border-radius: 3px; }
+.ta-product-grid::-webkit-scrollbar-thumb:hover { background: #FF7675; }
+
+/* -- 商品卡片 -- */
+.ta-product-card {
+    position: relative;
+    background: #fff;
+    border: 2px solid #f0f0f0;
+    border-radius: 14px;
+    padding: 16px 14px 14px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    user-select: none;
+    overflow: hidden;
+}
+/* 卡片顶部彩色装饰条 */
+.ta-product-card::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 4px;
+    border-radius: 14px 14px 0 0;
+    background: #e5e7eb;
+    transition: all 0.25s;
+}
+/* 不同位置卡片不同颜色装饰条 */
+.ta-product-card:nth-child(4n+1)::after { background: #FFE066; }
+.ta-product-card:nth-child(4n+2)::after { background: #FF7675; }
+.ta-product-card:nth-child(4n+3)::after { background: #74B9FF; }
+.ta-product-card:nth-child(4n+4)::after { background: #55EFC4; }
+
+.ta-product-card:hover {
+    border-color: #ddd;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
+    transform: translateY(-3px);
+}
+.ta-product-card:hover::after { height: 5px; }
+
+/* 选中态 */
+.ta-product-card-selected {
+    border-color: #FF7675;
+    background: linear-gradient(135deg, #FFF5F5 0%, #FFF0F0 100%);
+    box-shadow: 0 4px 16px rgba(255,118,117,0.18);
+}
+.ta-product-card-selected::after {
+    height: 5px;
+    background: #FF7675 !important;
+}
+
+/* -- 选中勾号 -- */
+.ta-product-check {
+    position: absolute;
+    top: 10px;
+    right: 10px;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #FF7675;
+    color: #fff;
+    font-size: 14px;
+    font-weight: bold;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: 0 2px 8px rgba(255,118,117,0.35);
+    animation: taPopIn 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
+}
+@keyframes taPopIn {
+    0% { transform: scale(0); opacity: 0; }
+    60% { transform: scale(1.2); }
+    100% { transform: scale(1); opacity: 1; }
+}
+
+/* -- 卡片内容排版 -- */
+.ta-product-card-name {
+    font-size: 14px;
+    font-weight: 700;
+    color: #2d2d2d;
+    margin-bottom: 8px;
+    margin-right: 30px;
+    line-height: 1.4;
+}
+.ta-product-card-meta {
+    font-size: 12px;
+    color: #999;
+    margin-bottom: 6px;
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ta-product-card-price {
+    font-size: 17px;
+    font-weight: 800;
+    color: #FF7675;
+    margin-bottom: 6px;
+    letter-spacing: -0.5px;
+}
+.ta-product-card-campus {
+    font-size: 11px;
+    color: #bbb;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    padding-top: 4px;
+    border-top: 1px dashed #f0f0f0;
+}
+
+/* -- 购物车区域 -- */
+.ta-cart-items {
+    background: #fff;
+    border: 2px solid #f0f0f0;
+    border-radius: 14px;
+    overflow: hidden;
+}
+.ta-cart-item {
+    padding: 12px 16px;
+    border-bottom: 1px solid #faf0f0;
+    display: flex;
+    align-items: center;
+    transition: background 0.15s;
+}
+.ta-cart-item:hover { background: #fffdf7; }
+.ta-cart-item:last-child { border-bottom: none; }
+.ta-cart-item-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    flex-wrap: wrap;
+    width: 100%;
+}
+.ta-cart-item-name {
+    font-weight: 700;
+    font-size: 13px;
+    min-width: 100px;
+    color: #2d2d2d;
+}
+.ta-cart-item-price {
+    color: #999;
+    font-size: 13px;
+}
+
+/* -- 数量步进器 -- */
+.ta-cart-item-qty {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+    background: #fafafa;
+    border-radius: 8px;
+    padding: 2px;
+}
+.ta-qty-btn {
+    width: 28px;
+    height: 28px;
+    border: none;
+    border-radius: 6px;
+    background: #f0f0f0;
+    cursor: pointer;
+    font-size: 16px;
+    font-weight: bold;
+    color: #666;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.18s;
+}
+.ta-qty-btn:hover {
+    background: #FF7675;
+    color: #fff;
+    transform: scale(1.08);
+}
+.ta-qty-btn:active { transform: scale(0.95); }
+.ta-qty-val {
+    display: inline-block;
+    min-width: 32px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 14px;
+    color: #2d2d2d;
+}
+
+/* -- 购物车小计 -- */
+.ta-cart-item-subtotal {
+    font-weight: 700;
+    color: #FF7675;
+    font-size: 14px;
+    margin-left: auto;
+    letter-spacing: -0.3px;
+}
+.ta-cart-item-remove {
+    background: none;
+    border: none;
+    color: #ccc;
+    cursor: pointer;
+    font-size: 20px;
+    line-height: 1;
+    padding: 2px 6px;
+    transition: all 0.15s;
+    border-radius: 50%;
+}
+.ta-cart-item-remove:hover {
+    color: #FF7675;
+    background: #FFF0F0;
+}
+
+/* -- 购物车合计行 -- */
+.ta-cart-summary {
+    background: linear-gradient(135deg, #FFF5F5 0%, #fff 100%);
+    border: 2px solid #f0f0f0;
+    border-top: 2px dashed #FFE066;
+    border-radius: 0 0 14px 14px;
+    padding: 14px 18px;
+    text-align: right;
+    font-size: 14px;
+    color: #666;
+}
+.ta-cart-summary strong {
+    font-size: 20px;
+    color: #FF7675;
+    letter-spacing: -0.5px;
+}
+
+/* -- 支付区 -- */
+.ta-payment-section {
+    background: #fff;
+    border: 2px solid #f0f0f0;
+    border-radius: 14px;
+    padding: 18px 20px;
+    position: relative;
+}
+/* 支付区标题 */
+.ta-payment-section h4 {
+    margin: 0 0 14px 0 !important;
+    font-size: 14px;
+    font-weight: 700;
+    color: #2d2d2d;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.ta-payment-section h4::after {
+    content: '';
+    flex: 1;
+    height: 2px;
+    background: linear-gradient(90deg, #FFE066, transparent);
+    border-radius: 1px;
+}
+
+/* -- 支付行 -- */
+.ta-payment-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 10px;
+    font-size: 13px;
+    padding: 8px 12px;
+    border-radius: 10px;
+    background: #fafafa;
+    transition: background 0.2s;
+}
+.ta-payment-row:focus-within { background: #fffdf5; }
+.ta-payment-row:nth-child(1) label { color: #e67e22; } /* 现金 - 鹅黄系 */
+.ta-payment-row:nth-child(2) label { color: #FF7675; } /* 美团 - 珊瑚系 */
+.ta-payment-row:nth-child(3) label { color: #74B9FF; } /* 账户 - 天蓝系 */
+.ta-payment-row label {
+    width: 80px;
+    text-align: right;
+    font-weight: 600;
+    white-space: nowrap;
+}
+/* 支付输入框 */
+.ta-payment-row input[type="number"] {
+    border: 2px solid #f0f0f0;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #2d2d2d;
+    transition: all 0.2s;
+    background: #fff;
+}
+.ta-payment-row:nth-child(1) input[type="number"]:focus { border-color: #FFE066; }
+.ta-payment-row:nth-child(2) input[type="number"]:focus { border-color: #FF7675; }
+.ta-payment-row:nth-child(3) input[type="number"]:focus { border-color: #74B9FF; }
+
+/* -- 支付匹配指示 -- */
+.ta-payment-match {
+    padding: 10px 16px;
+    border-radius: 10px;
+    font-size: 13px;
+    font-weight: 600;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    animation: taFadeIn 0.3s ease;
+}
+@keyframes taFadeIn {
+    from { opacity: 0; transform: translateY(-4px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+.ta-payment-match-ok {
+    background: #F0FFF8;
+    color: #0d7d4a;
+    border: 2px solid #55EFC4;
+}
+.ta-payment-match-err {
+    background: #FFF5F5;
+    color: #c0392b;
+    border: 2px solid #FF7675;
+}
+
+/* -- 确认购买按钮 -- */
+#ta-purchase-btn {
+    font-weight: 700;
+    font-size: 15px;
+    padding: 10px 28px;
+    border-radius: 24px;
+    transition: all 0.25s;
+}
+#ta-purchase-btn:not(:disabled) {
+    background: #FF7675;
+    border-color: #FF7675;
+    box-shadow: 0 4px 14px rgba(255,118,117,0.35);
+}
+#ta-purchase-btn:not(:disabled):hover {
+    background: #e86867;
+    box-shadow: 0 6px 20px rgba(255,118,117,0.45);
+    transform: translateY(-2px);
+}
+#ta-purchase-btn:not(:disabled):active { transform: translateY(0); }
+#ta-purchase-btn:disabled {
+    background: #e0e0e0;
+    border-color: #e0e0e0;
+    color: #aaa;
+    cursor: not-allowed;
+}
+
+/* -- 销售记录表格 -- */
+#table-ta-sales {
+    border-collapse: separate;
+    border-spacing: 0;
+}
+#table-ta-sales thead th {
+    background: linear-gradient(180deg, #fffef9 0%, #fff9e0 100%);
+    color: #e67e22;
+    font-weight: 700;
+    font-size: 12px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 12px 10px;
+    border-bottom: 3px solid #FFE066;
+    position: sticky;
+    top: 0;
+    z-index: 5;
+}
+#table-ta-sales tbody td {
+    padding: 11px 10px;
+    border-bottom: 1px solid #fef5e7;
+    font-size: 13px;
+    vertical-align: middle;
+}
+#table-ta-sales tbody tr {
+    transition: all 0.18s;
+    border-left: 3px solid transparent;
+}
+#table-ta-sales tbody tr:hover {
+    background: #fffdf5 !important;
+    border-left-color: #FFE066;
+}
+/* 金额列 */
+#table-ta-sales td:nth-child(7),
+#table-ta-sales td:nth-child(8) {
+    font-variant-numeric: tabular-nums;
+    font-family: 'SF Mono', 'Consolas', 'Monaco', monospace;
+}
+/* 支付方式彩色标签 */
+#table-ta-sales td:nth-child(9) {
+    font-size: 12px;
+    line-height: 1.6;
+}
+
+/* -- 销售记录筛选栏 -- */
+#tab-ta-sales .toolbar {
+    background: linear-gradient(180deg, #fffef9 0%, #fff 100%);
+    padding: 14px 20px;
+    border-radius: 14px;
+    margin-bottom: 16px;
+    border: 2px solid #f0f0f0;
+}
+#tab-ta-sales .toolbar input[type="text"],
+#tab-ta-sales .toolbar input[type="date"] {
+    border: 2px solid #f0f0f0;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-size: 13px;
+    transition: all 0.2s;
+}
+#tab-ta-sales .toolbar input[type="text"]:focus,
+#tab-ta-sales .toolbar input[type="date"]:focus {
+    border-color: #FFE066;
+    box-shadow: 0 0 0 3px rgba(255,224,102,0.15);
+}
+
+/* -- 销售记录空状态 -- */
+#tab-ta-sales .empty-state {
+    padding: 48px 20px;
+    text-align: center;
+    color: #ccc;
+    font-size: 14px;
+}
+
+/* -- 购买区小标题 -- */
+#tab-ta-purchase h4 {
+    font-size: 14px;
+    font-weight: 700;
+    color: #2d2d2d;
+    margin: 0 0 12px 0;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+#tab-ta-purchase h4::before {
+    content: '';
+    display: inline-block;
+    width: 4px;
+    height: 16px;
+    border-radius: 2px;
+}
+/* 各区域的标题颜色不同 */
+#ta-product-grid-wrap > h4::before { background: #FFE066; }
+#ta-cart-section > h4::before { background: #FF7675; }
+
+/* -- 销售记录 Tag 标签（少儿美术风格） -- */
+#table-ta-sales .tag-blue {
+    background: #F0F7FF;
+    color: #74B9FF;
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-weight: 600;
+    border: 1px solid rgba(116,185,255,0.3);
+}
+#table-ta-sales .tag-orange {
+    background: #FFF9E0;
+    color: #e67e22;
+    border-radius: 10px;
+    padding: 2px 10px;
+    font-weight: 600;
+    border: 1px solid rgba(255,224,102,0.4);
+}
+
+/* -- 响应式适配 -- */
+@media (max-width: 768px) {
+    .ta-product-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 10px;
+        max-height: 320px;
+    }
+    .ta-cart-item-info { gap: 6px; }
+    .ta-cart-item-name { min-width: 60px; font-size: 12px; }
+    .ta-payment-row { flex-wrap: wrap; }
+    #tab-ta-sales .toolbar { flex-direction: column; gap: 8px; }
+    #table-ta-sales { min-width: 700px; }
+}
