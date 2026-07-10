@@ -12746,7 +12746,7 @@ function selectEnrollType(type) {
         if (af) af.style.display = '';
         // 校区已从公用下拉选定，直接加载活动
         var campusName = currentEnrollCampusName || '';
-        activityEnrollState = { campus: campusName, activity: null, adultCount: 0, studentCount: 0, step: 2 };
+        activityEnrollState = { campus: campusName, activity: null, adultCount: 0, studentCount: 0, step: 2, adultDeductions: [], studentDeductions: [] };
         loadActivityList(campusName);
         document.getElementById('enroll-activity-step-activity').style.display = '';
         document.getElementById('enroll-activity-step-count').style.display = 'none';
@@ -12865,7 +12865,7 @@ function filterActivities() {
 }
 
 function selectActivity(activityId, activityName, cardEl) {
-    activityEnrollState.activity = { id: activityId, name: activityName, feeAdult: parseFloat(cardEl.dataset.feeAdult) || 0, feeStudent: parseFloat(cardEl.dataset.feeStudent) || 0, subject: cardEl.dataset.subject, deductionRules: JSON.parse(cardEl.dataset.deductRules || '[]'), hasSubjectDeduction: parseInt(cardEl.dataset.hasSubjectDeduction) || 0, remaining: parseInt(cardEl.dataset.remaining) || 0 };
+    activityEnrollState.activity = { id: activityId, name: activityName, feeAdult: parseFloat(cardEl.dataset.feeAdult) || 0, feeStudent: parseFloat(cardEl.dataset.feeStudent) || 0, subject: cardEl.dataset.subject, deductionRules: JSON.parse(cardEl.dataset.deductRules || '{}'), adultDeductions: JSON.parse(cardEl.dataset.deductRules || '{}').adult || [], studentDeductions: JSON.parse(cardEl.dataset.deductRules || '{}').student || [], hasSubjectDeduction: parseInt(cardEl.dataset.hasSubjectDeduction) || 0, remaining: parseInt(cardEl.dataset.remaining) || 0 };
     document.querySelectorAll('.activity-card').forEach(c => c.classList.toggle('selected', false));
     cardEl.classList.add('selected');
     document.getElementById('enroll-activity-step-count').style.display = '';
@@ -12888,9 +12888,12 @@ function selectActivity(activityId, activityName, cardEl) {
     const hintText = document.getElementById('activity-deduct-text');
     if (a.hasSubjectDeduction) {
         hintDiv.style.display = '';
-        var rules = a.deductionRules || [];
-        var ruleTexts = rules.map(function(r) { return (r.subject_level1 || '默认') + '扣' + (r.deduct_lessons || 1) + '课时'; });
-        hintText.textContent = '该活动考勤时将按学科匹配课包扣除课时' + (ruleTexts.length > 0 ? '（' + ruleTexts.join('；') + '）' : '');
+        var allRules = [];
+        var adultRules = a.adultDeductions || [];
+        var studentRules = a.studentDeductions || [];
+        adultRules.forEach(function(r) { allRules.push('成人' + (r.subject_level1 || '默认') + '扣' + (r.deduct_lessons || 1) + '课时'); });
+        studentRules.forEach(function(r) { allRules.push('学员' + (r.subject_level1 || '默认') + '扣' + (r.deduct_lessons || 1) + '课时'); });
+        hintText.textContent = '该活动考勤时将按学科匹配课包扣除课时' + (allRules.length > 0 ? '（' + allRules.join('；') + '）' : '');
     }
     else { hintDiv.style.display = 'none'; }
     const capHint = document.getElementById('activity-capacity-hint');
