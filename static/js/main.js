@@ -5930,6 +5930,7 @@ function switchStudentDetailTab(tabId) {
     else if (tabId === 'tab-orders') loadStudentOrders(sid);
     else if (tabId === 'tab-attendance') loadAttendance(sid);
     else if (tabId === 'tab-account') loadStudentAccount(sid);
+    else if (tabId === 'tab-activity-enrollments') loadStudentActivities(sid);
 }
 
 // 标签页点击事件委托
@@ -8063,6 +8064,10 @@ async function switchAttendanceTab(tabId) {
         scheduleWeekOffset = 0;
         await initScheduleCampusFilter();
         loadScheduleView();
+    } else if (tabId === 'tab-activity-attendance') {
+        loadActivityAttendanceList();
+    } else if (tabId === 'tab-activity-consumption') {
+        loadActivityConsumption();
     }
 }
 
