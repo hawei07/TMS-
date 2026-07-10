@@ -3626,7 +3626,7 @@ $stmt->execute();
             $pendingRefundIds = [];
             $refStmt = $db->query("SELECT DISTINCT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')");
             while ($refR = $refStmt->fetch(PDO::FETCH_ASSOC)) $pendingRefundIds[$refR['order_id']] = true;
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.id DESC");
             $orderRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
             // 批量查询考勤记录获取真实消耗课时。班级考勤以 deduction_json 的跨订单分摊为准。
@@ -4036,7 +4036,7 @@ $stmt->execute();
             $stmt = $db->prepare($countSql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->execute(); $total = $stmt->fetch(PDO::FETCH_NUM)[0];
-            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.teaching_aid_price, o.product_coupon_amount, o.discount_plan_amount, o.coupon_amount, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.account_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
+            $sql = "SELECT o.id, o.student_id, o.course_id, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.teaching_aid_price, o.product_coupon_amount, o.discount_plan_amount, o.coupon_amount, o.status, o.created_at, o.paid_at, o.order_no, o.parent_order_no, o.cash_amount, o.meituan_amount, o.account_amount, o.paid_amount, o.order_type, o.campus, o.pay_status, o.is_voided, o.subject_level1, o.subject_level2, o.activity_id, o.activity_name, o.activity_campus, o.activity_adult_count, o.activity_student_count, o.adult_unit_price, o.student_unit_price, o.activity_fee_type, s.name AS student_name, s.student_no, c.name AS course_name FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id $where ORDER BY o.id DESC LIMIT :limit OFFSET :offset";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':limit', $pageSize, PDO::PARAM_INT);
@@ -4056,6 +4056,10 @@ $stmt->execute();
                 $row['course_amount'] = round($unitPrice - $dp - $cp, 2);
                 // 商品金额 = 教材包 - 商品券
                 $row['product_amount'] = round($tap - $pc, 2);
+                // 活动订单：课程名显示活动名称
+                if (($row['order_type'] ?? '') === '活动') {
+                    $row['course_name'] = $row['activity_name'] ?? '';
+                }
             }
             unset($row);
             // 支付方式汇总
@@ -4231,9 +4235,40 @@ $sumStmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $oid = intval($input['order_id'] ?? 0);
             if ($oid <= 0) { json(['success' => false, 'message' => '订单ID无效']); break; }
-            $order = $db->query("SELECT student_id, course_id, lesson_count, consumed_lessons, is_voided FROM orders WHERE id = $oid")->fetch();
+            $order = $db->query("SELECT student_id, course_id, lesson_count, consumed_lessons, is_voided, order_type, activity_id, activity_campus, activity_adult_count, activity_student_count, account_amount FROM orders WHERE id = $oid")->fetch();
             if (!$order) { json(['success' => false, 'message' => '订单不存在']); break; }
             if ($order['is_voided'] === '是') { json(['success' => false, 'message' => '该订单已作废']); break; }
+
+            // 活动订单：单独处理
+            if (($order['order_type'] ?? '') === '活动') {
+                // 检查是否已有考勤
+                $attCount = $db->query("SELECT COUNT(*) FROM class_attendance WHERE activity_order_id = $oid")->fetchColumn();
+                if (intval($attCount) > 0) json(['success' => false, 'message' => '该活动已有考勤记录，请先删除考勤后再作废']);
+                
+                // 归还账户余额
+                $accountAmount = floatval($order['account_amount'] ?? 0);
+                if ($accountAmount > 0) {
+                    $sid = intval($order['student_id']);
+                    $db->exec("UPDATE student_accounts SET balance = balance + $accountAmount, total_consume = GREATEST(0, total_consume - $accountAmount) WHERE student_id = $sid");
+                }
+                
+                // 作废订单
+                $db->exec("UPDATE orders SET is_voided = '是' WHERE id = $oid");
+                
+                // 更新活动报名人数统计
+                $activityId = intval($order['activity_id'] ?? 0);
+                $campusName = $order['activity_campus'] ?? '';
+                $adultCount = intval($order['activity_adult_count'] ?? 0);
+                $studentCount = intval($order['activity_student_count'] ?? 0);
+                if ($activityId > 0 && $campusName) {
+                    $db->exec("UPDATE activity_enrollment_counts SET adult_count = GREATEST(0, adult_count - $adultCount), student_count = GREATEST(0, student_count - $studentCount) WHERE activity_id = $activityId AND campus_name = " . $db->quote($campusName));
+                }
+                
+                json(['success' => true, 'message' => '活动订单已作废']);
+                break;
+            }
+
+            // 课程订单：原有逻辑
             $lc = intval($order['lesson_count']);
             $cl = intval($order['consumed_lessons']);
             $remaining = $lc - $cl;
@@ -6409,6 +6444,542 @@ json([
             ]);
             break;
 
+        // ==================== 活动报名全流程 API ====================
+
+        // 活动报名支付
+        case 'pay_activity_enroll':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $studentId = intval($input['student_id'] ?? 0);
+            $activityId = intval($input['activity_id'] ?? 0);
+            $campusName = trim($input['campus_name'] ?? '');
+            $adultCount = max(0, intval($input['adult_count'] ?? 0));
+            $studentCount = max(0, intval($input['student_count'] ?? 0));
+            if ($studentId <= 0) json(['error' => '学员ID无效']);
+            if ($activityId <= 0) json(['error' => '活动ID无效']);
+            if ($campusName === '') json(['error' => '请选择校区']);
+            if ($adultCount <= 0 && $studentCount <= 0) json(['error' => '至少报名1人']);
+
+            // 查询活动
+            $actStmt = $db->prepare("SELECT * FROM activities WHERE id = :aid");
+            $actStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+            $actStmt->execute();
+            $activity = $actStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$activity) json(['error' => '活动不存在']);
+
+            // 检查校区配置
+            $acStmt = $db->prepare("SELECT * FROM activity_campuses WHERE activity_id = :aid AND campus_name = :cn");
+            $acStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+            $acStmt->bindValue(':cn', $campusName, PDO::PARAM_STR);
+            $acStmt->execute();
+            $acConfig = $acStmt->fetch(PDO::FETCH_ASSOC);
+
+            // 检查报名时间范围
+            $today = date('Y-m-d');
+            $regStart = $activity['reg_start_date'] ?? '';
+            $regEnd = $activity['reg_end_date'] ?? '';
+            if ($regStart && $today < $regStart) json(['error' => '活动报名尚未开始（' . $regStart . '起）']);
+            if ($regEnd && $today > $regEnd) json(['error' => '活动报名已截止（' . $regEnd . '止）']);
+
+            // 费用计算
+            $adultFeeMode = $activity['adult_fee_mode'] ?? '';
+            $studentFeeMode = $activity['student_fee_mode'] ?? '';
+            $adultPrice = floatval($activity['adult_price'] ?? 0);
+            $studentPrice = floatval($activity['student_price'] ?? 0);
+
+            if ($adultCount > 0 && ($adultFeeMode === '' || $adultFeeMode === 'disabled')) json(['error' => '该活动不支持成人报名']);
+            if ($studentCount > 0 && ($studentFeeMode === '' || $studentFeeMode === 'disabled')) json(['error' => '该活动不支持学员报名']);
+            if ($adultCount > 0 && $adultPrice <= 0 && $adultFeeMode === 'fee_only') json(['error' => '成人报名费未配置']);
+            if ($studentCount > 0 && $studentPrice <= 0 && $studentFeeMode === 'fee_only') json(['error' => '学员报名费未配置']);
+
+            $totalAdultFee = ($adultFeeMode === 'fee_only' || $adultFeeMode === 'fee_and_deduct') ? round($adultPrice * $adultCount, 2) : 0;
+            $totalStudentFee = ($studentFeeMode === 'fee_only' || $studentFeeMode === 'fee_and_deduct') ? round($studentPrice * $studentCount, 2) : 0;
+            $totalPrice = round($totalAdultFee + $totalStudentFee, 2);
+
+            // 容量校验
+            if ($acConfig) {
+                $maxCap = intval($acConfig['max_capacity']);
+                if ($maxCap > 0) {
+                    $ecStmt = $db->prepare("SELECT COALESCE(SUM(adult_count + student_count), 0) FROM activity_enrollment_counts WHERE activity_id = :aid AND campus_name = :cn");
+                    $ecStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+                    $ecStmt->bindValue(':cn', $campusName, PDO::PARAM_STR);
+                    $ecStmt->execute();
+                    $currentEnrolled = intval($ecStmt->fetchColumn());
+                    if ($currentEnrolled + $adultCount + $studentCount > $maxCap) {
+                        json(['error' => '该校区已报名' . $currentEnrolled . '人，剩余容量不足（上限' . $maxCap . '人）']);
+                    }
+                }
+            }
+
+            $paymentCash = round(floatval($input['payment_cash'] ?? 0), 2);
+            $paymentMeituan = round(floatval($input['payment_meituan'] ?? 0), 2);
+            $useBalance = intval($input['use_balance'] ?? 0);
+            $balanceAmount = round(floatval($input['balance_amount'] ?? 0), 2);
+
+            if (abs($paymentCash + $paymentMeituan + $balanceAmount - $totalPrice) > 0.01) {
+                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan + $balanceAmount) . '）与订单总额（' . $totalPrice . '）不一致']);
+            }
+
+            // 余额支付扣款
+            $newBalAfter = null;
+            if ($useBalance && $balanceAmount > 0) {
+                $db->beginTransaction();
+                try {
+                    $acct = $db->prepare("SELECT balance FROM student_accounts WHERE student_id = :sid FOR UPDATE");
+                    $acct->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $acct->execute();
+                    $acct = $acct->fetch(PDO::FETCH_ASSOC);
+                    $currentBalance = $acct ? floatval($acct['balance']) : 0.00;
+                    if ($currentBalance < $balanceAmount) {
+                        $db->rollBack();
+                        json(['error' => '账户余额不足（当前 ¥' . number_format($currentBalance, 2) . '，需要 ¥' . number_format($balanceAmount, 2) . '）']);
+                    }
+                    $newBalance = round($currentBalance - $balanceAmount, 2);
+                    $newBalAfter = $newBalance;
+                    $upd = $db->prepare("INSERT INTO student_accounts (student_id, balance, total_deposit, total_consume, total_refund) VALUES (:sid, 0, 0, 0, 0) ON DUPLICATE KEY UPDATE balance = :bal, total_consume = total_consume + :tc");
+                    $upd->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $upd->bindValue(':bal', $newBalance);
+                    $upd->bindValue(':tc', $balanceAmount);
+                    $upd->execute();
+                    $db->commit();
+                } catch (Exception $e) {
+                    $db->rollBack();
+                    json(['error' => '余额扣款失败: ' . $e->getMessage()]);
+                }
+            }
+
+            // 生成订单
+            $n = now();
+            $orderNo = generateOrderNo($db);
+            $feeType = '';
+            if ($adultCount > 0 && $studentCount > 0) $feeType = 'mixed';
+            elseif ($adultCount > 0) $feeType = 'adult';
+            elseif ($studentCount > 0) $feeType = 'student';
+
+            $insStmt = $db->prepare("INSERT INTO orders (
+                student_id, course_id, plan_name, item_name, lesson_count,
+                actual_price, cash_amount, meituan_amount, account_amount,
+                paid_amount, order_no, parent_order_no, order_type, campus,
+                pay_status, is_voided, subject_level1, subject_level2,
+                activity_id, activity_name, activity_campus,
+                activity_adult_count, activity_student_count,
+                adult_unit_price, student_unit_price, activity_fee_type,
+                status, created_at, paid_at,
+                discount_plan_name, discount_plan_amount,
+                coupon_name, coupon_amount,
+                teaching_aid_name, teaching_aid_price,
+                product_coupon_name, product_coupon_amount,
+                gifted_lessons, consumed_lessons, refund_status
+            ) VALUES (
+                :sid, 0, '', '', 0,
+                :ap, :ca, :ma, :aa,
+                :pa, :ono, :pono, '活动', :campus,
+                '已支付', '否', :sl1, '',
+                :aid, :aname, :acampus,
+                :aac, :asc,
+                :aup, :sup, :aft,
+                '已报名', :ct, :pat,
+                '', 0,
+                '', 0,
+                '', 0,
+                '', 0,
+                0, 0, '正常'
+            )");
+            $insStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+            $insStmt->bindValue(':ap', $totalPrice);
+            $insStmt->bindValue(':ca', $paymentCash);
+            $insStmt->bindValue(':ma', $paymentMeituan);
+            $insStmt->bindValue(':aa', $balanceAmount);
+            $insStmt->bindValue(':pa', $totalPrice);
+            $insStmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
+            $insStmt->bindValue(':pono', $orderNo, PDO::PARAM_STR);
+            $insStmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
+            $insStmt->bindValue(':sl1', $activity['subject_level1'] ?? '', PDO::PARAM_STR);
+            $insStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+            $insStmt->bindValue(':aname', $activity['name'] ?? '', PDO::PARAM_STR);
+            $insStmt->bindValue(':acampus', $campusName, PDO::PARAM_STR);
+            $insStmt->bindValue(':aac', $adultCount, PDO::PARAM_INT);
+            $insStmt->bindValue(':asc', $studentCount, PDO::PARAM_INT);
+            $insStmt->bindValue(':aup', $adultPrice);
+            $insStmt->bindValue(':sup', $studentPrice);
+            $insStmt->bindValue(':aft', $feeType, PDO::PARAM_STR);
+            $insStmt->bindValue(':ct', $n, PDO::PARAM_STR);
+            $insStmt->bindValue(':pat', $n, PDO::PARAM_STR);
+            $insStmt->execute();
+            $newOrderId = $db->lastInsertId();
+
+            // 更新报名人数统计
+            $db->exec("INSERT INTO activity_enrollment_counts (activity_id, campus_name, adult_count, student_count) VALUES ($activityId, " . $db->quote($campusName) . ", $adultCount, $studentCount) ON DUPLICATE KEY UPDATE adult_count = adult_count + $adultCount, student_count = student_count + $studentCount");
+
+            // 余额支付流水
+            if ($useBalance && $balanceAmount > 0) {
+                $txStmt = $db->prepare("INSERT INTO account_transactions (student_id, type, amount, balance_after, ref_type, ref_id, campus, note) VALUES (:sid, 'consume', :amt, :ba, 'order', :rid, :campus, :note)");
+                $txStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $txStmt->bindValue(':amt', $balanceAmount);
+                $txStmt->bindValue(':ba', $newBalAfter, PDO::PARAM_STR);
+                $txStmt->bindValue(':rid', $newOrderId, PDO::PARAM_INT);
+                $txStmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
+                $txStmt->bindValue(':note', '活动报名-余额支付', PDO::PARAM_STR);
+                $txStmt->execute();
+            }
+
+            // 标记资源已转化
+            $db->exec("UPDATE resources SET converted = '已转化' WHERE id = (SELECT resource_id FROM students WHERE id = $studentId) AND converted = '未转化'");
+
+            // 更新学员类型
+            $st = $db->query("SELECT student_type FROM students WHERE id=$studentId")->fetch(PDO::FETCH_ASSOC);
+            $currentType = $st['student_type'] ?? '小课包';
+            if ($currentType !== '常规') {
+                $hasNonXKB = $db->query("SELECT COUNT(*) FROM orders WHERE student_id=$studentId AND is_voided='否' AND order_type != '小课包' AND order_type != ''")->fetchColumn();
+                if ($hasNonXKB > 0) {
+                    $db->exec("UPDATE students SET student_type='常规' WHERE id=$studentId");
+                }
+            }
+
+            json(['message' => '活动报名成功', 'order_id' => $newOrderId, 'order_no' => $orderNo]);
+            break;
+
+        // 报名用活动列表（按校区过滤）
+        case 'list_activities_for_enroll':
+            $campusName = trim($_GET['campus_name'] ?? '');
+            if (!$campusName) json(['error' => '请指定校区名称']);
+            $keyword = trim($_GET['keyword'] ?? '');
+            $subjectLevel1 = trim($_GET['subject_level1'] ?? '');
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+
+            $where = ["EXISTS (SELECT 1 FROM activity_campuses ac WHERE ac.activity_id = a.id AND ac.campus_name = :cn)"];
+            $params = [':cn' => $campusName];
+            if ($keyword) {
+                $where[] = "a.name LIKE :kw";
+                $params[':kw'] = "%$keyword%";
+            }
+            if ($subjectLevel1) {
+                $where[] = "a.subject_level1 = :sl1";
+                $params[':sl1'] = $subjectLevel1;
+            }
+            $whereStr = 'WHERE ' . implode(' AND ', $where);
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM activities a $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
+            $offset = ($page - 1) * $pageSize;
+
+            $stmt = $db->prepare("SELECT a.* FROM activities a $whereStr ORDER BY a.id DESC LIMIT :lim OFFSET :off");
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // 校区配置
+                $campusStmt = $db->prepare("SELECT ac.* FROM activity_campuses ac WHERE ac.activity_id = :aid");
+                $campusStmt->bindValue(':aid', $r['id'], PDO::PARAM_INT);
+                $campusStmt->execute();
+                $r['campuses'] = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
+                // 扣课时规则
+                $deductStmt = $db->prepare("SELECT * FROM activity_subject_deductions WHERE activity_id = :aid");
+                $deductStmt->bindValue(':aid', $r['id'], PDO::PARAM_INT);
+                $deductStmt->execute();
+                $deductions = ['adult' => [], 'student' => []];
+                foreach ($deductStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                    $ft = $d['fee_type'] ?? 'student';
+                    $deductions[$ft === 'adult' ? 'adult' : 'student'][] = $d;
+                }
+                $r['deductions'] = $deductions;
+                // 当前校区报名人数
+                $ecStmt = $db->prepare("SELECT COALESCE(SUM(adult_count + student_count), 0) FROM activity_enrollment_counts WHERE activity_id = :aid AND campus_name = :cn");
+                $ecStmt->bindValue(':aid', $r['id'], PDO::PARAM_INT);
+                $ecStmt->bindValue(':cn', $campusName, PDO::PARAM_STR);
+                $ecStmt->execute();
+                $r['campus_enrolled'] = intval($ecStmt->fetchColumn());
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        // 学员报读活动列表
+        case 'get_student_activities':
+            $sid = intval($_GET['student_id'] ?? 0);
+            if ($sid <= 0) { json(['error' => '参数错误']); break; }
+            $stmt = $db->query("SELECT id, order_no, activity_id, activity_name, activity_campus AS campus, activity_adult_count AS adult_count, activity_student_count AS student_count, actual_price AS total_price, cash_amount, meituan_amount, account_amount, pay_status, is_voided, created_at FROM orders WHERE student_id = $sid AND order_type = '活动' AND is_voided = '否' ORDER BY id DESC");
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // 检查考勤状态
+                $attStmt = $db->query("SELECT id FROM class_attendance WHERE activity_order_id = " . intval($r['id']) . " AND activity_id > 0 LIMIT 1");
+                $att = $attStmt->fetch(PDO::FETCH_ASSOC);
+                $r['attended'] = $att ? true : false;
+                $r['attendance_id'] = $att ? intval($att['id']) : null;
+                $r['attendance_status'] = $att ? '已考勤' : '未考勤';
+                $r['order_id'] = $r['id'];
+                $r['enroll_time'] = $r['created_at'];
+                $rows[] = $r;
+            }
+            json(['data' => $rows]);
+            break;
+
+        // 活动考勤列表
+        case 'list_activity_attendance':
+            $keyword = trim($_GET['keyword'] ?? '');
+            $campus = trim($_GET['campus'] ?? '');
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+            $where = ["o.order_type = '活动'", "o.is_voided = '否'"];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(s.name LIKE :kw1 OR a.name LIKE :kw2)";
+                $params[':kw1'] = "%$keyword%";
+                $params[':kw2'] = "%$keyword%";
+            }
+            if ($campus) {
+                $where[] = "o.campus = :campus";
+                $params[':campus'] = $campus;
+            }
+            $whereStr = 'WHERE ' . implode(' AND ', $where);
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM orders o LEFT JOIN students s ON o.student_id = s.id LEFT JOIN activities a ON o.activity_id = a.id $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
+            $offset = ($page - 1) * $pageSize;
+
+            $sql = "SELECT o.id AS order_id, o.student_id, o.activity_id, o.created_at AS enroll_time, o.campus, s.name AS student_name, a.name AS activity_name, a.id AS activity_id FROM orders o LEFT JOIN students s ON o.student_id = s.id LEFT JOIN activities a ON o.activity_id = a.id $whereStr ORDER BY o.id DESC LIMIT :lim OFFSET :off";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // 查询考勤状态
+                $attStmt = $db->prepare("SELECT id, status FROM class_attendance WHERE activity_id = :aid AND activity_order_id = :aoid LIMIT 1");
+                $attStmt->bindValue(':aid', $r['activity_id'], PDO::PARAM_INT);
+                $attStmt->bindValue(':aoid', $r['order_id'], PDO::PARAM_INT);
+                $attStmt->execute();
+                $att = $attStmt->fetch(PDO::FETCH_ASSOC);
+                $r['attendance_status'] = $att ? ($att['status'] ?? '未考勤') : '未考勤';
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        // 活动考勤
+        case 'save_activity_attendance':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $activityId = intval($input['activity_id'] ?? 0);
+            $activityOrderId = intval($input['activity_order_id'] ?? 0);
+            $studentId = intval($input['student_id'] ?? 0);
+            $deductOrderId = intval($input['deduct_order_id'] ?? 0);
+            $deductLessons = intval($input['deduct_lessons'] ?? 0);
+            $sessionDate = trim($input['session_date'] ?? date('Y-m-d'));
+
+            if ($activityId <= 0) json(['error' => '活动ID无效']);
+            if ($activityOrderId <= 0) json(['error' => '活动订单ID无效']);
+            if ($studentId <= 0) json(['error' => '学员ID无效']);
+            if ($deductOrderId <= 0) json(['error' => '请选择扣课来源课包']);
+            if ($deductLessons <= 0) json(['error' => '扣课时数必须大于0']);
+
+            // 验证活动订单
+            $actOrder = $db->query("SELECT * FROM orders WHERE id = $activityOrderId AND order_type = '活动' AND is_voided = '否'")->fetch(PDO::FETCH_ASSOC);
+            if (!$actOrder) json(['error' => '活动报名订单不存在或已作废']);
+
+            // 验证扣课来源课包
+            $srcOrder = $db->query("SELECT * FROM orders WHERE id = $deductOrderId AND student_id = $studentId AND is_voided = '否' AND (refund_status IS NULL OR refund_status = '正常')")->fetch(PDO::FETCH_ASSOC);
+            if (!$srcOrder) json(['error' => '扣课来源课包不存在或不可用']);
+
+            $srcLc = intval($srcOrder['lesson_count'] ?? 0);
+            $srcGl = intval($srcOrder['gifted_lessons'] ?? 0);
+            $srcConsumed = intval($srcOrder['consumed_lessons'] ?? 0);
+            $totalLessons = $srcLc + $srcGl;
+            $remaining = $totalLessons - $srcConsumed;
+            if ($remaining <= 0) json(['error' => '该课包已无剩余课时']);
+            if ($deductLessons > $remaining) json(['error' => '扣课时数(' . $deductLessons . ')超过剩余课时(' . $remaining . ')']);
+
+            // 计算消耗金额（排除教材包和商品券）
+            $srcAp = floatval($srcOrder['actual_price'] ?? 0);
+            $srcTap = floatval($srcOrder['teaching_aid_price'] ?? 0);
+            $srcPc = floatval($srcOrder['product_coupon_amount'] ?? 0);
+            $srcDp = floatval($srcOrder['discount_plan_amount'] ?? 0);
+            $srcCp = floatval($srcOrder['coupon_amount'] ?? 0);
+            $classPrice = $srcAp - $srcTap + $srcPc;
+            $rawUnitPrice = $classPrice + $srcDp + $srcCp;
+            $classUnitPrice = $srcLc > 0 ? round(($rawUnitPrice - $srcDp - $srcCp) / $srcLc, 2) : 0;
+            $consumedAmount = round($classUnitPrice * $deductLessons, 2);
+
+            // 查询学员姓名
+            $studentName = $db->query("SELECT name FROM students WHERE id = $studentId")->fetchColumn() ?: '';
+
+            $db->beginTransaction();
+            try {
+                // 扣课时
+                $db->exec("UPDATE orders SET consumed_lessons = consumed_lessons + $deductLessons WHERE id = $deductOrderId");
+
+                // 写考勤记录
+                $deductionJson = json_encode([['order_id' => $deductOrderId, 'amount' => $deductLessons]], JSON_UNESCAPED_UNICODE);
+                $n = now();
+                $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :ct)");
+                $attStmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
+                $attStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                $attStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
+                $attStmt->bindValue(':dl', $deductLessons, PDO::PARAM_INT);
+                $attStmt->bindValue(':doid', $deductOrderId, PDO::PARAM_INT);
+                $attStmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
+                $attStmt->bindValue(':ca', $consumedAmount);
+                $attStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+                $attStmt->bindValue(':aoid', $activityOrderId, PDO::PARAM_INT);
+                $attStmt->bindValue(':ct', $n, PDO::PARAM_STR);
+                $attStmt->execute();
+                $attId = $db->lastInsertId();
+
+                $db->commit();
+                json(['message' => '活动考勤成功，已扣除 ' . $deductLessons . ' 课时', 'attendance_id' => $attId]);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '考勤保存失败: ' . $e->getMessage()]);
+            }
+            break;
+
+        // 删除活动考勤（归还课时）
+        case 'delete_activity_attendance':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $attId = intval($input['attendance_id'] ?? 0);
+            if ($attId <= 0) json(['error' => '考勤ID无效']);
+
+            $att = $db->query("SELECT * FROM class_attendance WHERE id = $attId AND activity_id > 0")->fetch(PDO::FETCH_ASSOC);
+            if (!$att) json(['error' => '考勤记录不存在']);
+
+            $deductedLessons = intval($att['deducted_lessons'] ?? 0);
+            $deductionJson = $att['deduction_json'] ?? '[]';
+
+            $db->beginTransaction();
+            try {
+                // 归还课时
+                $entries = json_decode($deductionJson, true) ?: [];
+                foreach ($entries as $entry) {
+                    $oid = intval($entry['order_id'] ?? 0);
+                    $amt = intval($entry['amount'] ?? 0);
+                    if ($oid > 0 && $amt > 0) {
+                        $db->exec("UPDATE orders SET consumed_lessons = GREATEST(0, consumed_lessons - $amt) WHERE id = $oid");
+                    }
+                }
+                // 没有 deduction_json 或解析失败时，按 deducted_lessons 和 deducted_order_id 归还
+                if (empty($entries) && $deductedLessons > 0) {
+                    $doid = intval($att['deducted_order_id'] ?? 0);
+                    if ($doid > 0) {
+                        $db->exec("UPDATE orders SET consumed_lessons = GREATEST(0, consumed_lessons - $deductedLessons) WHERE id = $doid");
+                    }
+                }
+                $db->exec("DELETE FROM class_attendance WHERE id = $attId");
+                $db->commit();
+                json(['message' => '已撤销活动考勤']);
+            } catch (Exception $e) {
+                $db->rollBack();
+                json(['error' => '撤销失败: ' . $e->getMessage()]);
+            }
+            break;
+
+        // 活动课耗列表
+        case 'list_activity_consumptions':
+            $keyword = trim($_GET['keyword'] ?? '');
+            $dateFrom = trim($_GET['date_from'] ?? '');
+            $dateTo = trim($_GET['date_to'] ?? '');
+            $page = max(1, intval($_GET['page'] ?? 1));
+            $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 20)));
+
+            $where = ["ca.activity_id > 0"];
+            $params = [];
+            if ($keyword) {
+                $where[] = "(a.name LIKE :kw1 OR s.name LIKE :kw2)";
+                $params[':kw1'] = "%$keyword%";
+                $params[':kw2'] = "%$keyword%";
+            }
+            if ($dateFrom) {
+                $where[] = "ca.session_date >= :df";
+                $params[':df'] = $dateFrom;
+            }
+            if ($dateTo) {
+                $where[] = "ca.session_date <= :dt";
+                $params[':dt'] = $dateTo;
+            }
+            $whereStr = 'WHERE ' . implode(' AND ', $where);
+
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id $whereStr");
+            foreach ($params as $k => $v) $countStmt->bindValue($k, $v, PDO::PARAM_STR);
+            $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
+            $offset = ($page - 1) * $pageSize;
+
+            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.deduction_json, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
+            $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
+            $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
+            $stmt->execute();
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // 解析扣课来源
+                $deductionJson = $r['deduction_json'] ?? '[]';
+                $entries = json_decode($deductionJson, true) ?: [];
+                $r['source_course_name'] = '';
+                $r['source_order_no'] = '';
+                if (!empty($entries)) {
+                    $srcOrderId = intval($entries[0]['order_id'] ?? 0);
+                    if ($srcOrderId > 0) {
+                        $srcOrder = $db->query("SELECT item_name, order_no FROM orders WHERE id = $srcOrderId")->fetch(PDO::FETCH_ASSOC);
+                        if ($srcOrder) {
+                            $r['source_course_name'] = $srcOrder['item_name'] ?? '';
+                            $r['source_order_no'] = $srcOrder['order_no'] ?? '';
+                        }
+                    }
+                }
+                $rows[] = $r;
+            }
+            json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
+            break;
+
+        // 活动报名详情（含各校区已报名人数）
+        case 'get_activity_enroll_detail':
+            $activityId = intval($_GET['activity_id'] ?? 0);
+            if ($activityId <= 0) json(['error' => '活动ID无效']);
+
+            $actStmt = $db->prepare("SELECT * FROM activities WHERE id = :aid");
+            $actStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+            $actStmt->execute();
+            $activity = $actStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$activity) json(['error' => '活动不存在']);
+
+            // 校区配置
+            $campusStmt = $db->prepare("SELECT ac.*, o.id as campus_id FROM activity_campuses ac LEFT JOIN organizations o ON o.name = ac.campus_name AND o.type = '校区' WHERE ac.activity_id = :aid");
+            $campusStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+            $campusStmt->execute();
+            $campuses = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
+
+            // 各校区已报名人数
+            foreach ($campuses as &$campus) {
+                $ecStmt = $db->prepare("SELECT COALESCE(adult_count, 0) AS enrolled_adult, COALESCE(student_count, 0) AS enrolled_student FROM activity_enrollment_counts WHERE activity_id = :aid AND campus_name = :cn");
+                $ecStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+                $ecStmt->bindValue(':cn', $campus['campus_name'], PDO::PARAM_STR);
+                $ecStmt->execute();
+                $ec = $ecStmt->fetch(PDO::FETCH_ASSOC);
+                $campus['enrolled_adult'] = $ec ? intval($ec['enrolled_adult']) : 0;
+                $campus['enrolled_student'] = $ec ? intval($ec['enrolled_student']) : 0;
+                $campus['enrolled_total'] = $campus['enrolled_adult'] + $campus['enrolled_student'];
+            }
+            unset($campus);
+            $activity['campuses'] = $campuses;
+
+            // 扣课时规则
+            $deductStmt = $db->prepare("SELECT * FROM activity_subject_deductions WHERE activity_id = :aid");
+            $deductStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+            $deductStmt->execute();
+            $deductions = ['adult' => [], 'student' => []];
+            foreach ($deductStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                $ft = $d['fee_type'] ?? 'student';
+                $deductions[$ft === 'adult' ? 'adult' : 'student'][] = $d;
+            }
+            $activity['deductions'] = $deductions;
+
+            json($activity);
+            break;
+
         default:
             json(['error' => 'Unknown action']);
     }
@@ -7354,7 +7925,9 @@ if (intval($countBt) === 0) {
                 <div class="attendance-tabs">
                     <button class="att-tab active" data-tab="tab-schedule-view">课表</button>
                     <button class="att-tab" data-tab="tab-attendance-operations">操作考勤</button>
+                    <button class="att-tab" data-tab="tab-activity-attendance">活动考勤</button>
                     <button class="att-tab" data-tab="tab-student-consumption">学员课耗</button>
+                    <button class="att-tab" data-tab="tab-activity-consumption">活动课耗</button>
                     <button class="att-tab" data-tab="tab-absence-records">缺勤记录</button>
                     <button class="att-tab" data-tab="tab-classes">班级管理</button>
                 </div>
@@ -7381,8 +7954,25 @@ if (intval($countBt) === 0) {
                             </table>
                         </div>
                         <div class="pagination" id="pagination-attendance-sessions"></div>
-                    </div>
-                    <!-- 学员课耗页签 -->
+                        </div>
+                        <!-- 活动考勤页签 -->
+                        <div class="att-panel" id="tab-activity-attendance">
+                            <div style="padding:8px 16px 16px;">
+                                <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
+                                    <input id="att-activity-search" placeholder="搜索学员/活动..." style="width:160px;">
+                                    <select id="att-activity-campus-filter"><option value="">全部校区</option></select>
+                                    <button onclick="loadActivityAttendanceList()">查询</button>
+                                </div>
+                                <div class="table-wrap">
+                                    <table><thead><tr>
+                                        <th>学员</th><th>活动名称</th><th>报名校区</th><th>报名时间</th><th>考勤状态</th><th>操作</th>
+                                    </tr></thead>
+                                    <tbody id="activity-attendance-tbody"><tr><td colspan="6">加载中...</td></tr></tbody></table>
+                                </div>
+                                <div id="activity-attendance-pagination"></div>
+                            </div>
+                        </div>
+                        <!-- 学员课耗页签 -->
                     <div class="att-panel" id="tab-student-consumption">
                         <div class="toolbar">
                             <div class="toolbar-left">
@@ -7404,8 +7994,26 @@ if (intval($countBt) === 0) {
                             </table>
                         </div>
                         <div class="pagination" id="pagination-student-consumption"></div>
-                    </div>
-                    <!-- 缺勤记录页签 -->
+                        </div>
+                        <!-- 活动课耗页签 -->
+                        <div class="att-panel" id="tab-activity-consumption">
+                            <div style="padding:8px 16px 16px;">
+                                <div style="display:flex;gap:12px;margin-bottom:12px;">
+                                    <input id="act-consume-search" placeholder="搜索..." style="width:160px;">
+                                    <input type="date" id="act-consume-from">
+                                    <input type="date" id="act-consume-to">
+                                    <button onclick="loadActivityConsumption()">查询</button>
+                                </div>
+                                <div class="table-wrap">
+                                    <table><thead><tr>
+                                        <th>学员</th><th>活动名称</th><th>考勤日期</th><th>消耗课时</th><th>扣除课包</th><th>课耗金额</th>
+                                    </tr></thead>
+                                    <tbody id="activity-consumption-tbody"><tr><td colspan="6">加载中...</td></tr></tbody></table>
+                                </div>
+                                <div id="activity-consumption-pagination"></div>
+                            </div>
+                        </div>
+                        <!-- 缺勤记录页签 -->
                     <div class="att-panel" id="tab-absence-records">
                         <div class="toolbar">
                             <div class="toolbar-left">
@@ -7564,6 +8172,7 @@ if (intval($countBt) === 0) {
                 <!-- 标签页 -->
                 <div class="student-detail-tabs">
                     <button class="sdt-tab active" data-tab="tab-courses">报读课程</button>
+                    <button class="sdt-tab" data-tab="tab-activities">报读活动</button>
                     <button class="sdt-tab" data-tab="tab-orders">交易订单</button>
                     <button class="sdt-tab" data-tab="tab-attendance">上课记录</button>
                     <button class="sdt-tab" data-tab="tab-account">账户</button>
@@ -7573,6 +8182,31 @@ if (intval($countBt) === 0) {
                     <div class="sdt-panel active" id="tab-courses">
                         <div id="student-courses-content" style="padding:8px 16px 16px;">
                             <div style="text-align:center;color:#999;padding:20px;">加载中...</div>
+                        </div>
+                    </div>
+                    <!-- 报读活动 -->
+                    <div class="sdt-panel" id="tab-activities">
+                        <div id="student-activities-content" style="padding:8px 16px 16px;">
+                            <div class="table-wrap">
+                                <table class="activity-enroll-table">
+                                    <thead>
+                                        <tr>
+                                            <th>活动名称</th>
+                                            <th width="100">报名校区</th>
+                                            <th width="60">成人</th>
+                                            <th width="60">学员</th>
+                                            <th width="100">总费用</th>
+                                            <th width="110">报名时间</th>
+                                            <th width="90">支付方式</th>
+                                            <th width="85">考勤状态</th>
+                                            <th width="110">操作</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="student-activities-tbody">
+                                        <tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
                         </div>
                     </div>
                     <!-- 交易订单 -->
@@ -7667,8 +8301,40 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
 
+                <!-- ★ 新增：类型选择（学员信息卡片之后） -->
+                <div class="enroll-type-select" id="enroll-type-select">
+                    <div class="enroll-type-grid">
+                        <!-- 报名课程卡片 -->
+                        <div class="enroll-type-card active" id="enroll-type-course" onclick="selectEnrollType('course')">
+                            <div class="enroll-type-card-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                                    <line x1="8" y1="7" x2="16" y2="7"/>
+                                    <line x1="8" y1="11" x2="14" y2="11"/>
+                                </svg>
+                            </div>
+                            <div class="enroll-type-card-label">报名课程</div>
+                            <div class="enroll-type-card-desc">选择校区 → 课程 → 价格方案 → 支付</div>
+                        </div>
+                        <!-- 报名活动卡片 -->
+                        <div class="enroll-type-card" id="enroll-type-activity" onclick="selectEnrollType('activity')">
+                            <div class="enroll-type-card-icon">
+                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <circle cx="12" cy="12" r="10"/>
+                                    <polygon points="10,8 16,12 10,16"/>
+                                </svg>
+                            </div>
+                            <div class="enroll-type-card-label">报名活动</div>
+                            <div class="enroll-type-card-desc">选择活动 → 填写人数 → 支付报名费</div>
+                        </div>
+                    </div>
+                </div>
+
                 <!-- 表单区域 -->
                 <div class="enroll-form">
+                    <!-- 课程报名流程容器 -->
+                    <div class="enroll-course-flow" id="enroll-course-flow">
                     <!-- 校区/课程 — 上下布局 -->
                     <div class="enroll-form-row" style="flex-direction: column; gap: 16px;">
                         <div class="form-group" style="margin-bottom: 0;">
@@ -7766,10 +8432,125 @@ if (intval($countBt) === 0) {
                                 确认支付
                             </button>
                         </div>
-                    </div>
+                    </div><!-- /enroll-course-flow -->
+
+                    <!-- ★ 新增：活动报名流程容器（默认隐藏） -->
+                    <div class="enroll-activity-flow" id="enroll-activity-flow" style="display:none;">
+
+                        <!-- Step 1: 选择校区 -->
+                        <div class="enroll-section enroll-step" id="enroll-activity-step-campus">
+                            <div class="enroll-section-title">
+                                <span class="enroll-step-num">1</span> 选择校区
+                            </div>
+                            <div class="activity-campus-grid" id="activity-campus-grid">
+                                <!-- JS 动态渲染校区卡片 -->
+                            </div>
+                            <div class="activity-campus-empty" id="activity-campus-empty" style="display:none;">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
+                                <p>暂无可用校区</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 2: 选择活动 -->
+                        <div class="enroll-section enroll-step" id="enroll-activity-step-activity" style="display:none;">
+                            <div class="enroll-section-title">
+                                <span class="enroll-step-num">2</span> 选择活动
+                            </div>
+                            <div class="activity-search-bar">
+                                <div class="ta-filter-group ta-filter-activity-name">
+                                    <span class="ta-filter-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                                    </span>
+                                    <input type="text" id="activity-search-input" class="ta-filter-input" placeholder="搜索活动名称" oninput="filterActivities()">
+                                </div>
+                                <div class="ta-filter-group ta-filter-activity-subject">
+                                    <span class="ta-filter-icon">
+                                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                                    </span>
+                                    <select id="activity-subject-filter" class="ta-filter-input" onchange="filterActivities()" style="min-width:110px;">
+                                        <option value="">全部学科</option>
+                                    </select>
+                                </div>
+                            </div>
+                            <div class="activity-card-list" id="activity-card-list"></div>
+                            <div class="activity-card-empty" id="activity-card-empty" style="display:none;">
+                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="8" y1="15" x2="16" y2="15"/></svg>
+                                <p>该校区暂无可用活动</p>
+                            </div>
+                        </div>
+
+                        <!-- Step 3: 填写报名人数 -->
+                        <div class="enroll-section enroll-step" id="enroll-activity-step-count" style="display:none;">
+                            <div class="enroll-section-title">
+                                <span class="enroll-step-num">3</span> 填写报名人数
+                            </div>
+                            <div id="activity-fee-display"></div>
+                            <div class="activity-count-form" id="activity-count-form">
+                                <!-- 成人行 -->
+                                <div class="activity-count-row" id="activity-count-adult-row" style="display:none;">
+                                    <div class="activity-count-label">
+                                        <span class="activity-count-icon adult-icon">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
+                                        </span>
+                                        <span>成人</span>
+                                    </div>
+                                    <div class="activity-count-fee" id="activity-adult-fee-label"></div>
+                                    <input type="number" id="activity-adult-count" class="activity-count-input" min="0" value="0" oninput="recalcActivityTotal()">
+                                    <span class="activity-count-unit">人</span>
+                                    <span class="activity-count-subtotal" id="activity-adult-subtotal">= ¥0</span>
+                                </div>
+                                <!-- 学员行 -->
+                                <div class="activity-count-row" id="activity-count-student-row" style="display:none;">
+                                    <div class="activity-count-label">
+                                        <span class="activity-count-icon student-icon">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="9" cy="7" r="4"/><path d="M3 19c0-4 4-6 6-6s6 2 6 6"/></svg>
+                                        </span>
+                                        <span>学员</span>
+                                    </div>
+                                    <div class="activity-count-fee" id="activity-student-fee-label"></div>
+                                    <input type="number" id="activity-student-count" class="activity-count-input" min="0" value="1" oninput="recalcActivityTotal()">
+                                    <span class="activity-count-unit">人</span>
+                                    <span class="activity-count-subtotal" id="activity-student-subtotal">= ¥0</span>
+                                </div>
+                            </div>
+                            <div class="activity-deduct-hint" id="activity-deduct-hint" style="display:none;">
+                                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                <span id="activity-deduct-text"></span>
+                            </div>
+                            <div class="activity-total-bar" id="activity-total-bar">
+                                <span class="activity-total-label">报名费用合计</span>
+                                <span class="activity-total-amount" id="activity-total-amount">¥0.00</span>
+                            </div>
+                            <div class="activity-capacity-hint" id="activity-capacity-hint" style="display:none;"></div>
+                        </div>
+
+                        <!-- Step 4: 确认支付（复用现有支付 UI） -->
+                        <div class="enroll-section enroll-step" id="enroll-activity-step-pay" style="display:none;">
+                            <div class="enroll-section-title">
+                                <span class="enroll-step-num">4</span> 确认支付
+                            </div>
+                        </div>
+
+                        <!-- 活动流程操作栏 -->
+                        <div class="enroll-action-bar" id="enroll-activity-action-bar" style="display:none;">
+                            <button class="btn btn-outline btn-lg" onclick="prevActivityStep()" id="btn-activity-prev" style="display:none;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>
+                                上一步
+                            </button>
+                            <button class="btn btn-capsule btn-activity-next" onclick="nextActivityStep()" id="btn-activity-next">
+                                下一步
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+                            </button>
+                            <button class="btn btn-capsule btn-activity-confirm" onclick="confirmActivityEnroll()" id="btn-activity-confirm" style="display:none;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
+                                确认支付
+                            </button>
+                        </div>
+
+                    </div><!-- /enroll-activity-flow -->
+
                 </div>
             </section>
-
 
             <!-- 面板：交易订单 -->
             <section class="content-panel" id="panel-orders">
@@ -10186,6 +10967,40 @@ if (intval($countBt) === 0) {
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeModal('modal-coupon-record')">取消</button>
                 <button class="btn btn-primary" id="btn-cr-save" onclick="saveCouponRecord()">保存</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 活动考勤弹窗 -->
+    <div class="modal-overlay" id="modal-activity-attendance">
+        <div class="modal-dialog" style="width:1100px;max-width:95vw;">
+            <div class="modal-header">
+                <h3>活动考勤 — <span id="att-modal-activity-name"></span></h3>
+                <button class="modal-close" onclick="closeModal('modal-activity-attendance')">×</button>
+            </div>
+            <div class="modal-body">
+                <!-- Step 1: 选择扣课课包 -->
+                <div id="att-modal-step1">
+                    <p style="margin-bottom:12px;color:#666;">请选择从哪个课包扣除课时：</p>
+                    <div id="att-modal-packages"></div>
+                </div>
+                <!-- Step 2: 确认扣课规则 -->
+                <div id="att-modal-step2" style="display:none;">
+                    <div id="att-modal-rule-info"></div>
+                    <div style="margin-top:12px;">
+                        <label>考勤日期：</label><input type="date" id="att-modal-date" style="width:160px;">
+                    </div>
+                </div>
+                <!-- Step 3: 确认 -->
+                <div id="att-modal-step3" style="display:none;">
+                    <div id="att-modal-summary"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button id="att-modal-prev" style="display:none;" onclick="prevActivityAttStep()">上一步</button>
+                <button id="att-modal-next" onclick="nextActivityAttStep()">下一步</button>
+                <button id="att-modal-confirm" style="display:none;" onclick="confirmActivityAttendance()">确认考勤</button>
+                <button onclick="closeModal('modal-activity-attendance')">取消</button>
             </div>
         </div>
     </div>

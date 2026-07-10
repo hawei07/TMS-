@@ -12685,3 +12685,495 @@ document.addEventListener('click', function(e) {
         dropdown.style.display = 'none';
     }
 });
+
+// ==================== 活动报名 ====================
+
+// 全局状态
+let activityEnrollState = { campus: null, activity: null, adultCount: 0, studentCount: 0, step: 1 };
+let activityAttendanceData = { activityId: 0, activityOrderId: 0, studentId: 0, selectedPackageOrderId: 0, selectedPackageCourse: '', attStep: 1 };
+
+// 选择报名类型
+function selectEnrollType(type) {
+    document.getElementById('enroll-type-course').classList.toggle('active', type === 'course');
+    document.getElementById('enroll-type-activity').classList.toggle('active', type === 'activity');
+    if (type === 'course') {
+        document.getElementById('enroll-course-flow').style.display = '';
+        document.getElementById('enroll-activity-flow').style.display = 'none';
+    } else {
+        document.getElementById('enroll-course-flow').style.display = 'none';
+        document.getElementById('enroll-activity-flow').style.display = '';
+        activityEnrollState = { campus: null, activity: null, adultCount: 0, studentCount: 0, step: 1 };
+        loadActivityCampuses();
+        document.getElementById('enroll-activity-step-activity').style.display = 'none';
+        document.getElementById('enroll-activity-step-count').style.display = 'none';
+        document.getElementById('enroll-activity-step-pay').style.display = 'none';
+        document.getElementById('enroll-activity-action-bar').style.display = 'none';
+    }
+}
+
+// 加载活动校区
+async function loadActivityCampuses() {
+    const grid = document.getElementById('activity-campus-grid');
+    const empty = document.getElementById('activity-campus-empty');
+    grid.innerHTML = '<div style="text-align:center;color:#999;padding:20px;grid-column:1/-1;">加载中...</div>';
+    empty.style.display = 'none';
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const orgs = (data.data || []).filter(o => o.type === '校区');
+        if (orgs.length === 0) { grid.innerHTML = ''; empty.style.display = ''; return; }
+        grid.innerHTML = orgs.map(o => '<div class="activity-campus-card" data-campus="' + esc(o.name) + '" onclick="selectActivityCampus(\'' + esc(o.name).replace(/'/g, "\\'") + '\')"><div class="activity-campus-card-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div><div class="activity-campus-card-name">' + esc(o.name) + '</div></div>').join('');
+    } catch (e) {
+        grid.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;grid-column:1/-1;">加载校区失败</div>';
+    }
+}
+
+// 选择校区
+function selectActivityCampus(campusName) {
+    activityEnrollState.campus = campusName;
+    activityEnrollState.activity = null;
+    document.querySelectorAll('.activity-campus-card').forEach(c => c.classList.toggle('selected', c.dataset.campus === campusName));
+    loadActivityList(campusName);
+    document.getElementById('enroll-activity-step-activity').style.display = '';
+    document.getElementById('enroll-activity-step-count').style.display = 'none';
+    document.getElementById('enroll-activity-step-pay').style.display = 'none';
+    document.getElementById('enroll-activity-action-bar').style.display = 'none';
+    activityEnrollState.step = 2;
+}
+
+// 加载活动列表
+async function loadActivityList(campusName) {
+    const listDiv = document.getElementById('activity-card-list');
+    const emptyDiv = document.getElementById('activity-card-empty');
+    listDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
+    emptyDiv.style.display = 'none';
+    try {
+        const params = new URLSearchParams({ campus_name: campusName });
+        const res = await fetch(API_BASE + 'list_activities_for_enroll&' + params.toString());
+        const data = await res.json();
+        const activities = data.data || [];
+        window._allActivities = activities;
+        populateActivitySubjectFilter(activities);
+        if (activities.length === 0) { listDiv.innerHTML = ''; emptyDiv.style.display = ''; return; }
+        renderActivityCards(activities);
+    } catch (e) {
+        listDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载活动失败</div>';
+    }
+}
+
+function populateActivitySubjectFilter(activities) {
+    const sel = document.getElementById('activity-subject-filter');
+    const subjects = [...new Set(activities.map(a => a.subject_level1).filter(Boolean))].sort();
+    sel.innerHTML = '<option value="">全部学科</option>' + subjects.map(s => '<option value="' + esc(s) + '">' + esc(s) + '</option>').join('');
+}
+
+function renderActivityCards(activities) {
+    const listDiv = document.getElementById('activity-card-list');
+    if (activities.length === 0) { listDiv.innerHTML = ''; document.getElementById('activity-card-empty').style.display = ''; return; }
+    document.getElementById('activity-card-empty').style.display = 'none';
+    listDiv.innerHTML = activities.map(a => {
+        const feeAdult = parseFloat(a.adult_price) || 0;
+        const feeStudent = parseFloat(a.student_price) || 0;
+        const enrolled = parseInt(a.campus_enrolled) || 0;
+        const capacity = parseInt(a.campuses && a.campuses[0] ? a.campuses[0].max_capacity : 0) || 0;
+        const remaining = capacity - enrolled;
+        let feeText = '';
+        if (feeAdult > 0 && feeStudent > 0) feeText = '成人 ¥' + feeAdult.toFixed(0) + ' / 学员 ¥' + feeStudent.toFixed(0);
+        else if (feeStudent > 0) feeText = '学员 ¥' + feeStudent.toFixed(0) + '/人';
+        else if (feeAdult > 0) feeText = '成人 ¥' + feeAdult.toFixed(0) + '/人';
+        else feeText = '免费';
+        const capacityInfo = capacity > 0 ? ' (已报' + enrolled + '/' + capacity + ')' : '';
+        return '<div class="activity-card" data-activity-id="' + a.id + '" data-activity-name="' + esc(a.name) + '" data-fee-adult="' + feeAdult + '" data-fee-student="' + feeStudent + '" data-subject="' + esc(a.subject_level1 || '') + '" data-deduct-rules=\'' + JSON.stringify(a.deductions && a.deductions.student ? a.deductions.student : []) + '\' data-has-subject-deduction="' + (a.student_fee_mode === 'fee_and_deduct' || a.student_fee_mode === 'deduct_only' ? 1 : 0) + '" data-remaining="' + remaining + '" onclick="selectActivity(' + a.id + ', \'' + esc(a.name).replace(/'/g, "\\'") + '\', this)"><div class="activity-card-header"><span class="activity-card-name">' + esc(a.name) + '</span><span class="activity-card-subject">' + esc(a.subject_level1 || '') + '</span></div><div class="activity-card-fee">' + feeText + '</div><div class="activity-card-capacity">剩余名额：' + remaining + capacityInfo + '</div></div>';
+    }).join('');
+}
+
+function filterActivities() {
+    const activities = window._allActivities || [];
+    const keyword = (document.getElementById('activity-search-input')?.value || '').toLowerCase();
+    const subject = document.getElementById('activity-subject-filter')?.value || '';
+    let filtered = activities;
+    if (keyword) filtered = filtered.filter(a => (a.name || '').toLowerCase().includes(keyword));
+    if (subject) filtered = filtered.filter(a => a.subject_level1 === subject);
+    renderActivityCards(filtered);
+}
+
+function selectActivity(activityId, activityName, cardEl) {
+    activityEnrollState.activity = { id: activityId, name: activityName, feeAdult: parseFloat(cardEl.dataset.feeAdult) || 0, feeStudent: parseFloat(cardEl.dataset.feeStudent) || 0, subject: cardEl.dataset.subject, deductionRules: JSON.parse(cardEl.dataset.deductRules || '[]'), hasSubjectDeduction: parseInt(cardEl.dataset.hasSubjectDeduction) || 0, remaining: parseInt(cardEl.dataset.remaining) || 0 };
+    document.querySelectorAll('.activity-card').forEach(c => c.classList.toggle('selected', false));
+    cardEl.classList.add('selected');
+    document.getElementById('enroll-activity-step-count').style.display = '';
+    document.getElementById('enroll-activity-step-pay').style.display = 'none';
+    document.getElementById('enroll-activity-action-bar').style.display = '';
+    document.getElementById('btn-activity-next').style.display = '';
+    document.getElementById('btn-activity-prev').style.display = '';
+    document.getElementById('btn-activity-confirm').style.display = 'none';
+    activityEnrollState.step = 3;
+    activityEnrollState.adultCount = 0;
+    activityEnrollState.studentCount = 1;
+    const a = activityEnrollState.activity;
+    document.getElementById('activity-count-adult-row').style.display = a.feeAdult > 0 ? '' : 'none';
+    document.getElementById('activity-count-student-row').style.display = a.feeStudent > 0 ? '' : 'none';
+    document.getElementById('activity-adult-fee-label').textContent = a.feeAdult > 0 ? '¥' + a.feeAdult.toFixed(0) + '/人' : '';
+    document.getElementById('activity-student-fee-label').textContent = a.feeStudent > 0 ? '¥' + a.feeStudent.toFixed(0) + '/人' : '';
+    document.getElementById('activity-adult-count').value = 0;
+    document.getElementById('activity-student-count').value = 1;
+    const hintDiv = document.getElementById('activity-deduct-hint');
+    const hintText = document.getElementById('activity-deduct-text');
+    if (a.hasSubjectDeduction) { hintDiv.style.display = ''; hintText.textContent = '该活动考勤时将按学科匹配课包扣除课时'; }
+    else { hintDiv.style.display = 'none'; }
+    const capHint = document.getElementById('activity-capacity-hint');
+    if (a.remaining <= 5) {
+        capHint.style.display = '';
+        capHint.innerHTML = '<span style="color:' + (a.remaining === 0 ? '#e74c3c' : '#f39c12') + ';font-size:13px;">⚠ 剩余名额：' + a.remaining + '人</span>';
+    } else { capHint.style.display = 'none'; }
+    recalcActivityTotal();
+    updateActivityStepButtons();
+}
+
+function nextActivityStep() {
+    const state = activityEnrollState;
+    if (state.step === 2) {
+        if (!state.activity) { showToast('请先选择活动', 'error'); return; }
+        state.step = 3;
+        document.getElementById('enroll-activity-step-count').style.display = '';
+        document.getElementById('enroll-activity-step-pay').style.display = 'none';
+    } else if (state.step === 3) {
+        const a = state.activity;
+        if (!a) { showToast('请先选择活动', 'error'); return; }
+        if (a.remaining <= 0) { showToast('该活动名额已满', 'error'); return; }
+        state.adultCount = parseInt(document.getElementById('activity-adult-count').value) || 0;
+        state.studentCount = parseInt(document.getElementById('activity-student-count').value) || 0;
+        if (state.adultCount + state.studentCount <= 0) { showToast('请填写报名人数', 'error'); return; }
+        if (state.adultCount + state.studentCount > a.remaining) { showToast('剩余名额不足（剩余' + a.remaining + '人）', 'error'); return; }
+        state.step = 4;
+        document.getElementById('enroll-activity-step-count').style.display = 'none';
+        document.getElementById('enroll-activity-step-pay').style.display = '';
+        renderActivityPaymentSummary();
+    }
+    updateActivityStepButtons();
+}
+
+function prevActivityStep() {
+    const state = activityEnrollState;
+    if (state.step === 4) {
+        state.step = 3;
+        document.getElementById('enroll-activity-step-count').style.display = '';
+        document.getElementById('enroll-activity-step-pay').style.display = 'none';
+    } else if (state.step === 3) {
+        state.step = 2;
+        document.getElementById('enroll-activity-step-count').style.display = 'none';
+        document.getElementById('enroll-activity-step-pay').style.display = 'none';
+        document.getElementById('enroll-activity-action-bar').style.display = 'none';
+        activityEnrollState.activity = null;
+        document.querySelectorAll('.activity-card').forEach(c => c.classList.remove('selected'));
+    }
+    updateActivityStepButtons();
+}
+
+function updateActivityStepButtons() {
+    const state = activityEnrollState;
+    const prevBtn = document.getElementById('btn-activity-prev');
+    const nextBtn = document.getElementById('btn-activity-next');
+    const confirmBtn = document.getElementById('btn-activity-confirm');
+    const actionBar = document.getElementById('enroll-activity-action-bar');
+    if (state.step === 2) {
+        actionBar.style.display = state.activity ? '' : 'none';
+        prevBtn.style.display = 'none';
+        nextBtn.style.display = state.activity ? '' : 'none';
+        confirmBtn.style.display = 'none';
+        if (state.activity) nextBtn.textContent = '下一步';
+    } else if (state.step === 3) {
+        actionBar.style.display = '';
+        prevBtn.style.display = '';
+        nextBtn.style.display = '';
+        confirmBtn.style.display = 'none';
+        nextBtn.textContent = '下一步';
+    } else if (state.step === 4) {
+        actionBar.style.display = '';
+        prevBtn.style.display = '';
+        nextBtn.style.display = 'none';
+        confirmBtn.style.display = '';
+    }
+}
+
+function renderActivityPaymentSummary() {
+    const a = activityEnrollState.activity;
+    const total = calcActivityTotal();
+    const paySection = document.getElementById('enroll-activity-step-pay');
+    paySection.innerHTML = '<div class="enroll-section-title"><span class="enroll-step-num">4</span> 确认支付</div><div class="activity-pay-summary"><div class="activity-pay-item"><span>活动：</span><strong>' + esc(a.name) + '</strong></div><div class="activity-pay-item"><span>校区：</span>' + esc(activityEnrollState.campus || '') + '</div>' + (activityEnrollState.adultCount > 0 ? '<div class="activity-pay-item"><span>成人：</span>' + activityEnrollState.adultCount + '人 × ¥' + a.feeAdult.toFixed(0) + ' = ¥' + (activityEnrollState.adultCount * a.feeAdult).toFixed(2) + '</div>' : '') + (activityEnrollState.studentCount > 0 ? '<div class="activity-pay-item"><span>学员：</span>' + activityEnrollState.studentCount + '人 × ¥' + a.feeStudent.toFixed(0) + ' = ¥' + (activityEnrollState.studentCount * a.feeStudent).toFixed(2) + '</div>' : '') + '<div class="activity-pay-total"><span>合计：</span><strong>¥' + total.toFixed(2) + '</strong></div></div><div class="enroll-section" style="margin-top:16px;"><div class="enroll-section-title">支付方式</div><div class="enroll-payment-row"><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg></span><span class="enroll-payment-label">现金</span></div><input type="number" id="activity-pay-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-meituan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></span><span class="enroll-payment-label">美团</span></div><input type="number" id="activity-pay-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-account"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="enroll-payment-label">账户余额</span></div><input type="number" id="activity-pay-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div></div><div id="activity-pay-hint" style="display:none;margin-top:8px;font-size:13px;color:#e74c3c;"></div></div>';
+    document.getElementById('activity-pay-cash').value = total.toFixed(2);
+    checkActivityPayMatch();
+}
+
+function checkActivityPayMatch() {
+    const total = calcActivityTotal();
+    const cash = parseFloat(document.getElementById('activity-pay-cash')?.value) || 0;
+    const meituan = parseFloat(document.getElementById('activity-pay-meituan')?.value) || 0;
+    const balance = parseFloat(document.getElementById('activity-pay-balance')?.value) || 0;
+    const sum = cash + meituan + balance;
+    const hint = document.getElementById('activity-pay-hint');
+    if (Math.abs(sum - total) < 0.01) { hint.style.display = 'none'; }
+    else { hint.style.display = ''; hint.textContent = '支付金额合计 ¥' + sum.toFixed(2) + '，报名费用 ¥' + total.toFixed(2) + '，差额 ¥' + Math.abs(sum - total).toFixed(2); }
+}
+
+function recalcActivityTotal() {
+    const total = calcActivityTotal();
+    document.getElementById('activity-total-amount').textContent = '¥' + total.toFixed(2);
+    const a = activityEnrollState.activity;
+    if (a && a.feeAdult > 0) {
+        const adultCount = parseInt(document.getElementById('activity-adult-count').value) || 0;
+        document.getElementById('activity-adult-subtotal').textContent = '= ¥' + (adultCount * a.feeAdult).toFixed(2);
+    }
+    if (a && a.feeStudent > 0) {
+        const studentCount = parseInt(document.getElementById('activity-student-count').value) || 0;
+        document.getElementById('activity-student-subtotal').textContent = '= ¥' + (studentCount * a.feeStudent).toFixed(2);
+    }
+}
+
+function calcActivityTotal() {
+    const a = activityEnrollState.activity;
+    if (!a) return 0;
+    const adultCount = parseInt(document.getElementById('activity-adult-count')?.value) || 0;
+    const studentCount = parseInt(document.getElementById('activity-student-count')?.value) || 0;
+    return adultCount * a.feeAdult + studentCount * a.feeStudent;
+}
+
+async function confirmActivityEnroll() {
+    const total = calcActivityTotal();
+    const cash = parseFloat(document.getElementById('activity-pay-cash')?.value) || 0;
+    const meituan = parseFloat(document.getElementById('activity-pay-meituan')?.value) || 0;
+    const balance = parseFloat(document.getElementById('activity-pay-balance')?.value) || 0;
+    const sum = cash + meituan + balance;
+    if (Math.abs(sum - total) > 0.01) { showToast('支付金额与报名费用不匹配', 'error'); return; }
+    if (!currentEnrollStudentId) { showToast('请先选择学员', 'error'); return; }
+    const confirmBtn = document.getElementById('btn-activity-confirm');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '提交中...';
+    try {
+        const payload = { student_id: currentEnrollStudentId, activity_id: activityEnrollState.activity.id, campus_name: activityEnrollState.campus, adult_count: activityEnrollState.adultCount, student_count: activityEnrollState.studentCount, payment_cash: cash, payment_meituan: meituan, use_balance: balance > 0 ? 1 : 0, balance_amount: balance };
+        const res = await api('pay_activity_enroll', payload, 'POST');
+        if (res.error) { showToast(res.error, 'error'); confirmBtn.disabled = false; confirmBtn.textContent = '确认支付'; return; }
+        showToast('活动报名成功！订单号：' + (res.order_no || ''));
+        if (currentEnrollStudentId) viewStudent(currentEnrollStudentId);
+    } catch (e) { showToast('报名失败：' + e.message, 'error'); confirmBtn.disabled = false; confirmBtn.textContent = '确认支付'; }
+}
+
+// ==================== 学员报读活动 ====================
+async function loadStudentActivities(sid) {
+    const tbody = document.getElementById('student-activities-tbody');
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    try {
+        const res = await fetch(API_BASE + 'get_student_activities&student_id=' + sid);
+        const data = await res.json();
+        const rows = data.data || [];
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:30px;">暂无报读活动</td></tr>'; return; }
+        tbody.innerHTML = rows.map(r => {
+            const attBtn = r.attended ? '<span class="activity-att-pill attended">已考勤</span>' : '<button class="btn btn-sm btn-activity-att" onclick="openActivityAttendanceModal(' + r.activity_id + ', ' + r.id + ', ' + currentViewStudentId + ', \'' + esc(r.activity_name || '').replace(/'/g, "\\'") + '\')">考勤</button>';
+            const voidBtn = r.is_voided ? '<span style="color:#999;font-size:12px;">已作废</span>' : '<button class="btn-link-danger" onclick="voidActivityOrder(' + r.id + ')">作废</button>';
+            const payMethods = [];
+            if (parseFloat(r.cash_amount) > 0) payMethods.push('现金');
+            if (parseFloat(r.meituan_amount) > 0) payMethods.push('美团');
+            if (parseFloat(r.account_amount) > 0) payMethods.push('余额');
+            const attStatus = r.attendance_status || (r.attended ? '已考勤' : '未考勤');
+            return '<tr><td>' + esc(r.activity_name || '') + '</td><td>' + esc(r.campus || '') + '</td><td style="text-align:center;">' + (r.adult_count || 0) + '</td><td style="text-align:center;">' + (r.student_count || 0) + '</td><td style="text-align:right;">¥' + (parseFloat(r.total_price) || 0).toFixed(2) + '</td><td>' + (r.enroll_time || r.created_at || '').substring(0, 10) + '</td><td>' + (payMethods.join('+') || '—') + '</td><td><span class="activity-att-pill ' + (r.attended ? 'attended' : 'unattended') + '">' + attStatus + '</span></td><td>' + attBtn + ' ' + voidBtn + '</td></tr>';
+        }).join('');
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+}
+
+async function voidActivityOrder(orderId) {
+    if (!confirm('确认作废该活动报名订单？作废后无法恢复。')) return;
+    try {
+        const res = await api('void_order', { order_id: orderId }, 'POST');
+        if (res.error) { showToast(res.error, 'error'); return; }
+        showToast('订单已作废');
+        if (currentViewStudentId) loadStudentActivities(currentViewStudentId);
+    } catch (e) { showToast('操作失败：' + e.message, 'error'); }
+}
+
+// ==================== 活动考勤弹窗 ====================
+async function openActivityAttendanceModal(activityId, activityOrderId, studentId, activityName) {
+    activityAttendanceData = { activityId, activityOrderId, studentId, selectedPackageOrderId: 0, selectedPackageCourse: '', attStep: 1 };
+    document.getElementById('att-modal-activity-name').textContent = activityName;
+    document.getElementById('att-modal-step1').style.display = '';
+    document.getElementById('att-modal-step2').style.display = 'none';
+    document.getElementById('att-modal-step3').style.display = 'none';
+    document.getElementById('att-modal-prev').style.display = 'none';
+    document.getElementById('att-modal-next').style.display = '';
+    document.getElementById('att-modal-confirm').style.display = 'none';
+    document.getElementById('att-modal-date').value = new Date().toISOString().split('T')[0];
+    const packagesDiv = document.getElementById('att-modal-packages');
+    packagesDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载课包列表...</div>';
+    try {
+        const res = await fetch(API_BASE + 'get_student_courses&student_id=' + studentId);
+        const data = await res.json();
+        const courses = (data.data || []).filter(c => c.order_type !== '活动');
+        if (courses.length === 0) { packagesDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">该学员暂无可用课包</div>'; return; }
+        packagesDiv.innerHTML = courses.map((c, i) => '<label class="activity-package-radio" style="display:flex;align-items:center;padding:10px 12px;margin-bottom:8px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;"><input type="radio" name="att-package" value="' + c.order_id + '" data-course="' + esc(c.course_name || '') + '" data-remaining="' + (c.remaining_lessons || 0) + '" onchange="onActivityAttPackageChange()" ' + (i === 0 ? 'checked' : '') + '><span style="margin-left:10px;flex:1;"><strong>' + esc(c.course_name || '') + '</strong><span style="color:#888;margin-left:8px;font-size:13px;">剩余 ' + (c.remaining_lessons || 0) + ' 课时</span></span></label>').join('');
+        if (courses.length > 0) onActivityAttPackageChange();
+    } catch (e) { packagesDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载课包失败</div>'; }
+    openModal('modal-activity-attendance');
+}
+
+function onActivityAttPackageChange() {
+    const selected = document.querySelector('input[name="att-package"]:checked');
+    if (!selected) return;
+    activityAttendanceData.selectedPackageOrderId = parseInt(selected.value);
+    activityAttendanceData.selectedPackageCourse = selected.dataset.course || '';
+    document.querySelectorAll('.activity-package-radio').forEach(l => l.style.borderColor = '#e0e0e0');
+    const label = selected.closest('.activity-package-radio');
+    if (label) label.style.borderColor = '#FF7675';
+}
+
+async function nextActivityAttStep() {
+    const d = activityAttendanceData;
+    if (d.attStep === 1) {
+        if (!d.selectedPackageOrderId) { showToast('请选择扣课课包', 'error'); return; }
+        await loadActivityDeductionRule();
+        d.attStep = 2;
+        document.getElementById('att-modal-step1').style.display = 'none';
+        document.getElementById('att-modal-step2').style.display = '';
+        document.getElementById('att-modal-step3').style.display = 'none';
+        document.getElementById('att-modal-prev').style.display = '';
+        document.getElementById('att-modal-next').style.display = '';
+        document.getElementById('att-modal-confirm').style.display = 'none';
+    } else if (d.attStep === 2) {
+        renderAttendanceSummary();
+        d.attStep = 3;
+        document.getElementById('att-modal-step1').style.display = 'none';
+        document.getElementById('att-modal-step2').style.display = 'none';
+        document.getElementById('att-modal-step3').style.display = '';
+        document.getElementById('att-modal-prev').style.display = '';
+        document.getElementById('att-modal-next').style.display = 'none';
+        document.getElementById('att-modal-confirm').style.display = '';
+    }
+}
+
+function prevActivityAttStep() {
+    const d = activityAttendanceData;
+    if (d.attStep === 2) {
+        d.attStep = 1;
+        document.getElementById('att-modal-step1').style.display = '';
+        document.getElementById('att-modal-step2').style.display = 'none';
+        document.getElementById('att-modal-step3').style.display = 'none';
+        document.getElementById('att-modal-prev').style.display = 'none';
+        document.getElementById('att-modal-next').style.display = '';
+        document.getElementById('att-modal-confirm').style.display = 'none';
+    } else if (d.attStep === 3) {
+        d.attStep = 2;
+        document.getElementById('att-modal-step1').style.display = 'none';
+        document.getElementById('att-modal-step2').style.display = '';
+        document.getElementById('att-modal-step3').style.display = 'none';
+        document.getElementById('att-modal-next').style.display = '';
+        document.getElementById('att-modal-confirm').style.display = 'none';
+    }
+}
+
+async function loadActivityDeductionRule() {
+    const ruleDiv = document.getElementById('att-modal-rule-info');
+    const d = activityAttendanceData;
+    ruleDiv.innerHTML = '<div style="text-align:center;color:#999;padding:10px;">加载扣课规则...</div>';
+    try {
+        const res = await fetch(API_BASE + 'get_activity&id=' + d.activityId);
+        const data = await res.json();
+        const activity = data.activity || {};
+        const deductions = activity.deductions || [];
+        if (deductions.length === 0) { ruleDiv.innerHTML = '<p style="color:#888;">该活动未配置扣课规则，考勤时不扣除课时。</p>'; return; }
+        let matchedRule = null;
+        for (const ded of deductions) {
+            if (ded.subject_level1 && d.selectedPackageCourse && d.selectedPackageCourse.indexOf(ded.subject_level1) >= 0) { matchedRule = ded; break; }
+        }
+        if (!matchedRule) matchedRule = deductions.find(d => !d.subject_level1) || deductions[0];
+        ruleDiv.innerHTML = '<div style="background:#f7f9fc;border:1px solid #dce3e8;border-radius:8px;padding:14px;"><p style="margin:0 0 8px;font-weight:600;">扣课规则</p><p style="margin:0 0 4px;font-size:14px;">课包：<strong>' + esc(d.selectedPackageCourse) + '</strong></p><p style="margin:0 0 4px;font-size:14px;">每次考勤扣除：<strong>' + (matchedRule ? matchedRule.deduct_lessons : 1) + ' 课时</strong></p>' + (matchedRule && matchedRule.subject_level1 ? '<p style="margin:0;font-size:14px;color:#666;">匹配学科：' + esc(matchedRule.subject_level1) + '</p>' : '') + '</div>';
+        activityAttendanceData._matchedRule = matchedRule;
+    } catch (e) { ruleDiv.innerHTML = '<div style="background:#f7f9fc;border:1px solid #dce3e8;border-radius:8px;padding:14px;"><p style="margin:0;">课包：<strong>' + esc(d.selectedPackageCourse) + '</strong></p><p style="margin:4px 0 0;">每次考勤默认扣除 1 课时</p></div>'; }
+}
+
+function renderAttendanceSummary() {
+    const summaryDiv = document.getElementById('att-modal-summary');
+    const d = activityAttendanceData;
+    const date = document.getElementById('att-modal-date').value || '';
+    const rule = d._matchedRule;
+    summaryDiv.innerHTML = '<div style="background:#f7f9fc;border:1px solid #dce3e8;border-radius:8px;padding:14px;"><p style="margin:0 0 8px;font-weight:600;">确认考勤信息</p><p style="margin:0 0 4px;font-size:14px;">活动ID：' + d.activityId + '</p><p style="margin:0 0 4px;font-size:14px;">课包：<strong>' + esc(d.selectedPackageCourse) + '</strong></p><p style="margin:0 0 4px;font-size:14px;">考勤日期：' + date + '</p><p style="margin:0;font-size:14px;">扣除课时：<strong style="color:#e74c3c;">' + (rule ? rule.deduct_lessons : 1) + ' 课时</strong></p></div>';
+}
+
+async function confirmActivityAttendance() {
+    const d = activityAttendanceData;
+    const date = document.getElementById('att-modal-date').value;
+    if (!date) { showToast('请选择考勤日期', 'error'); return; }
+    const confirmBtn = document.getElementById('att-modal-confirm');
+    confirmBtn.disabled = true;
+    confirmBtn.textContent = '提交中...';
+    try {
+        const payload = { activity_id: d.activityId, activity_order_id: d.activityOrderId, student_id: d.studentId, deduct_order_id: d.selectedPackageOrderId, deduct_lessons: activityAttendanceData._matchedRule?.deduct_lessons || 1, session_date: date };
+        const res = await api('save_activity_attendance', payload, 'POST');
+        if (res.error) { showToast(res.error, 'error'); confirmBtn.disabled = false; confirmBtn.textContent = '确认考勤'; return; }
+        showToast('考勤成功');
+        closeModal('modal-activity-attendance');
+        if (currentViewStudentId) loadStudentActivities(currentViewStudentId);
+    } catch (e) { showToast('考勤失败：' + e.message, 'error'); confirmBtn.disabled = false; confirmBtn.textContent = '确认考勤'; }
+}
+
+// ==================== 活动考勤列表 ====================
+async function loadActivityAttendanceList(page = 1) {
+    const tbody = document.getElementById('activity-attendance-tbody');
+    const pagination = document.getElementById('activity-attendance-pagination');
+    const keyword = document.getElementById('att-activity-search')?.value || '';
+    const campus = document.getElementById('att-activity-campus-filter')?.value || '';
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    try {
+        let url = API_BASE + 'list_activity_attendance&page=' + page + '&page_size=20';
+        if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
+        if (campus) url += '&campus=' + encodeURIComponent(campus);
+        const res = await fetch(url);
+        const data = await res.json();
+        const rows = data.data || [];
+        const total = data.total || 0;
+        loadActivityAttendanceCampuses();
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无活动考勤记录</td></tr>'; pagination.innerHTML = ''; return; }
+        tbody.innerHTML = rows.map(r => {
+            const statusTag = r.attendance_status === '已考勤' ? '<span class="activity-att-pill attended">已考勤</span>' : '<span class="activity-att-pill unattended">未考勤</span>';
+            const actionBtn = r.attendance_status === '已考勤' ? '<span style="color:#999;font-size:12px;">已考勤</span>' : '<button class="btn btn-sm btn-activity-att" onclick="openActivityAttendanceModal(' + r.activity_id + ', ' + r.order_id + ', ' + r.student_id + ', \'' + esc(r.activity_name || '').replace(/'/g, "\\'") + '\')">考勤</button>';
+            return '<tr><td>' + esc(r.student_name || '') + '</td><td>' + esc(r.activity_name || '') + '</td><td>' + esc(r.campus || '') + '</td><td>' + (r.enroll_time || r.created_at || '').substring(0, 10) + '</td><td>' + statusTag + '</td><td>' + actionBtn + '</td></tr>';
+        }).join('');
+        const totalPages = Math.ceil(total / 20);
+        pagination.innerHTML = totalPages > 1 ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadActivityAttendanceList(' + (page - 1) + ')"') + '>上一页</button><span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span><button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadActivityAttendanceList(' + (page + 1) + ')"') + '>下一页</button>' : '';
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+}
+
+async function loadActivityAttendanceCampuses() {
+    const sel = document.getElementById('att-activity-campus-filter');
+    if (!sel || sel.options.length > 1) return;
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const orgs = (data.data || []).filter(o => o.type === '校区');
+        sel.innerHTML = '<option value="">全部校区</option>' + orgs.map(o => '<option value="' + esc(o.name) + '">' + esc(o.name) + '</option>').join('');
+    } catch (e) { /* ignore */ }
+}
+
+// ==================== 活动课耗列表 ====================
+async function loadActivityConsumption(page = 1) {
+    const tbody = document.getElementById('activity-consumption-tbody');
+    const pagination = document.getElementById('activity-consumption-pagination');
+    const keyword = document.getElementById('act-consume-search')?.value || '';
+    const dateFrom = document.getElementById('act-consume-from')?.value || '';
+    const dateTo = document.getElementById('act-consume-to')?.value || '';
+    if (!tbody) return;
+    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    try {
+        let url = API_BASE + 'list_activity_consumptions&page=' + page + '&page_size=20';
+        if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
+        if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
+        if (dateTo) url += '&date_to=' + encodeURIComponent(dateTo);
+        const res = await fetch(url);
+        const data = await res.json();
+        const rows = data.data || [];
+        const total = data.total || 0;
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无活动课耗记录</td></tr>'; pagination.innerHTML = ''; return; }
+        tbody.innerHTML = rows.map(r => '<tr><td>' + esc(r.student_name || '') + '</td><td>' + esc(r.activity_name || '') + '</td><td>' + (r.session_date || '') + '</td><td style="text-align:center;">' + (r.deducted_lessons || 0) + '</td><td>' + esc(r.source_course_name || '') + '</td><td style="text-align:right;">¥' + (parseFloat(r.consumed_amount) || 0).toFixed(2) + '</td></tr>').join('');
+        const totalPages = Math.ceil(total / 20);
+        pagination.innerHTML = totalPages > 1 ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadActivityConsumption(' + (page - 1) + ')"') + '>上一页</button><span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span><button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadActivityConsumption(' + (page + 1) + ')"') + '>下一页</button>' : '';
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+}
