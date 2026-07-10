@@ -1775,7 +1775,7 @@ $stmt->execute();
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 // 读取 campus 信息
-                $campusStmt = $db->prepare("SELECT id, campus_name, max_capacity FROM activity_campuses WHERE activity_id = :aid");
+                $campusStmt = $db->prepare("SELECT ac.id, ac.campus_name, ac.max_capacity, o.id as campus_id FROM activity_campuses ac LEFT JOIN organizations o ON o.name = ac.campus_name AND o.type = '校区' WHERE ac.activity_id = :aid");
                 $campusStmt->bindValue(':aid', $r['id'], PDO::PARAM_INT);
                 $campusStmt->execute();
                 $r['campuses'] = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1793,7 +1793,7 @@ $stmt->execute();
             if (!$activity) json(['error' => '活动不存在']);
 
             // campuses
-            $campusStmt = $db->prepare("SELECT * FROM activity_campuses WHERE activity_id = :aid");
+            $campusStmt = $db->prepare("SELECT ac.*, o.id as campus_id FROM activity_campuses ac LEFT JOIN organizations o ON o.name = ac.campus_name AND o.type = '校区' WHERE ac.activity_id = :aid");
             $campusStmt->bindValue(':aid', $id, PDO::PARAM_INT);
             $campusStmt->execute();
             $activity['campuses'] = $campusStmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1805,6 +1805,14 @@ $stmt->execute();
             $deductions = ['adult' => [], 'student' => []];
             foreach ($deductStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
                 $ft = $d['fee_type'] ?? 'student';
+                // 附加 subject_id 和 subject_name
+                $sl1 = $d['subject_level1'] ?? '';
+                $d['subject_name'] = $sl1;
+                $d['subject_id'] = 0;
+                if ($sl1) {
+                    $sid = $db->query("SELECT id FROM subjects WHERE name=" . $db->quote($sl1) . " AND parent_id=0 LIMIT 1")->fetchColumn();
+                    if ($sid) $d['subject_id'] = intval($sid);
+                }
                 $deductions[$ft === 'adult' ? 'adult' : 'student'][] = $d;
             }
             $activity['deductions'] = $deductions;
@@ -1865,11 +1873,19 @@ $stmt->execute();
 
                 // 替换 deductions
                 $db->exec("DELETE FROM activity_subject_deductions WHERE activity_id = $id");
-                foreach ($deductions as $deduct) {
-                    $feeType = $deduct['fee_type'] ?? 'student';
-                    $subjLevel1 = trim($deduct['subject_level1'] ?? '');
-                    $deductLessons = intval($deduct['deduct_lessons'] ?? 1);
-                    $db->exec("INSERT INTO activity_subject_deductions (activity_id, fee_type, subject_level1, deduct_lessons) VALUES ($id, " . $db->quote($feeType) . ", " . $db->quote($subjLevel1) . ", $deductLessons)");
+                foreach (['adult', 'student'] as $feeType) {
+                    $items = $deductions[$feeType] ?? [];
+                    foreach ($items as $deduct) {
+                        $subjId = intval($deduct['subject_id'] ?? 0);
+                        $subjLevel1 = '';
+                        if ($subjId > 0) {
+                            $subjLevel1 = $db->query("SELECT name FROM subjects WHERE id=$subjId")->fetchColumn() ?: '';
+                        }
+                        $deductLessons = intval($deduct['deduct_lessons'] ?? 1);
+                        if ($subjLevel1 && $deductLessons > 0) {
+                            $db->exec("INSERT INTO activity_subject_deductions (activity_id, fee_type, subject_level1, deduct_lessons) VALUES ($id, " . $db->quote($feeType) . ", " . $db->quote($subjLevel1) . ", $deductLessons)");
+                        }
+                    }
                 }
 
                 $db->commit();
