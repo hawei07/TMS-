@@ -11017,7 +11017,7 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260702a"></script>
+    <script src="static/js/main.js?v=20260710c"></script>
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 </body>
 </html>
