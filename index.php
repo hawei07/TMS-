@@ -1,4 +1,4 @@
-﻿<?php
+<?php
 error_reporting(E_ALL);
 // PHP 内置服务器：静态文件直接返回，不经过 PHP 处理
 if (php_sapi_name() === 'cli-server') {
@@ -6762,6 +6762,30 @@ json([
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
             break;
 
+        // 获取活动扣课规则
+        case 'get_activity_deduction_rules':
+            $activityId = intval($_GET['activity_id'] ?? 0);
+            if ($activityId <= 0) { json(['error' => '缺少活动ID']); break; }
+            $deductStmt = $db->prepare("SELECT * FROM activity_subject_deductions WHERE activity_id = :aid");
+            $deductStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+            $deductStmt->execute();
+            $deductions = ['adult' => [], 'student' => []];
+            foreach ($deductStmt->fetchAll(PDO::FETCH_ASSOC) as $d) {
+                $ft = $d['fee_type'] ?? 'student';
+                // 附加 subject_id 和 subject_name
+                $sl1 = $d['subject_level1'] ?? '';
+                $d['subject_name'] = $sl1;
+                $d['subject_id'] = 0;
+                if ($sl1) {
+                    $sid = $db->query("SELECT id FROM subjects WHERE name=" . $db->quote($sl1) . " AND parent_id=0 LIMIT 1")->fetchColumn();
+                    if ($sid) $d['subject_id'] = intval($sid);
+                }
+                $key = ($ft === 'adult') ? 'adult' : 'student';
+                $deductions[$key][] = $d;
+            }
+            json($deductions);
+            break;
+
         // 活动考勤
         case 'save_activity_attendance':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -6769,14 +6793,46 @@ json([
             $activityOrderId = intval($input['activity_order_id'] ?? 0);
             $studentId = intval($input['student_id'] ?? 0);
             $deductOrderId = intval($input['deduct_order_id'] ?? 0);
-            $deductLessons = intval($input['deduct_lessons'] ?? 0);
             $sessionDate = trim($input['session_date'] ?? date('Y-m-d'));
+            // 🆕 出勤人数参数
+            $adultAttended = intval($input['adult_attended'] ?? 0);
+            $studentAttended = intval($input['student_attended'] ?? 0);
+            // 🆕 扣课明细 JSON 字符串（前端传入）
+            $deductionBreakdownRaw = $input['deduction_breakdown'] ?? '';
+            if (is_array($deductionBreakdownRaw)) {
+                $deductionBreakdownJson = json_encode($deductionBreakdownRaw, JSON_UNESCAPED_UNICODE);
+            } else {
+                $deductionBreakdownJson = is_string($deductionBreakdownRaw) && strlen($deductionBreakdownRaw) > 0 ? $deductionBreakdownRaw : '{}';
+            }
 
             if ($activityId <= 0) json(['error' => '活动ID无效']);
             if ($activityOrderId <= 0) json(['error' => '活动订单ID无效']);
             if ($studentId <= 0) json(['error' => '学员ID无效']);
             if ($deductOrderId <= 0) json(['error' => '请选择扣课来源课包']);
-            if ($deductLessons <= 0) json(['error' => '扣课时数必须大于0']);
+
+            // 🆕 计算总扣课时：查询活动扣课规则
+            $totalDeductLessons = 0;
+            $isNewMode = ($adultAttended + $studentAttended > 0);
+            if ($isNewMode) {
+                // 新流程：从活动扣课规则计算总扣课时
+                $deductRules = $db->query("SELECT fee_type, deduct_lessons FROM activity_subject_deductions WHERE activity_id = $activityId")->fetchAll(PDO::FETCH_ASSOC);
+                $adultPerLesson = 0;
+                $studentPerLesson = 0;
+                foreach ($deductRules as $rule) {
+                    $ft = $rule['fee_type'] ?? 'student';
+                    $dl = intval($rule['deduct_lessons'] ?? 1);
+                    if ($ft === 'adult' && $dl > $adultPerLesson) $adultPerLesson = $dl;
+                    if ($ft === 'student' && $dl > $studentPerLesson) $studentPerLesson = $dl;
+                }
+                // 如果没有配置规则，默认每人扣1课时
+                if ($adultPerLesson <= 0 && $adultAttended > 0) $adultPerLesson = 1;
+                if ($studentPerLesson <= 0 && $studentAttended > 0) $studentPerLesson = 1;
+                $totalDeductLessons = $adultAttended * $adultPerLesson + $studentAttended * $studentPerLesson;
+            } else {
+                // 旧流程兼容：直接使用 deduct_lessons 参数
+                $totalDeductLessons = intval($input['deduct_lessons'] ?? 0);
+            }
+            if ($totalDeductLessons <= 0) json(['error' => '扣课时数必须大于0']);
 
             // 验证活动订单
             $actOrder = $db->query("SELECT * FROM orders WHERE id = $activityOrderId AND order_type = '活动' AND is_voided = '否'")->fetch(PDO::FETCH_ASSOC);
@@ -6792,7 +6848,7 @@ json([
             $totalLessons = $srcLc + $srcGl;
             $remaining = $totalLessons - $srcConsumed;
             if ($remaining <= 0) json(['error' => '该课包已无剩余课时']);
-            if ($deductLessons > $remaining) json(['error' => '扣课时数(' . $deductLessons . ')超过剩余课时(' . $remaining . ')']);
+            if ($totalDeductLessons > $remaining) json(['error' => '扣课时数(' . $totalDeductLessons . ')超过剩余课时(' . $remaining . ')']);
 
             // 计算消耗金额（排除教材包和商品券）
             $srcAp = floatval($srcOrder['actual_price'] ?? 0);
@@ -6803,35 +6859,39 @@ json([
             $classPrice = $srcAp - $srcTap + $srcPc;
             $rawUnitPrice = $classPrice + $srcDp + $srcCp;
             $classUnitPrice = $srcLc > 0 ? round(($rawUnitPrice - $srcDp - $srcCp) / $srcLc, 2) : 0;
-            $consumedAmount = round($classUnitPrice * $deductLessons, 2);
+            $consumedAmount = round($classUnitPrice * $totalDeductLessons, 2);
 
             // 查询学员姓名
             $studentName = $db->query("SELECT name FROM students WHERE id = $studentId")->fetchColumn() ?: '';
 
             $db->beginTransaction();
             try {
-                // 扣课时
-                $db->exec("UPDATE orders SET consumed_lessons = consumed_lessons + $deductLessons WHERE id = $deductOrderId");
+                // 扣课时（上限保护）
+                $newConsumed = $srcConsumed + $totalDeductLessons;
+                $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $deductOrderId AND $newConsumed <= ($srcLc + $srcGl)");
 
                 // 写考勤记录
-                $deductionJson = json_encode([['order_id' => $deductOrderId, 'amount' => $deductLessons]], JSON_UNESCAPED_UNICODE);
+                $deductionJson = json_encode([['order_id' => $deductOrderId, 'amount' => $totalDeductLessons]], JSON_UNESCAPED_UNICODE);
                 $n = now();
-                $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :ct)");
+                $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, adult_attended, student_attended, deduction_breakdown, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :aa, :sa, :db, :ct)");
                 $attStmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
                 $attStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                 $attStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
-                $attStmt->bindValue(':dl', $deductLessons, PDO::PARAM_INT);
+                $attStmt->bindValue(':dl', $totalDeductLessons, PDO::PARAM_INT);
                 $attStmt->bindValue(':doid', $deductOrderId, PDO::PARAM_INT);
                 $attStmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
                 $attStmt->bindValue(':ca', $consumedAmount);
                 $attStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
                 $attStmt->bindValue(':aoid', $activityOrderId, PDO::PARAM_INT);
+                $attStmt->bindValue(':aa', $adultAttended, PDO::PARAM_INT);
+                $attStmt->bindValue(':sa', $studentAttended, PDO::PARAM_INT);
+                $attStmt->bindValue(':db', $deductionBreakdownJson, PDO::PARAM_STR);
                 $attStmt->bindValue(':ct', $n, PDO::PARAM_STR);
                 $attStmt->execute();
                 $attId = $db->lastInsertId();
 
                 $db->commit();
-                json(['message' => '活动考勤成功，已扣除 ' . $deductLessons . ' 课时', 'attendance_id' => $attId]);
+                json(['message' => '活动考勤成功，已扣除 ' . $totalDeductLessons . ' 课时', 'attendance_id' => $attId]);
             } catch (Exception $e) {
                 $db->rollBack();
                 json(['error' => '考勤保存失败: ' . $e->getMessage()]);
@@ -6907,7 +6967,7 @@ json([
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
 
-            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.deduction_json, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.deduction_json, ca.adult_attended, ca.student_attended, ca.deduction_breakdown, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
@@ -10962,36 +11022,83 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <!-- 活动考勤弹窗 -->
+    <!-- 活动考勤弹窗 — 单页表单 -->
     <div class="modal-overlay" id="modal-activity-attendance">
-        <div class="modal-dialog" style="width:1100px;max-width:95vw;">
+        <div class="modal modal-lg" style="width:1100px;max-width:95vw;">
             <div class="modal-header">
                 <h3>活动考勤 — <span id="att-modal-activity-name"></span></h3>
                 <button class="modal-close" onclick="closeModal('modal-activity-attendance')">×</button>
             </div>
-            <div class="modal-body">
-                <!-- Step 1: 选择扣课课包 -->
-                <div id="att-modal-step1">
-                    <p style="margin-bottom:12px;color:#666;">请选择从哪个课包扣除课时：</p>
-                    <div id="att-modal-packages"></div>
-                </div>
-                <!-- Step 2: 确认扣课规则 -->
-                <div id="att-modal-step2" style="display:none;">
-                    <div id="att-modal-rule-info"></div>
-                    <div style="margin-top:12px;">
-                        <label>考勤日期：</label><input type="date" id="att-modal-date" style="width:160px;">
+            <div class="modal-body" style="padding:20px 24px;">
+                <!-- 学员信息行 -->
+                <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;">
+                    <div style="flex:1;min-width:150px;">
+                        <label style="font-size:13px;color:#888;">学员</label>
+                        <div style="font-size:16px;font-weight:600;" id="att-student-name">—</div>
+                    </div>
+                    <div style="flex:1;min-width:150px;">
+                        <label style="font-size:13px;color:#888;">活动名称</label>
+                        <div style="font-size:16px;font-weight:600;" id="att-activity-name">—</div>
+                    </div>
+                    <div style="flex:1;min-width:150px;">
+                        <label style="font-size:13px;color:#888;">报名校区</label>
+                        <div style="font-size:16px;font-weight:600;" id="att-campus">—</div>
                     </div>
                 </div>
-                <!-- Step 3: 确认 -->
-                <div id="att-modal-step3" style="display:none;">
-                    <div id="att-modal-summary"></div>
+
+                <!-- 出勤人数行 -->
+                <div style="display:flex;gap:16px;margin-bottom:16px;flex-wrap:wrap;align-items:flex-end;">
+                    <div style="flex:1;min-width:200px;background:#FFF9E6;border-radius:10px;padding:14px 16px;">
+                        <div style="font-size:13px;color:#888;margin-bottom:6px;">成人 <span style="color:#333;">报名 <b id="att-adult-reg">0</b> 人</span></div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:14px;">实际出勤</span>
+                            <input type="number" id="att-adult-count" value="0" min="0" max="0" style="width:70px;height:36px;text-align:center;border:1px solid #ddd;border-radius:8px;font-size:16px;" oninput="recalcAttTotal()">
+                            <span style="font-size:14px;color:#888;">人</span>
+                        </div>
+                    </div>
+                    <div style="flex:1;min-width:200px;background:#E8F8F5;border-radius:10px;padding:14px 16px;">
+                        <div style="font-size:13px;color:#888;margin-bottom:6px;">学员 <span style="color:#333;">报名 <b id="att-student-reg">0</b> 人</span></div>
+                        <div style="display:flex;align-items:center;gap:8px;">
+                            <span style="font-size:14px;">实际出勤</span>
+                            <input type="number" id="att-student-count" value="0" min="0" max="0" style="width:70px;height:36px;text-align:center;border:1px solid #ddd;border-radius:8px;font-size:16px;" oninput="recalcAttTotal()">
+                            <span style="font-size:14px;color:#888;">人</span>
+                        </div>
+                    </div>
+                    <div style="flex:1;min-width:180px;background:#FFF0F0;border-radius:10px;padding:14px 16px;text-align:center;">
+                        <div style="font-size:12px;color:#888;">本次扣课时</div>
+                        <div style="font-size:28px;font-weight:700;color:#E74C3C;" id="att-total-deduct">0</div>
+                        <div style="font-size:12px;color:#888;">课时</div>
+                    </div>
+                </div>
+
+                <!-- 扣课规则提示 -->
+                <div id="att-rule-hint" style="margin-bottom:12px;padding:8px 12px;background:#FFF9E6;border-radius:8px;font-size:13px;color:#888;"></div>
+
+                <!-- 带课老师 -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px;color:#888;">带课老师</label>
+                    <select id="att-teacher" style="width:200px;height:36px;border:1px solid #ddd;border-radius:8px;padding:0 8px;">
+                        <option value="">请选择</option>
+                    </select>
+                </div>
+
+                <!-- 选择扣课课包 -->
+                <div style="margin-bottom:12px;">
+                    <label style="font-size:13px;color:#888;margin-bottom:6px;display:block;">选择扣课课包（仅显示有剩余课时且可被本活动消课的课包）</label>
+                    <div id="att-package-list" style="max-height:250px;overflow-y:auto;border:1px solid #e8ecf1;border-radius:10px;padding:4px;">
+                        <div style="text-align:center;color:#999;padding:20px;">加载课包列表...</div>
+                    </div>
+                </div>
+
+                <!-- 考勤日期 -->
+                <div style="margin-bottom:16px;">
+                    <label style="font-size:13px;color:#888;">考勤日期</label>
+                    <input type="date" id="att-confirm-date" style="width:160px;height:36px;border:1px solid #ddd;border-radius:8px;padding:0 8px;">
                 </div>
             </div>
             <div class="modal-footer">
-                <button id="att-modal-prev" style="display:none;" onclick="prevActivityAttStep()">上一步</button>
-                <button id="att-modal-next" onclick="nextActivityAttStep()">下一步</button>
-                <button id="att-modal-confirm" style="display:none;" onclick="confirmActivityAttendance()">确认考勤</button>
-                <button onclick="closeModal('modal-activity-attendance')">取消</button>
+                <button class="btn btn-primary" onclick="confirmActivityAttendance()">确定考勤</button>
+                <button class="btn btn-default" onclick="closeModal('modal-activity-attendance')">取消</button>
             </div>
         </div>
     </div>
