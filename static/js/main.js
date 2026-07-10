@@ -12886,7 +12886,12 @@ function selectActivity(activityId, activityName, cardEl) {
     document.getElementById('activity-student-count').value = 1;
     const hintDiv = document.getElementById('activity-deduct-hint');
     const hintText = document.getElementById('activity-deduct-text');
-    if (a.hasSubjectDeduction) { hintDiv.style.display = ''; hintText.textContent = '该活动考勤时将按学科匹配课包扣除课时'; }
+    if (a.hasSubjectDeduction) {
+        hintDiv.style.display = '';
+        var rules = a.deductionRules || [];
+        var ruleTexts = rules.map(function(r) { return (r.subject_level1 || '默认') + '扣' + (r.deduct_lessons || 1) + '课时'; });
+        hintText.textContent = '该活动考勤时将按学科匹配课包扣除课时' + (ruleTexts.length > 0 ? '（' + ruleTexts.join('；') + '）' : '');
+    }
     else { hintDiv.style.display = 'none'; }
     const capHint = document.getElementById('activity-capacity-hint');
     if (a.remaining <= 5) {
