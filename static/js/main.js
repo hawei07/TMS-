@@ -5930,7 +5930,7 @@ function switchStudentDetailTab(tabId) {
     else if (tabId === 'tab-orders') loadStudentOrders(sid);
     else if (tabId === 'tab-attendance') loadAttendance(sid);
     else if (tabId === 'tab-account') loadStudentAccount(sid);
-    else if (tabId === 'tab-activity-enrollments') loadStudentActivities(sid);
+    else if (tabId === 'tab-activities') loadStudentActivities(sid);
 }
 
 // 标签页点击事件委托
