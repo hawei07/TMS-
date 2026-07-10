@@ -8436,6 +8436,7 @@ if (intval($countBt) === 0) {
                                 确认支付
                             </button>
                         </div>
+                    </div>
                     </div><!-- /enroll-course-flow -->
 
                     <!-- 活动报名流程容器（默认隐藏） -->
