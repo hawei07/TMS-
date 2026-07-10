@@ -11042,7 +11042,7 @@ if (intval($countBt) === 0) {
                     </div>
                     <div style="flex:1;min-width:150px;">
                         <label style="font-size:13px;color:#888;">报名校区</label>
-                        <div style="font-size:16px;font-weight:600;" id="att-campus">—</div>
+                        <div style="font-size:16px;font-weight:600;" id="att-enroll-campus">—</div>
                     </div>
                 </div>
 
@@ -11085,7 +11085,7 @@ if (intval($countBt) === 0) {
                 <!-- 选择扣课课包 -->
                 <div style="margin-bottom:12px;">
                     <label style="font-size:13px;color:#888;margin-bottom:6px;display:block;">选择扣课课包（仅显示有剩余课时且可被本活动消课的课包）</label>
-                    <div id="att-package-list" style="max-height:250px;overflow-y:auto;border:1px solid #e8ecf1;border-radius:10px;padding:4px;">
+                    <div id="att-package-list" style="border:1px solid #e8ecf1;border-radius:10px;padding:4px;">
                         <div style="text-align:center;color:#999;padding:20px;">加载课包列表...</div>
                     </div>
                 </div>
@@ -11115,7 +11115,7 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260710c"></script>
+    <script src="static/js/main.js?v=20260711a"></script>
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 </body>
 </html>
