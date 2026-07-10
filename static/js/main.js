@@ -12694,20 +12694,22 @@ let activityAttendanceData = { activityId: 0, activityOrderId: 0, studentId: 0, 
 
 // 选择报名类型
 function selectEnrollType(type) {
-    document.getElementById('enroll-type-course').classList.toggle('active', type === 'course');
-    document.getElementById('enroll-type-activity').classList.toggle('active', type === 'activity');
+    var ec = document.getElementById('enroll-type-course');
+    var ea = document.getElementById('enroll-type-activity');
+    if (ec) ec.classList.toggle('active', type === 'course');
+    if (ea) ea.classList.toggle('active', type === 'activity');
+    var cf = document.getElementById('enroll-course-flow');
+    var af = document.getElementById('enroll-activity-flow');
     if (type === 'course') {
-        document.getElementById('enroll-course-flow').style.display = '';
-        document.getElementById('enroll-activity-flow').style.display = 'none';
+        if (cf) cf.style.display = '';
+        if (af) af.style.display = 'none';
     } else {
-        document.getElementById('enroll-course-flow').style.display = 'none';
-        document.getElementById('enroll-activity-flow').style.display = '';
+        if (cf) cf.style.display = 'none';
+        if (af) af.style.display = '';
         activityEnrollState = { campus: null, activity: null, adultCount: 0, studentCount: 0, step: 1 };
         loadActivityCampuses();
-        document.getElementById('enroll-activity-step-activity').style.display = 'none';
-        document.getElementById('enroll-activity-step-count').style.display = 'none';
-        document.getElementById('enroll-activity-step-pay').style.display = 'none';
-        document.getElementById('enroll-activity-action-bar').style.display = 'none';
+        var ids = ['enroll-activity-step-activity','enroll-activity-step-count','enroll-activity-step-pay','enroll-activity-action-bar'];
+        ids.forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
     }
 }
 
@@ -12715,8 +12717,9 @@ function selectEnrollType(type) {
 async function loadActivityCampuses() {
     const grid = document.getElementById('activity-campus-grid');
     const empty = document.getElementById('activity-campus-empty');
+    if (!grid) { console.error('loadActivityCampuses: activity-campus-grid not found'); return; }
     grid.innerHTML = '<div style="text-align:center;color:#999;padding:20px;grid-column:1/-1;">加载中...</div>';
-    empty.style.display = 'none';
+    if (empty) empty.style.display = 'none';
     try {
         const res = await fetch(API_BASE + 'list_organizations');
         const data = await res.json();
@@ -12725,10 +12728,11 @@ async function loadActivityCampuses() {
         function walk(nodes) { (nodes || []).forEach(n => { orgs.push(n); if (n.children) walk(n.children); }); }
         walk(tree);
         const campuses = orgs.filter(o => o.type === '校区');
-        if (campuses.length === 0) { grid.innerHTML = ''; empty.style.display = ''; return; }
+        if (campuses.length === 0) { grid.innerHTML = ''; if (empty) empty.style.display = ''; return; }
         grid.innerHTML = campuses.map(o => '<div class="activity-campus-card" data-campus="' + esc(o.name) + '" onclick="selectActivityCampus(\'' + esc(o.name).replace(/'/g, "\\'") + '\')"><div class="activity-campus-card-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div><div class="activity-campus-card-name">' + esc(o.name) + '</div></div>').join('');
     } catch (e) {
-        grid.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;grid-column:1/-1;">加载校区失败</div>';
+        console.error('loadActivityCampuses error:', e);
+        grid.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;grid-column:1/-1;">加载校区失败: ' + esc(e.message) + '</div>';
     }
 }
 
