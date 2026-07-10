@@ -8313,7 +8313,7 @@ async function showClassEnrollModal(studentId) {
             }
             return `<tr>
                 <td>${esc(c.name)}</td>
-                <td>${esc(c.course_name || '')}</td>
+                <td>${esc(c.name || '')}</td>
                 <td>${esc(c.class_type || '')}</td>
                 <td>${esc(c.campus || '')}</td>
                 <td>${c.enrollable ? '<span style="color:#27ae60;">可分入</span>（剩余课时：' + c.remaining + '）' : '<span style="color:#e74c3c;">不可分入</span>'}</td>
@@ -13093,7 +13093,7 @@ async function openActivityAttendanceModal(activityId, activityOrderId, studentI
         const data = await res.json();
         const courses = (data.data || []).filter(c => c.order_type !== '活动');
         if (courses.length === 0) { packagesDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">该学员暂无可用课包</div>'; return; }
-        packagesDiv.innerHTML = courses.map((c, i) => '<label class="activity-package-radio" style="display:flex;align-items:center;padding:10px 12px;margin-bottom:8px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;"><input type="radio" name="att-package" value="' + c.order_id + '" data-course="' + esc(c.course_name || '') + '" data-remaining="' + (c.remaining_lessons || 0) + '" onchange="onActivityAttPackageChange()" ' + (i === 0 ? 'checked' : '') + '><span style="margin-left:10px;flex:1;"><strong>' + esc(c.course_name || '') + '</strong><span style="color:#888;margin-left:8px;font-size:13px;">剩余 ' + (c.remaining_lessons || 0) + ' 课时</span></span></label>').join('');
+        packagesDiv.innerHTML = courses.map((c, i) => '<label class="activity-package-radio" style="display:flex;align-items:center;padding:10px 12px;margin-bottom:8px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;"><input type="radio" name="att-package" value="' + c.order_id + '" data-course="' + esc(c.name || '') + '" data-remaining="' + (c.remaining_lessons || 0) + '" onchange="onActivityAttPackageChange()" ' + (i === 0 ? 'checked' : '') + '><span style="margin-left:10px;flex:1;"><strong>' + esc(c.name || '') + '</strong><span style="color:#888;margin-left:8px;font-size:13px;">剩余 ' + (c.remaining_lessons || 0) + ' 课时</span></span></label>').join('');
         if (courses.length > 0) onActivityAttPackageChange();
     } catch (e) { packagesDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载课包失败</div>'; }
     openModal('modal-activity-attendance');
