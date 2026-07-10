@@ -8301,46 +8301,50 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
 
-                <!-- ★ 新增：类型选择（学员信息卡片之后） -->
-                <div class="enroll-type-select" id="enroll-type-select">
-                    <div class="enroll-type-grid">
-                        <!-- 报名课程卡片 -->
-                        <div class="enroll-type-card active" id="enroll-type-course" onclick="selectEnrollType('course')">
-                            <div class="enroll-type-card-icon">
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                                    <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                                    <line x1="8" y1="7" x2="16" y2="7"/>
-                                    <line x1="8" y1="11" x2="14" y2="11"/>
-                                </svg>
-                            </div>
-                            <div class="enroll-type-card-label">报名课程</div>
-                            <div class="enroll-type-card-desc">选择校区 → 课程 → 价格方案 → 支付</div>
-                        </div>
-                        <!-- 报名活动卡片 -->
-                        <div class="enroll-type-card" id="enroll-type-activity" onclick="selectEnrollType('activity')">
-                            <div class="enroll-type-card-icon">
-                                <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                    <circle cx="12" cy="12" r="10"/>
-                                    <polygon points="10,8 16,12 10,16"/>
-                                </svg>
-                            </div>
-                            <div class="enroll-type-card-label">报名活动</div>
-                            <div class="enroll-type-card-desc">选择活动 → 填写人数 → 支付报名费</div>
-                        </div>
-                    </div>
-                </div>
-
                 <!-- 表单区域 -->
                 <div class="enroll-form">
-                    <!-- 课程报名流程容器 -->
-                    <div class="enroll-course-flow" id="enroll-course-flow">
-                    <!-- 校区/课程 — 上下布局 -->
-                    <div class="enroll-form-row" style="flex-direction: column; gap: 16px;">
+                    <!-- 公用：选择校区 -->
+                    <div class="enroll-form-row" id="enroll-common-campus" style="flex-direction: column; gap: 16px;">
                         <div class="form-group" style="margin-bottom: 0;">
                             <label>校区 <span class="required">*</span></label>
                             <select id="enroll-campus-select"><option value="">请选择校区</option></select>
                         </div>
+                    </div>
+
+                    <!-- 选择课程/活动（校区选定后显示） -->
+                    <div class="enroll-type-select" id="enroll-type-select" style="display:none;">
+                        <div class="enroll-type-grid">
+                            <!-- 报名课程卡片 -->
+                            <div class="enroll-type-card active" id="enroll-type-course" onclick="selectEnrollType('course')">
+                                <div class="enroll-type-card-icon">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
+                                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
+                                        <line x1="8" y1="7" x2="16" y2="7"/>
+                                        <line x1="8" y1="11" x2="14" y2="11"/>
+                                    </svg>
+                                </div>
+                                <div class="enroll-type-card-label">报名课程</div>
+                                <div class="enroll-type-card-desc">选择课程 → 方案 → 支付</div>
+                            </div>
+                            <!-- 报名活动卡片 -->
+                            <div class="enroll-type-card" id="enroll-type-activity" onclick="selectEnrollType('activity')">
+                                <div class="enroll-type-card-icon">
+                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                        <circle cx="12" cy="12" r="10"/>
+                                        <polygon points="10,8 16,12 10,16"/>
+                                    </svg>
+                                </div>
+                                <div class="enroll-type-card-label">报名活动</div>
+                                <div class="enroll-type-card-desc">选择活动 → 人数 → 支付</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- 课程报名流程容器（默认隐藏） -->
+                    <div class="enroll-course-flow" id="enroll-course-flow" style="display:none;">
+                    <!-- 课程 — 上下布局 -->
+                    <div class="enroll-form-row" style="flex-direction: column; gap: 16px;">
                         <div class="enroll-course-picker" id="enroll-course-picker">
                             <label>课程 <span class="required">*</span></label>
                             <div class="course-picker-body">
@@ -8434,27 +8438,13 @@ if (intval($countBt) === 0) {
                         </div>
                     </div><!-- /enroll-course-flow -->
 
-                    <!-- ★ 新增：活动报名流程容器（默认隐藏） -->
+                    <!-- 活动报名流程容器（默认隐藏） -->
                     <div class="enroll-activity-flow" id="enroll-activity-flow" style="display:none;">
 
-                        <!-- Step 1: 选择校区 -->
-                        <div class="enroll-section enroll-step" id="enroll-activity-step-campus">
-                            <div class="enroll-section-title">
-                                <span class="enroll-step-num">1</span> 选择校区
-                            </div>
-                            <div class="activity-campus-grid" id="activity-campus-grid">
-                                <!-- JS 动态渲染校区卡片 -->
-                            </div>
-                            <div class="activity-campus-empty" id="activity-campus-empty" style="display:none;">
-                                <svg width="40" height="40" viewBox="0 0 24 24" fill="none" stroke="#ccc" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg>
-                                <p>暂无可用校区</p>
-                            </div>
-                        </div>
-
-                        <!-- Step 2: 选择活动 -->
+                        <!-- Step 1: 选择活动 -->
                         <div class="enroll-section enroll-step" id="enroll-activity-step-activity" style="display:none;">
                             <div class="enroll-section-title">
-                                <span class="enroll-step-num">2</span> 选择活动
+                                <span class="enroll-step-num">1</span> 选择活动
                             </div>
                             <div class="activity-search-bar">
                                 <div class="ta-filter-group ta-filter-activity-name">
@@ -8479,10 +8469,10 @@ if (intval($countBt) === 0) {
                             </div>
                         </div>
 
-                        <!-- Step 3: 填写报名人数 -->
+                        <!-- Step 2: 填写报名人数 -->
                         <div class="enroll-section enroll-step" id="enroll-activity-step-count" style="display:none;">
                             <div class="enroll-section-title">
-                                <span class="enroll-step-num">3</span> 填写报名人数
+                                <span class="enroll-step-num">2</span> 填写报名人数
                             </div>
                             <div id="activity-fee-display"></div>
                             <div class="activity-count-form" id="activity-count-form">
@@ -8524,14 +8514,14 @@ if (intval($countBt) === 0) {
                             <div class="activity-capacity-hint" id="activity-capacity-hint" style="display:none;"></div>
                         </div>
 
-                        <!-- Step 4: 确认支付（复用现有支付 UI） -->
+                        <!-- Step 3: 确认支付（复用现有支付 UI） -->
                         <div class="enroll-section enroll-step" id="enroll-activity-step-pay" style="display:none;">
                             <div class="enroll-section-title">
-                                <span class="enroll-step-num">4</span> 确认支付
+                                <span class="enroll-step-num">3</span> 确认支付
                             </div>
                         </div>
 
-                        <!-- 活动流程操作栏 -->
+                        <!-- 活动流程操作栏（Step 1:选活动, Step 2:填人数, Step 3:支付） -->
                         <div class="enroll-action-bar" id="enroll-activity-action-bar" style="display:none;">
                             <button class="btn btn-outline btn-lg" onclick="prevActivityStep()" id="btn-activity-prev" style="display:none;">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="15 18 9 12 15 6"/></svg>

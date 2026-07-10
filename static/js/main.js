@@ -6556,37 +6556,42 @@ let currentEnrollPlans = [];
 let currentEnrollMode = 'student'; // 'student' | 'resource'
 let currentEnrollResourceId = null;
 let currentEnrollCampusId = null;
-let currentEnrollStep = 0; // 0=未开始, 1=选择课程, 2=选择方案, 3=确认支付
+let currentEnrollCampusName = '';
+let currentEnrollType = null; // 'course' | 'activity' | null
+let currentEnrollStep = 0; // 0=未开始, 1=校区, 2=课程/活动, 3=方案/人数, 4=支付
 
 // ==================== 报名步骤进度条（动态创建） ====================
-function ensureEnrollProgressBar() {
-    if (document.getElementById('enroll-progress-bar')) return;
-    const formDiv = document.querySelector('#panel-enroll .enroll-form');
-    if (!formDiv) return;
-    const bar = document.createElement('div');
-    bar.id = 'enroll-progress-bar';
-    bar.className = 'enroll-progress-bar';
-    bar.innerHTML = `
-        <div class="eps" data-step="1">
-            <div class="eps-num">1</div>
-            <span>选择课程</span>
-        </div>
-        <div class="eps-conn"><div class="eps-conn-inner"></div></div>
-        <div class="eps" data-step="2">
-            <div class="eps-num">2</div>
-            <span>选择方案</span>
-        </div>
-        <div class="eps-conn"><div class="eps-conn-inner"></div></div>
-        <div class="eps" data-step="3">
-            <div class="eps-num">3</div>
-            <span>确认支付</span>
-        </div>`;
-    formDiv.insertBefore(bar, formDiv.firstChild);
+function ensureEnrollProgressBar(type) {
+    var bar = document.getElementById('enroll-progress-bar');
+    var steps;
+    if (type === 'activity') {
+        steps = ['校区', '活动', '人数', '支付'];
+    } else if (type === 'course') {
+        steps = ['校区', '课程', '方案', '支付'];
+    } else {
+        steps = ['校区', '', '', ''];
+    }
+    var html = '';
+    for (var i = 0; i < steps.length; i++) {
+        html += '<div class="eps" data-step="' + (i + 1) + '"><div class="eps-num">' + (i + 1) + '</div><span>' + steps[i] + '</span></div>';
+        if (i < steps.length - 1) html += '<div class="eps-conn"><div class="eps-conn-inner"></div></div>';
+    }
+    if (bar) {
+        bar.innerHTML = html;
+    } else {
+        const formDiv = document.querySelector('#panel-enroll .enroll-form');
+        if (!formDiv) return;
+        bar = document.createElement('div');
+        bar.id = 'enroll-progress-bar';
+        bar.className = 'enroll-progress-bar';
+        bar.innerHTML = html;
+        formDiv.insertBefore(bar, formDiv.firstChild);
+    }
 }
 function setEnrollProgress(step) {
     if (currentEnrollStep === step) return;
     currentEnrollStep = step;
-    ensureEnrollProgressBar();
+    ensureEnrollProgressBar(currentEnrollType || 'course');
     const bar = document.getElementById('enroll-progress-bar');
     if (!bar) return;
     bar.querySelectorAll('.eps').forEach(el => {
@@ -6599,11 +6604,12 @@ function setEnrollProgress(step) {
     });
     // 如果回到步骤1，重置后续
     if (step <= 1) {
-        bar.querySelectorAll('.eps[data-step="2"], .eps[data-step="3"]').forEach(el => {
-            el.classList.remove('done', 'active');
+        bar.querySelectorAll('.eps').forEach(el => {
+            const s = parseInt(el.dataset.step);
+            if (s > 1) el.classList.remove('done', 'active');
+            if (s === 1) el.classList.add('active');
         });
         bar.querySelectorAll('.eps-conn').forEach(el => el.classList.remove('done'));
-        bar.querySelector('.eps[data-step="1"]').classList.add('active');
     }
 }
 
@@ -6676,6 +6682,7 @@ async function goEnroll(studentId) {
     currentEnrollMode = 'student';
     currentEnrollResourceId = null;
     currentEnrollCampusId = null;
+    currentEnrollCampusName = '';
 
     // Reset labels for student mode
     document.getElementById('btn-enroll-back').textContent = '返回学员详情';
@@ -6713,9 +6720,17 @@ async function goEnroll(studentId) {
     // Load campus list
     await loadCampusOptions('enroll-campus-select');
 
+    // Hide type cards and both flows
+    document.getElementById('enroll-type-select').style.display = 'none';
+    document.getElementById('enroll-course-flow').style.display = 'none';
+    document.getElementById('enroll-activity-flow').style.display = 'none';
+
     // Hide plan/items sections with transition
     enrollTransitionHide(document.getElementById('enroll-plans-section'));
     enrollTransitionHide(document.getElementById('enroll-items-section'));
+
+    // Reset type
+    currentEnrollType = null;
 
     setEnrollProgress(1);
     activatePanel('panel-enroll');
@@ -6731,6 +6746,7 @@ async function goEnrollFromResource(resourceId) {
     currentEnrollPlanType = '';
     currentEnrollPlans = [];
     currentEnrollCampusId = null;
+    currentEnrollCampusName = '';
 
     // Load resource info and display
     try {
@@ -6748,12 +6764,20 @@ async function goEnrollFromResource(resourceId) {
     // Load campus list
     await loadCampusOptions('enroll-campus-select');
 
+    // Hide type cards and both flows
+    document.getElementById('enroll-type-select').style.display = 'none';
+    document.getElementById('enroll-course-flow').style.display = 'none';
+    document.getElementById('enroll-activity-flow').style.display = 'none';
+
     // Update back button text
     document.getElementById('btn-enroll-back').textContent = '返回我的资源';
 
     // Hide plan/items sections with transition
     enrollTransitionHide(document.getElementById('enroll-plans-section'));
     enrollTransitionHide(document.getElementById('enroll-items-section'));
+
+    // Reset type
+    currentEnrollType = null;
 
     setEnrollProgress(1);
     activatePanel('panel-enroll');
@@ -6767,18 +6791,29 @@ document.addEventListener('DOMContentLoaded', function() {
         campusSel.addEventListener('change', async function() {
             const campusId = this.value;
             currentEnrollCampusId = campusId ? parseInt(campusId) : null;
+            currentEnrollCampusName = this.options[this.selectedIndex]?.text || '';
             currentEnrollCourseId = null;
             currentEnrollPlanId = null;
+            currentEnrollType = null;
             // 隐藏价格方案和报价明细
             enrollTransitionHide(document.getElementById('enroll-items-section'));
             const plansSection = document.getElementById('enroll-plans-section');
             if (plansSection) plansSection.style.display = 'none';
             document.getElementById('enroll-plans-list').innerHTML = '';
-            setEnrollProgress(1);
+            // 隐藏两个报名流程
+            document.getElementById('enroll-course-flow').style.display = 'none';
+            document.getElementById('enroll-activity-flow').style.display = 'none';
             if (!campusId) {
+                document.getElementById('enroll-type-select').style.display = 'none';
                 loadEnrollCoursePicker(null);
+                setEnrollProgress(1);
                 return;
             }
+            // 显示进度条（校区步骤）
+            setEnrollProgress(1);
+            // 显示类型选择卡片
+            document.getElementById('enroll-type-select').style.display = '';
+            // 预加载课程数据
             await loadEnrollCoursePicker(campusId);
         });
     }
@@ -6825,7 +6860,7 @@ function renderEnrollPlansList(plans) {
 function selectEnrollPlan(planId) {
     currentEnrollPlanId = planId;
     currentEnrollPlanType = '';
-    setEnrollProgress(2);
+    setEnrollProgress(3);
 
     const plan = currentEnrollPlans.find(p => p.id == planId);
     currentEnrollPlanType = (plan && plan.plan_type) ? plan.plan_type : '';
@@ -6872,7 +6907,7 @@ function selectEnrollPlan(planId) {
     // 初始化支付方式
     document.getElementById('enroll-payment-cash').value = total.toFixed(2);
     document.getElementById('enroll-payment-meituan').value = '0.00';
-    setEnrollProgress(3);
+    setEnrollProgress(4);
     updatePaymentHint();
 }
 
@@ -7287,7 +7322,7 @@ function selectEnrollCourse(courseId, courseName) {
         card.classList.toggle('selected', parseInt(card.dataset.courseId) === courseId);
     });
 
-    setEnrollProgress(2);
+    setEnrollProgress(3);
     enrollTransitionHide(document.getElementById('enroll-items-section'));
     const plansSection = document.getElementById('enroll-plans-section');
     plansSection.style.display = '';
@@ -12694,6 +12729,7 @@ let activityAttendanceData = { activityId: 0, activityOrderId: 0, studentId: 0, 
 
 // 选择报名类型
 function selectEnrollType(type) {
+    currentEnrollType = type;
     var ec = document.getElementById('enroll-type-course');
     var ea = document.getElementById('enroll-type-activity');
     if (ec) ec.classList.toggle('active', type === 'course');
@@ -12703,13 +12739,21 @@ function selectEnrollType(type) {
     if (type === 'course') {
         if (cf) cf.style.display = '';
         if (af) af.style.display = 'none';
+        ensureEnrollProgressBar('course');
+        setEnrollProgress(2);
     } else {
         if (cf) cf.style.display = 'none';
         if (af) af.style.display = '';
-        activityEnrollState = { campus: null, activity: null, adultCount: 0, studentCount: 0, step: 1 };
-        loadActivityCampuses();
-        var ids = ['enroll-activity-step-activity','enroll-activity-step-count','enroll-activity-step-pay','enroll-activity-action-bar'];
-        ids.forEach(function(id) { var el = document.getElementById(id); if (el) el.style.display = 'none'; });
+        // 校区已从公用下拉选定，直接加载活动
+        var campusName = currentEnrollCampusName || '';
+        activityEnrollState = { campus: campusName, activity: null, adultCount: 0, studentCount: 0, step: 2 };
+        loadActivityList(campusName);
+        document.getElementById('enroll-activity-step-activity').style.display = '';
+        document.getElementById('enroll-activity-step-count').style.display = 'none';
+        document.getElementById('enroll-activity-step-pay').style.display = 'none';
+        document.getElementById('enroll-activity-action-bar').style.display = 'none';
+        ensureEnrollProgressBar('activity');
+        setEnrollProgress(2);
     }
 }
 
@@ -12916,7 +12960,7 @@ function renderActivityPaymentSummary() {
     const a = activityEnrollState.activity;
     const total = calcActivityTotal();
     const paySection = document.getElementById('enroll-activity-step-pay');
-    paySection.innerHTML = '<div class="enroll-section-title"><span class="enroll-step-num">4</span> 确认支付</div><div class="activity-pay-summary"><div class="activity-pay-item"><span>活动：</span><strong>' + esc(a.name) + '</strong></div><div class="activity-pay-item"><span>校区：</span>' + esc(activityEnrollState.campus || '') + '</div>' + (activityEnrollState.adultCount > 0 ? '<div class="activity-pay-item"><span>成人：</span>' + activityEnrollState.adultCount + '人 × ¥' + a.feeAdult.toFixed(0) + ' = ¥' + (activityEnrollState.adultCount * a.feeAdult).toFixed(2) + '</div>' : '') + (activityEnrollState.studentCount > 0 ? '<div class="activity-pay-item"><span>学员：</span>' + activityEnrollState.studentCount + '人 × ¥' + a.feeStudent.toFixed(0) + ' = ¥' + (activityEnrollState.studentCount * a.feeStudent).toFixed(2) + '</div>' : '') + '<div class="activity-pay-total"><span>合计：</span><strong>¥' + total.toFixed(2) + '</strong></div></div><div class="enroll-section" style="margin-top:16px;"><div class="enroll-section-title">支付方式</div><div class="enroll-payment-row"><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg></span><span class="enroll-payment-label">现金</span></div><input type="number" id="activity-pay-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-meituan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></span><span class="enroll-payment-label">美团</span></div><input type="number" id="activity-pay-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-account"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="enroll-payment-label">账户余额</span></div><input type="number" id="activity-pay-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div></div><div id="activity-pay-hint" style="display:none;margin-top:8px;font-size:13px;color:#e74c3c;"></div></div>';
+    paySection.innerHTML = '<div class="enroll-section-title"><span class="enroll-step-num">3</span> 确认支付</div><div class="activity-pay-summary"><div class="activity-pay-item"><span>活动：</span><strong>' + esc(a.name) + '</strong></div><div class="activity-pay-item"><span>校区：</span>' + esc(activityEnrollState.campus || '') + '</div>' + (activityEnrollState.adultCount > 0 ? '<div class="activity-pay-item"><span>成人：</span>' + activityEnrollState.adultCount + '人 × ¥' + a.feeAdult.toFixed(0) + ' = ¥' + (activityEnrollState.adultCount * a.feeAdult).toFixed(2) + '</div>' : '') + (activityEnrollState.studentCount > 0 ? '<div class="activity-pay-item"><span>学员：</span>' + activityEnrollState.studentCount + '人 × ¥' + a.feeStudent.toFixed(0) + ' = ¥' + (activityEnrollState.studentCount * a.feeStudent).toFixed(2) + '</div>' : '') + '<div class="activity-pay-total"><span>合计：</span><strong>¥' + total.toFixed(2) + '</strong></div></div><div class="enroll-section" style="margin-top:16px;"><div class="enroll-section-title">支付方式</div><div class="enroll-payment-row"><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg></span><span class="enroll-payment-label">现金</span></div><input type="number" id="activity-pay-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-meituan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></span><span class="enroll-payment-label">美团</span></div><input type="number" id="activity-pay-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-account"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="enroll-payment-label">账户余额</span></div><input type="number" id="activity-pay-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div></div><div id="activity-pay-hint" style="display:none;margin-top:8px;font-size:13px;color:#e74c3c;"></div></div>';
     document.getElementById('activity-pay-cash').value = total.toFixed(2);
     checkActivityPayMatch();
 }
