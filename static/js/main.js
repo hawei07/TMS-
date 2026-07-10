@@ -7686,6 +7686,7 @@ function renderOrderTable(rows) {
         else if (ot === '续费') orderTypeHtml = '<span class="tag tag-renewal">续费</span>';
         else if (ot === '小课包') orderTypeHtml = '<span class="tag tag-small-pack">小课包</span>';
         else if (ot === '账户充值') orderTypeHtml = '<span class="tag tag-account-recharge">账户充值</span>';
+        else if (ot === '活动') orderTypeHtml = '<span class="tag tag-activity">活动</span>';
         return `
         <tr>
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
