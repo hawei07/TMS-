@@ -12729,7 +12729,15 @@ async function loadActivityCampuses() {
         walk(tree);
         const campuses = orgs.filter(o => o.type === '校区');
         if (campuses.length === 0) { grid.innerHTML = ''; if (empty) empty.style.display = ''; return; }
-        grid.innerHTML = campuses.map(o => '<div class="activity-campus-card" data-campus="' + esc(o.name) + '" onclick="selectActivityCampus(\'' + esc(o.name).replace(/'/g, "\\'") + '\')"><div class="activity-campus-card-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div><div class="activity-campus-card-name">' + esc(o.name) + '</div></div>').join('');
+        grid.innerHTML = '';
+        campuses.forEach(function(o) {
+            var card = document.createElement('div');
+            card.className = 'activity-campus-card';
+            card.setAttribute('data-campus', o.name);
+            card.onclick = function() { selectActivityCampus(o.name); };
+            card.innerHTML = '<div class="activity-campus-card-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div><div class="activity-campus-card-name">' + esc(o.name) + '</div>';
+            grid.appendChild(card);
+        });
     } catch (e) {
         console.error('loadActivityCampuses error:', e);
         grid.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;grid-column:1/-1;">加载校区失败: ' + esc(e.message) + '</div>';
