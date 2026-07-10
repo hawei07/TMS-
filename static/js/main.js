@@ -12720,9 +12720,13 @@ async function loadActivityCampuses() {
     try {
         const res = await fetch(API_BASE + 'list_organizations');
         const data = await res.json();
-        const orgs = (data.data || []).filter(o => o.type === '校区');
-        if (orgs.length === 0) { grid.innerHTML = ''; empty.style.display = ''; return; }
-        grid.innerHTML = orgs.map(o => '<div class="activity-campus-card" data-campus="' + esc(o.name) + '" onclick="selectActivityCampus(\'' + esc(o.name).replace(/'/g, "\\'") + '\')"><div class="activity-campus-card-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div><div class="activity-campus-card-name">' + esc(o.name) + '</div></div>').join('');
+        const tree = (data && data.data && data.data.tree) ? data.data.tree : [];
+        const orgs = [];
+        function walk(nodes) { (nodes || []).forEach(n => { orgs.push(n); if (n.children) walk(n.children); }); }
+        walk(tree);
+        const campuses = orgs.filter(o => o.type === '校区');
+        if (campuses.length === 0) { grid.innerHTML = ''; empty.style.display = ''; return; }
+        grid.innerHTML = campuses.map(o => '<div class="activity-campus-card" data-campus="' + esc(o.name) + '" onclick="selectActivityCampus(\'' + esc(o.name).replace(/'/g, "\\'") + '\')"><div class="activity-campus-card-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/></svg></div><div class="activity-campus-card-name">' + esc(o.name) + '</div></div>').join('');
     } catch (e) {
         grid.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;grid-column:1/-1;">加载校区失败</div>';
     }
@@ -13148,8 +13152,12 @@ async function loadActivityAttendanceCampuses() {
     try {
         const res = await fetch(API_BASE + 'list_organizations');
         const data = await res.json();
-        const orgs = (data.data || []).filter(o => o.type === '校区');
-        sel.innerHTML = '<option value="">全部校区</option>' + orgs.map(o => '<option value="' + esc(o.name) + '">' + esc(o.name) + '</option>').join('');
+        const tree = (data && data.data && data.data.tree) ? data.data.tree : [];
+        const orgs = [];
+        function walk(nodes) { (nodes || []).forEach(n => { orgs.push(n); if (n.children) walk(n.children); }); }
+        walk(tree);
+        const campuses = orgs.filter(o => o.type === '校区');
+        sel.innerHTML = '<option value="">全部校区</option>' + campuses.map(o => '<option value="' + esc(o.name) + '">' + esc(o.name) + '</option>').join('');
     } catch (e) { /* ignore */ }
 }
 
