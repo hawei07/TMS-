@@ -13133,6 +13133,7 @@ function showAttStep(step) {
 async function openActivityAttendanceModal(activityId, activityOrderId, studentId, enrollmentRow) {
     // enrollmentRow may contain: adult_count, student_count, campus, total_price, activity_name, enroll_time
     var row = enrollmentRow || {};
+    console.log('ATTENDANCE MODAL enrollmentRow:', JSON.stringify({adult_count: row.adult_count, student_count: row.student_count, total_price: row.total_price, activity_name: row.activity_name}));
     activityAttendanceData = {
         activityId: activityId,
         activityOrderId: activityOrderId,
