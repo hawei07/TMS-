@@ -1854,7 +1854,8 @@ $stmt->execute();
                 $stmt->bindValue(':sp', $student_price);
                 $stmt->execute();
 
-                if ($id <= 0) $id = $db->lastInsertId();
+                $isNew = ($id <= 0);
+                if ($isNew) $id = $db->lastInsertId();
 
                 // 替换 campuses
                 $db->exec("DELETE FROM activity_campuses WHERE activity_id = $id");
@@ -1889,7 +1890,7 @@ $stmt->execute();
                 }
 
                 $db->commit();
-                json(['id' => $id, 'message' => $id > 0 ? '活动更新成功' : '活动创建成功']);
+                json(['id' => $id, 'message' => $isNew ? '活动创建成功' : '活动更新成功']);
             } catch (Exception $e) {
                 $db->rollBack();
                 json(['error' => '保存失败: ' . $e->getMessage()]);
