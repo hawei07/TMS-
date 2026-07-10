@@ -111,6 +111,7 @@ function refreshPanel(panelId) {
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
         case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
         case 'panel-period-settings': loadPeriodTable(); break;
+        case 'panel-tax-rate-settings': loadTaxRates(); break;
         case 'panel-teaching-aids': loadTeachingAids(); break;
     }
 }
@@ -133,7 +134,8 @@ const API_CACHEABLE_ACTIONS = new Set([
     'list_organizations',
     'list_subjects',
     'get_employees',
-    'list_class_periods'
+    'list_class_periods',
+    'list_tax_rates'
 ]);
 
 function cloneApiData(data) {
@@ -392,6 +394,48 @@ async function deletePeriod(pid) {
             showToast('删除失败', 'error');
         }
     });
+}
+
+// ==================== 税率设置 ====================
+async function loadTaxRates() {
+    try {
+        const res = await api('list_tax_rates', null, 'GET');
+        const rates = res.data || [];
+        const tbody = document.querySelector('#table-tax-rates tbody');
+        if (!tbody) return;
+        if (rates.length === 0) {
+            tbody.innerHTML = '<tr><td colspan="5" style="text-align:center;color:#999;padding:30px;">暂无校区数据</td></tr>';
+            return;
+        }
+        tbody.innerHTML = rates.map(r => `
+            <tr>
+                <td><strong>${esc(r.campus_name)}</strong></td>
+                <td><input type="number" class="form-input tax-rate-input" id="tax-course-${r.campus_id}" value="${r.course_tax_rate}" min="0" max="100" step="0.01" style="width:120px;"></td>
+                <td><input type="number" class="form-input tax-rate-input" id="tax-product-${r.campus_id}" value="${r.product_tax_rate}" min="0" max="100" step="0.01" style="width:120px;"></td>
+                <td style="color:#888;font-size:12px;">${r.updated_at ? r.updated_at.slice(0, 16) : '—'}</td>
+                <td><button class="btn btn-primary btn-sm" onclick="saveTaxRate(${r.campus_id})">保存</button></td>
+            </tr>
+        `).join('');
+    } catch (e) {
+        console.error('loadTaxRates', e);
+        showToast('加载税率设置失败', 'error');
+    }
+}
+
+async function saveTaxRate(campusId) {
+    const courseEl = document.getElementById('tax-course-' + campusId);
+    const productEl = document.getElementById('tax-product-' + campusId);
+    const courseTaxRate = parseFloat(courseEl.value) || 0;
+    const productTaxRate = parseFloat(productEl.value) || 0;
+    try {
+        const result = await api('save_tax_rate', { campus_id: campusId, course_tax_rate: courseTaxRate, product_tax_rate: productTaxRate });
+        if (result.error) { showToast(result.error, 'error'); return; }
+        showToast(result.message || '税率保存成功');
+        loadTaxRates();
+    } catch (e) {
+        console.error('saveTaxRate', e);
+        showToast('保存失败', 'error');
+    }
 }
 
 // ==================== 意向等级管理 ====================

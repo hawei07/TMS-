@@ -760,6 +760,15 @@ function ensureSchema(PDO $db): void
         FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // ==================== 税率设置表 ====================
+    $db->exec("CREATE TABLE IF NOT EXISTS tax_rates (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        campus_id INT NOT NULL DEFAULT 0,
+        course_tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+        product_tax_rate DECIMAL(5,2) NOT NULL DEFAULT 0.00,
+        updated_at VARCHAR(500) DEFAULT ''
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // 常用列表/详情查询索引（重复创建会被捕获忽略）
     foreach ([
         ['orders', 'idx_orders_parent_order_no', 'parent_order_no'],

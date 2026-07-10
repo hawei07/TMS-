@@ -1062,6 +1062,30 @@ $stmt->execute();
             $rows = $db->query("SELECT id, name FROM organizations WHERE type='校区' ORDER BY name")->fetchAll(PDO::FETCH_ASSOC);
             json(['data' => $rows]);
 
+        case 'list_tax_rates':
+            $sql = "SELECT t.id, t.campus_id, o.name AS campus_name, COALESCE(t.course_tax_rate,0) AS course_tax_rate, COALESCE(t.product_tax_rate,0) AS product_tax_rate, COALESCE(t.updated_at,'') AS updated_at FROM organizations o LEFT JOIN tax_rates t ON t.campus_id = o.id WHERE o.type='校区' ORDER BY o.name";
+            $stmt = $db->query($sql);
+            $rows = [];
+            while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                $rows[] = $r;
+            }
+            json(['data' => $rows]);
+
+        case 'save_tax_rate':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $campusId = intval($input['campus_id'] ?? 0);
+            $courseTaxRate = floatval($input['course_tax_rate'] ?? 0);
+            $productTaxRate = floatval($input['product_tax_rate'] ?? 0);
+            if (!$campusId) json(['error' => '校区ID无效']);
+            $n = now();
+            $existing = $db->query("SELECT id FROM tax_rates WHERE campus_id=$campusId")->fetch();
+            if ($existing) {
+                $db->exec("UPDATE tax_rates SET course_tax_rate=$courseTaxRate, product_tax_rate=$productTaxRate, updated_at='$n' WHERE campus_id=$campusId");
+            } else {
+                $db->exec("INSERT INTO tax_rates (campus_id, course_tax_rate, product_tax_rate, updated_at) VALUES ($campusId, $courseTaxRate, $productTaxRate, '$n')");
+            }
+            json(['message' => '税率保存成功']);
+
         case 'list_class_periods':
             $campusFilter = trim($_GET['campus'] ?? '');
             $sql = "SELECT * FROM class_periods";
@@ -6589,6 +6613,12 @@ if (intval($countBt) === 0) {
                                             <span class="tree-label">上课时段设置</span>
                                         </div>
                                     </li>
+                                    <li class="tree-node">
+                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-tax-rate-settings">
+                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
+                                            <span class="tree-label">税率设置</span>
+                                        </div>
+                                    </li>
                                 </ul>
                             </li>
                         </ul>
@@ -6894,6 +6924,29 @@ if (intval($countBt) === 0) {
                             </tr></thead>
                             <tbody>
                                 <tr><td colspan="7">加载中...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+            <!-- 面板：税率设置 -->
+            <section class="content-panel" id="panel-tax-rate-settings">
+                <div class="panel-header">
+                    <h3>税率设置</h3>
+                </div>
+                <div class="channel-settings-panel">
+                    <div class="table-wrap">
+                        <table id="table-tax-rates">
+                            <thead><tr>
+                                <th>校区</th>
+                                <th width="160">课耗税率（%）</th>
+                                <th width="160">商品税率（%）</th>
+                                <th width="120">更新时间</th>
+                                <th width="80">操作</th>
+                            </tr></thead>
+                            <tbody>
+                                <tr><td colspan="5">加载中...</td></tr>
                             </tbody>
                         </table>
                     </div>
