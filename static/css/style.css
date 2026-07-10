@@ -2330,6 +2330,7 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 .tag-new-enroll  { background: #EDE9FE; color: #7C3AED; }
 .tag-renewal    { background: #DCFCE7; color: #16A34A; }
 .tag-small-pack { background: #FEF3C7; color: #D97706; }
+.tag-activity  { background: #FFE0E0; color: #E74C3C; }
 .tag-account-recharge { background: #DBEAFE; color: #2563EB; }
 
 
