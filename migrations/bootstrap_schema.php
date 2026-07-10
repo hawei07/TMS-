@@ -495,6 +495,9 @@ function ensureSchema(PDO $db): void
         "activity_id INT DEFAULT 0",
         "activity_order_id INT DEFAULT 0",
         "consumed_amount DECIMAL(10,2) DEFAULT 0.00",
+        "adult_attended INT DEFAULT 0",
+        "student_attended INT DEFAULT 0",
+        "deduction_breakdown TEXT",
     ] as $colDef) {
         $colName = explode(' ', $colDef)[0];
         $check = $db->query("SHOW COLUMNS FROM class_attendance LIKE '$colName'")->fetch();

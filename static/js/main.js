@@ -13082,508 +13082,248 @@ async function voidActivityOrder(orderId) {
     } catch (e) { showToast('操作失败：' + e.message, 'error'); }
 }
 
-// ==================== 活动考勤弹窗 — 4步重设计 ====================
+// ==================== 活动考勤弹窗 — 单页表单 ====================
 
-function showAttStep(step) {
+function recalcAttTotal() {
     var d = activityAttendanceData;
-    d.attStep = step;
+    updateAttRulesForSelectedPackage();
+    var adultCnt = parseInt(document.getElementById('att-adult-count').value) || 0;
+    var studentCnt = parseInt(document.getElementById('att-student-count').value) || 0;
+    d.adultCount = Math.min(adultCnt, d.adultMax || 0);
+    d.studentCount = Math.min(studentCnt, d.studentMax || 0);
+    // 扣课时 = 成人出勤 × 成人每人扣课 + 学员出勤 × 学员每人扣课
+    var adultPer = (d.adultRule && d.adultRule.deduct_lessons) ? d.adultRule.deduct_lessons : 0;
+    var studentPer = (d.studentRule && d.studentRule.deduct_lessons) ? d.studentRule.deduct_lessons : 0;
+    d.adultDeduct = d.adultCount * adultPer;
+    d.studentDeduct = d.studentCount * studentPer;
+    d.totalDeduct = d.adultDeduct + d.studentDeduct;
+    document.getElementById('att-total-deduct').textContent = d.totalDeduct;
+    // 更新课包列表（标记哪些课包剩余课时够用）
+    refreshAttPackageStatus();
+}
 
-    // 更新进度条
-    document.querySelectorAll('#modal-activity-attendance .att-progress-step').forEach(function(el) {
-        var s = parseInt(el.getAttribute('data-step'));
-        el.classList.remove('current', 'completed');
-        if (s < step) el.classList.add('completed');
-        if (s === step) el.classList.add('current');
-    });
-    document.querySelectorAll('#modal-activity-attendance .att-progress-line').forEach(function(el, i) {
-        el.classList.toggle('completed', (i + 1) < step);
-    });
+function normalizeAttSubject(value) {
+    return (value || '').trim();
+}
 
-    // 切换内容
-    document.querySelectorAll('#modal-activity-attendance .att-step-content').forEach(function(el) {
-        el.classList.remove('active');
-    });
-    var stepEl = document.getElementById('att-modal-step' + step);
-    if (stepEl) stepEl.classList.add('active');
-
-    // 控制按钮
-    document.getElementById('att-modal-prev').style.display = (step === 1) ? 'none' : '';
-    document.getElementById('att-modal-next').style.display = (step === 4) ? 'none' : '';
-    document.getElementById('att-modal-confirm').style.display = (step === 4) ? '' : 'none';
-
-    // Step 校验
-    var nextBtn = document.getElementById('att-modal-next');
-    if (step === 2) {
-        var total = d.totalDeduct;
-        // 如果是无扣课规则，每次都允许下一步
-        var hasRules = (d.adultRule || d.studentRule);
-        nextBtn.disabled = (hasRules && total <= 0);
+function findAttDeductRule(rules, subjectLevel1) {
+    subjectLevel1 = normalizeAttSubject(subjectLevel1);
+    rules = rules || [];
+    var defaultRule = null;
+    for (var i = 0; i < rules.length; i++) {
+        var ruleSubject = normalizeAttSubject(rules[i].subject_level1);
+        if (ruleSubject === '' && !defaultRule) defaultRule = rules[i];
+        if (subjectLevel1 && ruleSubject === subjectLevel1) return rules[i];
     }
-    if (step === 3) {
-        // 校验是否有选中课包
-        var need = d.totalDeduct || 0;
-        if (need > 0) {
-            nextBtn.disabled = !d.selectedPackageId;
-        } else {
-            nextBtn.disabled = false;
+    return defaultRule;
+}
+
+function updateAttRulesForSelectedPackage() {
+    var d = activityAttendanceData;
+    var subject = d.selectedPackageData ? d.selectedPackageData.subject_level1 : '';
+    var deductions = d.deductions || { adult: [], student: [] };
+    d.adultRule = findAttDeductRule(deductions.adult, subject);
+    d.studentRule = findAttDeductRule(deductions.student, subject);
+    renderAttRuleHint();
+}
+
+function renderAttRuleHint() {
+    var rulesDiv = document.getElementById('att-rule-hint');
+    if (!rulesDiv) return;
+    var d = activityAttendanceData;
+    var subject = d.selectedPackageData ? d.selectedPackageData.subject_level1 : '';
+    var subjectText = subject || '未选择课包学科';
+    var parts = [];
+    if (d.adultRule) parts.push('成人: ' + (d.adultRule.subject_level1 || '默认') + ' 每人每次扣' + d.adultRule.deduct_lessons + '课时');
+    if (d.studentRule) parts.push('学员: ' + (d.studentRule.subject_level1 || '默认') + ' 每人每次扣' + d.studentRule.deduct_lessons + '课时');
+    rulesDiv.textContent = parts.length > 0 ? ('当前课包学科: ' + subjectText + ' | 扣课规则: ' + parts.join(' | ')) : ('当前课包学科: ' + subjectText + ' | 未匹配到扣课规则');
+}
+
+function calcAttNeedForSubject(subjectLevel1) {
+    var d = activityAttendanceData;
+    var deductions = d.deductions || { adult: [], student: [] };
+    var adultRule = findAttDeductRule(deductions.adult, subjectLevel1);
+    var studentRule = findAttDeductRule(deductions.student, subjectLevel1);
+    var adultCnt = parseInt(document.getElementById('att-adult-count')?.value) || 0;
+    var studentCnt = parseInt(document.getElementById('att-student-count')?.value) || 0;
+    adultCnt = Math.min(Math.max(adultCnt, 0), d.adultMax || 0);
+    studentCnt = Math.min(Math.max(studentCnt, 0), d.studentMax || 0);
+    var adultPer = adultRule ? (parseInt(adultRule.deduct_lessons) || 0) : 0;
+    var studentPer = studentRule ? (parseInt(studentRule.deduct_lessons) || 0) : 0;
+    return adultCnt * adultPer + studentCnt * studentPer;
+}
+
+function refreshAttPackageStatus() {
+    document.querySelectorAll('.att-package-row').forEach(function(el) {
+        var remain = parseInt(el.getAttribute('data-remaining')) || 0;
+        var subject = el.getAttribute('data-subject-level1') || '';
+        var need = calcAttNeedForSubject(subject);
+        var badge = el.querySelector('.att-pkg-badge');
+        if (badge) {
+            if (need <= 0) { badge.textContent = '无匹配规则'; badge.style.color = '#999'; }
+            else if (remain >= need) { badge.textContent = '可用 · 扣' + need + '课时'; badge.style.color = '#16A34A'; }
+            else { badge.textContent = '不足 · 需' + need + '课时'; badge.style.color = '#D97706'; }
         }
-    }
+    });
 }
 
 async function openActivityAttendanceModal(activityId, activityOrderId, studentId, enrollmentRow) {
-    // enrollmentRow may contain: adult_count, student_count, campus, total_price, activity_name, enroll_time
     var row = enrollmentRow || {};
-    console.log('ATTENDANCE MODAL enrollmentRow:', JSON.stringify({adult_count: row.adult_count, student_count: row.student_count, total_price: row.total_price, activity_name: row.activity_name}));
+    console.log('ATTENDANCE MODAL enrollmentRow:', JSON.stringify({adult_count: row.adult_count, student_count: row.student_count, total_price: row.total_price, campus: row.campus, activity_name: row.activity_name, id: row.id}));
+
     activityAttendanceData = {
-        activityId: activityId,
-        activityOrderId: activityOrderId,
-        studentId: studentId,
-        activityName: row.activity_name || '',
-        campus: row.campus || '',
-        adultMax: parseInt(row.adult_count) || 0,
-        studentMax: parseInt(row.student_count) || 0,
-        totalPrice: parseFloat(row.total_price) || 0,
-        enrollTime: (row.enroll_time || row.created_at || '').substring(0, 19),
-        deductions: { adult: [], student: [] },
-        adultRule: null,
-        studentRule: null,
-        adultCount: parseInt(row.adult_count) || 0,
-        studentCount: parseInt(row.student_count) || 0,
-        adultDeduct: 0,
-        studentDeduct: 0,
-        totalDeduct: 0,
-        packages: [],
-        selectedPackageId: null,
-        selectedPackageData: null,
-        attStep: 1
+        activityId: activityId, activityOrderId: activityOrderId, studentId: studentId,
+        activityName: row.activity_name || '', campus: row.campus || '',
+        adultMax: parseInt(row.adult_count) || 0, studentMax: parseInt(row.student_count) || 0,
+        adultCount: 0, studentCount: 0, adultDeduct: 0, studentDeduct: 0, totalDeduct: 0,
+        adultRule: null, studentRule: null,
+        selectedPackageId: null, selectedPackageData: null, deductions: { adult: [], student: [] }
     };
 
-    // 设置活动名称
-    document.getElementById('att-modal-activity-name').textContent = row.activity_name || '';
+    var d = activityAttendanceData;
+    document.getElementById('att-modal-activity-name').textContent = d.activityName;
+    document.getElementById('att-activity-name').textContent = d.activityName;
+    document.getElementById('att-enroll-campus').textContent = d.campus || row.campus || '—';
 
-    // 设置确认页日期
+    // 学员姓名
+    try {
+        var stuRes = await fetch(API_BASE + 'get_student&id=' + studentId);
+        var stuData = await stuRes.json();
+        var sname = (stuData && stuData.student && stuData.student.name) ? stuData.student.name : (stuData.name || ('学员#' + studentId));
+        document.getElementById('att-student-name').textContent = sname;
+    } catch(e) { document.getElementById('att-student-name').textContent = '学员#' + studentId; }
+
+    // 设置成人/学员报名人数和输入上限
+    document.getElementById('att-adult-reg').textContent = d.adultMax;
+    document.getElementById('att-student-reg').textContent = d.studentMax;
+    var adultInput = document.getElementById('att-adult-count');
+    var studentInput = document.getElementById('att-student-count');
+    adultInput.max = d.adultMax; adultInput.value = d.adultMax;  // 默认全部出勤
+    studentInput.max = d.studentMax; studentInput.value = d.studentMax;
+
+    // 设置日期
     var dateEl = document.getElementById('att-confirm-date');
     if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
 
-    // 渲染 Step 1 报名详情
-    renderAttEnrollmentDetail();
-
     // 加载扣课规则
-    await loadAttDeductionRules();
+    await loadAttDeductionRulesSimple();
 
-    // 初始化 Step 2 步进器
-    initAttSteppers();
+    // 加载课包列表
+    await loadAttPackages();
 
-    // 确保 Step 1 可见
-    showAttStep(1);
+    // 加载老师列表
+    loadAttTeachers();
+
+    // 计算初始扣课时
+    recalcAttTotal();
 
     openModal('modal-activity-attendance');
 }
 
-function renderAttEnrollmentDetail() {
+async function loadAttDeductionRulesSimple() {
+    var rulesDiv = document.getElementById('att-rule-hint');
     var d = activityAttendanceData;
-    document.getElementById('att-detail-activity-name').textContent = d.activityName || '—';
-    document.getElementById('att-detail-campus').textContent = d.campus || '—';
-    document.getElementById('att-detail-enroll-time').textContent = d.enrollTime || '—';
-    document.getElementById('att-detail-adult-count').textContent = d.adultMax + ' 人';
-    document.getElementById('att-detail-student-count').textContent = d.studentMax + ' 人';
-    document.getElementById('att-detail-total-price').textContent = '¥' + d.totalPrice.toFixed(2);
-}
-
-async function loadAttDeductionRules() {
-    var rulesDiv = document.getElementById('att-detail-rules');
-    var d = activityAttendanceData;
-    rulesDiv.innerHTML = '<div class="att-rule-no-deduction">加载扣课规则...</div>';
+    if (rulesDiv) rulesDiv.textContent = '请选择扣课课包后匹配扣课规则';
     try {
-        var res = await fetch(API_BASE + 'get_activity&id=' + d.activityId);
+        var res = await fetch(API_BASE + 'get_activity_deduction_rules&activity_id=' + d.activityId);
         var data = await res.json();
-        var deductions = (data && data.deductions) ? data.deductions : { adult: [], student: [] };
-        d.deductions = deductions;
-
-        // 匹配规则：取第一个非空 subject_level1 的规则，或默认规则
-        var adultRules = deductions.adult || [];
-        var studentRules = deductions.student || [];
-
-        function findBestRule(rules) {
-            if (!rules || rules.length === 0) return null;
-            // 优先精确匹配（subject_level1 非空）
-            var exact = null;
-            for (var i = 0; i < rules.length; i++) {
-                if (rules[i].subject_level1 && rules[i].subject_level1 !== '') {
-                    exact = rules[i]; break;
-                }
-            }
-            if (exact) return exact;
-            // 默认规则
-            for (var j = 0; j < rules.length; j++) {
-                if (!rules[j].subject_level1 || rules[j].subject_level1 === '') {
-                    return rules[j];
-                }
-            }
-            return null;
-        }
-
-        d.adultRule = findBestRule(adultRules);
-        d.studentRule = findBestRule(studentRules);
-
-        // 初始计算
-        recalcAttDeductions();
-
-        // 渲染规则卡片
-        var html = '';
-        if (d.adultRule) {
-            var subj = d.adultRule.subject_level1 || '默认';
-            html += '<div class="att-rule-card"><span class="att-rule-icon">🙋</span><span class="att-rule-type">成人</span><span class="att-rule-detail">学科：' + esc(subj) + '，每人每次扣</span><span class="att-rule-value">' + d.adultRule.deduct_lessons + ' 课时</span></div>';
-        }
-        if (d.studentRule) {
-            var subj2 = d.studentRule.subject_level1 || '默认';
-            html += '<div class="att-rule-card"><span class="att-rule-icon">🧒</span><span class="att-rule-type">学员</span><span class="att-rule-detail">学科：' + esc(subj2) + '，每人每次扣</span><span class="att-rule-value">' + d.studentRule.deduct_lessons + ' 课时</span></div>';
-        }
-        if (!html) {
-            html = '<div class="att-rule-no-deduction">该活动未配置扣课规则，考勤时不扣除课时</div>';
-        }
-        rulesDiv.innerHTML = html;
-    } catch (e) {
-        rulesDiv.innerHTML = '<div class="att-rule-no-deduction">加载扣课规则失败</div>';
+        d.deductions = {
+            adult: data.adult || [],
+            student: data.student || []
+        };
+        updateAttRulesForSelectedPackage();
+    } catch(e) {
+        d.deductions = { adult: [], student: [] };
+        if (rulesDiv) rulesDiv.textContent = '加载扣课规则失败';
     }
 }
 
-function initAttSteppers() {
+async function loadAttPackages() {
+    var pkgDiv = document.getElementById('att-package-list');
     var d = activityAttendanceData;
-
-    // 成人
-    document.getElementById('att-step2-adult-max').textContent = '报名 ' + d.adultMax + ' 人';
-    document.getElementById('att-step2-adult-hint').textContent = '最多出勤 ' + d.adultMax + ' 人';
-    var adultInput = document.getElementById('att-step2-adult-val');
-    adultInput.max = d.adultMax;
-    adultInput.value = d.adultCount;
-    updateStepperButtons('adult');
-
-    // 学员
-    document.getElementById('att-step2-student-max').textContent = '报名 ' + d.studentMax + ' 人';
-    document.getElementById('att-step2-student-hint').textContent = '最多出勤 ' + d.studentMax + ' 人';
-    var studentInput = document.getElementById('att-step2-student-val');
-    studentInput.max = d.studentMax;
-    studentInput.value = d.studentCount;
-    updateStepperButtons('student');
-
-    recalcAttDeductions();
-}
-
-function attStepperChange(type, delta) {
-    var d = activityAttendanceData;
-    var countKey = (type === 'adult') ? 'adultCount' : 'studentCount';
-    var maxKey = (type === 'adult') ? 'adultMax' : 'studentMax';
-    d[countKey] = Math.max(0, Math.min(d[maxKey], d[countKey] + delta));
-    document.getElementById('att-step2-' + type + '-val').value = d[countKey];
-    updateStepperButtons(type);
-    recalcAttDeductions();
-}
-
-function attStepperInput(type) {
-    var d = activityAttendanceData;
-    var countKey = (type === 'adult') ? 'adultCount' : 'studentCount';
-    var maxKey = (type === 'adult') ? 'adultMax' : 'studentMax';
-    var input = document.getElementById('att-step2-' + type + '-val');
-    var val = parseInt(input.value) || 0;
-    d[countKey] = Math.max(0, Math.min(d[maxKey], val));
-    input.value = d[countKey];
-    updateStepperButtons(type);
-    recalcAttDeductions();
-}
-
-function updateStepperButtons(type) {
-    var d = activityAttendanceData;
-    var countKey = (type === 'adult') ? 'adultCount' : 'studentCount';
-    var maxKey = (type === 'adult') ? 'adultMax' : 'studentMax';
-    var minusBtn = document.getElementById('att-step2-' + type + '-minus');
-    var plusBtn = document.getElementById('att-step2-' + type + '-plus');
-    if (minusBtn) minusBtn.disabled = (d[countKey] <= 0);
-    if (plusBtn) plusBtn.disabled = (d[countKey] >= d[maxKey]);
-}
-
-function recalcAttDeductions() {
-    var d = activityAttendanceData;
-
-    // 成人扣课计算
-    var adultPer = d.adultRule ? (parseInt(d.adultRule.deduct_lessons) || 1) : 0;
-    d.adultDeduct = d.adultCount * adultPer;
-
-    // 学员扣课计算
-    var studentPer = d.studentRule ? (parseInt(d.studentRule.deduct_lessons) || 1) : 0;
-    d.studentDeduct = d.studentCount * studentPer;
-
-    d.totalDeduct = d.adultDeduct + d.studentDeduct;
-
-    // 更新 Step 2 UI
-    // 成人
-    var adultCalc = document.getElementById('att-step2-adult-calc');
-    if (adultCalc) {
-        adultCalc.style.display = (d.adultRule && d.adultCount > 0) ? '' : 'none';
-        document.getElementById('att-calc-adult-count').textContent = d.adultCount;
-        document.getElementById('att-calc-adult-per').textContent = adultPer;
-        document.getElementById('att-calc-adult-subtotal').textContent = d.adultDeduct;
-    }
-    // 学员
-    var studentCalc = document.getElementById('att-step2-student-calc');
-    if (studentCalc) {
-        studentCalc.style.display = (d.studentRule && d.studentCount > 0) ? '' : 'none';
-        document.getElementById('att-calc-student-count').textContent = d.studentCount;
-        document.getElementById('att-calc-student-per').textContent = studentPer;
-        document.getElementById('att-calc-student-subtotal').textContent = d.studentDeduct;
-    }
-
-    // 汇总
-    document.getElementById('att-summary-adult').textContent = d.adultDeduct + ' 课时';
-    document.getElementById('att-summary-student').textContent = d.studentDeduct + ' 课时';
-    document.getElementById('att-summary-total').textContent = d.totalDeduct;
-
-    // 无扣课规则提示
-    var noRules = document.getElementById('att-step2-no-rules');
-    var summary = document.getElementById('att-step2-summary');
-    if (noRules && summary) {
-        var hasRules = (d.adultRule || d.studentRule);
-        noRules.style.display = hasRules ? 'none' : '';
-        summary.style.display = hasRules ? '' : 'none';
-    }
-
-    // 更新 Step 2 校验
-    var total = d.totalDeduct;
-    var hasRules = (d.adultRule || d.studentRule);
-    if (d.attStep === 2) {
-        var nextBtn = document.getElementById('att-modal-next');
-        if (nextBtn) nextBtn.disabled = (hasRules && total <= 0);
-    }
-}
-
-async function loadAttStep3Packages() {
-    var packagesDiv = document.getElementById('att-modal-packages');
-    var d = activityAttendanceData;
-    packagesDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载课包列表...</div>';
-
-    // 更新需扣课时显示
-    document.getElementById('att-step3-needed').textContent = d.totalDeduct;
-
+    pkgDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载课包列表...</div>';
     try {
         var res = await fetch(API_BASE + 'get_student_courses&student_id=' + d.studentId);
         var data = await res.json();
-        var courses = (data.data || []).filter(function(c) { return c.order_type !== '活动'; });
-        d.packages = courses;
-
-        if (courses.length === 0) {
-            packagesDiv.innerHTML = '';
-            document.getElementById('att-step3-no-packages').style.display = '';
-            document.getElementById('att-step3-stats').style.display = 'none';
-            d.selectedPackageId = null;
-            d.selectedPackageData = null;
-            return;
-        }
-
-        document.getElementById('att-step3-no-packages').style.display = 'none';
-        document.getElementById('att-step3-stats').style.display = '';
-
-        var availableCount = 0;
-        var firstAvailableId = null;
-        var firstAvailableData = null;
-
-        packagesDiv.innerHTML = courses.map(function(c) {
-            var remaining = parseInt(c.remaining_lessons) || 0;
-            var lessonCount = parseInt(c.lesson_count) || 0;
-            var name = c.name || '';
-            var orderId = parseInt(c.order_id) || 0;
-
-            // 判断课包状态
-            var status = 'available'; // 可用
-            var statusLabel = '✅ 可用';
-            var statusClass = 'ok';
-            var isDisabled = '';
-            var canSelect = true;
-
-            if (remaining <= 0) {
-                status = 'unavailable';
-                statusLabel = '❌ 已用完';
-                statusClass = 'error';
-                isDisabled = ' disabled';
-                canSelect = false;
-            } else if (d.totalDeduct > 0 && remaining < d.totalDeduct) {
-                status = 'unavailable';
-                statusLabel = '⚠ 课时不足';
-                statusClass = 'error';
-                isDisabled = ' disabled';
-                canSelect = false;
-            }
-
-            if (canSelect) {
-                availableCount++;
-                if (!firstAvailableId) {
-                    firstAvailableId = orderId;
-                    firstAvailableData = c;
-                }
-            }
-
-            var capacityPct = Math.min(100, Math.max(0, (remaining / Math.max(1, lessonCount)) * 100));
-            var fillClass = capacityPct >= 50 ? 'sufficient' : (capacityPct > 0 ? 'insufficient' : 'depleted');
-
-            return '<div class="att-package-card ' + status + (isDisabled ? '' : '') + '" data-order-id="' + orderId + '" onclick="attSelectPackage(' + orderId + ', ' + (canSelect ? 'true' : 'false') + ')" style="' + (!canSelect ? 'cursor:not-allowed;' : '') + '">' +
-                '<div class="att-package-radio-dot"></div>' +
-                '<div class="att-package-body">' +
-                '<div class="att-package-name">' + esc(name) + '</div>' +
-                '<div class="att-package-meta">剩余 ' + remaining + ' 课时 | 订单#' + orderId + '</div>' +
-                '<div class="att-package-capacity-bar"><div class="att-capacity-fill ' + fillClass + '" style="width:' + capacityPct + '%"></div></div>' +
-                '</div>' +
-                '<div class="att-package-status-tag ' + statusClass + '">' + statusLabel + '</div>' +
-                '</div>';
+        var courses = (data.data || []).filter(function(c) { return c.order_type !== '活动' && (c.remaining_lessons || 0) > 0; });
+        if (courses.length === 0) { pkgDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">该学员暂无可用课包</div>'; return; }
+        pkgDiv.innerHTML = courses.map(function(c, i) {
+            return '<label class="att-package-row" data-remaining="' + (c.remaining_lessons || 0) + '" data-subject-level1="' + esc(c.subject_level1 || '') + '" data-subject-level2="' + esc(c.subject_level2 || '') + '" style="display:flex;align-items:center;padding:10px 12px;border:1px solid #e0e0e0;border-radius:8px;cursor:pointer;margin:4px 0;">' +
+                '<input type="radio" name="att-package" value="' + c.order_id + '" data-course="' + esc(c.name || '') + '" data-subject-level1="' + esc(c.subject_level1 || '') + '" data-subject-level2="' + esc(c.subject_level2 || '') + '" onchange="onAttPackageSelect()" ' + (i === 0 ? 'checked' : '') + '>' +
+                '<span style="margin-left:10px;flex:1;"><strong>' + esc(c.name || '') + '</strong>' +
+                '<span style="color:#888;margin-left:8px;font-size:13px;">剩余 ' + (c.remaining_lessons || 0) + ' 课时</span></span>' +
+                '<span class="att-pkg-badge" style="font-size:12px;margin-left:8px;"></span>' +
+                '</label>';
         }).join('');
-
-        document.getElementById('att-step3-total-packages').textContent = courses.length;
-        document.getElementById('att-step3-available-count').textContent = availableCount;
-
-        // 自动选中第一个可用
-        if (firstAvailableId) {
-            attSelectPackage(firstAvailableId, true);
-        } else {
-            d.selectedPackageId = null;
-            d.selectedPackageData = null;
-        }
-    } catch (e) {
-        packagesDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载课包失败</div>';
-    }
+        if (courses.length > 0) onAttPackageSelect();
+        refreshAttPackageStatus();
+    } catch(e) { pkgDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载课包失败</div>'; }
 }
 
-function attSelectPackage(orderId, canSelect) {
-    if (!canSelect) return;
-    var d = activityAttendanceData;
-    d.selectedPackageId = orderId;
-
-    // 查找课包数据
-    var pkg = null;
-    for (var i = 0; i < d.packages.length; i++) {
-        if (parseInt(d.packages[i].order_id) === orderId) { pkg = d.packages[i]; break; }
-    }
-    d.selectedPackageData = pkg;
-
-    // 更新视觉
-    document.querySelectorAll('#modal-activity-attendance .att-package-card').forEach(function(card) {
-        card.classList.remove('selected');
-    });
-    var selectedCard = document.querySelector('#modal-activity-attendance .att-package-card[data-order-id="' + orderId + '"]');
-    if (selectedCard) selectedCard.classList.add('selected');
-
-    // 更新 Step 3 校验
-    if (d.attStep === 3) {
-        var nextBtn = document.getElementById('att-modal-next');
-        if (nextBtn && d.totalDeduct > 0) nextBtn.disabled = false;
-    }
+function onAttPackageSelect() {
+    var selected = document.querySelector('input[name="att-package"]:checked');
+    if (!selected) return;
+    activityAttendanceData.selectedPackageId = parseInt(selected.value);
+    activityAttendanceData.selectedPackageData = {
+        course: selected.dataset.course || '',
+        subject_level1: selected.dataset.subjectLevel1 || '',
+        subject_level2: selected.dataset.subjectLevel2 || '',
+        remaining_lessons: parseInt(selected.closest('.att-package-row')?.getAttribute('data-remaining')) || 0
+    };
+    document.querySelectorAll('.att-package-row').forEach(function(l) { l.style.borderColor = '#e0e0e0'; });
+    var label = selected.closest('.att-package-row');
+    if (label) label.style.borderColor = '#FF7675';
+    updateAttRulesForSelectedPackage();
+    recalcAttTotal();
 }
 
-function renderAttStep4Summary() {
-    var d = activityAttendanceData;
-    var pkg = d.selectedPackageData;
-    var pkgName = pkg ? (pkg.name || '') : (d.selectedPackageId ? '课包#' + d.selectedPackageId : '—');
-    var remaining = pkg ? (parseInt(pkg.remaining_lessons) || 0) : 0;
-    var afterDeduct = Math.max(0, remaining - d.totalDeduct);
-
-    document.getElementById('att-confirm-activity').textContent = d.activityName + '（' + (d.campus || '') + '）';
-    document.getElementById('att-confirm-adult').textContent = d.adultCount + ' 人出勤（报名 ' + d.adultMax + ' 人）→ 扣 ' + d.adultDeduct + ' 课时';
-    document.getElementById('att-confirm-student').textContent = d.studentCount + ' 人出勤（报名 ' + d.studentMax + ' 人）→ 扣 ' + d.studentDeduct + ' 课时';
-    document.getElementById('att-confirm-package').textContent = pkgName;
-    document.getElementById('att-confirm-total-deduct').textContent = d.totalDeduct + ' 课时';
-    document.getElementById('att-confirm-remaining').textContent = afterDeduct + ' 课时';
-
-    // 影响提示
-    document.getElementById('att-notice-adult').textContent = d.adultCount;
-    document.getElementById('att-notice-student').textContent = d.studentCount;
-    document.getElementById('att-notice-package').textContent = pkgName;
-    document.getElementById('att-notice-lessons').textContent = d.totalDeduct;
-
-    // 确保日期有值
-    var dateEl = document.getElementById('att-confirm-date');
-    if (dateEl && !dateEl.value) dateEl.value = new Date().toISOString().split('T')[0];
+async function loadAttTeachers() {
+    var sel = document.getElementById('att-teacher');
+    if (!sel) return;
+    sel.innerHTML = '<option value="">请选择</option>';
+    try {
+        var res = await fetch(API_BASE + 'get_teachers');
+        var data = await res.json();
+        var teachers = (data && data.teachers) ? data.teachers : [];
+        teachers.forEach(function(t) {
+            if (t.name) {
+                var opt = document.createElement('option');
+                opt.value = t.name;
+                opt.textContent = t.name + (t.department ? '（' + t.department + '）' : '');
+                sel.appendChild(opt);
+            }
+        });
+    } catch(e) { console.error('loadAttTeachers error:', e); }
 }
 
-// ===== 步骤导航 =====
-async function nextActivityAttStep() {
-    var d = activityAttendanceData;
-
-    if (d.attStep === 1) {
-        showAttStep(2);
-    } else if (d.attStep === 2) {
-        // 验证：至少一人出勤（有扣课规则时）
-        var hasRules = (d.adultRule || d.studentRule);
-        if (hasRules && d.totalDeduct <= 0) {
-            showToast('请至少选择一人出勤', 'error');
-            return;
-        }
-        // 加载 Step 3 课包列表
-        await loadAttStep3Packages();
-        showAttStep(3);
-    } else if (d.attStep === 3) {
-        // 验证：需要扣课时必须选课包
-        if (d.totalDeduct > 0 && !d.selectedPackageId) {
-            showToast('请选择扣课课包', 'error');
-            return;
-        }
-        // 渲染 Step 4 确认
-        renderAttStep4Summary();
-        showAttStep(4);
-    }
-}
-
-function prevActivityAttStep() {
-    var d = activityAttendanceData;
-    if (d.attStep > 1) {
-        showAttStep(d.attStep - 1);
-    }
-}
-
-// ===== 提交考勤 =====
 async function confirmActivityAttendance() {
     var d = activityAttendanceData;
-    var dateEl = document.getElementById('att-confirm-date');
-    var date = dateEl ? dateEl.value : '';
-    if (!date) { showToast('请选择考勤日期', 'error'); return; }
-
-    var confirmBtn = document.getElementById('att-modal-confirm');
-    confirmBtn.disabled = true;
-    confirmBtn.textContent = '提交中...';
-
+    var adultCnt = parseInt(document.getElementById('att-adult-count').value) || 0;
+    var studentCnt = parseInt(document.getElementById('att-student-count').value) || 0;
+    if (d.totalDeduct > 0 && !d.selectedPackageId) { showToast('请选择扣课课包', 'error'); return; }
+    if (adultCnt === 0 && studentCnt === 0) { showToast('成人或学员出勤人数至少填写一个', 'error'); return; }
+    var date = document.getElementById('att-confirm-date').value;
+    var teacher = document.getElementById('att-teacher').value;
+    var breakdown = JSON.stringify({
+        adult: { count: adultCnt, per_lesson: d.adultRule ? d.adultRule.deduct_lessons : 0, total: d.adultDeduct },
+        student: { count: studentCnt, per_lesson: d.studentRule ? d.studentRule.deduct_lessons : 0, total: d.studentDeduct },
+        teacher: teacher
+    });
     try {
-        var breakdown = [];
-        if (d.adultDeduct > 0) {
-            breakdown.push({
-                fee_type: 'adult',
-                count: d.adultCount,
-                per_person: d.adultRule ? (parseInt(d.adultRule.deduct_lessons) || 1) : 0,
-                subtotal: d.adultDeduct
-            });
-        }
-        if (d.studentDeduct > 0) {
-            breakdown.push({
-                fee_type: 'student',
-                count: d.studentCount,
-                per_person: d.studentRule ? (parseInt(d.studentRule.deduct_lessons) || 1) : 0,
-                subtotal: d.studentDeduct
-            });
-        }
-
         var payload = {
-            activity_id: d.activityId,
-            activity_order_id: d.activityOrderId,
-            student_id: d.studentId,
-            adult_attended: d.adultCount,
-            student_attended: d.studentCount,
-            deduct_order_id: d.selectedPackageId || 0,
-            total_deduct_lessons: d.totalDeduct,
-            deduction_breakdown: JSON.stringify(breakdown),
-            session_date: date
+            activity_id: d.activityId, activity_order_id: d.activityOrderId,
+            student_id: d.studentId, deduct_order_id: d.selectedPackageId || 0,
+            deduct_lessons: d.totalDeduct, session_date: date,
+            adult_attended: adultCnt, student_attended: studentCnt,
+            deduction_breakdown: breakdown
         };
-
         var res = await api('save_activity_attendance', payload, 'POST');
-        if (res.error) { showToast(res.error, 'error'); confirmBtn.disabled = false; confirmBtn.textContent = '✅ 确认考勤'; return; }
+        if (res.error) { showToast(res.error, 'error'); return; }
         showToast('考勤成功');
         closeModal('modal-activity-attendance');
         if (currentViewStudentId) loadStudentActivities(currentViewStudentId);
-    } catch (e) { showToast('考勤失败：' + e.message, 'error'); confirmBtn.disabled = false; confirmBtn.textContent = '✅ 确认考勤'; }
+        if (typeof loadActivityAttendanceList === 'function') loadActivityAttendanceList();
+    } catch(e) { showToast('考勤失败: ' + e.message, 'error'); }
 }
 
 // ==================== 活动考勤列表 ====================
@@ -13618,15 +13358,13 @@ async function loadActivityAttendanceList(page = 1) {
 function openActivityAttendanceFromList(index) {
     const r = window._activityAttendanceRows && window._activityAttendanceRows[index];
     if (!r) return;
-    // 从 list_activity_attendance 返回的数据可能不含 adult_count/student_count
-    // 构造最小 enrollmentRow，Step 1 显示为 0/暂缺
     openActivityAttendanceModal(r.activity_id, r.order_id, r.student_id, {
         activity_name: r.activity_name || '',
         campus: r.campus || '',
-        adult_count: 0,
-        student_count: 0,
-        total_price: 0,
-        enroll_time: r.enroll_time || ''
+        adult_count: r.adult_count || r.activity_adult_count || 0,
+        student_count: r.student_count || r.activity_student_count || 0,
+        total_price: r.total_price || r.actual_price || 0,
+        enroll_time: r.enroll_time || r.created_at || ''
     });
 }
 

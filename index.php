@@ -6741,7 +6741,7 @@ json([
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
 
-            $sql = "SELECT o.id AS order_id, o.student_id, o.activity_id, o.created_at AS enroll_time, o.campus, s.name AS student_name, a.name AS activity_name, a.id AS activity_id FROM orders o LEFT JOIN students s ON o.student_id = s.id LEFT JOIN activities a ON o.activity_id = a.id $whereStr ORDER BY o.id DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT o.id AS order_id, o.student_id, o.activity_id, o.created_at AS enroll_time, o.campus, o.activity_adult_count AS adult_count, o.activity_student_count AS student_count, o.actual_price AS total_price, s.name AS student_name, a.name AS activity_name, a.id AS activity_id FROM orders o LEFT JOIN students s ON o.student_id = s.id LEFT JOIN activities a ON o.activity_id = a.id $whereStr ORDER BY o.id DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
@@ -6815,18 +6815,31 @@ json([
             $isNewMode = ($adultAttended + $studentAttended > 0);
             if ($isNewMode) {
                 // 新流程：从活动扣课规则计算总扣课时
-                $deductRules = $db->query("SELECT fee_type, deduct_lessons FROM activity_subject_deductions WHERE activity_id = $activityId")->fetchAll(PDO::FETCH_ASSOC);
+                $srcSubjectLevel1 = '';
+                if ($deductOrderId > 0) {
+                    $srcSubjectRow = $db->query("SELECT c.subject_level1 FROM orders o LEFT JOIN courses c ON o.course_id = c.id WHERE o.id = $deductOrderId AND o.student_id = $studentId LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+                    $srcSubjectLevel1 = trim($srcSubjectRow['subject_level1'] ?? '');
+                }
+                $deductRules = $db->query("SELECT fee_type, subject_level1, deduct_lessons FROM activity_subject_deductions WHERE activity_id = $activityId")->fetchAll(PDO::FETCH_ASSOC);
                 $adultPerLesson = 0;
                 $studentPerLesson = 0;
+                $adultDefaultLesson = 0;
+                $studentDefaultLesson = 0;
                 foreach ($deductRules as $rule) {
                     $ft = $rule['fee_type'] ?? 'student';
-                    $dl = intval($rule['deduct_lessons'] ?? 1);
-                    if ($ft === 'adult' && $dl > $adultPerLesson) $adultPerLesson = $dl;
-                    if ($ft === 'student' && $dl > $studentPerLesson) $studentPerLesson = $dl;
+                    $ruleSubject = trim($rule['subject_level1'] ?? '');
+                    $dl = intval($rule['deduct_lessons'] ?? 0);
+                    if ($dl <= 0) continue;
+                    if ($ft === 'adult') {
+                        if ($ruleSubject === '' && $adultDefaultLesson <= 0) $adultDefaultLesson = $dl;
+                        if ($srcSubjectLevel1 !== '' && $ruleSubject === $srcSubjectLevel1) $adultPerLesson = $dl;
+                    } else {
+                        if ($ruleSubject === '' && $studentDefaultLesson <= 0) $studentDefaultLesson = $dl;
+                        if ($srcSubjectLevel1 !== '' && $ruleSubject === $srcSubjectLevel1) $studentPerLesson = $dl;
+                    }
                 }
-                // 如果没有配置规则，默认每人扣1课时
-                if ($adultPerLesson <= 0 && $adultAttended > 0) $adultPerLesson = 1;
-                if ($studentPerLesson <= 0 && $studentAttended > 0) $studentPerLesson = 1;
+                if ($adultPerLesson <= 0) $adultPerLesson = $adultDefaultLesson;
+                if ($studentPerLesson <= 0) $studentPerLesson = $studentDefaultLesson;
                 $totalDeductLessons = $adultAttended * $adultPerLesson + $studentAttended * $studentPerLesson;
             } else {
                 // 旧流程兼容：直接使用 deduct_lessons 参数
@@ -11115,7 +11128,7 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260711a"></script>
+    <script src="static/js/main.js?v=20260711c"></script>
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 </body>
 </html>
