@@ -12803,21 +12803,28 @@ function selectActivityCampus(campusName) {
 
 // 加载活动列表
 async function loadActivityList(campusName) {
+    console.log('loadActivityList called with campus:', campusName);
     const listDiv = document.getElementById('activity-card-list');
     const emptyDiv = document.getElementById('activity-card-empty');
+    if (!listDiv) { console.error('activity-card-list not found in DOM'); return; }
     listDiv.innerHTML = '<div style="text-align:center;color:#999;padding:20px;">加载中...</div>';
-    emptyDiv.style.display = 'none';
+    if (emptyDiv) emptyDiv.style.display = 'none';
     try {
         const params = new URLSearchParams({ campus_name: campusName });
-        const res = await fetch(API_BASE + 'list_activities_for_enroll&' + params.toString());
+        const url = API_BASE + 'list_activities_for_enroll&' + params.toString();
+        console.log('Fetching:', url);
+        const res = await fetch(url);
         const data = await res.json();
+        console.log('API response:', data);
         const activities = data.data || [];
         window._allActivities = activities;
         populateActivitySubjectFilter(activities);
-        if (activities.length === 0) { listDiv.innerHTML = ''; emptyDiv.style.display = ''; return; }
+        if (activities.length === 0) { listDiv.innerHTML = ''; if (emptyDiv) emptyDiv.style.display = ''; console.log('No activities found for campus:', campusName); return; }
         renderActivityCards(activities);
+        console.log('Rendered', activities.length, 'activities for campus:', campusName);
     } catch (e) {
-        listDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载活动失败</div>';
+        console.error('loadActivityList error:', e);
+        listDiv.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载活动失败: ' + esc(e.message) + '</div>';
     }
 }
 
