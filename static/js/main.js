@@ -12850,7 +12850,7 @@ function renderActivityCards(activities) {
         else if (feeAdult > 0) feeText = '成人 ¥' + feeAdult.toFixed(0) + '/人';
         else feeText = '免费';
         const capacityInfo = capacity > 0 ? ' (已报' + enrolled + '/' + capacity + ')' : '';
-        return '<div class="activity-card" data-activity-id="' + a.id + '" data-activity-name="' + esc(a.name) + '" data-fee-adult="' + feeAdult + '" data-fee-student="' + feeStudent + '" data-subject="' + esc(a.subject_level1 || '') + '" data-deduct-rules=\'" + JSON.stringify(a.deductions || {adult:[],student:[]}).replace(/'/g, "&#39;") + "\\' data-has-subject-deduction="' + (a.student_fee_mode === 'fee_and_deduct' || a.student_fee_mode === 'deduct_only' ? 1 : 0) + '" data-remaining="' + remaining + '" onclick="selectActivity(' + a.id + ', \'' + esc(a.name).replace(/'/g, "\\'") + '\', this)"><div class="activity-card-header"><span class="activity-card-name">' + esc(a.name) + '</span><span class="activity-card-subject">' + esc(a.subject_level1 || '') + '</span></div><div class="activity-card-fee">' + feeText + '</div><div class="activity-card-capacity">剩余名额：' + remaining + capacityInfo + '</div></div>';
+        return '<div class="activity-card" data-activity-id="' + a.id + '" data-activity-name="' + esc(a.name) + '" data-fee-adult="' + feeAdult + '" data-fee-student="' + feeStudent + '" data-subject="' + esc(a.subject_level1 || '') + '" data-deduct-rules=\'' + JSON.stringify(a.deductions && a.deductions.student ? a.deductions.student : []) + '\' data-has-subject-deduction="' + (a.student_fee_mode === 'fee_and_deduct' || a.student_fee_mode === 'deduct_only' ? 1 : 0) + '" data-remaining="' + remaining + '" onclick="selectActivity(' + a.id + ', \'' + esc(a.name).replace(/'/g, "\\'") + '\', this)"><div class="activity-card-header"><span class="activity-card-name">' + esc(a.name) + '</span><span class="activity-card-subject">' + esc(a.subject_level1 || '') + '</span></div><div class="activity-card-fee">' + feeText + '</div><div class="activity-card-capacity">剩余名额：' + remaining + capacityInfo + '</div></div>';
     }).join('');
 }
 
@@ -12867,7 +12867,8 @@ function filterActivities() {
 function selectActivity(activityId, activityName, cardEl) {
     var actData = (window._allActivities || []).find(function(x) { return x.id == activityId; });
     var ded = (actData && actData.deductions) ? actData.deductions : {adult:[],student:[]};
-    activityEnrollState.activity = { id: activityId, name: activityName, feeAdult: parseFloat(cardEl.dataset.feeAdult) || 0, feeStudent: parseFloat(cardEl.dataset.feeStudent) || 0, subject: cardEl.dataset.subject, deductionRules: ded, adultDeductions: ded.adult || [], studentDeductions: ded.student || [], hasSubjectDeduction: (ded.adult && ded.adult.length > 0) || (ded.student && ded.student.length > 0) ? 1 : 0, remaining: parseInt(cardEl.dataset.remaining) || 0 };
+    var hasDed = ((ded.adult && ded.adult.length > 0) || (ded.student && ded.student.length > 0)) ? 1 : 0;
+    activityEnrollState.activity = { id: activityId, name: activityName, feeAdult: parseFloat(cardEl.dataset.feeAdult) || 0, feeStudent: parseFloat(cardEl.dataset.feeStudent) || 0, subject: cardEl.dataset.subject, deductionRules: ded, adultDeductions: ded.adult || [], studentDeductions: ded.student || [], hasSubjectDeduction: hasDed, remaining: parseInt(cardEl.dataset.remaining) || 0 };
     document.querySelectorAll('.activity-card').forEach(c => c.classList.toggle('selected', false));
     cardEl.classList.add('selected');
     document.getElementById('enroll-activity-step-count').style.display = '';
