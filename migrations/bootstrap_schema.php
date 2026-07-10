@@ -299,7 +299,23 @@ function ensureSchema(PDO $db): void
         if (!$exists) $db->exec("ALTER TABLE orders ADD COLUMN $col $def");
     }
 
-    // 历史数据回填：通过 price_items JOIN 重建已有订单的优惠快照
+    // 活动报名：orders 表新增 8 列
+    $activityOrderCols = [
+        'activity_id' => 'INT DEFAULT 0',
+        'activity_name' => "VARCHAR(200) DEFAULT ''",
+        'activity_campus' => "VARCHAR(200) DEFAULT ''",
+        'activity_adult_count' => 'INT DEFAULT 0',
+        'activity_student_count' => 'INT DEFAULT 0',
+        'adult_unit_price' => 'DECIMAL(10,2) DEFAULT 0.00',
+        'student_unit_price' => 'DECIMAL(10,2) DEFAULT 0.00',
+        'activity_fee_type' => "VARCHAR(20) DEFAULT ''",
+    ];
+    foreach ($activityOrderCols as $col => $def) {
+        $exists = $db->query("SHOW COLUMNS FROM orders LIKE '$col'")->fetch();
+        if (!$exists) $db->exec("ALTER TABLE orders ADD COLUMN $col $def");
+    }
+
+    // 历史数据回填
     $snapshotTablesReady = true;
     foreach (['price_items', 'discount_plans', 'coupons', 'teaching_aids'] as $tableName) {
         if (!$db->query("SHOW TABLES LIKE " . $db->quote($tableName))->fetch()) {
@@ -468,6 +484,17 @@ function ensureSchema(PDO $db): void
         "deducted_order_id INT DEFAULT 0",
         "deduction_json TEXT",
         "is_temporary INT DEFAULT 0",
+    ] as $colDef) {
+        $colName = explode(' ', $colDef)[0];
+        $check = $db->query("SHOW COLUMNS FROM class_attendance LIKE '$colName'")->fetch();
+        if (!$check) $db->exec("ALTER TABLE class_attendance ADD COLUMN $colDef");
+    }
+
+    // 活动考勤：class_attendance 新增字段
+    foreach ([
+        "activity_id INT DEFAULT 0",
+        "activity_order_id INT DEFAULT 0",
+        "consumed_amount DECIMAL(10,2) DEFAULT 0.00",
     ] as $colDef) {
         $colName = explode(' ', $colDef)[0];
         $check = $db->query("SHOW COLUMNS FROM class_attendance LIKE '$colName'")->fetch();
@@ -760,6 +787,18 @@ function ensureSchema(PDO $db): void
         FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
 
+    // 活动报名人数统计缓存表
+    $db->exec("CREATE TABLE IF NOT EXISTS activity_enrollment_counts (
+        id INT PRIMARY KEY AUTO_INCREMENT,
+        activity_id INT NOT NULL,
+        campus_name VARCHAR(200) NOT NULL DEFAULT '',
+        adult_count INT NOT NULL DEFAULT 0,
+        student_count INT NOT NULL DEFAULT 0,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+        UNIQUE KEY uk_activity_campus (activity_id, campus_name),
+        FOREIGN KEY (activity_id) REFERENCES activities(id) ON DELETE CASCADE
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+
     // ==================== 税率设置表 ====================
     $db->exec("CREATE TABLE IF NOT EXISTS tax_rates (
         id INT PRIMARY KEY AUTO_INCREMENT,
@@ -789,6 +828,7 @@ function ensureSchema(PDO $db): void
         ['employees', 'idx_employees_department', 'department'],
         ['appointments', 'idx_appointments_time', 'appointment_time'],
         ['class_attendance', 'idx_class_attendance_session', 'class_id, schedule_id, session_date'],
+        ['class_attendance', 'idx_class_attendance_activity', 'activity_id'],
         ['teaching_aid_sales', 'idx_tas_sold_at', 'sold_at'],
         ['teaching_aid_sales', 'idx_tas_student_name', 'student_name'],
         ['teaching_aid_sales', 'idx_tas_teaching_aid_name', 'teaching_aid_name']

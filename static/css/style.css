@@ -8392,3 +8392,910 @@ tbody td {
 }
 
 /* ==================== 活动面板按钮组 */
+
+/* ============================================================
+   活动报名全流程 — 少儿美术主题样式
+   ============================================================ */
+
+/* --- 设计变量（作用域隔离） --- */
+#panel-enroll.activity-mode,
+#panel-student-detail .sdt-panel-activity,
+#panel-attendance .att-panel-activity {
+    --ta-yellow: #FFE066;
+    --ta-coral: #FF7675;
+    --ta-sky: #74B9FF;
+    --ta-mint: #55EFC4;
+    --ta-yellow-bg: #FFF9E0;
+    --ta-coral-bg: #FFF0F0;
+    --ta-sky-bg: #F0F7FF;
+    --ta-mint-bg: #F0FFF8;
+}
+
+/* ==================== 报名类型选择卡片 ==================== */
+.enroll-type-select {
+    padding: 24px 28px;
+    background: #fffef9;
+    border-bottom: 2px solid #f0f0f0;
+}
+.enroll-type-grid {
+    display: flex;
+    gap: 20px;
+    max-width: 700px;
+}
+.enroll-type-card {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 12px;
+    padding: 32px 24px 24px;
+    background: #fff;
+    border: 2px solid #e8ecf1;
+    border-radius: 16px;
+    cursor: pointer;
+    transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
+    user-select: none;
+}
+.enroll-type-card:hover {
+    border-color: #FFE066;
+    box-shadow: 0 4px 20px rgba(255,224,102,0.18);
+    transform: translateY(-2px);
+}
+.enroll-type-card.active {
+    border-color: #FF7675;
+    background: #FFF0F0;
+    box-shadow: 0 4px 24px rgba(255,118,117,0.2);
+}
+.enroll-type-card-icon {
+    width: 80px;
+    height: 80px;
+    border-radius: 50%;
+    background: #f8f9fb;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: #888;
+    transition: all 0.25s;
+}
+.enroll-type-card.active .enroll-type-card-icon {
+    background: #fff;
+    color: #FF7675;
+}
+.enroll-type-card-label {
+    font-size: 18px;
+    font-weight: 700;
+    color: #444;
+}
+.enroll-type-card.active .enroll-type-card-label {
+    color: #FF7675;
+}
+.enroll-type-card-desc {
+    font-size: 12px;
+    color: #999;
+    text-align: center;
+}
+
+/* ==================== 活动报名流程容器 ==================== */
+.enroll-activity-flow {
+    padding: 0;
+}
+.enroll-course-flow {
+    /* wraps existing course selection UI */;
+}
+
+/* ==================== 活动 — 校区选择卡片 ==================== */
+.activity-campus-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+    gap: 12px;
+    margin-top: 8px;
+}
+.activity-campus-card {
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    padding: 18px 12px;
+    background: #fff;
+    border: 2px solid #e8ecf1;
+    border-radius: 14px;
+    cursor: pointer;
+    font-size: 15px;
+    font-weight: 600;
+    color: #555;
+    transition: all 0.2s;
+    text-align: center;
+    min-height: 56px;
+}
+.activity-campus-card:hover {
+    border-color: #74B9FF;
+    color: #74B9FF;
+    transform: translateY(-1px);
+}
+.activity-campus-card.selected {
+    border-color: #74B9FF;
+    background: #F0F7FF;
+    color: #74B9FF;
+    box-shadow: 0 2px 12px rgba(116,185,255,0.18);
+}
+.activity-campus-card .campus-icon {
+    color: #bbb;
+    transition: color 0.2s;
+}
+.activity-campus-card.selected .campus-icon {
+    color: #74B9FF;
+}
+.activity-campus-empty {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+}
+
+/* ==================== 活动 — 搜索栏 ==================== */
+.activity-search-bar {
+    display: flex;
+    gap: 12px;
+    align-items: center;
+    margin-bottom: 12px;
+    flex-wrap: wrap;
+}
+.ta-filter-group {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+}
+.ta-filter-icon {
+    color: #bbb;
+}
+.ta-filter-input {
+    padding: 8px 12px;
+    border: 2px solid #e8ecf1;
+    border-radius: 10px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+    background: #fff;
+}
+.ta-filter-input:focus {
+    border-color: #FFE066;
+}
+
+/* ==================== 活动 — 活动卡片列表 ==================== */
+.activity-card-list {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 4px;
+}
+.activity-card {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    padding: 18px 20px;
+    background: #fff;
+    border: 2px solid #e8ecf1;
+    border-radius: 14px;
+    cursor: pointer;
+    transition: all 0.2s;
+    position: relative;
+}
+.activity-card::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: 4px;
+    border-radius: 14px 0 0 14px;
+    background: #e5e7eb;
+    transition: all 0.25s;
+}
+.activity-card:nth-child(4n+1)::before { background: #FFE066; }
+.activity-card:nth-child(4n+2)::before { background: #FF7675; }
+.activity-card:nth-child(4n+3)::before { background: #74B9FF; }
+.activity-card:nth-child(4n+4)::before { background: #55EFC4; }
+.activity-card:hover {
+    border-color: #FFE066;
+    box-shadow: 0 4px 16px rgba(255,224,102,0.12);
+    transform: translateX(2px);
+}
+.activity-card.selected {
+    border-color: #FF7675;
+    background: #FFF0F0;
+}
+.activity-card-main {
+    flex: 1;
+    min-width: 0;
+}
+.activity-card-name {
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.activity-card-meta {
+    font-size: 12px;
+    color: #999;
+    display: flex;
+    gap: 12px;
+    align-items: center;
+}
+.activity-card-meta svg {
+    margin-right: 3px;
+    vertical-align: -2px;
+}
+.activity-card-fees {
+    display: flex;
+    gap: 16px;
+    flex-shrink: 0;
+}
+.activity-card-fee-item {
+    text-align: center;
+}
+.activity-card-fee-label {
+    font-size: 11px;
+    color: #999;
+    margin-bottom: 2px;
+}
+.activity-card-fee-price {
+    font-size: 16px;
+    font-weight: 700;
+    color: #FF7675;
+    font-variant-numeric: tabular-nums;
+}
+.activity-card-fee-mode {
+    font-size: 10px;
+    padding: 1px 6px;
+    border-radius: 4px;
+    background: #FFF9E0;
+    color: #b8860b;
+}
+.activity-card-arrow {
+    color: #ccc;
+    flex-shrink: 0;
+}
+.activity-card.selected .activity-card-arrow {
+    color: #FF7675;
+}
+.activity-card-empty {
+    text-align: center;
+    padding: 30px;
+    color: #999;
+}
+
+/* ==================== 活动 — 报名人数输入 ==================== */
+.activity-count-form {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    margin-top: 12px;
+}
+.activity-count-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: #fafbfc;
+    border: 2px solid #e8ecf1;
+    border-radius: 12px;
+    transition: border-color 0.2s;
+}
+.activity-count-row:focus-within {
+    border-color: #FFE066;
+}
+.activity-count-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 14px;
+    font-weight: 600;
+    color: #555;
+    min-width: 60px;
+}
+.activity-count-icon {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+.adult-icon { background: #FFF0F0; color: #FF7675; }
+.student-icon { background: #F0F7FF; color: #74B9FF; }
+.activity-count-fee {
+    font-size: 13px;
+    color: #888;
+    white-space: nowrap;
+}
+.activity-count-input {
+    width: 64px;
+    padding: 6px 10px;
+    border: 2px solid #e8ecf1;
+    border-radius: 10px;
+    text-align: center;
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    outline: none;
+    transition: border-color 0.2s;
+}
+.activity-count-input:focus {
+    border-color: #FFE066;
+}
+.activity-count-unit {
+    font-size: 13px;
+    color: #888;
+}
+.activity-count-subtotal {
+    font-size: 16px;
+    font-weight: 700;
+    color: #FF7675;
+    font-variant-numeric: tabular-nums;
+    margin-left: auto;
+}
+/* 扣课时提示 */
+.activity-deduct-hint {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 10px 16px;
+    margin-top: 10px;
+    background: #FFF9E0;
+    border: 2px solid #FFE066;
+    border-radius: 10px;
+    font-size: 13px;
+    color: #b8860b;
+}
+/* 合计栏 */
+.activity-total-bar {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 20px;
+    margin-top: 16px;
+    background: #FFF0F0;
+    border: 2px solid #FF7675;
+    border-radius: 12px;
+}
+.activity-total-label {
+    font-size: 15px;
+    font-weight: 600;
+    color: #555;
+}
+.activity-total-amount {
+    font-size: 24px;
+    font-weight: 800;
+    color: #FF7675;
+    font-variant-numeric: tabular-nums;
+}
+/* 容量提示 */
+.activity-capacity-hint {
+    margin-top: 8px;
+    font-size: 12px;
+    color: #999;
+    text-align: right;
+}
+
+/* ==================== 活动 — 步骤系统 ==================== */
+.enroll-section {
+    padding: 16px 28px;
+}
+.enroll-section-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 12px;
+}
+.enroll-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: #FFE066;
+    color: #555;
+    font-size: 13px;
+    font-weight: 700;
+    margin-right: 8px;
+    vertical-align: -3px;
+}
+
+/* 活动流程专属按钮 */
+.btn-activity-next {
+    background: #FF7675;
+    color: #fff;
+    border: none;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 10px rgba(255,118,117,0.3);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+.btn-activity-next:hover {
+    background: #ff5e5d;
+    box-shadow: 0 4px 16px rgba(255,118,117,0.4);
+    transform: translateY(-1px);
+}
+.btn-activity-next:active {
+    transform: scale(0.97);
+}
+.btn-activity-confirm {
+    background: #55EFC4;
+    color: #333;
+    border: none;
+    padding: 10px 24px;
+    font-size: 14px;
+    font-weight: 700;
+    border-radius: 9999px;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    box-shadow: 0 2px 10px rgba(85,239,196,0.3);
+    transition: all 0.2s;
+    cursor: pointer;
+}
+.btn-activity-confirm:hover {
+    box-shadow: 0 4px 16px rgba(85,239,196,0.4);
+    transform: translateY(-1px);
+}
+
+/* ==================== 学员详情 — 报读活动 Tab ==================== */
+#tab-activities .activity-enroll-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#tab-activities .activity-enroll-table th {
+    background: #FFF9E0;
+    color: #555;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px 12px;
+    border-bottom: 3px solid #FFE066;
+    text-align: left;
+    white-space: nowrap;
+}
+#tab-activities .activity-enroll-table th:last-child {
+    text-align: center;
+}
+#tab-activities .activity-enroll-table td {
+    padding: 12px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+    color: #444;
+    vertical-align: middle;
+}
+#tab-activities .activity-enroll-table tbody tr {
+    border-left: 3px solid transparent;
+    transition: all 0.18s ease;
+}
+#tab-activities .activity-enroll-table tbody tr:hover {
+    background: #FFF9E0;
+    border-left-color: #FFE066;
+    transform: translateX(2px);
+}
+
+/* 考勤状态 pill */
+.activity-att-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    font-size: 12px;
+    font-weight: 600;
+    white-space: nowrap;
+}
+.pill-attended {
+    background: #F0FFF8;
+    color: #00b894;
+    border: 1px solid #55EFC4;
+}
+.pill-unattended {
+    background: #f5f5f5;
+    color: #999;
+    border: 1px solid #e0e0e0;
+}
+
+/* 考勤操作按钮 */
+.btn-activity-att {
+    background: #55EFC4;
+    color: #333;
+    border: 2px solid #55EFC4;
+    font-size: 12px;
+    font-weight: 600;
+    padding: 5px 14px;
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    cursor: pointer;
+}
+.btn-activity-att:hover {
+    background: #3dd9a8;
+    border-color: #3dd9a8;
+}
+
+/* ==================== 活动考勤弹窗 ==================== */
+.modal-activity-attendance {
+    background: #fff;
+    border-radius: 16px;
+    box-shadow: 0 8px 40px rgba(0,0,0,0.12);
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+    max-height: 90vh;
+}
+.modal-header-activity-att {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-start;
+    padding: 24px 28px 16px;
+    background: #FFF9E0;
+    border-bottom: 3px solid #FFE066;
+}
+.modal-header-activity-att h4 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 700;
+    color: #333;
+}
+.modal-att-meta {
+    margin-top: 4px;
+    font-size: 12px;
+    color: #999;
+    display: flex;
+    gap: 16px;
+}
+.modal-body-activity-att {
+    padding: 24px 28px;
+    overflow-y: auto;
+    flex: 1;
+}
+.att-modal-step {
+    margin-bottom: 20px;
+}
+.att-modal-step-title {
+    font-size: 15px;
+    font-weight: 700;
+    color: #333;
+    margin-bottom: 10px;
+}
+.att-modal-step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    background: #FFE066;
+    font-size: 12px;
+    font-weight: 700;
+    color: #555;
+    margin-right: 8px;
+    vertical-align: -2px;
+}
+.att-modal-step-desc {
+    font-size: 13px;
+    color: #888;
+    margin-bottom: 12px;
+}
+
+/* 课包 radio 列表 */
+.att-package-list {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+.att-package-option {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: #fff;
+    border: 2px solid #e8ecf1;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.2s;
+    user-select: none;
+}
+.att-package-option:hover {
+    border-color: #FFE066;
+}
+.att-package-option.selected,
+.att-package-option:has(input:checked) {
+    border-color: #74B9FF;
+    background: #F0F7FF;
+}
+.att-package-option input[type="radio"] {
+    display: none;
+}
+.att-package-radio {
+    width: 20px;
+    height: 20px;
+    border-radius: 50%;
+    border: 2px solid #ddd;
+    flex-shrink: 0;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s;
+}
+.att-package-option.selected .att-package-radio,
+.att-package-option:has(input:checked) .att-package-radio {
+    border-color: #74B9FF;
+    background: #74B9FF;
+}
+.att-package-option.selected .att-package-radio::after,
+.att-package-option:has(input:checked) .att-package-radio::after {
+    content: '';
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: #fff;
+}
+.att-package-info {
+    flex: 1;
+    min-width: 0;
+}
+.att-package-name {
+    font-size: 14px;
+    font-weight: 600;
+    color: #333;
+    display: block;
+    margin-bottom: 2px;
+}
+.att-package-meta {
+    font-size: 12px;
+    color: #999;
+}
+.att-package-order {
+    font-size: 11px;
+    color: #bbb;
+    background: #f5f5f5;
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+}
+
+/* 选中课包信息卡片 */
+.att-selected-package {
+    padding: 14px 18px;
+    background: #F0F7FF;
+    border: 2px solid #74B9FF;
+    border-radius: 12px;
+    margin-bottom: 12px;
+    font-size: 13px;
+    color: #555;
+}
+
+/* 扣课时规则展示 */
+.att-deduct-rule {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 14px 18px;
+    background: #F0FFF8;
+    border: 2px solid #55EFC4;
+    border-radius: 12px;
+}
+.att-deduct-rule-text {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+.att-deduct-subject {
+    font-size: 15px;
+    font-weight: 600;
+    color: #333;
+}
+.att-deduct-sep {
+    color: #ccc;
+    font-size: 14px;
+}
+.att-deduct-amount {
+    font-size: 15px;
+    font-weight: 700;
+    color: #FF7675;
+}
+.att-deduct-check {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    font-size: 12px;
+    font-weight: 600;
+    color: #00b894;
+}
+
+/* 无匹配规则 */
+.att-deduct-no-match {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 14px 18px;
+    background: #FFF5F5;
+    border: 2px solid #fab1a0;
+    border-radius: 12px;
+    font-size: 13px;
+    color: #d63031;
+}
+
+/* 考勤确认摘要 */
+.att-confirm-summary {
+    background: #fafbfc;
+    border: 2px solid #e8ecf1;
+    border-radius: 12px;
+    padding: 16px 18px;
+    margin-bottom: 14px;
+    font-size: 13px;
+    line-height: 1.8;
+    color: #555;
+}
+.att-confirm-summary strong {
+    color: #FF7675;
+    font-size: 15px;
+}
+.att-confirm-date, .att-confirm-notes {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin-bottom: 12px;
+}
+.att-confirm-date label, .att-confirm-notes label {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+    min-width: 60px;
+}
+.att-confirm-notes input[type="text"] {
+    flex: 1;
+    padding: 8px 12px;
+    border: 2px solid #e8ecf1;
+    border-radius: 10px;
+}
+
+/* 弹窗底部 */
+.modal-footer-activity-att {
+    display: flex;
+    justify-content: flex-end;
+    gap: 12px;
+    padding: 16px 28px;
+    background: #fafbfc;
+    border-top: 2px solid #f0f0f0;
+}
+
+/* ==================== 考勤模块 — 活动考勤 Tab ==================== */
+#tab-activity-attendance .toolbar,
+#tab-activity-consumption .toolbar {
+    padding: 14px 20px;
+    background: #fffef9;
+    border-radius: 16px;
+    border: 2px solid #f0f0f0;
+    box-shadow: 0 2px 12px rgba(0,0,0,0.03);
+    margin-bottom: 16px;
+}
+#tab-activity-attendance .activity-att-table,
+#tab-activity-consumption .activity-cons-table {
+    width: 100%;
+    border-collapse: collapse;
+}
+#tab-activity-attendance .activity-att-table th,
+#tab-activity-consumption .activity-cons-table th {
+    background: #FFF9E0;
+    color: #555;
+    font-size: 12px;
+    font-weight: 700;
+    padding: 10px 14px;
+    border-bottom: 3px solid #FFE066;
+    text-align: left;
+}
+#tab-activity-attendance .activity-att-table td,
+#tab-activity-consumption .activity-cons-table td {
+    padding: 12px 14px;
+    border-bottom: 1px solid #f0f0f0;
+    font-size: 13px;
+    color: #444;
+    vertical-align: middle;
+}
+#tab-activity-attendance .activity-att-table tbody tr,
+#tab-activity-consumption .activity-cons-table tbody tr {
+    transition: all 0.18s;
+}
+#tab-activity-attendance .activity-att-table tbody tr:hover,
+#tab-activity-consumption .activity-cons-table tbody tr:hover {
+    background: #FFF9E0;
+}
+
+/* 首字母圆形头像 */
+.avatar-circle-sm {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+.avatar-circle-sm span {
+    font-size: 14px;
+    font-weight: 700;
+    color: #fff;
+    line-height: 1;
+}
+
+/* 消耗课时 badge */
+.cons-deduct-badge {
+    display: inline-block;
+    padding: 3px 10px;
+    border-radius: 9999px;
+    background: #FFF5F5;
+    color: #FF7675;
+    font-weight: 700;
+    font-size: 13px;
+}
+/* 消耗金额 */
+.cons-amount {
+    font-weight: 700;
+    color: #FF7675;
+    font-variant-numeric: tabular-nums;
+}
+/* 课包来源 */
+.cons-source {
+    display: block;
+    font-weight: 600;
+    color: #555;
+    font-size: 13px;
+}
+.cons-order-no {
+    display: block;
+    font-size: 11px;
+    color: #bbb;
+    margin-top: 2px;
+}
+
+/* 活动考勤/课耗 Tab 颜色指示器 */
+#panel-attendance .att-tab:nth-child(3).active {
+    border-bottom-color: #74B9FF;
+    color: #74B9FF;
+}
+#panel-attendance .att-tab:nth-child(5).active {
+    border-bottom-color: #55EFC4;
+    color: #55EFC4;
+}
+
+/* 活动费用框架展示区 */
+#activity-fee-display {
+    margin-bottom: 12px;
+    padding: 12px 16px;
+    background: #fafbfc;
+    border-radius: 10px;
+    border: 1px solid #e8ecf1;
+    font-size: 12px;
+    color: #888;
+    display: flex;
+    gap: 20px;
+    flex-wrap: wrap;
+}
+#activity-fee-display .fee-framework-item {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+#activity-fee-display .fee-framework-type {
+    font-size: 10px;
+    color: #999;
+}
+#activity-fee-display .fee-framework-detail {
+    font-size: 13px;
+    font-weight: 600;
+    color: #555;
+}
