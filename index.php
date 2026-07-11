@@ -3726,6 +3726,17 @@ $stmt->execute();
                 $classAttKeys[$key] = true;
                 $entries = json_decode($ca['deduction_json'] ?? '[]', true);
                 if (!is_array($entries)) continue;
+                // 活动考勤：从 activities 表和 deduction_breakdown 获取活动名和带课老师
+                $activityName = '';
+                $activityTeacher = '';
+                $activityCampus = '';
+                if (intval($ca['activity_id'] ?? 0) > 0) {
+                    $actRow = $db->query("SELECT name FROM activities WHERE id = " . intval($ca['activity_id']))->fetch(PDO::FETCH_ASSOC);
+                    $activityName = $actRow ? ($actRow['name'] ?? '') : '';
+                    $breakdown = json_decode($ca['deduction_breakdown'] ?? '{}', true) ?: [];
+                    $activityTeacher = $breakdown['teacher'] ?? '';
+                    $activityCampus = $breakdown['campus'] ?? '';
+                }
                 $classTime = '';
                 $timeSlots = json_decode($ca['time_slots'] ?? '{}', true) ?: [];
                 $dow = date('N', strtotime($ca['session_date'] ?? ''));
@@ -3747,6 +3758,7 @@ $stmt->execute();
                     $productCouponAmount = floatval($orderRow['product_coupon_amount'] ?? 0);
                     $classPrice = $actualPrice - $teachingAidPrice + $productCouponAmount;
                     $unitPrice = $lessonCount > 0 ? $classPrice / $lessonCount : 0;
+                    $isActivity = intval($ca['activity_id'] ?? 0) > 0;
                     $rows[] = [
                         'id' => 'ca_' . intval($ca['id']) . '_' . $orderId,
                         'student_id' => $sid,
@@ -3754,9 +3766,9 @@ $stmt->execute();
                         'order_id' => $orderId,
                         'class_id' => intval($ca['class_id'] ?? 0),
                         'schedule_id' => intval($ca['schedule_id'] ?? 0),
-                        'class_name' => $ca['class_name'] ?? '',
-                        'campus' => $ca['campus'] ?? '',
-                        'teacher' => $ca['teacher'] ?? '',
+                        'class_name' => $isActivity ? $activityName : ($ca['class_name'] ?? ''),
+                        'campus' => $isActivity ? $activityCampus : ($ca['campus'] ?? ''),
+                        'teacher' => $isActivity ? $activityTeacher : ($ca['teacher'] ?? ''),
                         'subject_level1' => $orderRow['subject_level1'] ?? '',
                         'subject_level2' => $orderRow['subject_level2'] ?? '',
                         'course_name' => $orderRow['course_name'] ?? '',
@@ -7805,15 +7817,6 @@ if (intval($countBt) === 0) {
                 </div>
                 <div class="section-tab-content">
                     <div class="sec-panel active" id="tab-courses-panel">
-                <div class="action-button-group">
-                    <button class="action-btn" onclick="showCourseModal()" title="新增课程">
-                        <span class="action-btn-icon">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                        </span>
-                        <span class="action-btn-label">新增课程</span>
-                    </button>
-
-                </div>
                 <div class="filter-bar" id="filter-bar-course">
                     <div class="filter-item filter-item-search">
                         <label class="filter-label">课程名称</label>
@@ -7830,21 +7833,21 @@ if (intval($countBt) === 0) {
                         <label class="filter-label">二级学科</label>
                         <select id="filter-subject2" onchange="onFilterChange()"><option value="">全部</option></select>
                     </div>
-                    <div class="filter-item">
+                    <div class="filter-item filter-item-toggle">
                         <label class="filter-label">小课包</label>
-                        <select id="filter-small-package" onchange="onFilterChange()">
-                            <option value="">全部</option>
-                            <option value="是">是</option>
-                            <option value="否">否</option>
-                        </select>
+                        <div class="filter-chip-group" id="filter-chip-package">
+                            <button class="filter-chip-btn active" data-value="" onclick="toggleFilterChip(this, 'package')">全部</button>
+                            <button class="filter-chip-btn" data-value="是" onclick="toggleFilterChip(this, 'package')">是</button>
+                            <button class="filter-chip-btn" data-value="否" onclick="toggleFilterChip(this, 'package')">否</button>
+                        </div>
                     </div>
-                    <div class="filter-item">
+                    <div class="filter-item filter-item-toggle">
                         <label class="filter-label">低幼龄</label>
-                        <select id="filter-toddler" onchange="onFilterChange()">
-                            <option value="">全部</option>
-                            <option value="是">是</option>
-                            <option value="否">否</option>
-                        </select>
+                        <div class="filter-chip-group" id="filter-chip-toddler">
+                            <button class="filter-chip-btn active" data-value="" onclick="toggleFilterChip(this, 'toddler')">全部</button>
+                            <button class="filter-chip-btn" data-value="是" onclick="toggleFilterChip(this, 'toddler')">是</button>
+                            <button class="filter-chip-btn" data-value="否" onclick="toggleFilterChip(this, 'toddler')">否</button>
+                        </div>
                     </div>
                     <div class="filter-item filter-item-campus">
                         <label class="filter-label">适用校区</label>
@@ -7859,6 +7862,7 @@ if (intval($countBt) === 0) {
                             </div>
                         </div>
                     </div>
+                    <button class="action-btn" onclick="showCourseModal()">新增</button>
                     <button class="filter-reset-btn" onclick="resetCourseFilters()" title="重置筛选">重置</button>
                 </div>
                 <div class="course-table-wrap" id="table-courses">
@@ -7882,14 +7886,6 @@ if (intval($countBt) === 0) {
                     <div class="sec-panel" id="tab-activities-panel">
                         <!-- 活动列表区域 -->
                         <div id="activity-list-wrap">
-                            <div class="action-button-group">
-                                <button class="action-btn" onclick="showActivityForm()" title="新增活动">
-                                    <span class="action-btn-icon">
-                                        <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                                    </span>
-                                    <span class="action-btn-label">新增活动</span>
-                                </button>
-                            </div>
                             <div class="filter-bar" id="filter-bar-activity">
                                 <div class="filter-item filter-item-search">
                                     <label class="filter-label">活动名称</label>
@@ -7911,6 +7907,7 @@ if (intval($countBt) === 0) {
                                         <option value="已取消">已取消</option>
                                     </select>
                                 </div>
+                                <button class="action-btn" onclick="showActivityForm()">新增</button>
                                 <button class="filter-reset-btn" onclick="resetActivityFilters()" title="重置筛选">重置</button>
                             </div>
                             <div class="table-wrap">

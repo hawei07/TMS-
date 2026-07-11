@@ -2663,8 +2663,8 @@ async function loadCourses() {
     const params = new URLSearchParams({ page: coursePage, page_size: 15, keyword });
     const subject1 = document.getElementById('filter-subject1')?.value || '';
     const subject2 = document.getElementById('filter-subject2')?.value || '';
-    const smallPackage = document.getElementById('filter-small-package')?.value || '';
-    const toddler = document.getElementById('filter-toddler')?.value || '';
+    const smallPackage = getFilterChipValue('filter-chip-package');
+    const toddler = getFilterChipValue('filter-chip-toddler');
     const campusIds = getFilterCampusIds();
     if (subject1) params.set('subject_level1', subject1);
     if (subject2) params.set('subject_level2', subject2);
@@ -2871,6 +2871,28 @@ function getBooleanBadgeHTML(val) {
         return '<span class="boolean-badge boolean-badge-no">否</span>';
     }
     return '<span class="boolean-badge boolean-badge-yes">是</span>';
+}
+
+/* Toggle filter chip (小课包 / 低幼龄) */
+function toggleFilterChip(btn, group) {
+    const parent = btn.parentElement;
+    parent.querySelectorAll('.filter-chip-btn').forEach(b => b.classList.remove('active'));
+    btn.classList.add('active');
+    onFilterChange();
+}
+
+/* Read active chip value */
+function getFilterChipValue(groupId) {
+    const active = document.querySelector('#' + groupId + ' .filter-chip-btn.active');
+    return active ? active.dataset.value : '';
+}
+
+function resetFilterChips(groupId) {
+    const parent = document.getElementById(groupId);
+    if (!parent) return;
+    parent.querySelectorAll('.filter-chip-btn').forEach(b => b.classList.remove('active'));
+    const first = parent.querySelector('.filter-chip-btn');
+    if (first) first.classList.add('active');
 }
 
 function renderCourseTable(rows) {
@@ -6633,6 +6655,7 @@ async function showConsumptionDetail(orderId, courseId, courseName, isGifted = f
             const lessons = parseFloat(r.deducted_lessons) || 0;
             const amount = isGifted ? '0.00' : (parseFloat(r.consumed_amount) || 0).toFixed(2);
             const attTime = r.attended_at ? r.attended_at.slice(0, 16).replace('T', ' ') : '—';
+            const isActivity = (parseInt(r.class_id) || 0) === 0;
             return `<div class="consumption-card">
                 <div class="cst-accent ${st.cls}"></div>
                 <div class="cst-body">
@@ -6650,8 +6673,7 @@ async function showConsumptionDetail(orderId, courseId, courseName, isGifted = f
                         </div>
                     </div>
                     <div class="cst-meta">
-                        <span>${esc(r.campus)}</span><span class="cst-sep">·</span>
-                        <span>${esc(r.course_name)}</span><span class="cst-sep">·</span>
+                        ${!isActivity ? `<span>${esc(r.course_name)}</span><span class="cst-sep">·</span>` : ''}
                         <span>${esc(r.class_name)}</span><span class="cst-sep">·</span>
                         <span>${esc(r.teacher)}</span>
                     </div>
@@ -13774,7 +13796,7 @@ async function loadActivityAttendanceList(page = 1) {
                 ? '<span class="activity-att-pill pill-attended">已考勤</span>'
                 : '<span class="activity-att-pill pill-unattended">待考勤</span>';
             const actionBtn = isAttended
-                ? '<button class="btn-activity-att btn-edit" onclick="openActivityAttendanceFromList(' + i + ')">修改考勤</button>'
+                ? '<button class="btn-activity-att btn-edit" onclick="openActivityAttendanceFromList(' + i + ')">修改考勤</button><button class="btn-activity-att btn-revoke" onclick="revokeActivityAttendance(' + i + ')">撤销考勤</button>'
                 : '<button class="btn-activity-att btn-do" onclick="openActivityAttendanceFromList(' + i + ')">考勤</button>';
             const feeDisplay = parseFloat(r.total_price) ? '¥' + parseFloat(r.total_price).toFixed(2) : '<span style="color:#c0c4cc;">—</span>';
             const enrollTime = (r.enroll_time || r.created_at || '').substring(0, 16);
@@ -13817,6 +13839,18 @@ function openActivityAttendanceFromList(index) {
         deduction_breakdown: r.deduction_breakdown || '',
         att_session_date: r.att_session_date || ''
     });
+}
+
+async function revokeActivityAttendance(index) {
+    const r = window._activityAttendanceRows && window._activityAttendanceRows[index];
+    if (!r || !r.attendance_id) return;
+    if (!confirm('确认撤销「' + (r.student_name || '') + '」对「' + (r.activity_name || '') + '」的考勤？\n扣减的课时将会归还。')) return;
+    try {
+        const res = await api('delete_activity_attendance', { attendance_id: r.attendance_id }, 'POST');
+        if (res.error) { showToast(res.error, 'error'); return; }
+        showToast('已撤销考勤');
+        loadActivityAttendanceList();
+    } catch (e) { showToast('撤销失败: ' + e.message, 'error'); }
 }
 
 async function loadActivityAttendanceCampuses() {
