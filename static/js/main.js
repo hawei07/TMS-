@@ -43,35 +43,92 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// ==================== 树状导航 ====================
+// ==================== 双栏导航 ====================
+const subNavData = {
+  market: [
+    { label: '我的资源', panel: 'panel-my-resources' },
+    { label: '预约试听名单', panel: 'panel-appointments' },
+    { label: '资源公海', panel: 'panel-sea-pool' },
+    { label: '渠道设置', panel: 'panel-channel-settings', group: '基础设置' },
+    { label: '意向等级设置', panel: 'panel-intention-level-settings', group: '基础设置' },
+    { label: '基础类型设置', panel: 'panel-basic-type-settings', group: '基础设置' },
+  ],
+  edu: [
+    { label: '课程&活动', panel: 'panel-courses' },
+    { label: '学员管理', panel: 'panel-students' },
+    { label: '考勤', panel: 'panel-attendance' },
+    { label: '交易订单', panel: 'panel-orders' },
+    { label: '工作记录', panel: 'panel-work-records' },
+    { label: '优惠管理', panel: 'panel-discounts' },
+    { label: '画具管理', panel: 'panel-teaching-aids' },
+    { label: '学科设置', panel: 'panel-subjects', group: '基础设置' },
+    { label: '教室管理', panel: 'panel-classrooms', group: '基础设置' },
+    { label: '上课时段设置', panel: 'panel-period-settings', group: '基础设置' },
+    { label: '税率设置', panel: 'panel-tax-rate-settings', group: '基础设置' },
+  ],
+  data: [
+    { label: '现金流统计', panel: 'panel-cashflow' },
+    { label: '确收统计', panel: 'panel-revenue' },
+  ],
+  staff: [
+    { label: '员工名册', panel: 'panel-employees' },
+    { label: '岗位管理', panel: 'panel-position-settings' },
+    { label: '组织管理', panel: 'panel-org' },
+  ],
+};
+
+let currentModule = 'market';
+
 function initTreeNav() {
-    // 父节点点击：展开/折叠，不加载页面（stopPropagation 防止嵌套父节点冒泡）
-    document.querySelectorAll('.tree-parent').forEach(parent => {
-        parent.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const node = this.parentElement;
-            if (!node.classList.contains('tree-node')) return;
-            node.classList.toggle('expanded');
-        });
-    });
-
-    // 叶子节点点击：切换面板 + 高亮（阻止冒泡以免触发父节点折叠）
-    document.querySelectorAll('.tree-leaf[data-panel]').forEach(leaf => {
-        leaf.addEventListener('click', function(e) {
-            e.stopPropagation();
-            const panelId = this.dataset.panel;
-            if (!panelId) return;
-
-            // 高亮当前叶子节点
-            document.querySelectorAll('.tree-leaf').forEach(l => l.classList.remove('active'));
-            document.querySelectorAll('.tree-parent').forEach(p => p.classList.remove('active'));
+    const subNavEl = document.getElementById('sub-nav');
+    // 一级导航点击
+    document.querySelectorAll('.primary-nav-item').forEach(item => {
+        item.addEventListener('click', function() {
+            const module = this.dataset.module;
+            if (!module) return;
+            currentModule = module;
+            document.querySelectorAll('.primary-nav-item').forEach(i => i.classList.remove('active'));
             this.classList.add('active');
-
-            // 切换面板
-            activatePanel(panelId);
-            refreshPanel(panelId);
+            renderSubNav(module);
         });
     });
+    // 渲染默认市场子项
+    renderSubNav('market');
+}
+
+function renderSubNav(module) {
+    const subNavEl = document.getElementById('sub-nav');
+    const items = subNavData[module] || [];
+    let html = '<ul class="sub-menu-list">';
+    let inGroup = false;
+    items.forEach(item => {
+        if (item.group && !inGroup) {
+            html += '<li class="sub-group-header" onclick="toggleSubGroup(this)"><span class="group-arrow"><svg viewBox=&quot;0 0 24 24&quot; width=&quot;10&quot; height=&quot;10&quot; fill=&quot;currentColor&quot;><path d=&quot;M7 10l5 5 5-5z&quot;/></svg></span>' + item.group + '</li>';
+            html += '<li><ul class="sub-group-items">';
+            inGroup = true;
+        }
+        if (!item.group && inGroup) {
+            html += '</ul></li>';
+            inGroup = false;
+        }
+        html += '<li><button class="sub-nav-item" data-panel="' + item.panel + '" onclick="subNavClick(this, '' + item.panel + '')">' + item.label + '</button></li>';
+    });
+    if (inGroup) html += '</ul></li>';
+    html += '</ul>';
+    subNavEl.innerHTML = html;
+}
+
+function toggleSubGroup(header) {
+    header.classList.toggle('collapsed');
+    const items = header.nextElementSibling.querySelector('.sub-group-items');
+    if (items) items.classList.toggle('collapsed');
+}
+
+function subNavClick(btn, panelId) {
+    document.querySelectorAll('.sub-nav-item').forEach(i => i.classList.remove('active'));
+    btn.classList.add('active');
+    activatePanel(panelId);
+    refreshPanel(panelId);
 }
 
 function activatePanel(panelId) {
@@ -116,12 +173,26 @@ function refreshPanel(panelId) {
     }
 }
 
-// 高亮指定面板对应的树节点（用于外部调用）
 function highlightLeafByPanel(panelId) {
-    document.querySelectorAll('.tree-leaf').forEach(l => l.classList.remove('active'));
-    const leaf = document.querySelector(`.tree-leaf[data-panel="${panelId}"]`);
-    if (leaf) leaf.classList.add('active');
+    document.querySelectorAll('.sub-nav-item').forEach(i => i.classList.remove('active'));
+    const item = document.querySelector('.sub-nav-item[data-panel="' + panelId + '"]');
+    if (item) item.classList.add('active');
+    // Also make sure the correct module is active
+    for (const [module, items] of Object.entries(subNavData)) {
+        if (items.some(it => it.panel === panelId)) {
+            currentModule = module;
+            document.querySelectorAll('.primary-nav-item').forEach(i => {
+                i.classList.toggle('active', i.dataset.module === module);
+            });
+            renderSubNav(module);
+            // Re-highlight after re-render
+            const newItem = document.querySelector('.sub-nav-item[data-panel="' + panelId + '"]');
+            if (newItem) newItem.classList.add('active');
+            break;
+        }
+    }
 }
+
 
 // ==================== API ====================
 const apiCache = new Map();
@@ -11483,9 +11554,11 @@ async function submitRecharge() {
 
 // ── 移动端侧边栏切换 ──
 function toggleSidebar() {
-    var sidebar = document.querySelector('.sidebar');
+    var primary = document.querySelector('.sidebar-primary');
+    var sub = document.querySelector('.sidebar-sub');
     var overlay = document.querySelector('.sidebar-overlay');
-    sidebar.classList.toggle('mobile-open');
+    if (primary) primary.classList.toggle('mobile-open');
+    if (sub) sub.classList.toggle('mobile-open');
     if (overlay) overlay.classList.toggle('active');
 }
 

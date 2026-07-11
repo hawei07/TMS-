@@ -7242,236 +7242,48 @@ if (intval($countBt) === 0) {
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>TMS管理系统</title>
+    <title>TMS</title>
     <link rel="stylesheet" href="static/css/style.css">
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 </head>
 <body>
     <div class="mobile-topbar">
         <button class="hamburger-btn" onclick="toggleSidebar()">☰</button>
-        <span class="mobile-title">TMS管理系统</span>
+        <span class="mobile-title">TMS</span>
     </div>
     <div class="app-layout">
         <!-- 左侧树状导航 -->
-        <aside class="sidebar" id="sidebar">
-            <div class="sidebar-header">
-                <div class="sidebar-logo">
+        <aside class="sidebar-primary" id="sidebar">
+            <div class="brand-header">
+                <div class="brand-logo">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg>
                 </div>
-                <h2>TMS管理系统</h2>
+                <span class="brand-name">TMS</span>
             </div>
-            <nav class="tree-nav" id="tree-nav">
-                <ul class="tree-root">
-                    <!-- 市场管理（父节点） -->
-                    <li class="tree-node expanded">
-                        <div class="tree-parent">
-                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
-                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-                            <span class="tree-label">市场管理</span>
-                        </div>
-                        <ul class="tree-children">
-                            <li class="tree-node">
-                                <div class="tree-leaf active" data-panel="panel-my-resources">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-                                    <span class="tree-label">我的资源</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-appointments">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg></span>
-                                    <span class="tree-label">预约试听名单</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-sea-pool">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg></span>
-                                    <span class="tree-label">资源公海</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-parent sub-parent">
-                                    <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
-                                    <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-                                    <span class="tree-label">基础设置</span>
-                                </div>
-                                <ul class="tree-children">
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-channel-settings">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/></svg></span>
-                                            <span class="tree-label">渠道设置</span>
-                                        </div>
-                                    </li>
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-intention-level-settings">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></span>
-                                            <span class="tree-label">意向等级设置</span>
-                                        </div>
-                                    </li>
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-basic-type-settings">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg></span>
-                                            <span class="tree-label">基础类型设置</span>
-                                        </div>
-                                    </li>
-                                </ul>
-                            </li>
-                        </ul>
-                    </li>
-                    <!-- 教务管理（父节点） -->
-                    <li class="tree-node expanded">
-                        <div class="tree-parent">
-                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
-                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-                            <span class="tree-label">教务管理</span>
-                        </div>
-                        <ul class="tree-children">
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-courses">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-                                    <span class="tree-label">课程&活动</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-students">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-                                    <span class="tree-label">学员管理</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-attendance">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg></span>
-                                    <span class="tree-label">考勤</span>
-                                </div>
-                            </li>
-                            <li class="tree-node" style="display:none;">
-                                <div class="tree-leaf" data-panel="panel-classes">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-                                    <span class="tree-label">班级管理</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-orders">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="4" width="22" height="16" rx="2" ry="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg></span>
-                                    <span class="tree-label">交易订单</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-work-records">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-                                    <span class="tree-label">工作记录</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-discounts">
-                                    <span class="tree-icon-sub">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
-                                            <line x1="7" y1="7" x2="7.01" y2="7"/>
-                                        </svg>
-                                    </span>
-                                    <span class="tree-label">优惠管理</span>
-                                </div>
-                            </li>
-                            <!-- 画具管理 -->
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-teaching-aids">
-                                    <span class="tree-icon-sub">
-                                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2">
-                                            <path d="M12 2L2 7l10 5 10-5-10-5z"/><path d="M2 17l10 5 10-5"/><path d="M2 12l10 5 10-5"/>
-                                        </svg>
-                                    </span>
-                                    <span class="tree-label">画具管理</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-parent sub-parent">
-                                    <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
-                                    <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></span>
-                                    <span class="tree-label">基础设置</span>
-                                </div>
-                                <ul class="tree-children">
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-subjects">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg></span>
-                                            <span class="tree-label">学科设置</span>
-                                        </div>
-                                    </li>
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-classrooms">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><line x1="3" y1="9" x2="21" y2="9"/><line x1="9" y1="21" x2="9" y2="9"/></svg></span>
-                                            <span class="tree-label">教室管理</span>
-                                        </div>
-                                    </li>
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-period-settings">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg></span>
-                                            <span class="tree-label">上课时段设置</span>
-                                        </div>
-                                    </li>
-                                    <li class="tree-node">
-                                        <div class="tree-leaf tree-leaf-deep" data-panel="panel-tax-rate-settings">
-                                            <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-                                            <span class="tree-label">税率设置</span>
-                                        </div>
-                                    </li>
-                                </ul>
-                            </li>
-                        </ul>
-                    </li>
-                    <!-- 数据中心（父节点） -->
-                    <li class="tree-node expanded">
-                        <div class="tree-parent">
-                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
-                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg></span>
-                            <span class="tree-label">数据中心</span>
-                        </div>
-                        <ul class="tree-children">
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-cashflow">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-                                    <span class="tree-label">现金流统计</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-revenue">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg></span>
-                                    <span class="tree-label">确收统计</span>
-                                </div>
-                            </li>
-                        </ul>
-                    </li>
-
-                    <li class="tree-node expanded">
-                        <div class="tree-parent">
-                            <span class="tree-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>
-                            <span class="tree-icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg></span>
-                            <span class="tree-label">员工管理</span>
-                        </div>
-                        <ul class="tree-children">
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-employees">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></span>
-                                    <span class="tree-label">员工名册</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-position-settings">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 21v-7"/><path d="M4 10V3"/><path d="M12 21v-9"/><path d="M12 8V3"/><path d="M20 21v-5"/><path d="M20 12V3"/></svg></span>
-                                    <span class="tree-label">岗位管理</span>
-                                </div>
-                            </li>
-                            <li class="tree-node">
-                                <div class="tree-leaf" data-panel="panel-org">
-                                    <span class="tree-icon-sub"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 3h7v7H3z"/><path d="M14 3h7v7h-7z"/><path d="M14 14h7v7h-7z"/><path d="M3 14h7v7H3z"/></svg></span>
-                                    <span class="tree-label">组织管理</span>
-                                </div>
-                            </li>
-                        </ul>
-                    </li>
-                </ul>
+            <nav class="primary-nav">
+                <button class="primary-nav-item active" data-module="market">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+                    <span>市场</span>
+                </button>
+                <button class="primary-nav-item" data-module="edu">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+                    <span>教务</span>
+                </button>
+                <button class="primary-nav-item" data-module="data">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+                    <span>数据</span>
+                </button>
+                <button class="primary-nav-item" data-module="staff">
+                    <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                    <span>员工</span>
+                </button>
             </nav>
-
         </aside>
+        <aside class="sidebar-sub" id="sidebar-sub">
+            <nav class="sub-nav" id="sub-nav"></nav>
+        </aside>
+
+
 
         <!-- 右侧内容区 -->
         <main class="main-content">
