@@ -72,9 +72,9 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 ## 一、项目概述
 
 - **系统名称**：TMS管理系统
-- **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
-- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 7550 行）+ CSS3（CSS Variables 设计令牌体系，约 3280 行）
-- **架构模式**：单体 PHP 单文件应用（`index.php`，约 6700 行），前端内嵌于同一文件，API 通过 `?action=` 路由分发，所有 API 统一返回 JSON
+- **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、活动管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
+- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 13200 行）+ CSS3（约 9300 行）
+- **架构模式**：单体 PHP 单文件应用（`index.php`，约 11000 行），前端内嵌于同一文件，API 通过 `?action=` 路由分发，所有 API 统一返回 JSON
 
 ---
 
@@ -126,7 +126,7 @@ market-system-php/
 
 ## 三、数据库设计
 
-### 3.1 表概览（22 张表）
+### 3.1 表概览（26 张表）
 
 | 表名 | 用途 | 关联 |
 |------|------|------|
@@ -145,11 +145,14 @@ market-system-php/
 | `classes` | 班级信息（标准班/活动班） | course_id → courses.id |
 | `schedules` | 排课信息（规则排课/日期排课） | class_id → classes.id |
 | `classrooms` | 教室信息 | — |
+| `activities` | 活动信息（含成人/学员收费框架） | — |
+| `activity_campuses` | 活动适用校区及容量 | activity_id → activities.id |
+| `activity_subject_deductions` | 活动扣课时规则（按学科设置） | activity_id → activities.id |
+| `activity_enrollment_counts` | 活动报名人数统计缓存 | activity_id → activities.id |
 | `price_plans` | 价格方案 | course_id → courses.id |
 | `price_items` | 报价单明细 | plan_id → price_plans.id |
-| `orders` | 交易订单（子订单，含父订单号/现金/美团） | student_id → students.id, course_id → courses.id |
-| `attendance_records` | 上课记录（考勤） | student_id → students.id, course_id → courses.id |
-| `absence_records` | 缺勤记录（考勤缺勤时自动同步，缺勤→出勤时自动删除） | student_id → students.id, course_id → courses.id, attendance_id → attendance_records.id |
+| `orders` | 交易订单（含活动订单） | student_id → students.id, course_id → courses.id, activity_id → activities.id |
+| `class_attendance` | 班级/活动考勤记录 | student_id → students.id, activity_id → activities.id |
 | `parent_orders` | 父订单（汇总同一录单的所有子订单） | parent_order_no → orders.parent_order_no |
 | `refund_records` | 退费记录（申请→三级审批→财务确认） | order_id → orders.id, student_id → students.id |
 | `student_subject_teacher` | 学员-校区-学科-授课老师关联 | student_id → students.id, campus_id → organizations.id, subject_id → subjects.id, teacher_id → employees.id |
@@ -390,6 +393,82 @@ market-system-php/
 | refund_status | VARCHAR(10) | '正常' | **退费状态**：正常 / 退费申请中 / 已退费 |
 | created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
 
+
+### 3.20 orders（交易订单表）— 活动订单扩展
+
+orders 表新增以下活动相关字段（2026-07-10）：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| activity_id | INT | 0 | 关联活动 ID |
+| activity_name | VARCHAR(200) | '' | 活动名称 |
+| activity_campus | VARCHAR(200) | '' | 报名校区 |
+| activity_adult_count | INT | 0 | 成人报名人数 |
+| activity_student_count | INT | 0 | 学员报名人数 |
+| adult_unit_price | DECIMAL(10,2) | 0 | 成人单价 |
+| student_unit_price | DECIMAL(10,2) | 0 | 学员单价 |
+| activity_fee_type | VARCHAR(20) | '' | 收费类型 |
+
+活动订单规则：`order_type='活动'`、`course_id=0`、`parent_order_no=order_no`（自引用）。
+
+### 3.21 activities（活动表）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| name | VARCHAR(500) | — | 活动名称（必填） |
+| subject_level1 | VARCHAR(200) | '' | 一级学科 |
+| reg_start_date | DATE | NULL | 报名开始日期 |
+| reg_end_date | DATE | NULL | 报名结束日期 |
+| adult_fee_mode | VARCHAR(20) | 'fee_only' | 成人收费模式：fee_only / fee_and_deduct / deduct_only |
+| student_fee_mode | VARCHAR(20) | 'fee_only' | 学员收费模式 |
+| adult_price | DECIMAL(10,2) | 0 | 成人单价 |
+| student_price | DECIMAL(10,2) | 0 | 学员单价 |
+| created_at | DATETIME | CURRENT_TIMESTAMP | 创建时间 |
+| updated_at | DATETIME | CURRENT_TIMESTAMP | 更新时间 |
+
+### 3.22 activity_campuses（活动校区表）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| activity_id | INT | — | 关联活动 ID |
+| campus_name | VARCHAR(200) | '' | 校区名称 |
+| max_capacity | INT | 0 | 最大容量（0=不限） |
+
+### 3.23 activity_subject_deductions（活动扣课时规则表）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| activity_id | INT | — | 关联活动 ID |
+| fee_type | VARCHAR(10) | 'student' | 收费类型：adult / student |
+| subject_level1 | VARCHAR(200) | '' | 学科名称 |
+| deduct_lessons | INT | 1 | 每人每次扣课时数 |
+
+### 3.24 activity_enrollment_counts（活动报名统计表）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| activity_id | INT | — | 关联活动 ID |
+| campus_name | VARCHAR(200) | '' | 校区名称 |
+| adult_count | INT | 0 | 成人报名累计 |
+| student_count | INT | 0 | 学员报名累计 |
+| updated_at | DATETIME | CURRENT_TIMESTAMP | 更新时间 |
+
+### 3.25 class_attendance（考勤表）— 活动考勤扩展
+
+class_attendance 新增以下活动考勤字段（2026-07-10）：
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| activity_id | INT | 0 | 关联活动 ID（>0 表示活动考勤） |
+| activity_order_id | INT | 0 | 关联活动订单 ID |
+| adult_attended | INT | 0 | 成人实际出勤人数 |
+| student_attended | INT | 0 | 学员实际出勤人数 |
+| deduction_breakdown | TEXT | NULL | 扣课时明细 JSON |
+
 ### 3.20 attendance_records（上课记录表）
 
 | 字段 | 类型 | 默认值 | 说明 |
@@ -555,6 +634,50 @@ subjects                  courses              ┌──────────
 ```
 
 ---
+
+
+## 四、活动报名全流程（2026-07-10 新增）
+
+### 4.1 报名流程
+
+```
+选学员 → 选校区 → 选「报名课程」或「报名活动」
+  ├─ 报名课程 → 现有流程（选课程→选方案→支付）
+  └─ 报名活动 → 选活动→填人数→支付
+```
+
+### 4.2 活动订单
+
+- order_type = '活动'，course_id = 0
+- parent_order_no = order_no（自引用）
+- 展示活动名称、成人/学员人数、支付方式
+- 可作废（void_order 兼容活动订单）
+
+### 4.3 活动考勤
+
+- 从学员详情「报读活动」Tab 或考勤「活动考勤」Tab 进入
+- 选择实际出勤成人数、学员数
+- 根据活动扣课规则自动计算扣课时（出勤人数 × 每人每次扣课数）
+- 选择扣课来源课包（仅显示有剩余课时的）
+- 考勤状态同步到学员详情和活动考勤列表
+
+### 4.4 活动课耗
+
+- 考勤模块「活动课耗」Tab 展示所有活动考勤记录
+- 含学员、活动名称、考勤日期、消耗课时、扣除课包、课耗金额
+
+### 4.5 相关 API
+
+| API | 方法 | 说明 |
+|-----|------|------|
+| pay_activity_enroll | POST | 活动报名支付 |
+| list_activities_for_enroll | GET | 按校区筛选活动 |
+| get_student_activities | GET | 学员报读活动列表 |
+| save_activity_attendance | POST | 活动考勤保存 |
+| delete_activity_attendance | POST | 删除活动考勤 |
+| list_activity_consumptions | GET | 活动课耗列表 |
+| get_activity_deduction_rules | GET | 活动扣课规则 |
+| get_activity_enroll_detail | GET | 活动报名详情 |
 
 ## 四、后端 API 完整列表
 
