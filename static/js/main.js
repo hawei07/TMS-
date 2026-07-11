@@ -80,7 +80,9 @@ const subNavData = {
 let currentModule = 'market';
 
 function initTreeNav() {
+    console.log('[initTreeNav] called');
     const subNavEl = document.getElementById('sub-nav');
+    console.log('[initTreeNav] sub-nav element:', subNavEl);
     // 一级导航点击
     document.querySelectorAll('.primary-nav-item').forEach(item => {
         item.addEventListener('click', function() {
@@ -93,29 +95,73 @@ function initTreeNav() {
         });
     });
     // 渲染默认市场子项
+    console.log('[initTreeNav] rendering market subnav');
     renderSubNav('market');
+    console.log('[initTreeNav] done');
 }
 
 function renderSubNav(module) {
+    console.log('[renderSubNav] module:', module);
     const subNavEl = document.getElementById('sub-nav');
+    console.log('[renderSubNav] subNavEl:', subNavEl);
+    if (!subNavEl) return;
     const items = subNavData[module] || [];
-    let html = '<ul class="sub-menu-list">';
+    console.log('[renderSubNav] items count:', items.length);
+
+    // Clear previous content
+    subNavEl.innerHTML = '';
+
+    const ul = document.createElement('ul');
+    ul.className = 'sub-menu-list';
+
     let inGroup = false;
+    let groupUl = null;
+
     items.forEach(item => {
         if (item.group && !inGroup) {
-            html += '<li class="sub-group-header" onclick="toggleSubGroup(this)"><span class="group-arrow"><svg viewBox=&quot;0 0 24 24&quot; width=&quot;10&quot; height=&quot;10&quot; fill=&quot;currentColor&quot;><path d=&quot;M7 10l5 5 5-5z&quot;/></svg></span>' + item.group + '</li>';
-            html += '<li><ul class="sub-group-items">';
+            // Close any open group first, then open new group
+            if (inGroup && groupUl) {
+                // shouldn't happen with this structure, but handle gracefully
+                inGroup = false;
+            }
+            const groupHeader = document.createElement('li');
+            groupHeader.className = 'sub-group-header';
+            groupHeader.setAttribute('onclick', 'toggleSubGroup(this)');
+            groupHeader.innerHTML = '<span class="group-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>' + item.group;
+            ul.appendChild(groupHeader);
+
+            const groupLi = document.createElement('li');
+            groupUl = document.createElement('ul');
+            groupUl.className = 'sub-group-items';
+            groupLi.appendChild(groupUl);
+            ul.appendChild(groupLi);
             inGroup = true;
         }
+
         if (!item.group && inGroup) {
-            html += '</ul></li>';
             inGroup = false;
+            groupUl = null;
         }
-        html += '<li><button class="sub-nav-item" data-panel="' + item.panel + '" onclick="subNavClick(this, '' + item.panel + '')">' + item.label + '</button></li>';
+
+        const li = document.createElement('li');
+        const btn = document.createElement('button');
+        btn.className = 'sub-nav-item';
+        btn.setAttribute('data-panel', item.panel);
+        btn.textContent = item.label;
+        btn.addEventListener('click', function() {
+            subNavClick(btn, item.panel);
+        });
+        li.appendChild(btn);
+
+        if (inGroup && groupUl) {
+            groupUl.appendChild(li);
+        } else {
+            ul.appendChild(li);
+        }
     });
-    if (inGroup) html += '</ul></li>';
-    html += '</ul>';
-    subNavEl.innerHTML = html;
+
+    subNavEl.appendChild(ul);
+    console.log('[renderSubNav] done, ul children:', ul.children.length);
 }
 
 function toggleSubGroup(header) {
