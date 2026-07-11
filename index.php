@@ -6923,7 +6923,7 @@ json([
                     $attId = $attendanceId;
                 } else {
                     $n = now();
-                    $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, adult_attended, student_attended, deduction_breakdown, teacher, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :aa, :sa, :db, :tc, :ct)");
+                    $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, adult_attended, student_attended, deduction_breakdown, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :aa, :sa, :db, :ct)");
                     $attStmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
                     $attStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                     $attStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
@@ -6936,7 +6936,6 @@ json([
                     $attStmt->bindValue(':aa', $adultAttended, PDO::PARAM_INT);
                     $attStmt->bindValue(':sa', $studentAttended, PDO::PARAM_INT);
                     $attStmt->bindValue(':db', $deductionBreakdownJson, PDO::PARAM_STR);
-                    $attStmt->bindValue(':tc', $teacher, PDO::PARAM_STR);
                     $attStmt->bindValue(':ct', $n, PDO::PARAM_STR);
                     $attStmt->execute();
                     $attId = $db->lastInsertId();

@@ -13707,6 +13707,7 @@ async function confirmActivityAttendance() {
     if (adultCnt === 0 && studentCnt === 0) { showToast('成人或学员出勤人数至少填写一个', 'error'); return; }
     var date = document.getElementById('att-confirm-date').value;
     var teacher = document.getElementById('att-activity-teacher').value;
+    if (!teacher) { showToast('请选择带课老师', 'error'); return; }
     var breakdown = JSON.stringify({
         adult: { count: adultCnt, per_lesson: d.adultRule ? d.adultRule.deduct_lessons : 0, total: d.adultDeduct },
         student: { count: studentCnt, per_lesson: d.studentRule ? d.studentRule.deduct_lessons : 0, total: d.studentDeduct },
