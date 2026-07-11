@@ -3765,6 +3765,16 @@ $stmt->execute();
                     $totalPostTaxRaw = $ca['consumed_amount_post_tax'];
                     if ($totalPostTaxRaw !== null && $totalPostTaxRaw !== '' && $totalConsumed > 0) {
                         $rowPostTax = round($rowConsumedAmount * floatval($totalPostTaxRaw) / $totalConsumed, 2);
+                    } elseif ($totalConsumed > 0) {
+                        // 降级：DB 中无税后值，实时查询校区税率计算
+                        $campusName = $isActivity ? $activityCampus : ($ca['campus'] ?? '');
+                        if ($campusName) {
+                            $taxRate = $db->query("SELECT COALESCE(t.course_tax_rate, 0) FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($campusName) . " AND o.type = '校区'")->fetchColumn();
+                            if ($taxRate && floatval($taxRate) > 0) {
+                                $totalPostTaxFallback = round($totalConsumed / (1 + floatval($taxRate) / 100), 2);
+                                $rowPostTax = round($rowConsumedAmount * $totalPostTaxFallback / $totalConsumed, 2);
+                            }
+                        }
                     }
                     $isActivity = intval($ca['activity_id'] ?? 0) > 0;
                     $rows[] = [
@@ -3795,6 +3805,16 @@ $stmt->execute();
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 $key = intval($r['class_id']) . '|' . intval($r['schedule_id']) . '|' . ($r['lesson_date'] ?? '');
                 if (isset($classAttKeys[$key])) continue;
+                // 降级：DB 中无税后值时实时查询校区税率计算
+                if (($r['consumed_amount_post_tax'] ?? null) === null && floatval($r['consumed_amount'] ?? 0) > 0) {
+                    $campusNameAr = $r['campus'] ?? '';
+                    if ($campusNameAr) {
+                        $taxRateAr = $db->query("SELECT COALESCE(t.course_tax_rate, 0) FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($campusNameAr) . " AND o.type = '校区'")->fetchColumn();
+                        if ($taxRateAr && floatval($taxRateAr) > 0) {
+                            $r['consumed_amount_post_tax'] = round(floatval($r['consumed_amount']) / (1 + floatval($taxRateAr) / 100), 2);
+                        }
+                    }
+                }
                 $rows[] = $r;
             }
             usort($rows, function($a, $b) {
