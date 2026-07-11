@@ -3905,8 +3905,8 @@ async function resetCourseFilters() {
     document.getElementById('search-course').value = '';
     document.getElementById('filter-subject1').value = '';
     document.getElementById('filter-subject2').innerHTML = '<option value="">全部</option>';
-    document.getElementById('filter-small-package').value = '';
-    document.getElementById('filter-toddler').value = '';
+    resetFilterChips('filter-chip-package');
+    resetFilterChips('filter-chip-toddler');
     clearFilterCampus();
     document.getElementById('filter-campus-trigger').textContent = '全部校区 ▾';
     onFilterChange();
@@ -3993,8 +3993,7 @@ async function selectPlan(planId) {
     currentSelectedPlanId = planId;
     renderPlanList();
     renderItemList();
-    ensureInlineEditDelegation();
-    preloadInlineDiscountData(); // 异步加载，不阻塞 UI
+    preloadInlineDiscountData(); // 异步加载编辑弹窗所需下拉数据
 }
 
 async function preloadInlineDiscountData() {
@@ -4056,23 +4055,20 @@ function renderItemList() {
         const teachingAidDisplay = isSmall ? '—' : esc(item.teaching_aid_name || '-');
         const courseCouponDisplay = isSmall ? '—' : (item.coupon_name ? esc(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-');
         const productCouponDisplay = isSmall ? '—' : (item.product_coupon_name ? esc(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-');
-        const discountEditable = isSmall ? '' : 'pi-editable';
-        const teachingAidEditable = isSmall ? '' : 'pi-editable';
-        const courseCouponEditable = isSmall ? '' : 'pi-editable';
-        const productCouponEditable = isSmall ? '' : 'pi-editable';
         return `
         <tr data-item-id="${item.id}">
-            <td class="pi-editable" data-field="name" data-original="${escAttr(item.name)}">${esc(item.name)}</td>
-            <td class="pi-editable" data-field="lesson_count" data-original="${item.lesson_count}">${item.lesson_count}</td>
-            <td class="pi-editable" data-field="unit_price" data-original="${Number(item.unit_price).toFixed(2)}">${Number(item.unit_price).toFixed(2)}</td>
-            <td class="${discountEditable}" data-field="discount_plan_id" data-original="${item.discount_plan_id || ''}">${discountDisplay}</td>
-            <td class="${courseCouponEditable}" data-field="coupon_id" data-original="${item.coupon_id || ''}">${courseCouponDisplay}</td>
-            <td class="${teachingAidEditable}" data-field="teaching_aid_id" data-original="${item.teaching_aid_id || ''}">${teachingAidDisplay}</td>
-            <td class="pi-readonly">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
-            <td class="${productCouponEditable}" data-field="product_coupon_id" data-original="${item.product_coupon_id || ''}">${productCouponDisplay}</td>
-            <td class="pi-editable" data-field="gifted_lessons" data-original="${item.gifted_lessons || 0}">${isSmall ? '—' : (item.gifted_lessons || 0)}</td>
-            <td class="pi-readonly" data-field="actual_price">${Number(item.actual_price).toFixed(2)}</td>
+            <td>${esc(item.name)}</td>
+            <td>${item.lesson_count}</td>
+            <td>${Number(item.unit_price).toFixed(2)}</td>
+            <td>${discountDisplay}</td>
+            <td>${courseCouponDisplay}</td>
+            <td>${teachingAidDisplay}</td>
+            <td>${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
+            <td>${productCouponDisplay}</td>
+            <td>${isSmall ? '—' : (item.gifted_lessons || 0)}</td>
+            <td>${Number(item.actual_price).toFixed(2)}</td>
             <td>
+                <button class="btn-link" onclick="editItem(${item.id})">编辑</button>
                 <button class="btn-link-danger" onclick="deleteItem(${item.id})">删除</button>
             </td>
         </tr>`;
@@ -4095,429 +4091,11 @@ function renderItemList() {
             <td style="font-weight:bold;">${totalActualPrice.toFixed(2)}</td>
             <td></td>
         </tr>`;
-    ensureInlineEditDelegation();
-}
 
-// 点击事件委托：在 #price-item-table-body 上挂单击处理
-let _inlineEditClickBound = false;
-function ensureInlineEditDelegation() {
-    if (_inlineEditClickBound) return;
-    const tbody = document.getElementById('price-item-table-body');
-    if (!tbody) return;
-    tbody.addEventListener('click', (e) => {
-        // 先处理删除按钮冒泡等问题
-        const td = e.target.closest('td.pi-editable');
-        if (!td) return;
-        const tr = td.closest('tr');
-        if (!tr || !tr.dataset.itemId) return;
-        if (tr.classList.contains('inline-editing')) return; // 已在编辑态
-
-        // 如果另一行在编辑 → 先保存
-        const prev = tbody.querySelector('tr.inline-editing');
-        if (prev) {
-            e.preventDefault();
-            saveInlineEdit(prev);
-            return;
-        }
-
-        const itemId = parseInt(tr.dataset.itemId);
-        const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
-        if (!plan) return;
-        const item = (plan.items || []).find(i => i.id === itemId);
-        if (!item) return;
-        enterInlineEdit(tr, item);
-    });
-    _inlineEditClickBound = true;
-}
-
-// === inline 编辑核心函数 ===
-
-function enterInlineEdit(tr, item) {
-    const isSmallPack = (() => {
-        const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
-        return plan && plan.plan_type === '小课包';
-    })();
-
-    // 如果数据未加载，先加载再进入编辑
-    if (!isSmallPack && !priceItemInlineDataLoaded) {
-        preloadInlineDiscountData().then(() => enterInlineEdit(tr, item));
-        return;
+    // 加载下拉选项数据供编辑弹窗使用
+    if (!priceItemInlineDataLoaded) {
+        preloadInlineDiscountData();
     }
-
-    tr.classList.add('inline-editing');
-
-    // 快照原始值，用于 Esc 还原
-    tr._snapshot = {};
-
-    // 确定商品券学科过滤（根据当前报价单的教材包学科）
-    let inlineProductCouponSubjectId = 0;
-    if (!isSmallPack) {
-        const itemTaId = parseInt(item.teaching_aid_id) || 0;
-        if (itemTaId > 0) {
-            const itemTa = priceItemTeachingAids.find(a => a.id === itemTaId);
-            if (itemTa && itemTa.subject_id) inlineProductCouponSubjectId = itemTa.subject_id;
-        }
-    }
-
-    tr.querySelectorAll('td.pi-editable, td.pi-readonly').forEach(td => {
-        const field = td.dataset.field;
-        const original = td.dataset.original || td.textContent.trim();
-        tr._snapshot[field] = original;
-
-        if (field === 'actual_price') {
-            // 只读：灰色背景显示
-            td.innerHTML = `<span class="pi-calc-display">${esc(original)}</span>`;
-        } else if (field === 'discount_plan_id') {
-            if (isSmallPack) {
-                td.innerHTML = '<span style="color:#999;">—</span>';
-            } else {
-                td.innerHTML = buildInlineDiscountSelect(field, original);
-            }
-        } else if (field === 'teaching_aid_id') {
-            if (isSmallPack) {
-                td.innerHTML = '<span style="color:#999;">—</span>';
-            } else {
-                td.innerHTML = buildInlineTeachingAidSelect(field, original);
-            }
-        } else if (field === 'coupon_id') {
-            if (isSmallPack) {
-                td.innerHTML = '<span style="color:#999;">—</span>';
-            } else {
-                td.innerHTML = buildInlineCourseCouponSelect(field, original);
-            }
-        } else if (field === 'product_coupon_id') {
-            if (isSmallPack) {
-                td.innerHTML = '<span style="color:#999;">—</span>';
-            } else {
-                td.innerHTML = buildInlineProductCouponSelect(field, original, inlineProductCouponSubjectId);
-            }
-        } else if (field === 'name') {
-            td.innerHTML = `<input type="text" class="inline-edit-input" value="${escAttr(item.name || '')}" data-field="name">`;
-        } else if (field === 'lesson_count') {
-            td.innerHTML = `<input type="number" class="inline-edit-input" value="${Number(item.lesson_count) || 0}" data-field="lesson_count" min="1" step="1">`;
-        } else if (field === 'unit_price') {
-            td.innerHTML = `<input type="number" class="inline-edit-input" value="${Number(item.unit_price).toFixed(2)}" data-field="unit_price" min="0" step="0.01">`;
-        } else if (field === 'gifted_lessons') {
-            if (isSmallPack) {
-                td.innerHTML = '<span style="color:#999;">—</span>';
-            } else {
-                const giftedVal = parseInt(item.gifted_lessons) || 0;
-                td.innerHTML = `<div class="stepper-group" style="justify-content:center;">
-                    <button type="button" class="stepper-btn" onclick="(function(el){var v=parseInt(el.value)||0;v=Math.max(0,v-2);el.value=v;})(this.nextElementSibling)">−</button>
-                    <input type="number" class="inline-edit-input" value="${giftedVal}" data-field="gifted_lessons" min="0" step="2" readonly style="width:60px;">
-                    <button type="button" class="stepper-btn" onclick="(function(el){var v=parseInt(el.value)||0;v=v+2;el.value=v;})(this.previousElementSibling)">+</button>
-                </div>`;
-            }
-        }
-    });
-
-    // 自动 focus 第一个 input
-    const first = tr.querySelector('input.inline-edit-input');
-    if (first) first.focus();
-
-    // 点击行外任意位置 → 保存
-    setTimeout(() => {
-        document.addEventListener('click', tr._clickOutside = (e) => {
-            if (!tr.contains(e.target) && tr.classList.contains('inline-editing')) {
-                saveInlineEdit(tr, item);
-            }
-        });
-    }, 0);
-
-    // 绑定联动事件
-    bindInlinePriceRecalc(tr);
-    // 如果已有教材包选中 → 按学科加载商品券
-    const existingAid = tr.querySelector('[data-field="teaching_aid_id"]');
-    if (existingAid && existingAid.value) {
-        const aidId = parseInt(existingAid.value);
-        const aid = priceItemTeachingAids.find(a => a.id === aidId);
-        if (aid && aid.subject_id) {
-            reloadInlineProductCoupons(tr, aid.subject_id);
-        }
-    }
-    // 绑定键盘事件
-    bindInlineKeyboard(tr);
-}
-
-function buildInlineDiscountSelect(field, selectedValue) {
-    let html = `<select class="inline-edit-select" data-field="${field}">`;
-    html += '<option value="">不使用优惠方案</option>';
-    if (priceItemDiscountPlans.length > 0) {
-        html += priceItemDiscountPlans.map(d =>
-            `<option value="${d.id}"${String(d.id) === String(selectedValue) ? ' selected' : ''}>${esc(d.name)}（¥${Number(d.amount || 0).toFixed(2)}）</option>`
-        ).join('');
-    }
-    html += '</select>';
-    return html;
-}
-
-function buildInlineCourseCouponSelect(field, selectedValue) {
-    let html = `<select class="inline-edit-select" data-field="${field}">`;
-    html += '<option value="">不使用课时优惠券</option>';
-    if (priceItemCourseCoupons.length > 0) {
-        html += priceItemCourseCoupons.map(c =>
-            `<option value="${c.id}"${String(c.id) === String(selectedValue) ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
-        ).join('');
-    }
-    html += '</select>';
-    return html;
-}
-
-function buildInlineProductCouponSelect(field, selectedValue, subjectId = 0) {
-    let coupons = priceItemCoupons;
-    if (subjectId > 0) {
-        coupons = coupons.filter(c => {
-            if (!c.subject_ids || c.subject_ids === '') return true; // 未限制学科 → 适用所有
-            return c.subject_ids.split(',').map(Number).includes(subjectId);
-        });
-    }
-    let html = `<select class="inline-edit-select" data-field="${field}">`;
-    html += '<option value="">不使用商品券</option>';
-    if (coupons.length > 0) {
-        html += coupons.map(c =>
-            `<option value="${c.id}"${String(c.id) === String(selectedValue) ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
-        ).join('');
-    }
-    html += '</select>';
-    return html;
-}
-
-function buildInlineTeachingAidSelect(field, selectedValue) {
-    let html = `<select class="inline-edit-select" data-field="${field}">`;
-    html += '<option value="">不使用教材包</option>';
-    if (priceItemTeachingAids.length > 0) {
-        html += priceItemTeachingAids.map(a =>
-            `<option value="${a.id}"${String(a.id) === String(selectedValue) ? ' selected' : ''}>${esc(a.name)}（¥${Number(a.price).toFixed(2)}）</option>`
-        ).join('');
-    }
-    html += '</select>';
-    return html;
-}
-
-function bindInlinePriceRecalc(tr) {
-    const unitPriceInput = tr.querySelector('[data-field="unit_price"]');
-    const discountSelect = tr.querySelector('[data-field="discount_plan_id"]');
-    const courseCouponSelect = tr.querySelector('[data-field="coupon_id"]');
-    const productCouponSelect = tr.querySelector('[data-field="product_coupon_id"]');
-    const teachingAidSelect = tr.querySelector('[data-field="teaching_aid_id"]');
-    const displayEl = tr.querySelector('.pi-calc-display');
-
-    const recalc = () => {
-        const base = parseFloat(unitPriceInput?.value) || 0;
-        let discount = 0;
-        let teachingAidPrice = 0;
-        if (discountSelect?.value) {
-            const dp = priceItemDiscountPlans.find(d => d.id == discountSelect.value);
-            if (dp) discount += Number(dp.amount || 0);
-        }
-        if (courseCouponSelect?.value) {
-            const cc = priceItemCourseCoupons.find(c => c.id == courseCouponSelect.value);
-            if (cc) discount += Number(cc.amount || 0);
-        }
-        if (productCouponSelect?.value) {
-            const cp = priceItemCoupons.find(c => c.id == productCouponSelect.value);
-            if (cp) discount += Number(cp.amount || 0);
-        }
-        if (teachingAidSelect?.value) {
-            const ta = priceItemTeachingAids.find(a => a.id == teachingAidSelect.value);
-            if (ta) teachingAidPrice = Number(ta.price) || 0;
-        }
-        if (displayEl) displayEl.textContent = Math.max(0, base - discount + teachingAidPrice).toFixed(2);
-    };
-
-    unitPriceInput?.addEventListener('input', recalc);
-    discountSelect?.addEventListener('change', recalc);
-    courseCouponSelect?.addEventListener('change', recalc);
-    productCouponSelect?.addEventListener('change', recalc);
-    teachingAidSelect?.addEventListener('change', function() {
-        recalc();
-        // 教材包切换 → 重新加载商品券
-        const aidId = parseInt(this.value) || 0;
-        if (aidId > 0) {
-            const aid = priceItemTeachingAids.find(a => a.id === aidId);
-            reloadInlineProductCoupons(tr, aid ? (aid.subject_id || 0) : 0);
-        } else {
-            reloadInlineProductCoupons(tr, 0);
-        }
-    });
-}
-
-// 根据教材包学科重新加载 inline 编辑的商品券下拉
-async function reloadInlineProductCoupons(tr, subjectId) {
-    const select = tr.querySelector('[data-field="product_coupon_id"]');
-    if (!select) return;
-    const currentVal = select.value;
-    select.classList.add('loading');
-    let filteredData = priceItemCoupons;
-    try {
-        const params = { coupon_type: '商品券', page_size: 200 };
-        if (subjectId && subjectId > 0) params.subject_id = subjectId;
-        const res = await api('list_coupons', params, 'GET');
-        filteredData = res.data || [];
-    } catch (e) {
-        // 加载失败保留原数据
-    }
-    select.classList.remove('loading');
-    // 重建下拉
-    let html = '<option value="">不使用商品券</option>';
-    html += filteredData.map(c =>
-        `<option value="${c.id}"${String(c.id) === currentVal ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
-    ).join('');
-    select.innerHTML = html;
-}
-
-function bindInlineKeyboard(tr) {
-    tr.addEventListener('keydown', async (e) => {
-        if (e.key === 'Enter' && e.target.tagName !== 'SELECT') {
-            e.preventDefault();
-            await saveInlineEdit(tr);
-        } else if (e.key === 'Escape') {
-            e.preventDefault();
-            cancelInlineEdit(tr);
-        }
-    });
-}
-
-async function saveInlineEdit(tr) {
-    if (!tr || !tr.dataset.itemId) return;
-    const itemId = parseInt(tr.dataset.itemId);
-    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
-    if (!plan) return;
-
-    // 收集编辑后的值
-    const editedValues = {};
-    tr.querySelectorAll('input.inline-edit-input, select.inline-edit-select').forEach(el => {
-        editedValues[el.dataset.field] = el.value;
-    });
-
-    // 客户端校验
-    const name = (editedValues.name || '').trim();
-    if (!name) { showToast('报价单名称不能为空', 'error'); return; }
-    const lessonCount = parseInt(editedValues.lesson_count) || 0;
-    if (lessonCount <= 0) { showToast('课时数量必须大于0', 'error'); return; }
-
-    // 构建完整 items 数组（从内存 patched）
-    const unitPrice = parseFloat(editedValues.unit_price) || 0;
-    const discountPlanId = parseInt(editedValues.discount_plan_id) || 0;
-    const teachingAidId = parseInt(editedValues.teaching_aid_id) || 0;
-    const couponId = parseInt(editedValues.coupon_id) || 0;
-    const productCouponId = parseInt(editedValues.product_coupon_id) || 0;
-    // 计算实际价格
-    let discount = 0;
-    if (discountPlanId > 0) {
-        const dp = priceItemDiscountPlans.find(d => d.id === discountPlanId);
-        if (dp) discount += Number(dp.amount || 0);
-    }
-    if (couponId > 0) {
-        const cc = priceItemCourseCoupons.find(c => c.id === couponId);
-        if (cc) discount += Number(cc.amount || 0);
-    }
-    if (productCouponId > 0) {
-        const cp = priceItemCoupons.find(c => c.id === productCouponId);
-        if (cp) discount += Number(cp.amount || 0);
-    }
-    // 教材包原价
-    let teachingAidPrice = 0;
-    if (teachingAidId > 0) {
-        const ta = priceItemTeachingAids.find(a => a.id === teachingAidId);
-        if (ta) teachingAidPrice = Number(ta.price) || 0;
-    }
-    const actualPrice = Math.max(0, unitPrice - discount + teachingAidPrice);
-
-    const isSmallPack = plan.plan_type === '小课包';
-    const items = (plan.items || []).map((item, idx) => {
-        if (item.id === itemId) {
-            return {
-                name, lesson_count: lessonCount, unit_price: unitPrice,
-                actual_price: actualPrice,
-                discount_plan_id: discountPlanId,
-                teaching_aid_id: teachingAidId,
-                coupon_id: couponId,
-                product_coupon_id: productCouponId,
-                gifted_lessons: parseInt(editedValues.gifted_lessons) || 0,
-                sort_order: idx
-            };
-        }
-        return {
-            name: item.name,
-            lesson_count: item.lesson_count,
-            unit_price: item.unit_price,
-            actual_price: (() => {
-                if (isSmallPack) return parseFloat(item.actual_price) || 0;
-                let d = 0, taPrice = 0;
-                const dpId = parseInt(item.discount_plan_id) || 0;
-                const cId = parseInt(item.coupon_id) || 0;
-                const taId = parseInt(item.teaching_aid_id) || 0;
-                const pcId = parseInt(item.product_coupon_id) || 0;
-                if (dpId > 0) { const dp = priceItemDiscountPlans.find(x => x.id === dpId); if (dp) d += Number(dp.amount || 0); }
-                if (cId > 0) { const cc = priceItemCourseCoupons.find(x => x.id === cId); if (cc) d += Number(cc.amount || 0); }
-                if (taId > 0) { const ta = priceItemTeachingAids.find(x => x.id === taId); if (ta) taPrice = Number(ta.price) || 0; }
-                if (pcId > 0) { const cp = priceItemCoupons.find(x => x.id === pcId); if (cp) d += Number(cp.amount || 0); }
-                return Math.max(0, parseFloat(item.unit_price) || 0 - d + taPrice);
-            })(),
-            discount_plan_id: isSmallPack ? 0 : (parseInt(item.discount_plan_id) || 0),
-            teaching_aid_id: isSmallPack ? 0 : (parseInt(item.teaching_aid_id) || 0),
-            coupon_id: isSmallPack ? 0 : (parseInt(item.coupon_id) || 0),
-            product_coupon_id: isSmallPack ? 0 : (parseInt(item.product_coupon_id) || 0),
-            gifted_lessons: parseInt(item.gifted_lessons) || 0,
-            sort_order: idx
-        };
-    });
-
-    // 保存中状态
-    tr.classList.add('inline-saving');
-
-    try {
-        const r = await api('save_price_plan', {
-            course_id: currentPriceCourseId,
-            plan_id: currentSelectedPlanId,
-            plan_name: plan.name,
-            plan_type: plan.plan_type || '',
-            items: items
-        }, 'POST');
-        if (r && r.error) { showToast(r.error, 'error'); return; }
-        showToast('报价单已更新', 'success');
-        await loadPricePlans(currentPriceCourseId);
-    } catch (e) {
-        showToast('保存失败', 'error');
-    } finally {
-        tr.classList.remove('inline-saving');
-    }
-    if (tr._clickOutside) { document.removeEventListener('click', tr._clickOutside); tr._clickOutside = null; }
-}
-
-function cancelInlineEdit(tr) {
-    if (!tr || !tr._snapshot) return;
-    const isSmallPack = tr._snapshot.discount_plan_id === undefined; // 小课包行没有这些字段的 snapshot
-    tr.querySelectorAll('td.pi-editable, td.pi-readonly').forEach(td => {
-        const field = td.dataset.field;
-        const original = tr._snapshot[field];
-        if (field === 'actual_price') {
-            td.textContent = original || '0.00';
-        } else if (field === 'discount_plan_id' || field === 'teaching_aid_id' || field === 'coupon_id' || field === 'product_coupon_id') {
-            // 还原显示名而非 ID
-            const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
-            const item = plan ? (plan.items || []).find(i => i.id === parseInt(tr.dataset.itemId)) : null;
-            if (item) {
-                if (field === 'discount_plan_id') {
-                    td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.discount_plan_name || '-');
-                } else if (field === 'teaching_aid_id') {
-                    td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.teaching_aid_name || '-');
-                } else if (field === 'coupon_id') {
-                    td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.coupon_name || '-');
-                } else {
-                    td.textContent = (plan.plan_type === '小课包') ? '—' : esc(item.product_coupon_name || '-');
-                }
-            } else {
-                td.textContent = original || '-';
-            }
-        } else {
-            td.textContent = original || '';
-        }
-    });
-    if (tr._clickOutside) { document.removeEventListener('click', tr._clickOutside); tr._clickOutside = null; }
-    tr.classList.remove('inline-editing');
-    delete tr._snapshot;
 }
 
 function addPlan() {
@@ -4636,6 +4214,48 @@ function stepGiftedLessons(delta) {
     // 确保为偶数
     if (val % 2 !== 0) val = Math.max(0, val + (delta > 0 ? 1 : -1));
     el.value = val;
+}
+
+function editItem(itemId) {
+    if (!currentSelectedPlanId) { showToast('请先选择左侧价格方案', 'error'); return; }
+    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+    if (!plan) { showToast('价格方案不存在', 'error'); return; }
+    const item = (plan.items || []).find(i => i.id === itemId);
+    if (!item) { showToast('报价单不存在', 'error'); return; }
+
+    document.getElementById('modal-price-item-title').textContent = '编辑报价单';
+    document.getElementById('edit-price-item-id').value = itemId;
+    document.getElementById('price-item-name').value = item.name || '';
+    document.getElementById('price-item-lesson-count').value = item.lesson_count || '';
+    document.getElementById('price-item-unit-price').value = Number(item.unit_price || 0).toFixed(2);
+    document.getElementById('price-item-actual-price').value = Number(item.actual_price || 0).toFixed(2);
+
+    loadPriceItemDiscountOptions();
+    loadPriceItemTeachingAidOptions();
+    loadPriceItemCourseCouponOptions();
+    loadPriceItemCouponOptions();
+
+    const isSmall = plan.plan_type === '小课包';
+    const giftCard = document.getElementById('pi-gift-card');
+    if (giftCard) giftCard.style.display = isSmall ? 'none' : '';
+
+    if (!isSmall) {
+        document.getElementById('price-item-gifted-lessons').value = item.gifted_lessons || 0;
+    } else {
+        document.getElementById('price-item-gifted-lessons').value = '0';
+    }
+
+    openModal('modal-price-item');
+
+    // 延迟设置下拉选中值（等下拉加载完成）
+    setTimeout(() => {
+        if (!isSmall) {
+            document.getElementById('price-item-discount-plan').value = item.discount_plan_id || '';
+            document.getElementById('price-item-teaching-aid').value = item.teaching_aid_id || '';
+            document.getElementById('price-item-course-coupon').value = item.coupon_id || '';
+            document.getElementById('price-item-coupon').value = item.product_coupon_id || '';
+        }
+    }, 300);
 }
 
 function addItem() {
