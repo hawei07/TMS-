@@ -43,7 +43,7 @@ body {
 }
 
 /* ==================== 整体布局 ==================== */
-.app-layout { display: flex; min-height: 100vh; }
+.app-layout { display: flex; height: 100vh; overflow: hidden; }
 
 /* ==================== 左侧边栏（双栏布局） ==================== */
 .sidebar-primary {
@@ -52,8 +52,7 @@ body {
     color: #fff;
     display: flex; flex-direction: column;
     overflow-y: auto; overflow-x: hidden;
-    position: sticky; top: 0; height: 100vh;
-    z-index: 10;
+    flex-shrink: 0;
 }
 
 /* 品牌头 */
@@ -136,8 +135,7 @@ body {
     background: #FAF9FC;
     display: flex; flex-direction: column;
     overflow-y: auto; overflow-x: hidden;
-    position: sticky; top: 0; height: 100vh;
-    z-index: 5;
+    flex-shrink: 0;
     border-right: 1px solid #E8E6EE;
     box-shadow: 1px 0 8px rgba(0,0,0,0.04);
 }
