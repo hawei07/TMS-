@@ -6443,19 +6443,20 @@ let currentEditAttId = null;
 
 async function loadAttendance(sid) {
     const tbody = document.getElementById('attendance-tbody');
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + 'list_attendance&student_id=' + sid);
         const data = await res.json();
         const rows = data.data || [];
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:30px;">暂无上课记录</td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
             let statusClass = 'status-出勤';
             if (r.status === '缺勤') statusClass = 'status-缺勤';
             else if (r.status === '请假') statusClass = 'status-请假';
+            const postTaxDisplay = r.consumed_amount_post_tax ? '¥' + parseFloat(r.consumed_amount_post_tax).toFixed(2) : '<span style="color:#c0c4cc;">—</span>';
             return `<tr>
                 <td>${esc(r.campus)}</td>
                 <td>${esc(r.course_name)}</td>
@@ -6469,10 +6470,11 @@ async function loadAttendance(sid) {
                 <td><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
                 <td>${r.deducted_lessons || 0}</td>
                 <td>¥${(parseFloat(r.consumed_amount) || 0).toFixed(2)}</td>
+                <td>${postTaxDisplay}</td>
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
@@ -8743,7 +8745,7 @@ async function loadStudentConsumption(page = 1) {
     const pagination = document.getElementById('pagination-student-consumption');
     const dateFrom = document.getElementById('consumption-date-from').value;
     const dateTo = document.getElementById('consumption-date-to').value;
-    tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         let url = API_BASE + 'list_all_attendance&page=' + page + '&page_size=20';
         if (dateFrom) url += '&date_from=' + encodeURIComponent(dateFrom);
@@ -8753,7 +8755,7 @@ async function loadStudentConsumption(page = 1) {
         const rows = data.data || [];
         const total = data.total || 0;
         if (rows.length === 0) {
-            tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#999;padding:30px;">暂无考勤记录</td></tr>';
+            tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#999;padding:30px;">暂无考勤记录</td></tr>';
             pagination.innerHTML = '';
             return;
         }
@@ -8761,6 +8763,7 @@ async function loadStudentConsumption(page = 1) {
             let statusClass = 'status-出勤';
             if (r.status === '缺勤') statusClass = 'status-缺勤';
             else if (r.status === '请假') statusClass = 'status-请假';
+            const postTaxDisplay = r.consumed_amount_post_tax ? '¥' + parseFloat(r.consumed_amount_post_tax).toFixed(2) : '<span style="color:#c0c4cc;">—</span>';
             return `<tr>
                 <td>${esc(r.campus)}</td>
                 <td>${esc(r.student_no)}</td>
@@ -8777,6 +8780,7 @@ async function loadStudentConsumption(page = 1) {
                 <td><span class="status-tag ${statusClass}">${esc(r.status)}</span></td>
                 <td>${r.deducted_lessons || 0}</td>
                 <td>¥${(parseFloat(r.consumed_amount) || 0).toFixed(2)}</td>
+                <td>${postTaxDisplay}</td>
             </tr>`;
         }).join('');
         const totalPages = Math.ceil(total / 20);
@@ -8786,7 +8790,7 @@ async function loadStudentConsumption(page = 1) {
               + '<button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadStudentConsumption(' + (page + 1) + ')"') + '>下一页</button>'
             : '';
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="15" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 

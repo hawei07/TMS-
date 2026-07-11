@@ -3813,7 +3813,15 @@ $stmt->execute();
             if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
             $n = now();
-            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, order_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, campus, teacher, consumed_amount, created_at) VALUES (:sid, :cid, :oid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :cp, :t, :ca2, :ct2)");
+            // 计算课耗金额-税后
+            $postTaxAmount = null;
+            if ($consumedAmount > 0 && $campus) {
+                $taxRate = $db->query("SELECT COALESCE(t.course_tax_rate, 0) FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($campus) . " AND o.type = '校区'")->fetchColumn();
+                if ($taxRate && floatval($taxRate) > 0) {
+                    $postTaxAmount = round($consumedAmount / (1 + floatval($taxRate) / 100), 2);
+                }
+            }
+            $stmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, order_id, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, class_name, campus, teacher, consumed_amount, consumed_amount_post_tax, created_at) VALUES (:sid, :cid, :oid, :sl1, :sl2, :ct, :dt, :aa, :st, :cn, :cp, :t, :ca2, :pt, :ct2)");
             $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $cid, PDO::PARAM_INT);
             $stmt->bindValue(':oid', $orderId, PDO::PARAM_INT);
@@ -3827,6 +3835,7 @@ $stmt->execute();
             $stmt->bindValue(':cp', $campus, PDO::PARAM_STR);
             $stmt->bindValue(':t', $teacher, PDO::PARAM_STR);
             $stmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
+            $stmt->bindValue(':pt', $postTaxAmount, $postTaxAmount === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
             $stmt->bindValue(':ct2', $n, PDO::PARAM_STR);
             $stmt->execute();
             $attId = $db->lastInsertId();
@@ -3879,6 +3888,19 @@ $stmt->execute();
             if (isset($input['subject_level2'])) $fields[] = "subject_level2='" . $db->quote(trim($input['subject_level2'])) . "'";
             if (isset($input['class_time'])) $fields[] = "class_time='" . $db->quote(trim($input['class_time'])) . "'";
             if (isset($input['consumed_amount'])) $fields[] = "consumed_amount=" . round(floatval($input['consumed_amount']), 2);
+            // 如果consumed_amount变更，重新计算税后金额
+            if (isset($input['consumed_amount'])) {
+                $newCa = round(floatval($input['consumed_amount']), 2);
+                $campusName = isset($input['campus']) ? trim($input['campus']) : ($existing['campus'] ?? '');
+                $postTax = 'NULL';
+                if ($newCa > 0 && $campusName) {
+                    $taxRate = $db->query("SELECT COALESCE(t.course_tax_rate, 0) FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($campusName) . " AND o.type = '校区'")->fetchColumn();
+                    if ($taxRate && floatval($taxRate) > 0) {
+                        $postTax = round($newCa / (1 + floatval($taxRate) / 100), 2);
+                    }
+                }
+                $fields[] = "consumed_amount_post_tax=" . $postTax;
+            }
             if (isset($input['order_id'])) $fields[] = "order_id=" . intval($input['order_id']);
             if (empty($fields)) { json(['message' => '无变更']); break; }
             $db->exec("UPDATE attendance_records SET " . implode(', ', $fields) . " WHERE id=$id");
@@ -6063,7 +6085,15 @@ $stmt->execute();
                     $db->exec("DELETE FROM absence_records WHERE student_id=$studentId AND class_id=$classId AND schedule_id=$scheduleId AND lesson_date='$sessionDate'");
                     $newAttRecId = 0;
                     if ($status === '出勤' && $deductedLessons > 0) {
-                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, created_at, order_id) VALUES (:sid, :cid, :clid, :scid, :cn, :cp, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :ca, :oid)");
+                        // 计算课耗金额-税后
+                        $batchPostTax = null;
+                        if ($consumedAmount > 0 && $classCampus) {
+                            $batchTaxRate = $db->query("SELECT COALESCE(t.course_tax_rate, 0) FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($classCampus) . " AND o.type = '校区'")->fetchColumn();
+                            if ($batchTaxRate && floatval($batchTaxRate) > 0) {
+                                $batchPostTax = round($consumedAmount / (1 + floatval($batchTaxRate) / 100), 2);
+                            }
+                        }
+                        $arStmt = $db->prepare("INSERT INTO attendance_records (student_id, course_id, class_id, schedule_id, class_name, campus, teacher, subject_level1, subject_level2, class_time, lesson_date, attended_at, status, deducted_lessons, consumed_amount, consumed_amount_post_tax, created_at, order_id) VALUES (:sid, :cid, :clid, :scid, :cn, :cp, :t, :sl1, :sl2, :ct, :ld, :aa, :st, :dl, :ca2, :pt, :ca, :oid)");
                         $arStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                         $arStmt->bindValue(':cid', $attCourseId, PDO::PARAM_INT);
                         $arStmt->bindValue(':clid', $classId, PDO::PARAM_INT);
@@ -6079,6 +6109,7 @@ $stmt->execute();
                         $arStmt->bindValue(':st', $status, PDO::PARAM_STR);
                         $arStmt->bindValue(':dl', $deductedLessons, PDO::PARAM_INT);
                         $arStmt->bindValue(':ca2', round($consumedAmount, 2), PDO::PARAM_STR);
+                        $arStmt->bindValue(':pt', $batchPostTax, $batchPostTax === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
                         $arStmt->bindValue(':ca', $n, PDO::PARAM_STR);
                         $arStmt->bindValue(':oid', $deductedOrderId, PDO::PARAM_INT);
                         $arStmt->execute();
@@ -6964,12 +6995,21 @@ json([
 
                 // 写/更新考勤记录
                 $deductionJson = json_encode([['order_id' => $deductOrderId, 'amount' => $totalDeductLessons]], JSON_UNESCAPED_UNICODE);
+                // 计算课耗金额-税后
+                $actCampusName = $db->query("SELECT campus FROM orders WHERE id = $activityOrderId")->fetchColumn() ?: '';
+                $actPostTax = null;
+                if ($consumedAmount > 0 && $actCampusName) {
+                    $actTaxRate = $db->query("SELECT COALESCE(t.course_tax_rate, 0) FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($actCampusName) . " AND o.type = '校区'")->fetchColumn();
+                    if ($actTaxRate && floatval($actTaxRate) > 0) {
+                        $actPostTax = round($consumedAmount / (1 + floatval($actTaxRate) / 100), 2);
+                    }
+                }
                 if ($attendanceId > 0) {
-                    $db->exec("UPDATE class_attendance SET session_date = " . $db->quote($sessionDate) . ", deducted_lessons = $totalDeductLessons, deducted_order_id = $deductOrderId, deduction_json = " . $db->quote($deductionJson) . ", consumed_amount = $consumedAmount, adult_attended = $adultAttended, student_attended = $studentAttended, deduction_breakdown = " . $db->quote($deductionBreakdownJson) . " WHERE id = $attendanceId");
+                    $db->exec("UPDATE class_attendance SET session_date = " . $db->quote($sessionDate) . ", deducted_lessons = $totalDeductLessons, deducted_order_id = $deductOrderId, deduction_json = " . $db->quote($deductionJson) . ", consumed_amount = $consumedAmount, consumed_amount_post_tax = " . ($actPostTax === null ? 'NULL' : $actPostTax) . ", adult_attended = $adultAttended, student_attended = $studentAttended, deduction_breakdown = " . $db->quote($deductionBreakdownJson) . " WHERE id = $attendanceId");
                     $attId = $attendanceId;
                 } else {
                     $n = now();
-                    $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, adult_attended, student_attended, deduction_breakdown, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :aa, :sa, :db, :ct)");
+                    $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, consumed_amount_post_tax, activity_id, activity_order_id, adult_attended, student_attended, deduction_breakdown, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :pt, :aid, :aoid, :aa, :sa, :db, :ct)");
                     $attStmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
                     $attStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                     $attStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
@@ -6977,6 +7017,7 @@ json([
                     $attStmt->bindValue(':doid', $deductOrderId, PDO::PARAM_INT);
                     $attStmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
                     $attStmt->bindValue(':ca', $consumedAmount);
+                    $attStmt->bindValue(':pt', $actPostTax, $actPostTax === null ? PDO::PARAM_NULL : PDO::PARAM_STR);
                     $attStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
                     $attStmt->bindValue(':aoid', $activityOrderId, PDO::PARAM_INT);
                     $attStmt->bindValue(':aa', $adultAttended, PDO::PARAM_INT);
@@ -8253,10 +8294,10 @@ if (intval($countBt) === 0) {
                         <div class="table-wrap">
                             <table id="table-student-consumption">
                                 <thead><tr>
-                                    <th>校区</th><th>学号</th><th>学员姓名</th><th>手机号</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
+                                    <th>校区</th><th>学号</th><th>学员姓名</th><th>手机号</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th><th>课耗金额-税后</th>
                                 </tr></thead>
                                 <tbody id="consumption-tbody">
-                                    <tr><td colspan="15" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                    <tr><td colspan="16" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                 </tbody>
                             </table>
                         </div>
@@ -8490,10 +8531,10 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table class="attendance-table">
                                     <thead><tr>
-                                        <th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th>
+                                        <th>校区</th><th>课程</th><th>一级学科</th><th>二级学科</th><th>班级</th><th>授课教师</th><th>上课日期</th><th>上课时间</th><th>考勤时间</th><th>出勤状态</th><th>消耗课时</th><th>课耗金额</th><th>课耗金额-税后</th>
                                     </tr></thead>
                                     <tbody id="attendance-tbody">
-                                        <tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="13" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
