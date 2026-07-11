@@ -80,9 +80,7 @@ const subNavData = {
 let currentModule = 'market';
 
 function initTreeNav() {
-    console.log('[initTreeNav] called');
     const subNavEl = document.getElementById('sub-nav');
-    console.log('[initTreeNav] sub-nav element:', subNavEl);
     // 一级导航点击
     document.querySelectorAll('.primary-nav-item').forEach(item => {
         item.addEventListener('click', function() {
@@ -95,18 +93,13 @@ function initTreeNav() {
         });
     });
     // 渲染默认市场子项
-    console.log('[initTreeNav] rendering market subnav');
     renderSubNav('market');
-    console.log('[initTreeNav] done');
 }
 
 function renderSubNav(module) {
-    console.log('[renderSubNav] module:', module);
     const subNavEl = document.getElementById('sub-nav');
-    console.log('[renderSubNav] subNavEl:', subNavEl);
     if (!subNavEl) return;
     const items = subNavData[module] || [];
-    console.log('[renderSubNav] items count:', items.length);
 
     // Clear previous content
     subNavEl.innerHTML = '';
@@ -125,14 +118,14 @@ function renderSubNav(module) {
                 inGroup = false;
             }
             const groupHeader = document.createElement('li');
-            groupHeader.className = 'sub-group-header';
+            groupHeader.className = 'sub-group-header collapsed';
             groupHeader.setAttribute('onclick', 'toggleSubGroup(this)');
             groupHeader.innerHTML = '<span class="group-arrow"><svg viewBox="0 0 24 24" width="10" height="10" fill="currentColor"><path d="M7 10l5 5 5-5z"/></svg></span>' + item.group;
             ul.appendChild(groupHeader);
 
             const groupLi = document.createElement('li');
             groupUl = document.createElement('ul');
-            groupUl.className = 'sub-group-items';
+            groupUl.className = 'sub-group-items collapsed';
             groupLi.appendChild(groupUl);
             ul.appendChild(groupLi);
             inGroup = true;
@@ -161,7 +154,6 @@ function renderSubNav(module) {
     });
 
     subNavEl.appendChild(ul);
-    console.log('[renderSubNav] done, ul children:', ul.children.length);
 }
 
 function toggleSubGroup(header) {
@@ -13742,7 +13734,7 @@ async function loadActivityConsumption(page = 1) {
     const dateFrom = document.getElementById('act-consume-from')?.value || '';
     const dateTo = document.getElementById('act-consume-to')?.value || '';
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         let url = API_BASE + 'list_activity_consumptions&page=' + page + '&page_size=20';
         if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
@@ -13752,12 +13744,14 @@ async function loadActivityConsumption(page = 1) {
         const data = await res.json();
         const rows = data.data || [];
         const total = data.total || 0;
-        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无活动课耗记录</td></tr>'; pagination.innerHTML = ''; return; }
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:30px;">暂无活动课耗记录</td></tr>'; pagination.innerHTML = ''; return; }
         tbody.innerHTML = rows.map(r => {
             const displayVal = function(v) { return v ? esc(v) : '<span style="color:#c0c4cc;">—</span>'; };
             const feeVal = parseFloat(r.consumed_amount) || 0;
             const attFeeVal = parseFloat(r.activity_attended_fee) || 0;
             const attTime = (r.attendance_time || '').substring(0, 19);
+            const postTaxVal = parseFloat(r.consumed_amount_post_tax);
+            const postTaxDisplay = !isNaN(postTaxVal) && postTaxVal > 0 ? '¥' + postTaxVal.toFixed(2) : '<span style="color:#c0c4cc;">—</span>';
             return '<tr>' +
                 '<td>' + displayVal(r.student_name) + '</td>' +
                 '<td>' + displayVal(r.student_phone) + '</td>' +
@@ -13770,10 +13764,11 @@ async function loadActivityConsumption(page = 1) {
                 '<td>' + displayVal(r.subject_level2) + '</td>' +
                 '<td style="white-space:nowrap;">' + (attTime || '<span style="color:#c0c4cc;">—</span>') + '</td>' +
                 '<td style="text-align:right;">¥' + feeVal.toFixed(2) + '</td>' +
+                '<td style="text-align:right;">' + postTaxDisplay + '</td>' +
                 '<td style="text-align:right;">' + (attFeeVal > 0 ? '¥' + attFeeVal.toFixed(2) : '<span style="color:#c0c4cc;">—</span>') + '</td>' +
                 '</tr>';
         }).join('');
         const totalPages = Math.ceil(total / 20);
         pagination.innerHTML = totalPages > 1 ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadActivityConsumption(' + (page - 1) + ')"') + '>上一页</button><span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span><button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadActivityConsumption(' + (page + 1) + ')"') + '>下一页</button>' : '';
-    } catch (e) { tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
 }

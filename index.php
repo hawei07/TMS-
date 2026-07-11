@@ -7133,7 +7133,7 @@ json([
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
 
-            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.deduction_json, ca.adult_attended, ca.student_attended, ca.deduction_breakdown, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name, s.phone AS student_phone, s.student_no, o.actual_price AS activity_total_price, o.activity_adult_count, o.activity_student_count FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id LEFT JOIN orders o ON ca.activity_order_id = o.id AND o.order_type = '活动' $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.consumed_amount_post_tax, ca.campus, ca.deduction_json, ca.adult_attended, ca.student_attended, ca.deduction_breakdown, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name, s.phone AS student_phone, s.student_no, o.actual_price AS activity_total_price, o.activity_adult_count, o.activity_student_count FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id LEFT JOIN orders o ON ca.activity_order_id = o.id AND o.order_type = '活动' $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
@@ -7170,6 +7170,19 @@ json([
                             $r['source_order_no'] = $srcOrder['order_no'] ?? '';
                             $r['subject_level1'] = $srcOrder['subject_level1'] ?? '';
                             $r['subject_level2'] = $srcOrder['subject_level2'] ?? '';
+                        }
+                    }
+                }
+                // 课耗金额-税后（优先使用已固化值，历史数据无值则实时计算）
+                if (($r['consumed_amount_post_tax'] ?? null) === null) {
+                    $activityCampusName = $r['campus'] ?? '';
+                    if ($activityCampusName) {
+                        $taxStmt = $db->prepare("SELECT t.course_tax_rate FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = :cname AND o.type = '校区'");
+                        $taxStmt->execute([':cname' => $activityCampusName]);
+                        $taxRow = $taxStmt->fetch(PDO::FETCH_ASSOC);
+                        $rate = $taxRow ? floatval($taxRow['course_tax_rate']) : null;
+                        if ($rate !== null && floatval($r['consumed_amount'] ?? 0) > 0) {
+                            $r['consumed_amount_post_tax'] = round(floatval($r['consumed_amount']) / (1 + $rate / 100), 2);
                         }
                     }
                 }
@@ -8148,9 +8161,9 @@ if (intval($countBt) === 0) {
                                 </div>
                                 <div class="table-wrap">
                                     <table class="activity-cons-table"><thead><tr>
-                                        <th>学员</th><th>手机号</th><th>学号</th><th>活动名称</th><th>考勤日期</th><th>消耗课时</th><th>扣除课包</th><th>一级学科</th><th>二级学科</th><th>考勤时间</th><th>课耗金额</th><th>活动收费已考勤</th>
+                                        <th>学员</th><th>手机号</th><th>学号</th><th>活动名称</th><th>考勤日期</th><th>消耗课时</th><th>扣除课包</th><th>一级学科</th><th>二级学科</th><th>考勤时间</th><th>课耗金额</th><th>课耗金额-税后</th><th>活动收费已考勤</th>
                                     </tr></thead>
-                                    <tbody id="activity-consumption-tbody"><tr><td colspan="12">加载中...</td></tr></tbody></table>
+                                    <tbody id="activity-consumption-tbody"><tr><td colspan="13">加载中...</td></tr></tbody></table>
                                 </div>
                                 <div id="activity-consumption-pagination"></div>
                             </div>
