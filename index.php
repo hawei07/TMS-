@@ -3758,6 +3758,14 @@ $stmt->execute();
                     $productCouponAmount = floatval($orderRow['product_coupon_amount'] ?? 0);
                     $classPrice = $actualPrice - $teachingAidPrice + $productCouponAmount;
                     $unitPrice = $lessonCount > 0 ? $classPrice / $lessonCount : 0;
+                    $rowConsumedAmount = round($unitPrice * $amount, 2);
+                    // 按比例分配课耗金额-税后（一条考勤可能对应多笔订单扣减）
+                    $rowPostTax = null;
+                    $totalConsumed = floatval($ca['consumed_amount'] ?? 0);
+                    $totalPostTaxRaw = $ca['consumed_amount_post_tax'];
+                    if ($totalPostTaxRaw !== null && $totalPostTaxRaw !== '' && $totalConsumed > 0) {
+                        $rowPostTax = round($rowConsumedAmount * floatval($totalPostTaxRaw) / $totalConsumed, 2);
+                    }
                     $isActivity = intval($ca['activity_id'] ?? 0) > 0;
                     $rows[] = [
                         'id' => 'ca_' . intval($ca['id']) . '_' . $orderId,
@@ -3777,7 +3785,8 @@ $stmt->execute();
                         'attended_at' => $ca['created_at'] ?? '',
                         'status' => $ca['status'] ?? '出勤',
                         'deducted_lessons' => $amount,
-                        'consumed_amount' => round($unitPrice * $amount, 2),
+                        'consumed_amount' => $rowConsumedAmount,
+                        'consumed_amount_post_tax' => $rowPostTax,
                         'created_at' => $ca['created_at'] ?? ''
                     ];
                 }
