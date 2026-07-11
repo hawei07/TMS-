@@ -6672,14 +6672,48 @@ json([
             $stmt = $db->query("SELECT id, order_no, activity_id, activity_name, activity_campus AS campus, activity_adult_count AS adult_count, activity_student_count AS student_count, actual_price AS total_price, cash_amount, meituan_amount, account_amount, pay_status, is_voided, created_at FROM orders WHERE student_id = $sid AND order_type = '活动' AND is_voided = '否' ORDER BY id DESC");
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
-                // 检查考勤状态
-                $attStmt = $db->query("SELECT id FROM class_attendance WHERE activity_order_id = " . intval($r['id']) . " AND activity_id > 0 LIMIT 1");
+                $r['enroll_time'] = $r['created_at'];
+                $r['order_id'] = $r['id'];
+                // 查询考勤状态（与 list_activity_attendance 对齐字段）
+                $attStmt = $db->prepare("SELECT id, status, adult_attended, student_attended, deduction_breakdown, session_date, created_at, deduction_json, teacher FROM class_attendance WHERE activity_id = :aid AND activity_order_id = :aoid LIMIT 1");
+                $attStmt->bindValue(':aid', $r['activity_id'], PDO::PARAM_INT);
+                $attStmt->bindValue(':aoid', $r['id'], PDO::PARAM_INT);
+                $attStmt->execute();
                 $att = $attStmt->fetch(PDO::FETCH_ASSOC);
                 $r['attended'] = $att ? true : false;
-                $r['attendance_id'] = $att ? intval($att['id']) : null;
+                $r['attendance_id'] = $att ? intval($att['id']) : 0;
                 $r['attendance_status'] = $att ? '已考勤' : '待考勤';
-                $r['order_id'] = $r['id'];
-                $r['enroll_time'] = $r['created_at'];
+                if ($att) {
+                    $r['adult_attended'] = intval($att['adult_attended'] ?? 0);
+                    $r['student_attended'] = intval($att['student_attended'] ?? 0);
+                    $r['deduction_breakdown'] = $att['deduction_breakdown'] ?? '';
+                    $r['att_session_date'] = $att['session_date'] ?? '';
+                    $r['attendance_time'] = $att['created_at'] ?? '';
+                    $r['teacher'] = $att['teacher'] ?? '';
+                    if (empty($r['teacher'])) {
+                        $breakdown = json_decode($att['deduction_breakdown'] ?? '{}', true) ?: [];
+                        $r['teacher'] = $breakdown['teacher'] ?? '';
+                    }
+                    $r['subject_level1'] = '';
+                    $r['subject_level2'] = '';
+                    $deductionJson = $att['deduction_json'] ?? '[]';
+                    $entries = json_decode($deductionJson, true) ?: [];
+                    if (!empty($entries)) {
+                        $srcOrderId = intval($entries[0]['order_id'] ?? 0);
+                        if ($srcOrderId > 0) {
+                            $subjRow = $db->query("SELECT c.subject_level1, c.subject_level2 FROM orders o LEFT JOIN courses c ON o.course_id = c.id WHERE o.id = $srcOrderId LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+                            if ($subjRow) {
+                                $r['subject_level1'] = $subjRow['subject_level1'] ?? '';
+                                $r['subject_level2'] = $subjRow['subject_level2'] ?? '';
+                            }
+                        }
+                    }
+                } else {
+                    $r['attendance_time'] = '';
+                    $r['teacher'] = '';
+                    $r['subject_level1'] = '';
+                    $r['subject_level2'] = '';
+                }
                 $rows[] = $r;
             }
             json(['data' => $rows]);
@@ -8425,18 +8459,19 @@ if (intval($countBt) === 0) {
                                     <thead>
                                         <tr>
                                             <th>活动名称</th>
-                                            <th width="100">报名校区</th>
-                                            <th width="60">成人</th>
-                                            <th width="60">学员</th>
-                                            <th width="100">总费用</th>
-                                            <th width="110">报名时间</th>
-                                            <th width="90">支付方式</th>
-                                            <th width="85">考勤状态</th>
-                                            <th width="110">操作</th>
+                                            <th width="80">校区</th>
+                                            <th width="105">报名时间</th>
+                                            <th width="90">报名费用</th>
+                                            <th width="80">学科一级</th>
+                                            <th width="80">学科二级</th>
+                                            <th width="105">考勤时间</th>
+                                            <th width="65">老师</th>
+                                            <th width="80">考勤状态</th>
+                                            <th width="130">操作</th>
                                         </tr>
                                     </thead>
                                     <tbody id="student-activities-tbody">
-                                        <tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>

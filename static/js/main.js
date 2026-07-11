@@ -2721,6 +2721,28 @@ async function loadCampusTree(containerId) {
     } catch (e) {
         container.innerHTML = '<span style="color:#e6a23c;font-size:13px;">加载校区失败</span>';
     }
+    // 为 checkbox 树绑定整行点击切换（跳过 radio 单选树）
+    if (!isSingle) ensureTreeRowClick(containerId);
+}
+
+// 校区树整行点击委托 — 所有 checkbox 树通用（跳过 radio 单选树）
+var _treeRowClickBound = {};
+function ensureTreeRowClick(containerId) {
+    if (_treeRowClickBound[containerId]) return;
+    var container = document.getElementById(containerId);
+    if (!container) return;
+    container.addEventListener('click', function(e) {
+        if (e.target.closest('.campus-tree-arrow')) return;
+        var row = e.target.closest('.campus-tree-row');
+        if (!row) return;
+        var check = row.querySelector('.campus-tree-check');
+        if (!check || check.type !== 'checkbox') return;
+        if (e.target === check) return;
+        check.checked = !check.checked;
+        check.indeterminate = false;
+        toggleCampusTreeNode(check);
+    });
+    _treeRowClickBound[containerId] = true;
 }
 
 function renderCampusTreeNode(node, level, isSingle) {
@@ -3849,6 +3871,7 @@ async function loadFilterCampusTree() {
         const filtered = prune(tree);
         container.innerHTML = filtered.map(n => renderCampusTreeNode(n, 0)).join('');
         updateFilterCampusToggleLabel();
+        ensureTreeRowClick('filter-campus-tree');
     } catch (e) { /* 静默 */ }
 }
 
@@ -11806,34 +11829,19 @@ function updateDiscountSubjectCount() {
     badge.classList.toggle('has-selection', n > 0);
 }
 
-// 折扣校区树 click 委托 — 支持整行点击切换 + 更新 badge 和行选中态
+// 折扣校区树 click 委托 — 更新 badge 和行选中态
 let _discountCampusTreeListenerBound = false;
 function ensureDiscountCampusTreeListener() {
     if (_discountCampusTreeListenerBound) return;
     const tree = document.getElementById('discount-campus-tree');
     if (!tree) return;
     tree.addEventListener('click', function(e) {
-        // 不处理箭头点击（展开/收起）
-        if (e.target.closest('.campus-tree-arrow')) return;
-        const row = e.target.closest('.campus-tree-row');
-        if (!row) return;
-        // 找到该行的 checkbox
-        const check = row.querySelector('.campus-tree-check');
-        if (!check) return;
-        // 如果直接点击 checkbox，走原有逻辑（toggleCampusTreeNode 由 inline onclick 触发）
         if (e.target.classList.contains('campus-tree-check')) {
             setTimeout(function() {
                 syncAllDiscountCampusRows();
                 updateDiscountCampusCount();
             }, 0);
-            return;
         }
-        // 点击其他区域 — 切换 checkbox 并触发级联更新
-        check.checked = !check.checked;
-        check.indeterminate = false;
-        toggleCampusTreeNode(check);
-        syncAllDiscountCampusRows();
-        updateDiscountCampusCount();
     });
     _discountCampusTreeListenerBound = true;
 }
@@ -12036,6 +12044,27 @@ async function loadCouponSubjectTree() {
     } catch (e) {
         container.innerHTML = '<span style="color:#e6a23c;font-size:13px;">加载学科失败</span>';
     }
+    ensureCouponSubjectTreeRowClick();
+}
+
+// 优惠券学科树整行点击委托
+let _couponSubjectTreeRowClickBound = false;
+function ensureCouponSubjectTreeRowClick() {
+    if (_couponSubjectTreeRowClickBound) return;
+    var tree = document.getElementById('coupon-subject-tree');
+    if (!tree) return;
+    tree.addEventListener('click', function(e) {
+        if (e.target.closest('.campus-tree-arrow')) return;
+        var row = e.target.closest('.campus-tree-row');
+        if (!row) return;
+        var check = row.querySelector('.campus-tree-check');
+        if (!check) return;
+        if (e.target === check) return;
+        check.checked = !check.checked;
+        check.indeterminate = false;
+        onCouponSubjectCheck(check);
+    });
+    _couponSubjectTreeRowClickBound = true;
 }
 
 function renderCouponSubjectNode(node, level) {
@@ -13159,40 +13188,69 @@ async function confirmActivityEnroll() {
 async function loadStudentActivities(sid) {
     const tbody = document.getElementById('student-activities-tbody');
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         const res = await fetch(API_BASE + 'get_student_activities&student_id=' + sid);
         const data = await res.json();
         const rows = data.data || [];
         window._studentActivities = rows;
-        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:30px;">暂无报读活动</td></tr>'; return; }
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无报读活动</td></tr>'; return; }
         tbody.innerHTML = rows.map((r, i) => {
-            const attBtn = r.attended ? '<span class="activity-att-pill attended">已考勤</span>' : '<button class="btn btn-sm btn-activity-att" onclick="openActivityAttendanceFromRow(' + i + ')">考勤</button>';
-            const voidBtn = r.is_voided ? '<span style="color:#999;font-size:12px;">已作废</span>' : '<button class="btn-link-danger" onclick="voidActivityOrder(' + r.id + ')">作废</button>';
-            const payMethods = [];
-            if (parseFloat(r.cash_amount) > 0) payMethods.push('现金');
-            if (parseFloat(r.meituan_amount) > 0) payMethods.push('美团');
-            if (parseFloat(r.account_amount) > 0) payMethods.push('余额');
-            const attStatus = r.attendance_status || (r.attended ? '已考勤' : '未考勤');
-            return '<tr><td>' + esc(r.activity_name || '') + '</td><td>' + esc(r.campus || '') + '</td><td style="text-align:center;">' + (r.adult_count || 0) + '</td><td style="text-align:center;">' + (r.student_count || 0) + '</td><td style="text-align:right;">¥' + (parseFloat(r.total_price) || 0).toFixed(2) + '</td><td>' + (r.enroll_time || r.created_at || '').substring(0, 19) + '</td><td>' + (payMethods.join('+') || '—') + '</td><td><span class="activity-att-pill ' + (r.attended ? 'attended' : 'unattended') + '">' + attStatus + '</span></td><td>' + attBtn + ' ' + voidBtn + '</td></tr>';
+            const isAttended = r.attendance_status === '已考勤';
+            const statusTag = isAttended
+                ? '<span class="activity-att-pill pill-attended">已考勤</span>'
+                : '<span class="activity-att-pill pill-unattended">待考勤</span>';
+            const actionBtn = isAttended
+                ? '<button class="btn-activity-att btn-edit" onclick="openActivityAttendanceFromRow(' + i + ')">修改考勤</button><button class="btn-activity-att btn-revoke" onclick="revokeStudentActivityAttendance(' + i + ')">撤销考勤</button>'
+                : '<button class="btn-activity-att btn-do" onclick="openActivityAttendanceFromRow(' + i + ')">考勤</button>';
+            const feeDisplay = parseFloat(r.total_price) ? '¥' + parseFloat(r.total_price).toFixed(2) : '<span style="color:#c0c4cc;">—</span>';
+            const enrollTime = (r.enroll_time || r.created_at || '').substring(0, 16);
+            const attTime = (r.attendance_time || '').substring(0, 16);
+            const displayVal = function(v) { return v ? esc(v) : '<span style="color:#c0c4cc;">—</span>'; };
+            return '<tr>' +
+                '<td>' + displayVal(r.activity_name) + '</td>' +
+                '<td>' + displayVal(r.campus) + '</td>' +
+                '<td class="col-nowrap">' + (enrollTime || '<span style="color:#c0c4cc;">—</span>') + '</td>' +
+                '<td class="col-right">' + feeDisplay + '</td>' +
+                '<td>' + displayVal(r.subject_level1) + '</td>' +
+                '<td>' + displayVal(r.subject_level2) + '</td>' +
+                '<td class="col-nowrap">' + (attTime || '<span style="color:#c0c4cc;">—</span>') + '</td>' +
+                '<td>' + displayVal(r.teacher) + '</td>' +
+                '<td class="col-center">' + statusTag + '</td>' +
+                '<td class="col-center">' + actionBtn + '</td>' +
+                '</tr>';
         }).join('');
-    } catch (e) { tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
 }
 
 function openActivityAttendanceFromRow(index) {
     const r = window._studentActivities && window._studentActivities[index];
     if (!r) return;
-    openActivityAttendanceModal(r.activity_id, r.id, currentViewStudentId, r);
+    openActivityAttendanceModal(r.activity_id, r.order_id || r.id, currentViewStudentId, {
+        activity_name: r.activity_name || '',
+        campus: r.campus || '',
+        adult_count: r.adult_count || 0,
+        student_count: r.student_count || 0,
+        total_price: r.total_price || 0,
+        enroll_time: r.enroll_time || r.created_at || '',
+        attendance_id: r.attendance_id || 0,
+        adult_attended: r.adult_attended || 0,
+        student_attended: r.student_attended || 0,
+        deduction_breakdown: r.deduction_breakdown || '',
+        att_session_date: r.att_session_date || ''
+    });
 }
 
-async function voidActivityOrder(orderId) {
-    if (!confirm('确认作废该活动报名订单？作废后无法恢复。')) return;
+async function revokeStudentActivityAttendance(index) {
+    const r = window._studentActivities && window._studentActivities[index];
+    if (!r || !r.attendance_id) return;
+    if (!confirm('确认撤销「' + (r.activity_name || '') + '」的考勤？\n扣减的课时将会归还。')) return;
     try {
-        const res = await api('void_order', { order_id: orderId }, 'POST');
+        const res = await api('delete_activity_attendance', { attendance_id: r.attendance_id }, 'POST');
         if (res.error) { showToast(res.error, 'error'); return; }
-        showToast('订单已作废');
+        showToast('已撤销考勤');
         if (currentViewStudentId) loadStudentActivities(currentViewStudentId);
-    } catch (e) { showToast('操作失败：' + e.message, 'error'); }
+    } catch (e) { showToast('撤销失败: ' + e.message, 'error'); }
 }
 
 // ==================== 活动考勤弹窗 — 单页表单 ====================

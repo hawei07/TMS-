@@ -3224,17 +3224,15 @@ span.flatpickr-weekday {
     font-weight: 650;
 }
 
-/* 课程工具栏即时搜索 */
-
-/* ==================== 课程筛选栏 ==================== */
+/* ==================== 课程筛选栏（'25 redesign） ==================== */
 #panel-courses .filter-bar {
     display: flex;
     align-items: flex-end;
-    gap: 12px;
-    padding: 0 28px 14px;
+    gap: 10px;
+    padding: 4px 28px 12px;
     flex-wrap: wrap;
-    border-bottom: 1px solid var(--color-border-light);
-    margin-bottom: 12px;
+    border-bottom: 1px solid oklch(93% 0.008 290);
+    margin-bottom: 0;
 }
 
 #panel-courses .filter-item {
@@ -3244,59 +3242,110 @@ span.flatpickr-weekday {
 }
 
 #panel-courses .filter-label {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    font-weight: 500;
-    text-transform: uppercase;
-    letter-spacing: 0.3px;
-    padding-left: 2px;
+    font-size: 10.5px;
+    color: oklch(48% 0.02 290);
+    font-weight: 520;
+    letter-spacing: 0.1px;
+    padding-left: 1px;
 }
 
+/* Compact select (一级/二级学科, 适用校区) */
 #panel-courses .filter-item select {
-    height: 32px;
-    padding: 4px 28px 4px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    font-size: 13px;
-    color: var(--color-text);
+    height: 30px;
+    padding: 0 26px 0 10px;
+    border: 1.5px solid oklch(90% 0.012 290);
+    border-radius: 7px;
+    background: oklch(98.5% 0.003 290);
+    font-size: 12.5px;
+    color: oklch(28% 0.02 290);
     cursor: pointer;
-    min-width: 110px;
+    min-width: 95px;
     appearance: none;
-    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%236B6880' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2'%3E%3Cpolyline points='6 9 12 15 18 9'%3E%3C/polyline%3E%3C/svg%3E");
     background-repeat: no-repeat;
-    background-position: right 8px center;
+    background-position: right 7px center;
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+#panel-courses .filter-item select:hover {
+    border-color: oklch(78% 0.03 290);
 }
 
 #panel-courses .filter-item select:focus {
     outline: none;
     border-color: var(--color-primary);
-    box-shadow: 0 0 0 2px var(--color-primary-bg);
+    box-shadow: 0 0 0 2.5px oklch(87% 0.09 290);
+}
+
+/* Toggle chip — 小课包 / 低幼龄 */
+.filter-item-toggle {
+    flex-direction: row !important;
+    align-items: center;
+    gap: 0 !important;
+}
+.filter-item-toggle .filter-label {
+    font-size: 10.5px;
+    color: oklch(48% 0.02 290);
+    font-weight: 520;
+    margin-right: 6px;
+    letter-spacing: 0.1px;
+}
+.filter-chip-group {
+    display: inline-flex;
+    border: 1.5px solid oklch(90% 0.012 290);
+    border-radius: 7px;
+    overflow: hidden;
+    height: 30px;
+    background: oklch(98.5% 0.003 290);
+}
+.filter-chip-btn {
+    height: 100%;
+    padding: 0 11px;
+    border: none;
+    background: none;
+    font-size: 12px;
+    font-weight: 500;
+    color: oklch(50% 0.02 290);
+    cursor: pointer;
+    font-family: inherit;
+    transition: background 0.15s ease, color 0.15s ease;
+    white-space: nowrap;
+    border-right: 1px solid oklch(92% 0.008 290);
+}
+.filter-chip-btn:last-child { border-right: none; }
+.filter-chip-btn:hover {
+    background: oklch(95% 0.02 290);
+    color: oklch(30% 0.02 290);
+}
+.filter-chip-btn.active {
+    background: var(--color-primary);
+    color: #fff;
+    font-weight: 550;
+}
+.filter-chip-btn.active:hover {
+    background: oklch(40% 0.17 290);
 }
 
 /* 校区筛选下拉 */
 #panel-courses .filter-item-campus {
     position: relative;
 }
-
 #panel-courses .filter-campus-trigger {
-    height: 32px;
-    padding: 4px 24px 4px 10px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
-    font-size: 13px;
-    color: var(--color-text);
+    height: 30px;
+    padding: 0 24px 0 10px;
+    border: 1.5px solid oklch(90% 0.012 290);
+    border-radius: 7px;
+    background: oklch(98.5% 0.003 290);
+    font-size: 12.5px;
+    color: oklch(28% 0.02 290);
     cursor: pointer;
-    min-width: 120px;
+    min-width: 110px;
     text-align: left;
-    position: relative;
+    transition: border-color 0.18s ease;
 }
-
 #panel-courses .filter-campus-trigger:hover {
-    border-color: var(--color-primary);
+    border-color: oklch(78% 0.03 290);
 }
-
 #panel-courses .filter-campus-panel {
     display: none;
     position: absolute;
@@ -3304,170 +3353,163 @@ span.flatpickr-weekday {
     left: 0;
     z-index: 100;
     margin-top: 4px;
-    background: var(--color-surface);
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-md);
-    box-shadow: var(--shadow-lg);
+    background: oklch(99.5% 0.001 290);
+    border: 1.5px solid oklch(90% 0.012 290);
+    border-radius: 8px;
+    box-shadow: 0 8px 30px oklch(0% 0 0 / 0.1);
     min-width: 220px;
     max-height: 320px;
     overflow-y: auto;
-    padding: 8px 0;
+    padding: 6px 0;
 }
-
 #panel-courses .filter-campus-actions {
     display: flex;
     gap: 8px;
     padding: 4px 12px 8px;
-    border-bottom: 1px solid var(--color-border-light);
+    border-bottom: 1px solid oklch(93% 0.006 290);
 }
-
 #panel-courses .filter-campus-actions a {
     font-size: 12px;
     color: var(--color-primary);
     cursor: pointer;
     text-decoration: none;
+    font-weight: 500;
 }
-
 #panel-courses .filter-campus-actions a:hover {
-    color: var(--color-primary-dark);
+    color: oklch(38% 0.16 290);
 }
-
-#panel-courses .filter-campus-tree {
-    padding: 4px 0;
-}
-
-#panel-courses .filter-campus-tree .campus-tree-node {
-    margin: 0;
-}
-
+#panel-courses .filter-campus-tree { padding: 4px 0; }
+#panel-courses .filter-campus-tree .campus-tree-node { margin: 0; }
 #panel-courses .filter-campus-tree .campus-tree-row {
-    padding-top: 3px;
-    padding-bottom: 3px;
+    padding-top: 2px;
+    padding-bottom: 2px;
 }
 
-#panel-courses .filter-reset-btn {
-    height: 32px;
-    padding: 0 14px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm);
-    background: var(--color-surface);
+/* Action buttons — unified sizing */
+#panel-courses .filter-bar .action-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    padding: 0 16px;
+    line-height: 1;
+    border: 1.5px solid var(--color-primary);
+    border-radius: 7px;
+    background: #fff;
     font-size: 12px;
-    color: var(--color-text-secondary);
+    font-weight: 550;
+    color: var(--color-primary);
+    cursor: pointer;
+    white-space: nowrap;
+    align-self: flex-end;
+    flex-shrink: 0;
+    transition: background 0.18s ease, color 0.18s ease, transform 0.12s ease;
+}
+#panel-courses .filter-bar .action-btn:hover {
+    background: var(--color-primary);
+    color: #fff;
+    transform: translateY(-1px);
+}
+#panel-courses .filter-bar .action-btn:active {
+    transform: translateY(0);
+}
+#panel-courses .filter-reset-btn {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    height: 30px;
+    padding: 0 12px;
+    line-height: 1;
+    border: 1.5px solid oklch(90% 0.012 290);
+    border-radius: 7px;
+    background: oklch(98.5% 0.003 290);
+    font-size: 12px;
+    font-weight: 500;
+    color: oklch(48% 0.02 290);
     cursor: pointer;
     align-self: flex-end;
     white-space: nowrap;
+    transition: border-color 0.18s ease, color 0.18s ease, background 0.18s ease;
 }
-
 #panel-courses .filter-reset-btn:hover {
-    color: var(--color-danger);
-    border-color: var(--color-danger);
-    background: var(--color-danger-bg);
+    color: oklch(42% 0.15 20);
+    border-color: oklch(70% 0.1 20);
+    background: oklch(96% 0.02 20);
 }
 
-/* 课程筛选栏搜索输入 */
+/* 搜索框 - 更突出 */
 .filter-item-search {
     flex: 0 0 240px;
 }
-
-.filter-search-wrap {
-    position: relative;
-}
-
+.filter-search-wrap { position: relative; }
 .filter-search-icon {
     position: absolute;
-    left: 10px;
+    left: 11px;
     top: 50%;
     transform: translateY(-50%);
-    color: var(--color-text-muted);
+    color: oklch(60% 0.01 290);
     pointer-events: none;
     z-index: 1;
 }
-
 .filter-item-search input[type="text"] {
     width: 100%;
-    height: 32px;
-    padding: 0 10px 0 30px;
-    border: 1px solid var(--color-border);
-    border-radius: var(--radius-sm, 6px);
-    font-size: 13px;
+    height: 30px;
+    padding: 0 10px 0 32px;
+    border: 1.5px solid oklch(90% 0.012 290);
+    border-radius: 7px;
+    font-size: 12.5px;
     outline: none;
-    transition: all var(--transition);
-    background: var(--color-bg);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    background: oklch(98.5% 0.003 290);
     font-family: inherit;
     box-sizing: border-box;
+    color: oklch(28% 0.02 290);
 }
-
 .filter-item-search input[type="text"]:focus {
     border-color: var(--color-primary);
-    background: var(--color-surface);
+    box-shadow: 0 0 0 2.5px oklch(87% 0.09 290);
+    background: #fff;
 }
-
 .filter-item-search input[type="text"]::placeholder {
-    color: var(--color-text-muted);
+    color: oklch(62% 0.01 290);
     font-size: 12px;
 }
 
-/* 响应式：小屏时卡片纵向堆叠 */
-@media (max-width: 900px) {
-    .course-card-body {
-        flex-direction: column;
-        align-items: flex-start;
-    }
-    .course-card-actions {
-        margin-left: 0;
-        width: 100%;
-        justify-content: flex-end;
-    }
-    .course-card-main {
-        flex-wrap: wrap;
-    }
-}
+/* 隐藏旧 button group 样式 */
+#panel-courses .action-button-group { display: none; }
 
-/* 课程面板按钮组自适应（仅1个按钮时避免浪费空间） */
-#panel-courses .action-button-group {
-    grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
-}
-
-
-/* ==================== Section Tabs（少儿美术风格 — 课程&活动双标签） ==================== */
+/* ==================== Section Tabs（'25 redesign） ==================== */
 .section-tabs {
     display: flex;
-    border-bottom: 2px solid #E8EDF5;
-    padding: 0 24px;
-    background: #fff;
-    gap: 4px;
+    padding: 0 28px;
+    background: transparent;
+    gap: 6px;
+    border-bottom: 1.5px solid oklch(93% 0.006 290);
 }
 .sec-tab {
-    padding: 11px 22px;
+    padding: 10px 20px;
     border: none;
     background: none;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 600;
-    color: #999;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    border-radius: 8px 8px 0 0;
+    font-size: 13.5px;
+    font-weight: 580;
+    color: oklch(50% 0.02 290);
+    border-bottom: 2.5px solid transparent;
+    margin-bottom: -1.5px;
+    transition: color 0.2s ease, border-color 0.2s ease;
+    border-radius: 0;
     position: relative;
+    letter-spacing: 0.15px;
 }
 .sec-tab:hover {
-    color: #555;
-    background: rgba(255,224,102,0.08);
+    color: oklch(30% 0.02 290);
 }
 .sec-tab.active {
-    color: #2D3436;
-    border-bottom-color: #FF7675;  /* 珊瑚色active指示器 */
-    background: linear-gradient(to bottom, rgba(255,118,117,0.05), transparent);
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 620;
 }
-/* 第二个标签使用天蓝色指示器 */
-.sec-tab:nth-child(2).active {
-    border-bottom-color: #74B9FF;
-    background: linear-gradient(to bottom, rgba(116,185,255,0.05), transparent);
-}
-.section-tab-content .sec-panel {
-    display: none;
-}
+.section-tab-content .sec-panel { display: none; }
 .section-tab-content .sec-panel.active {
     display: block;
 }
@@ -6188,32 +6230,24 @@ tbody td {
 #modal-discount-plan .campus-tree-row {
     display: flex;
     align-items: center;
-    gap: 6px;
-    padding: 5px 12px;
+    gap: 8px;
+    padding: 6px 12px;
     margin: 1px 4px;
     border-radius: var(--radius-sm);
-    border-left: 3px solid transparent;
+    border-left: 4px solid transparent;
     cursor: pointer;
-    transition: background 0.12s, border-color 0.12s;
+    transition:
+        background 0.18s cubic-bezier(0.25,1,0.5,1),
+        border-color 0.18s cubic-bezier(0.25,1,0.5,1),
+        box-shadow 0.18s cubic-bezier(0.25,1,0.5,1);
 }
 #modal-discount-plan .campus-tree-row:hover {
     background: var(--color-primary-hover);
 }
 
-/* 选中态 — 浅紫背景 + 3px 左边紫线 */
-#modal-discount-plan .campus-tree-row.checked {
-    background: var(--color-primary-bg);
-    border-left-color: var(--color-primary);
-}
+/* 选中态 — 仅勾选反馈 */
 #modal-discount-plan .campus-tree-row.checked .campus-tree-label {
-    color: var(--color-primary-dark);
     font-weight: 600;
-}
-
-/* 半选态 */
-#modal-discount-plan .campus-tree-row.semi-checked {
-    background: rgba(245,240,255,0.5);
-    border-left-color: var(--color-primary-light);
 }
 
 /* 箭头增强 */
@@ -6235,14 +6269,82 @@ tbody td {
     background: var(--color-primary-bg);
 }
 
-/* checkbox 自定义 */
+/* ===== 自定义 Checkbox — 替代原生控件 ===== */
 #modal-discount-plan .campus-tree-check {
+    appearance: none;
+    -webkit-appearance: none;
     flex-shrink: 0;
-    width: 16px;
-    height: 16px;
-    accent-color: var(--color-primary);
-    cursor: pointer;
+    width: 18px;
+    height: 18px;
     margin: 0;
+    border: 1.5px solid var(--color-border);
+    border-radius: 5px;
+    background: var(--color-surface);
+    cursor: pointer;
+    position: relative;
+    transition:
+        background 0.18s cubic-bezier(0.25,1,0.5,1),
+        border-color 0.18s cubic-bezier(0.25,1,0.5,1),
+        box-shadow 0.12s ease,
+        transform 0.12s ease;
+}
+#modal-discount-plan .campus-tree-check:hover {
+    border-color: var(--color-primary-light);
+    background: var(--color-primary-hover);
+}
+#modal-discount-plan .campus-tree-check:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+#modal-discount-plan .campus-tree-check:active {
+    transform: scale(0.88);
+}
+/* 选中 — 填充 + 对勾动画 */
+#modal-discount-plan .campus-tree-check:checked {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+#modal-discount-plan .campus-tree-check:checked::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 5px;
+    height: 10px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+    opacity: 0;
+    animation: dp-check-draw 0.22s cubic-bezier(0.25,1,0.5,1) 0.04s forwards;
+}
+#modal-discount-plan .campus-tree-check:checked:active::after {
+    opacity: 1;
+    animation: none;
+}
+/* 半选 — 横线 */
+#modal-discount-plan .campus-tree-check:indeterminate {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+#modal-discount-plan .campus-tree-check:indeterminate::after {
+    content: '';
+    position: absolute;
+    left: 4px;
+    top: 7px;
+    width: 8px;
+    height: 2px;
+    background: #fff;
+    border-radius: 1px;
+    opacity: 0;
+    animation: dp-check-draw 0.15s cubic-bezier(0.25,1,0.5,1) forwards;
+}
+#modal-discount-plan .campus-tree-check:indeterminate:active::after {
+    opacity: 1;
+    animation: none;
+}
+
+@keyframes dp-check-draw {
+    to { opacity: 1; }
 }
 
 /* 标签增强 */
@@ -9250,6 +9352,16 @@ tbody td {
     background: #eef2ff;
     border-color: #818cf8;
 }
+.btn-activity-att.btn-revoke {
+    background: #fff;
+    color: #dc2626;
+    border: 1.5px solid #fecaca;
+    margin-left: 6px;
+}
+.btn-activity-att.btn-revoke:hover {
+    background: #fef2f2;
+    border-color: #f87171;
+}
 
 /* ==================== 活动考勤弹窗 ==================== */
 .modal-activity-attendance {
@@ -9582,9 +9694,12 @@ tbody td {
 }
 
 /* Column alignment */
-#tab-activity-attendance .activity-att-table .col-center { text-align: center; }
-#tab-activity-attendance .activity-att-table .col-right { text-align: right; }
-#tab-activity-attendance .activity-att-table .col-nowrap { white-space: nowrap; }
+#tab-activity-attendance .activity-att-table .col-center,
+.activity-enroll-table .col-center { text-align: center; }
+#tab-activity-attendance .activity-att-table .col-right,
+.activity-enroll-table .col-right { text-align: right; }
+#tab-activity-attendance .activity-att-table .col-nowrap,
+.activity-enroll-table .col-nowrap { white-space: nowrap; }
 
 /* Pagination */
 #activity-attendance-pagination {
@@ -10403,75 +10518,23 @@ tbody td {
     padding: 12px 24px 8px;
 }
 .action-btn {
-    display: inline-flex;
-    align-items: center;
-    gap: 5px;
-    padding: 6px 14px;
-    border: none;
-    border-radius: 7px;
-    background: var(--color-primary);
-    color: #fff;
+    height: 34px;
+    padding: 0 18px;
+    border: 1.5px solid var(--color-primary);
+    border-radius: 8px;
+    background: #fff;
+    font-size: 12px;
+    font-weight: 500;
+    color: var(--color-primary);
     cursor: pointer;
-    font-size: 12.5px;
-    font-weight: 560;
-    font-family: inherit;
-    letter-spacing: 0.15px;
-    transition: 
-        transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-        box-shadow 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
-        opacity 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    box-shadow: 
-        0 0.5px 1.5px rgba(124, 58, 237, 0.12),
-        0 1px 3px rgba(124, 58, 237, 0.08);
-    position: relative;
-    overflow: hidden;
-}
-.action-btn::after {
-    content: '';
-    position: absolute;
-    inset: 0;
-    background: oklch(100% 0 0 / 0);
-    transition: background 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
-    border-radius: inherit;
-    pointer-events: none;
+    white-space: nowrap;
+    align-self: flex-end;
+    flex-shrink: 0;
+    transition: all 0.18s ease;
 }
 .action-btn:hover {
-    background: oklch(38% 0.16 290);
-    box-shadow: 
-        0 1px 3px rgba(124, 58, 237, 0.18),
-        0 3px 8px rgba(124, 58, 237, 0.12);
-    transform: translateY(-0.5px);
-}
-.action-btn:hover::after {
-    background: oklch(100% 0 0 / 0.06);
-}
-.action-btn:active {
-    transform: translateY(0) scale(0.975);
-    box-shadow: 0 0.5px 1px rgba(124, 58, 237, 0.10);
-}
-.action-btn:active::after {
-    background: oklch(0% 0 0 / 0.08);
-}
-.action-btn:focus-visible {
-    outline: 2px solid oklch(55% 0.15 290);
-    outline-offset: 2px;
-}
-.action-btn-icon {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    width: 16px;
-    height: 16px;
-    flex-shrink: 0;
-}
-.action-btn-icon svg {
-    width: 15px;
-    height: 15px;
-}
-.action-btn-label {
-    font-size: 12.5px;
-    font-weight: 560;
-    line-height: 1;
+    background: var(--color-primary);
+    color: #fff;
 }
 
 /* --- Filter Bar --- */
@@ -10584,15 +10647,35 @@ tbody td {
 .course-table-wrap {
     background: var(--color-surface);
     border-radius: 0 0 var(--radius-xl) var(--radius-xl);
-    padding: 0 24px 16px;
+    padding: 4px 24px 16px;
     min-height: 80px;
 }
 
+/* Empty state */
 .course-table-empty {
-    padding: 48px 20px;
+    padding: 64px 20px;
     text-align: center;
-    color: oklch(55% 0.01 290);
-    font-size: 14px;
+    color: oklch(52% 0.015 290);
+    font-size: 13.5px;
+    font-weight: 500;
+}
+.course-table-empty::before {
+    content: '';
+    display: block;
+    width: 48px;
+    height: 48px;
+    margin: 0 auto 16px;
+    border-radius: 12px;
+    background: oklch(95% 0.03 290);
+    position: relative;
+}
+.course-table-empty::after {
+    content: '点击「新增」按钮创建第一条课程';
+    display: block;
+    font-size: 12px;
+    color: oklch(60% 0.01 290);
+    font-weight: 400;
+    margin-top: 6px;
 }
 
 /* --- Table --- */
@@ -10607,50 +10690,40 @@ tbody td {
 .course-table thead th {
     position: sticky;
     top: 0;
-    padding: 12px 14px;
-    font-size: 12px;
-    font-weight: 620;
+    padding: 11px 14px;
+    font-size: 11.5px;
+    font-weight: 600;
     color: oklch(42% 0.02 290);
     text-align: left;
-    text-transform: none;
-    letter-spacing: 0.2px;
+    letter-spacing: 0.15px;
     background: oklch(97% 0.005 290);
-    border-bottom: 2px solid oklch(91% 0.015 290);
+    border-bottom: 2px solid oklch(91% 0.012 290);
     white-space: nowrap;
     user-select: none;
 }
 
 /* Column widths */
-.course-table .col-name      { width: 28%; }
+.course-table .col-name      { width: 26%; }
 .course-table .col-subject   { width: 16%; }
-.course-table .col-campus    { width: 26%; }
+.course-table .col-campus    { width: 24%; }
 .course-table .col-bool      { width: 8%; text-align: center; }
-.course-table .col-actions   { width: 22%; text-align: right; }
+.course-table .col-actions   { width: 26%; text-align: right; }
 
 .course-table thead .col-bool { text-align: center; }
 .course-table thead .col-actions { text-align: right; }
 
 /* --- Table Rows --- */
-.course-row {
-    transition: background 0.15s ease;
-    border-bottom: 1px solid oklch(93% 0.008 290);
-}
-
-.course-table tbody tr {
-    border-bottom: 1px solid oklch(94% 0.006 290);
-}
-
+.course-row { transition: background 0.15s ease; }
+.course-table tbody tr { border-bottom: 1px solid oklch(94% 0.005 290); }
 .course-row td {
-    padding: 13px 14px;
+    padding: 12px 14px;
     vertical-align: middle;
     color: oklch(28% 0.015 290);
-    border-bottom: 1px solid oklch(94% 0.006 290);
+    border-bottom: 1px solid oklch(94% 0.005 290);
 }
-
 .course-row:hover td {
-    background: oklch(97% 0.015 290);
+    background: oklch(97% 0.01 290);
 }
-
 .course-row-name {
     font-size: 13.5px;
     font-weight: 600;
@@ -10662,7 +10735,7 @@ tbody td {
     max-width: 100%;
 }
 
-/* --- Subject Tags (in table cells) --- */
+/* --- Subject Tags --- */
 .course-tag {
     display: inline-block;
     padding: 2px 9px;
@@ -10682,12 +10755,8 @@ tbody td {
     margin-left: 4px;
 }
 
-/* --- Campus Pills (in table cells) --- */
-.course-campus-pills {
-    display: flex;
-    gap: 4px;
-    flex-wrap: wrap;
-}
+/* --- Campus Pills --- */
+.course-campus-pills { display: flex; gap: 4px; flex-wrap: wrap; }
 .course-campus-pill {
     display: inline-block;
     padding: 2px 8px;
@@ -10707,7 +10776,7 @@ tbody td {
     align-self: center;
 }
 
-/* --- Boolean Badges (in table cells) --- */
+/* --- Boolean Badges --- */
 .boolean-badge {
     display: inline-flex;
     align-items: center;
@@ -10747,19 +10816,18 @@ tbody td {
     font-family: inherit;
     white-space: nowrap;
 }
-.btn-row-action + .btn-row-action {
-    margin-left: 5px;
-}
+.btn-row-action + .btn-row-action { margin-left: 5px; }
 .btn-row-action:hover {
     border-color: oklch(70% 0.02 290);
     background: oklch(97% 0.005 290);
     transform: translateY(-1px);
 }
-.btn-row-action svg {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
+.btn-row-action:active { transform: translateY(0); }
+.btn-row-action:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
+.btn-row-action svg { width: 14px; height: 14px; flex-shrink: 0; }
 .btn-row-price {
     color: var(--color-primary);
     border-color: oklch(80% 0.06 290);
