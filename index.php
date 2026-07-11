@@ -3747,6 +3747,7 @@ $stmt->execute();
                     $classTime = $slot['start'];
                 }
                 foreach ($entries as $entry) {
+                    $isActivity = intval($ca['activity_id'] ?? 0) > 0;
                     $orderId = intval($entry['order_id'] ?? 0);
                     $amount = intval($entry['amount'] ?? 0);
                     if ($orderId <= 0 || $amount <= 0) continue;
@@ -3762,21 +3763,19 @@ $stmt->execute();
                     // 按比例分配课耗金额-税后（一条考勤可能对应多笔订单扣减）
                     $rowPostTax = null;
                     $totalConsumed = floatval($ca['consumed_amount'] ?? 0);
-                    $totalPostTaxRaw = $ca['consumed_amount_post_tax'];
+                    $totalPostTaxRaw = $ca['consumed_amount_post_tax'] ?? null;
                     if ($totalPostTaxRaw !== null && $totalPostTaxRaw !== '' && $totalConsumed > 0) {
                         $rowPostTax = round($rowConsumedAmount * floatval($totalPostTaxRaw) / $totalConsumed, 2);
-                    } elseif ($totalConsumed > 0) {
-                        // 降级：DB 中无税后值，实时查询校区税率计算
+                    } else {
+                        // 降级：class_attendance 没有税后总额时，按当前拆分行和校区税率实时计算。
                         $campusName = $isActivity ? $activityCampus : ($ca['campus'] ?? '');
-                        if ($campusName) {
+                        if ($campusName && $rowConsumedAmount > 0) {
                             $taxRate = $db->query("SELECT COALESCE(t.course_tax_rate, 0) FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($campusName) . " AND o.type = '校区'")->fetchColumn();
                             if ($taxRate && floatval($taxRate) > 0) {
-                                $totalPostTaxFallback = round($totalConsumed / (1 + floatval($taxRate) / 100), 2);
-                                $rowPostTax = round($rowConsumedAmount * $totalPostTaxFallback / $totalConsumed, 2);
+                                $rowPostTax = round($rowConsumedAmount / (1 + floatval($taxRate) / 100), 2);
                             }
                         }
                     }
-                    $isActivity = intval($ca['activity_id'] ?? 0) > 0;
                     $rows[] = [
                         'id' => 'ca_' . intval($ca['id']) . '_' . $orderId,
                         'student_id' => $sid,
