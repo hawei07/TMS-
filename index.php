@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 error_reporting(E_ALL);
 // PHP 内置服务器：静态文件直接返回，不经过 PHP 处理
 if (php_sapi_name() === 'cli-server') {
@@ -9,64 +9,10 @@ if (php_sapi_name() === 'cli-server') {
     }
 }
 
-ini_set('display_errors', 0);
-ini_set('log_errors', 1);
-ini_set('error_log', __DIR__ . '/php_errors.log');
-header('Content-Type: text/html; charset=utf-8');
-
-$pdoOptions = [
-    PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
-    PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
-    PDO::ATTR_EMULATE_PREPARES => false,
-];
-$dsn = 'mysql:host=127.0.0.1;port=3306;dbname=tms_db;charset=utf8mb4';
-$db = null;
-$dbErrors = [];
-foreach (['root', ''] as $password) {
-    try {
-        $db = new PDO($dsn, 'root', $password, $pdoOptions);
-        $db->exec("SET NAMES utf8mb4");
-        break;
-    } catch (PDOException $e) {
-        $dbErrors[] = $e->getMessage();
-    }
-}
-if (!$db) {
-    die("数据库连接失败: " . end($dbErrors));
-}
-
-require_once __DIR__ . '/migrations/bootstrap_schema.php';
-ensureSchema($db);
-
-date_default_timezone_set('Asia/Shanghai');
+$db = require __DIR__ . '/app/bootstrap.php';
 
 $action = $_GET['action'] ?? '';
 if ($action) { handleApi(); exit; }
-function h($s) { return htmlspecialchars($s ?? '', ENT_QUOTES, 'UTF-8'); }
-function now() { return date('Y-m-d H:i:s'); }
-function utf8_strlen($s) { return preg_match_all('/./us', $s ?? ''); }
-function generateOrderNo($db) {
-    do {
-        $ts = substr(strval(time()), -10);
-        $rand = str_pad(strval(random_int(0, 999999)), 6, '0', STR_PAD_LEFT);
-        $no = $ts . $rand;
-        $stmt = $db->query("SELECT COUNT(*) FROM orders WHERE order_no='$no'");
-        $exists = $stmt->fetchColumn();
-    } while (intval($exists) > 0);
-    return $no;
-}
-function generateStudentNo($db) {
-    do {
-        $ts = substr(strval(time()), -8);
-        $rand = str_pad(strval(random_int(0, 99)), 2, '0', STR_PAD_LEFT);
-        $no = $ts . $rand;
-        $stmt = $db->query("SELECT COUNT(*) FROM students WHERE student_no='$no'");
-        $exists = $stmt->fetchColumn();
-    } while (intval($exists) > 0);
-    return $no;
-}
-function json($data) { header('Content-Type: application/json; charset=utf-8'); echo json_encode($data, JSON_UNESCAPED_UNICODE); exit; }
-
 // ==================== Excel 解析工具函数（纯 PHP，ZipArchive + XML） ====================
 
 /**
@@ -2413,7 +2359,9 @@ $stmt->execute();
             $pageSize = max(1, min(100, intval($_GET['page_size'] ?? 15)));
             $keyword = trim($_GET['keyword'] ?? '');
             $couponType = trim($_GET['coupon_type'] ?? '');
+            $planType = trim($_GET['plan_type'] ?? '');
             $campusId = intval($_GET['campus_id'] ?? 0);
+            $subjectId = intval($_GET['subject_id'] ?? 0);
             $offset = ($page - 1) * $pageSize;
 
             $where = ['1=1'];
@@ -2423,8 +2371,14 @@ $stmt->execute();
             if ($couponType !== '') {
                 $where[] = 'c.coupon_type = ' . $db->quote($couponType);
             }
+            if ($planType !== '') {
+                $where[] = 'c.plan_type = ' . $db->quote($planType);
+            }
             if ($campusId > 0) {
                 $where[] = '(c.id IN (SELECT coupon_id FROM coupon_campuses WHERE campus_id=' . $campusId . ') OR c.id NOT IN (SELECT coupon_id FROM coupon_campuses))';
+            }
+            if ($subjectId > 0) {
+                $where[] = '(c.id IN (SELECT coupon_id FROM coupon_subjects WHERE subject_id=' . $subjectId . ') OR c.id NOT IN (SELECT coupon_id FROM coupon_subjects))';
             }
             $whereStr = implode(' AND ', $where);
 
@@ -2456,6 +2410,7 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $name = trim($input['name'] ?? '');
             $couponType = trim($input['coupon_type'] ?? '课程券');
+            $planType = trim($input['plan_type'] ?? '');
             $discountAmount = floatval($input['discount_amount'] ?? 0);
             $startDate = trim($input['start_date'] ?? '');
             $endDate = trim($input['end_date'] ?? '');
@@ -2468,13 +2423,13 @@ $stmt->execute();
             if ($startDate === '' || $endDate === '') { json(['error' => '日期不能为空']); break; }
             if ($endDate < $startDate) { json(['error' => '结束日期不能早于开始日期']); break; }
 
-            $dup = $db->query("SELECT COUNT(*) FROM coupons WHERE name=" . $db->quote($name) . " AND coupon_type=" . $db->quote($couponType))->fetchColumn();
+            $dup = $db->query("SELECT COUNT(*) FROM coupons WHERE name=" . $db->quote($name) . " AND coupon_type=" . $db->quote($couponType) . " AND plan_type=" . $db->quote($planType))->fetchColumn();
             if ($dup > 0) { json(['error' => '同类型下优惠券名称已存在']); break; }
 
             $n = now();
             $db->beginTransaction();
             try {
-                $db->exec("INSERT INTO coupons (name, coupon_type, discount_amount, start_date, end_date, created_at, updated_at) VALUES (" . $db->quote($name) . ", " . $db->quote($couponType) . ", $discountAmount, " . $db->quote($startDate) . ", " . $db->quote($endDate) . ", '$n', '$n')");
+                $db->exec("INSERT INTO coupons (name, coupon_type, plan_type, discount_amount, start_date, end_date, created_at, updated_at) VALUES (" . $db->quote($name) . ", " . $db->quote($couponType) . ", " . $db->quote($planType) . ", $discountAmount, " . $db->quote($startDate) . ", " . $db->quote($endDate) . ", '$n', '$n')");
                 $couponId = $db->lastInsertId();
 
                 if (!empty($campusIdsRaw)) {
@@ -2509,6 +2464,7 @@ $stmt->execute();
 
             $name = trim($input['name'] ?? $existing['name']);
             $couponType = trim($input['coupon_type'] ?? $existing['coupon_type']);
+            $planType = trim($input['plan_type'] ?? $existing['plan_type']);
             $discountAmount = floatval($input['discount_amount'] ?? $existing['discount_amount']);
             $startDate = trim($input['start_date'] ?? $existing['start_date']);
             $endDate = trim($input['end_date'] ?? $existing['end_date']);
@@ -2520,12 +2476,12 @@ $stmt->execute();
             if ($discountAmount <= 0) { json(['error' => '优惠金额必须大于0']); break; }
             if ($endDate < $startDate) { json(['error' => '结束日期不能早于开始日期']); break; }
 
-            $dup = $db->query("SELECT COUNT(*) FROM coupons WHERE name=" . $db->quote($name) . " AND coupon_type=" . $db->quote($couponType) . " AND id!=$id")->fetchColumn();
+            $dup = $db->query("SELECT COUNT(*) FROM coupons WHERE name=" . $db->quote($name) . " AND coupon_type=" . $db->quote($couponType) . " AND plan_type=" . $db->quote($planType) . " AND id!=$id")->fetchColumn();
             if ($dup > 0) { json(['error' => '同类型下优惠券名称已存在']); break; }
 
             $db->beginTransaction();
             try {
-                $db->exec("UPDATE coupons SET name=" . $db->quote($name) . ", coupon_type=" . $db->quote($couponType) . ", discount_amount=$discountAmount, start_date=" . $db->quote($startDate) . ", end_date=" . $db->quote($endDate) . ", updated_at='" . now() . "' WHERE id=$id");
+                $db->exec("UPDATE coupons SET name=" . $db->quote($name) . ", coupon_type=" . $db->quote($couponType) . ", plan_type=" . $db->quote($planType) . ", discount_amount=$discountAmount, start_date=" . $db->quote($startDate) . ", end_date=" . $db->quote($endDate) . ", updated_at='" . now() . "' WHERE id=$id");
 
                 if ($campusIdsRaw !== null) {
                     $db->exec("DELETE FROM coupon_campuses WHERE coupon_id=$id");
@@ -6709,7 +6665,7 @@ json([
                 $att = $attStmt->fetch(PDO::FETCH_ASSOC);
                 $r['attended'] = $att ? true : false;
                 $r['attendance_id'] = $att ? intval($att['id']) : null;
-                $r['attendance_status'] = $att ? '已考勤' : '未考勤';
+                $r['attendance_status'] = $att ? '已考勤' : '待考勤';
                 $r['order_id'] = $r['id'];
                 $r['enroll_time'] = $r['created_at'];
                 $rows[] = $r;
@@ -6741,7 +6697,7 @@ json([
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
 
-            $sql = "SELECT o.id AS order_id, o.student_id, o.activity_id, o.created_at AS enroll_time, o.campus, o.activity_adult_count AS adult_count, o.activity_student_count AS student_count, o.actual_price AS total_price, s.name AS student_name, a.name AS activity_name, a.id AS activity_id FROM orders o LEFT JOIN students s ON o.student_id = s.id LEFT JOIN activities a ON o.activity_id = a.id $whereStr ORDER BY o.id DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT o.id AS order_id, o.student_id, o.activity_id, o.created_at AS enroll_time, o.campus, o.activity_adult_count AS adult_count, o.activity_student_count AS student_count, o.actual_price AS total_price, s.phone AS student_phone, s.student_no, s.name AS student_name, a.name AS activity_name, a.id AS activity_id FROM orders o LEFT JOIN students s ON o.student_id = s.id LEFT JOIN activities a ON o.activity_id = a.id $whereStr ORDER BY o.id DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
@@ -6751,12 +6707,46 @@ json([
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 // 查询考勤状态
-                $attStmt = $db->prepare("SELECT id, status FROM class_attendance WHERE activity_id = :aid AND activity_order_id = :aoid LIMIT 1");
+                $attStmt = $db->prepare("SELECT id, status, adult_attended, student_attended, deduction_breakdown, session_date, created_at, deduction_json FROM class_attendance WHERE activity_id = :aid AND activity_order_id = :aoid LIMIT 1");
                 $attStmt->bindValue(':aid', $r['activity_id'], PDO::PARAM_INT);
                 $attStmt->bindValue(':aoid', $r['order_id'], PDO::PARAM_INT);
                 $attStmt->execute();
                 $att = $attStmt->fetch(PDO::FETCH_ASSOC);
-                $r['attendance_status'] = $att ? ($att['status'] ?? '未考勤') : '未考勤';
+                $r['attendance_status'] = $att ? '已考勤' : '待考勤';
+                $r['attendance_id'] = $att ? intval($att['id']) : 0;
+                if ($att) {
+                    $r['adult_attended'] = intval($att['adult_attended'] ?? 0);
+                    $r['student_attended'] = intval($att['student_attended'] ?? 0);
+                    $r['deduction_breakdown'] = $att['deduction_breakdown'] ?? '';
+                    $r['att_session_date'] = $att['session_date'] ?? '';
+                    // 新增：考勤时间、带课老师、学科
+                    $r['attendance_time'] = $att['created_at'] ?? '';
+                    $r['teacher'] = $att['teacher'] ?? '';
+                    // 兜底：如果teacher列为空，从deduction_breakdown提取
+                    if (empty($r['teacher'])) {
+                        $breakdown = json_decode($att['deduction_breakdown'] ?? '{}', true) ?: [];
+                        $r['teacher'] = $breakdown['teacher'] ?? '';
+                    }
+                    $r['subject_level1'] = '';
+                    $r['subject_level2'] = '';
+                    $deductionJson = $att['deduction_json'] ?? '[]';
+                    $entries = json_decode($deductionJson, true) ?: [];
+                    if (!empty($entries)) {
+                        $srcOrderId = intval($entries[0]['order_id'] ?? 0);
+                        if ($srcOrderId > 0) {
+                            $subjRow = $db->query("SELECT c.subject_level1, c.subject_level2 FROM orders o LEFT JOIN courses c ON o.course_id = c.id WHERE o.id = $srcOrderId LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+                            if ($subjRow) {
+                                $r['subject_level1'] = $subjRow['subject_level1'] ?? '';
+                                $r['subject_level2'] = $subjRow['subject_level2'] ?? '';
+                            }
+                        }
+                    }
+                } else {
+                    $r['attendance_time'] = '';
+                    $r['teacher'] = '';
+                    $r['subject_level1'] = '';
+                    $r['subject_level2'] = '';
+                }
                 $rows[] = $r;
             }
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
@@ -6803,6 +6793,13 @@ json([
                 $deductionBreakdownJson = json_encode($deductionBreakdownRaw, JSON_UNESCAPED_UNICODE);
             } else {
                 $deductionBreakdownJson = is_string($deductionBreakdownRaw) && strlen($deductionBreakdownRaw) > 0 ? $deductionBreakdownRaw : '{}';
+            }
+
+            // 提取带课老师
+            $teacher = '';
+            if ($deductionBreakdownRaw) {
+                $bd = is_array($deductionBreakdownRaw) ? $deductionBreakdownRaw : json_decode($deductionBreakdownRaw, true);
+                $teacher = ($bd && isset($bd['teacher'])) ? trim($bd['teacher']) : '';
             }
 
             if ($activityId <= 0) json(['error' => '活动ID无效']);
@@ -6877,31 +6874,73 @@ json([
             // 查询学员姓名
             $studentName = $db->query("SELECT name FROM students WHERE id = $studentId")->fetchColumn() ?: '';
 
+            // 获取 attendance_id（修改考勤时前端传入）
+            $attendanceId = intval($input['attendance_id'] ?? 0);
+            if ($attendanceId <= 0) {
+                $existingAtt = $db->query("SELECT id FROM class_attendance WHERE activity_id = $activityId AND activity_order_id = $activityOrderId LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+                if ($existingAtt) $attendanceId = intval($existingAtt['id']);
+            }
+
             $db->beginTransaction();
             try {
+                if ($attendanceId > 0) {
+                    // 修改考勤：先归还旧扣课
+                    $oldAtt = $db->query("SELECT * FROM class_attendance WHERE id = $attendanceId")->fetch(PDO::FETCH_ASSOC);
+                    if ($oldAtt) {
+                        $oldJson = $oldAtt['deduction_json'] ?? '[]';
+                        $oldEntries = json_decode($oldJson, true) ?: [];
+                        foreach ($oldEntries as $entry) {
+                            $oid = intval($entry['order_id'] ?? 0);
+                            $amt = intval($entry['amount'] ?? 0);
+                            if ($oid > 0 && $amt > 0) {
+                                $db->exec("UPDATE orders SET consumed_lessons = GREATEST(0, consumed_lessons - $amt) WHERE id = $oid");
+                            }
+                        }
+                        if (empty($oldEntries)) {
+                            $oldDl = intval($oldAtt['deducted_lessons'] ?? 0);
+                            $oldDoid = intval($oldAtt['deducted_order_id'] ?? 0);
+                            if ($oldDoid > 0 && $oldDl > 0) {
+                                $db->exec("UPDATE orders SET consumed_lessons = GREATEST(0, consumed_lessons - $oldDl) WHERE id = $oldDoid");
+                            }
+                        }
+                    }
+                    // 归还后重新读取 srcConsumed 确保剩余课时校验准确
+                    $srcConsumed = intval($db->query("SELECT consumed_lessons FROM orders WHERE id = $deductOrderId")->fetchColumn() ?? 0);
+                    $remaining = ($srcLc + $srcGl) - $srcConsumed;
+                    if ($remaining <= 0) { $db->rollBack(); json(['error' => '该课包已无剩余课时']); break; }
+                    if ($totalDeductLessons > $remaining) { $db->rollBack(); json(['error' => '扣课时数(' . $totalDeductLessons . ')超过剩余课时(' . $remaining . ')']); break; }
+                    // 重新计算 consumedAmount（基于最新 srcConsumed 价格不变）
+                }
+
                 // 扣课时（上限保护）
                 $newConsumed = $srcConsumed + $totalDeductLessons;
                 $db->exec("UPDATE orders SET consumed_lessons = $newConsumed WHERE id = $deductOrderId AND $newConsumed <= ($srcLc + $srcGl)");
 
-                // 写考勤记录
+                // 写/更新考勤记录
                 $deductionJson = json_encode([['order_id' => $deductOrderId, 'amount' => $totalDeductLessons]], JSON_UNESCAPED_UNICODE);
-                $n = now();
-                $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, adult_attended, student_attended, deduction_breakdown, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :aa, :sa, :db, :ct)");
-                $attStmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
-                $attStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
-                $attStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
-                $attStmt->bindValue(':dl', $totalDeductLessons, PDO::PARAM_INT);
-                $attStmt->bindValue(':doid', $deductOrderId, PDO::PARAM_INT);
-                $attStmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
-                $attStmt->bindValue(':ca', $consumedAmount);
-                $attStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
-                $attStmt->bindValue(':aoid', $activityOrderId, PDO::PARAM_INT);
-                $attStmt->bindValue(':aa', $adultAttended, PDO::PARAM_INT);
-                $attStmt->bindValue(':sa', $studentAttended, PDO::PARAM_INT);
-                $attStmt->bindValue(':db', $deductionBreakdownJson, PDO::PARAM_STR);
-                $attStmt->bindValue(':ct', $n, PDO::PARAM_STR);
-                $attStmt->execute();
-                $attId = $db->lastInsertId();
+                if ($attendanceId > 0) {
+                    $db->exec("UPDATE class_attendance SET session_date = " . $db->quote($sessionDate) . ", deducted_lessons = $totalDeductLessons, deducted_order_id = $deductOrderId, deduction_json = " . $db->quote($deductionJson) . ", consumed_amount = $consumedAmount, adult_attended = $adultAttended, student_attended = $studentAttended, deduction_breakdown = " . $db->quote($deductionBreakdownJson) . " WHERE id = $attendanceId");
+                    $attId = $attendanceId;
+                } else {
+                    $n = now();
+                    $attStmt = $db->prepare("INSERT INTO class_attendance (class_id, schedule_id, session_date, student_id, student_name, status, is_temporary, deducted_lessons, deducted_order_id, deduction_json, consumed_amount, activity_id, activity_order_id, adult_attended, student_attended, deduction_breakdown, teacher, created_at) VALUES (0, 0, :sd, :sid, :sn, '出勤', 0, :dl, :doid, :dj, :ca, :aid, :aoid, :aa, :sa, :db, :tc, :ct)");
+                    $attStmt->bindValue(':sd', $sessionDate, PDO::PARAM_STR);
+                    $attStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
+                    $attStmt->bindValue(':sn', $studentName, PDO::PARAM_STR);
+                    $attStmt->bindValue(':dl', $totalDeductLessons, PDO::PARAM_INT);
+                    $attStmt->bindValue(':doid', $deductOrderId, PDO::PARAM_INT);
+                    $attStmt->bindValue(':dj', $deductionJson, PDO::PARAM_STR);
+                    $attStmt->bindValue(':ca', $consumedAmount);
+                    $attStmt->bindValue(':aid', $activityId, PDO::PARAM_INT);
+                    $attStmt->bindValue(':aoid', $activityOrderId, PDO::PARAM_INT);
+                    $attStmt->bindValue(':aa', $adultAttended, PDO::PARAM_INT);
+                    $attStmt->bindValue(':sa', $studentAttended, PDO::PARAM_INT);
+                    $attStmt->bindValue(':db', $deductionBreakdownJson, PDO::PARAM_STR);
+                    $attStmt->bindValue(':tc', $teacher, PDO::PARAM_STR);
+                    $attStmt->bindValue(':ct', $n, PDO::PARAM_STR);
+                    $attStmt->execute();
+                    $attId = $db->lastInsertId();
+                }
 
                 $db->commit();
                 json(['message' => '活动考勤成功，已扣除 ' . $totalDeductLessons . ' 课时', 'attendance_id' => $attId]);
@@ -6980,7 +7019,7 @@ json([
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
 
-            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.deduction_json, ca.adult_attended, ca.student_attended, ca.deduction_breakdown, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.deduction_json, ca.adult_attended, ca.student_attended, ca.deduction_breakdown, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name, s.phone AS student_phone, s.student_no, o.actual_price AS activity_total_price, o.activity_adult_count, o.activity_student_count FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id LEFT JOIN orders o ON ca.activity_order_id = o.id AND o.order_type = '活动' $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
@@ -6988,18 +7027,35 @@ json([
             $stmt->execute();
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                // 活动收费已考勤 = 总价 / 报名总人数 × 出勤总人数
+                $totalPrice = floatval($r['activity_total_price'] ?? 0);
+                $adultCount = intval($r['activity_adult_count'] ?? 0);
+                $studentCount = intval($r['activity_student_count'] ?? 0);
+                $adultAttended = intval($r['adult_attended'] ?? 0);
+                $studentAttended = intval($r['student_attended'] ?? 0);
+                $totalPeople = $adultCount + $studentCount;
+                $r['activity_attended_fee'] = 0;
+                if ($totalPeople > 0 && $totalPrice > 0) {
+                    $r['activity_attended_fee'] = round($totalPrice / $totalPeople * ($adultAttended + $studentAttended), 2);
+                }
+                // 考勤时间
+                $r['attendance_time'] = $r['created_at'] ?? '';
                 // 解析扣课来源
                 $deductionJson = $r['deduction_json'] ?? '[]';
                 $entries = json_decode($deductionJson, true) ?: [];
                 $r['source_course_name'] = '';
                 $r['source_order_no'] = '';
+                $r['subject_level1'] = '';
+                $r['subject_level2'] = '';
                 if (!empty($entries)) {
                     $srcOrderId = intval($entries[0]['order_id'] ?? 0);
                     if ($srcOrderId > 0) {
-                        $srcOrder = $db->query("SELECT item_name, order_no FROM orders WHERE id = $srcOrderId")->fetch(PDO::FETCH_ASSOC);
+                        $srcOrder = $db->query("SELECT o.item_name, o.order_no, c.subject_level1, c.subject_level2 FROM orders o LEFT JOIN courses c ON o.course_id = c.id WHERE o.id = $srcOrderId")->fetch(PDO::FETCH_ASSOC);
                         if ($srcOrder) {
                             $r['source_course_name'] = $srcOrder['item_name'] ?? '';
                             $r['source_order_no'] = $srcOrder['order_no'] ?? '';
+                            $r['subject_level1'] = $srcOrder['subject_level1'] ?? '';
+                            $r['subject_level2'] = $srcOrder['subject_level2'] ?? '';
                         }
                     }
                 }
@@ -7738,7 +7794,7 @@ if (intval($countBt) === 0) {
             <!-- 面板：课程&活动 -->
             <section class="content-panel" id="panel-courses">
                 <div class="panel-header">
-                    <h3>课程&活动</h3>
+                    <h3>课程 · 活动</h3>
                     <div class="header-stats-inline">
                         <span class="stat-badge stat-badge-courses">课程总数：<strong id="stat-courses-inline">0</strong></span>
                         <span class="stat-badge stat-badge-activities">活动总数：<strong id="stat-activities-inline">0</strong></span>
@@ -7806,8 +7862,21 @@ if (intval($countBt) === 0) {
                     </div>
                     <button class="filter-reset-btn" onclick="resetCourseFilters()" title="重置筛选">重置</button>
                 </div>
-                <div class="course-cards-wrap" id="table-courses">
-                    <div class="course-cards-empty" style="display:none;">暂无课程数据</div>
+                <div class="course-table-wrap" id="table-courses">
+                    <table class="course-table">
+                        <thead>
+                            <tr>
+                                <th class="col-name">课程名称</th>
+                                <th class="col-subject">科目分类</th>
+                                <th class="col-campus">授权校区</th>
+                                <th class="col-bool">小课包</th>
+                                <th class="col-bool">低幼龄</th>
+                                <th class="col-actions">操作</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                    <div class="course-table-empty" style="display:none;">暂无课程数据</div>
                 </div>
                 <div class="pagination" id="pagination-course"></div>
                     </div>
@@ -7866,80 +7935,175 @@ if (intval($countBt) === 0) {
                             <div class="form-panel-body" style="max-width:750px;">
                                 <input type="hidden" id="edit-activity-id">
 
-                                <div class="form-group">
-                                    <label>活动名称 <span class="required">*</span></label>
-                                    <input type="text" id="activity-name" maxlength="100" placeholder="请输入活动名称" autocomplete="off">
-                                </div>
-
-                                <div class="form-group">
-                                    <label>一级学科</label>
-                                    <select id="activity-subject-level1"><option value="">请选择一级学科</option></select>
-                                </div>
-
-                                <div class="form-row">
-                                    <div class="form-group form-group-half">
-                                        <label>报名开始日期 <span class="required">*</span></label>
-                                        <input type="date" id="activity-reg-start">
+                                <!-- ===== Section 01: 基本信息 ===== -->
+                                <div class="activity-section-wrap">
+                                    <div class="activity-section-header">
+                                        <span class="section-badge">01</span>
+                                        <span class="section-label">基本信息</span>
                                     </div>
-                                    <div class="form-group form-group-half">
-                                        <label>报名结束日期 <span class="required">*</span></label>
-                                        <input type="date" id="activity-reg-end">
+
+                                    <div class="form-group">
+                                        <label>活动名称 <span class="required">*</span></label>
+                                        <input type="text" id="activity-name" maxlength="100" placeholder="请输入活动名称" autocomplete="off" data-validate="required">
+                                        <div class="field-error-msg" style="display:none;"></div>
+                                    </div>
+
+                                    <div class="form-group">
+                                        <label>一级学科</label>
+                                        <select id="activity-subject-level1"><option value="">请选择一级学科</option></select>
+                                    </div>
+
+                                    <div class="form-row">
+                                        <div class="form-group form-group-half">
+                                            <label>报名开始日期 <span class="required">*</span></label>
+                                            <input type="date" id="activity-reg-start" data-validate="required">
+                                            <div class="field-error-msg" style="display:none;"></div>
+                                        </div>
+                                        <div class="form-group form-group-half">
+                                            <label>报名结束日期 <span class="required">*</span></label>
+                                            <input type="date" id="activity-reg-end" data-validate="required">
+                                            <div class="field-error-msg" style="display:none;"></div>
+                                        </div>
                                     </div>
                                 </div>
 
-                                <!-- 成人收费 -->
-                                <div class="activity-section-title">成人收费</div>
-                                <div class="form-group">
-                                    <label>收费模式</label>
-                                    <select id="activity-adult-fee-mode" onchange="onActivityFeeModeChange('adult')">
-                                        <option value="">请选择</option>
-                                        <option value="fee_only">仅收费</option>
-                                        <option value="fee_and_deduct">收费+扣课时</option>
-                                        <option value="deduct_only">仅扣课时</option>
-                                    </select>
-                                </div>
-                                <div class="form-group" id="activity-adult-price-row" style="display:none;">
-                                    <label>成人价格 (元) <span class="required">*</span></label>
-                                    <input type="number" id="activity-adult-price" min="0" step="0.01" placeholder="请输入价格">
-                                </div>
-                                <div id="activity-adult-deduct-section" style="display:none;">
-                                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
-                                    <div id="activity-adult-deduct-rows"></div>
-                                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('adult')">+ 添加学科扣课</button>
+                                <!-- ===== Section 02: 收费设置 ===== -->
+                                <div class="activity-section-wrap">
+                                    <div class="activity-section-header">
+                                        <span class="section-badge">02</span>
+                                        <span class="section-label">收费设置</span>
+                                        <span class="section-hint">* 请至少设置一方</span>
+                                    </div>
+
+                                    <!-- Fee Tab Switch -->
+                                    <div class="fee-tab-switch" role="tablist">
+                                        <button type="button" class="fee-tab-btn active" data-fee-tab="adult">成人收费</button>
+                                        <button type="button" class="fee-tab-btn" data-fee-tab="student">学员收费</button>
+                                    </div>
+
+                                    <!-- 成人收费 -->
+                                    <div class="fee-panel" id="fee-panel-adult">
+                                        <div class="price-card-grid">
+                                            <div class="price-card" data-price-value="fee_only" data-fee-type="adult" tabindex="0">
+                                                <span class="price-card-check">✓</span>
+                                                <span class="price-card-icon">¥</span>
+                                                <div class="price-card-label">仅收费</div>
+                                                <div class="price-card-desc">固定金额收费</div>
+                                            </div>
+                                            <div class="price-card" data-price-value="fee_and_deduct" data-fee-type="adult" tabindex="0">
+                                                <span class="price-card-check">✓</span>
+                                                <span class="price-card-icon">¥⇄</span>
+                                                <div class="price-card-label">收费 + 扣课</div>
+                                                <div class="price-card-desc">收费并扣除课时</div>
+                                            </div>
+                                            <div class="price-card" data-price-value="deduct_only" data-fee-type="adult" tabindex="0">
+                                                <span class="price-card-check">✓</span>
+                                                <span class="price-card-icon">📋</span>
+                                                <div class="price-card-label">仅扣课时</div>
+                                                <div class="price-card-desc">不收取费用</div>
+                                            </div>
+                                        </div>
+                                        <!-- Hidden select for backend compatibility -->
+                                        <select id="activity-adult-fee-mode" style="display:none;" onchange="onActivityFeeModeChange('adult')">
+                                            <option value="">请选择</option>
+                                            <option value="fee_only">仅收费</option>
+                                            <option value="fee_and_deduct">收费+扣课时</option>
+                                            <option value="deduct_only">仅扣课时</option>
+                                        </select>
+                                        <div class="form-group" id="activity-adult-price-row" style="display:none;">
+                                            <label>成人价格 (元) <span class="required">*</span></label>
+                                            <input type="number" id="activity-adult-price" min="0" step="0.01" placeholder="请输入价格">
+                                        </div>
+                                        <div id="activity-adult-deduct-section" style="display:none;">
+                                            <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
+                                            <div id="activity-adult-deduct-rows"></div>
+                                            <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('adult')">+ 添加学科扣课</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- 学员收费 -->
+                                    <div class="fee-panel" id="fee-panel-student" style="display:none;">
+                                        <div class="price-card-grid">
+                                            <div class="price-card" data-price-value="fee_only" data-fee-type="student" tabindex="0">
+                                                <span class="price-card-check">✓</span>
+                                                <span class="price-card-icon">¥</span>
+                                                <div class="price-card-label">仅收费</div>
+                                                <div class="price-card-desc">固定金额收费</div>
+                                            </div>
+                                            <div class="price-card" data-price-value="fee_and_deduct" data-fee-type="student" tabindex="0">
+                                                <span class="price-card-check">✓</span>
+                                                <span class="price-card-icon">¥⇄</span>
+                                                <div class="price-card-label">收费 + 扣课</div>
+                                                <div class="price-card-desc">收费并扣除课时</div>
+                                            </div>
+                                            <div class="price-card" data-price-value="deduct_only" data-fee-type="student" tabindex="0">
+                                                <span class="price-card-check">✓</span>
+                                                <span class="price-card-icon">📋</span>
+                                                <div class="price-card-label">仅扣课时</div>
+                                                <div class="price-card-desc">不收取费用</div>
+                                            </div>
+                                        </div>
+                                        <select id="activity-student-fee-mode" style="display:none;" onchange="onActivityFeeModeChange('student')">
+                                            <option value="">请选择</option>
+                                            <option value="fee_only">仅收费</option>
+                                            <option value="fee_and_deduct">收费+扣课时</option>
+                                            <option value="deduct_only">仅扣课时</option>
+                                        </select>
+                                        <div class="form-group" id="activity-student-price-row" style="display:none;">
+                                            <label>学员价格 (元) <span class="required">*</span></label>
+                                            <input type="number" id="activity-student-price" min="0" step="0.01" placeholder="请输入价格">
+                                        </div>
+                                        <div id="activity-student-deduct-section" style="display:none;">
+                                            <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
+                                            <div id="activity-student-deduct-rows"></div>
+                                            <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('student')">+ 添加学科扣课</button>
+                                        </div>
+                                    </div>
                                 </div>
 
-                                <!-- 学员收费 -->
-                                <div class="activity-section-title">学员收费</div>
-                                <div class="form-group">
-                                    <label>收费模式</label>
-                                    <select id="activity-student-fee-mode" onchange="onActivityFeeModeChange('student')">
-                                        <option value="">请选择</option>
-                                        <option value="fee_only">仅收费</option>
-                                        <option value="fee_and_deduct">收费+扣课时</option>
-                                        <option value="deduct_only">仅扣课时</option>
-                                    </select>
-                                </div>
-                                <div class="form-group" id="activity-student-price-row" style="display:none;">
-                                    <label>学员价格 (元) <span class="required">*</span></label>
-                                    <input type="number" id="activity-student-price" min="0" step="0.01" placeholder="请输入价格">
-                                </div>
-                                <div id="activity-student-deduct-section" style="display:none;">
-                                    <label style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;">扣课学科设置</label>
-                                    <div id="activity-student-deduct-rows"></div>
-                                    <button type="button" class="deduct-add-btn" onclick="addActivityDeductRow('student')">+ 添加学科扣课</button>
+                                <!-- ===== Section 03: 适用校区 ===== -->
+                                <div class="activity-section-wrap">
+                                    <div class="activity-section-header">
+                                        <span class="section-badge">03</span>
+                                        <span class="section-label">适用校区 <span class="required">*</span></span>
+                                    </div>
+
+                                    <div class="campus-toolbar">
+                                        <div class="campus-search-wrap">
+                                            <svg class="campus-search-icon" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+                                            <input type="text" class="campus-search-input" placeholder="搜索校区…" id="campus-search-input">
+                                        </div>
+                                        <div class="campus-quick-actions">
+                                            <button type="button" class="link-btn" id="campus-select-all">全选</button>
+                                            <button type="button" class="link-btn" id="campus-deselect-all">取消全选</button>
+                                        </div>
+                                    </div>
+
+                                    <!-- Selected campus tags -->
+                                    <div class="campus-tags" id="campus-tags"></div>
+
+                                    <!-- Campus list -->
+                                    <div id="activity-campus-rows">
+                                        <span style="color:#999;font-size:13px;">加载中...</span>
+                                    </div>
+                                    <div id="campus-empty-msg" style="display:none;padding:20px;text-align:center;color:#999;font-size:13px;">没有匹配的校区</div>
+
+                                    <!-- Batch capacity -->
+                                    <div class="campus-batch-cap">
+                                        <span>批量设置已选校区上限人数：</span>
+                                        <input type="number" id="batch-capacity-value" value="0" min="0" placeholder="0">
+                                        <button type="button" class="link-btn" id="apply-batch-cap">应用</button>
+                                    </div>
                                 </div>
 
-                                <!-- 适用校区 -->
-                                <div class="activity-section-title">适用校区 <span class="required">*</span></div>
-                                <div id="activity-campus-rows">
-                                    <span style="color:#999;font-size:13px;">加载中...</span>
-                                </div>
-                                <button type="button" class="deduct-add-btn" onclick="addActivityCampusRow()" style="margin-top:6px;">+ 添加校区</button>
+                            </div>
 
-                                <!-- 操作按钮 -->
-                                <div style="margin-top:24px;padding-top:16px;border-top:1px solid var(--border);display:flex;gap:10px;">
+                            <!-- Sticky Submit Footer -->
+                            <div class="activity-form-footer" id="activity-form-footer">
+                                <span class="footer-hint" id="footer-validation-hint"></span>
+                                <div class="footer-actions">
                                     <button class="btn btn-outline" onclick="backToActivityList()">取消</button>
-                                    <button class="btn btn-primary" id="btn-save-activity" onclick="saveActivity()">保存</button>
+                                    <button class="btn btn-primary" id="btn-save-activity" onclick="saveActivity()" disabled>发布活动</button>
                                 </div>
                             </div>
                         </div>
@@ -8030,20 +8194,20 @@ if (intval($countBt) === 0) {
                         </div>
                         <!-- 活动考勤页签 -->
                         <div class="att-panel" id="tab-activity-attendance">
-                            <div style="padding:8px 16px 16px;">
-                                <div style="display:flex;gap:12px;margin-bottom:12px;flex-wrap:wrap;">
-                                    <input id="att-activity-search" placeholder="搜索学员/活动..." style="width:160px;">
-                                    <select id="att-activity-campus-filter"><option value="">全部校区</option></select>
-                                    <button onclick="loadActivityAttendanceList()">查询</button>
-                                </div>
-                                <div class="table-wrap">
-                                    <table><thead><tr>
-                                        <th>学员</th><th>活动名称</th><th>报名校区</th><th>报名时间</th><th>考勤状态</th><th>操作</th>
-                                    </tr></thead>
-                                    <tbody id="activity-attendance-tbody"><tr><td colspan="6">加载中...</td></tr></tbody></table>
-                                </div>
-                                <div id="activity-attendance-pagination"></div>
+                            <div class="act-toolbar">
+                                <input id="att-activity-search" placeholder="搜索学员/活动...">
+                                <select id="att-activity-campus-filter"><option value="">全部校区</option></select>
+                                <button class="btn-search" onclick="loadActivityAttendanceList()">查询</button>
                             </div>
+                            <div class="table-wrap">
+                                <table class="activity-att-table">
+                                    <thead><tr>
+                                        <th>学员</th><th>手机号</th><th>学号</th><th>活动名称</th><th>报名校区</th><th>报名时间</th><th class="col-right">活动收费</th><th>一级学科</th><th>二级学科</th><th>考勤时间</th><th>带课老师</th><th class="col-center">考勤状态</th><th class="col-center">操作</th>
+                                    </tr></thead>
+                                    <tbody id="activity-attendance-tbody"><tr><td colspan="13">加载中...</td></tr></tbody>
+                                </table>
+                            </div>
+                            <div id="activity-attendance-pagination"></div>
                         </div>
                         <!-- 学员课耗页签 -->
                     <div class="att-panel" id="tab-student-consumption">
@@ -8078,10 +8242,10 @@ if (intval($countBt) === 0) {
                                     <button onclick="loadActivityConsumption()">查询</button>
                                 </div>
                                 <div class="table-wrap">
-                                    <table><thead><tr>
-                                        <th>学员</th><th>活动名称</th><th>考勤日期</th><th>消耗课时</th><th>扣除课包</th><th>课耗金额</th>
+                                    <table class="activity-cons-table"><thead><tr>
+                                        <th>学员</th><th>手机号</th><th>学号</th><th>活动名称</th><th>考勤日期</th><th>消耗课时</th><th>扣除课包</th><th>一级学科</th><th>二级学科</th><th>考勤时间</th><th>课耗金额</th><th>活动收费已考勤</th>
                                     </tr></thead>
-                                    <tbody id="activity-consumption-tbody"><tr><td colspan="6">加载中...</td></tr></tbody></table>
+                                    <tbody id="activity-consumption-tbody"><tr><td colspan="12">加载中...</td></tr></tbody></table>
                                 </div>
                                 <div id="activity-consumption-pagination"></div>
                             </div>
@@ -9857,15 +10021,38 @@ if (intval($countBt) === 0) {
 
     <!-- 弹窗：新增/编辑教室 -->
     <div class="modal-overlay" id="modal-classroom-form">
-        <div class="modal"><div class="modal-header"><h3 id="modal-classroom-title">新增教室</h3><button class="modal-close" onclick="closeModal('modal-classroom-form')">&times;</button></div>
-        <div class="modal-body">
-            <input type="hidden" id="edit-classroom-id">
-            <div class="form-group"><label>教室名称 <span class="required">*</span></label><input type="text" id="classroom-name" maxlength="50" placeholder="请输入教室名称"></div>
-            <div class="form-group"><label>容纳人数</label><input type="number" id="classroom-capacity" min="0" placeholder="请输入容纳人数"></div>
-            <div class="form-group"><label>所属校区</label><select id="classroom-campus"><option value="">请选择校区</option></select></div>
-            <div class="form-group"><label>备注</label><textarea id="classroom-remark" rows="3" placeholder="请输入备注信息"></textarea></div>
+        <div class="modal modal-classroom">
+            <div class="modal-header">
+                <h3 id="modal-classroom-title">新增教室</h3>
+                <button class="modal-close" onclick="closeModal('modal-classroom-form')" aria-label="关闭">&times;</button>
+            </div>
+            <div class="modal-body">
+                <input type="hidden" id="edit-classroom-id">
+                <div class="classroom-form-group">
+                    <label for="classroom-name">教室名称 <span class="required">*</span></label>
+                    <input type="text" id="classroom-name" maxlength="50" placeholder="请输入教室名称" autocomplete="off">
+                </div>
+                <div class="classroom-form-row">
+                    <div class="classroom-form-group">
+                        <label for="classroom-campus">所属校区</label>
+                        <select id="classroom-campus"><option value="">请选择校区</option></select>
+                    </div>
+                    <div class="classroom-form-group">
+                        <label for="classroom-capacity">容纳人数</label>
+                        <input type="number" id="classroom-capacity" min="0" placeholder="0">
+                    </div>
+                </div>
+                <div class="classroom-form-group">
+                    <label for="classroom-remark">备注</label>
+                    <textarea id="classroom-remark" rows="4" placeholder="备注信息（选填）" maxlength="200"></textarea>
+                    <span class="classroom-char-count" id="classroom-char-count">0 / 200</span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-cancel" onclick="closeModal('modal-classroom-form')">取消</button>
+                <button class="btn btn-primary" onclick="saveClassroom()" id="classroom-save-btn">保存</button>
+            </div>
         </div>
-        <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-classroom-form')">取消</button><button class="btn btn-primary" onclick="saveClassroom()">保存</button></div></div>
     </div>
 
     <!-- 弹窗：排课设置 -->
@@ -10940,6 +11127,15 @@ if (intval($countBt) === 0) {
                                 </select>
                             </div>
                             <div class="form-group" style="flex:1;">
+                                <label>适用方案类型</label>
+                                <select id="coupon-plan-type" class="form-input">
+                                    <option value="">不限</option>
+                                    <option value="新报">新报</option>
+                                    <option value="续费">续费</option>
+                                    <option value="小课包">小课包</option>
+                                </select>
+                            </div>
+                            <div class="form-group" style="flex:1;">
                                 <label>优惠金额 (元)</label>
                                 <input type="number" id="coupon-amount" class="form-input" step="0.01" min="0" placeholder="0.00">
                             </div>
@@ -11090,7 +11286,7 @@ if (intval($countBt) === 0) {
                 <!-- 带课老师 -->
                 <div style="margin-bottom:16px;">
                     <label style="font-size:13px;color:#888;">带课老师</label>
-                    <select id="att-teacher" style="width:200px;height:36px;border:1px solid #ddd;border-radius:8px;padding:0 8px;">
+                    <select id="att-activity-teacher" style="width:200px;height:36px;border:1px solid #ddd;border-radius:8px;padding:0 8px;">
                         <option value="">请选择</option>
                     </select>
                 </div>

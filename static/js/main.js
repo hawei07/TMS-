@@ -2848,51 +2848,78 @@ function getCampusDisplayText(campusPermissionStr) {
         .join(', ');
 }
 
+function getCampusPillsHTML(campusPermissionStr) {
+    if (!campusPermissionStr || !campusCheckboxData.length) return '<span style="color:oklch(55% 0.01 290);font-size:11px;">-</span>';
+    const ids = campusPermissionStr.split(',').map(s => s.trim());
+    const names = campusCheckboxData
+        .filter(c => ids.includes(String(c.id)))
+        .map(c => c.name);
+    if (!names.length) return '<span style="color:oklch(55% 0.01 290);font-size:11px;">-</span>';
+    const MAX_VISIBLE = 3;
+    let html = '';
+    names.slice(0, MAX_VISIBLE).forEach(n => {
+        html += '<span class="course-campus-pill">' + esc(n) + '</span>';
+    });
+    if (names.length > MAX_VISIBLE) {
+        html += '<span class="course-campus-more">+' + (names.length - MAX_VISIBLE) + '</span>';
+    }
+    return html;
+}
+
+function getBooleanBadgeHTML(val) {
+    if (!val || val === '-' || val === '否' || val === '') {
+        return '<span class="boolean-badge boolean-badge-no">否</span>';
+    }
+    return '<span class="boolean-badge boolean-badge-yes">是</span>';
+}
+
 function renderCourseTable(rows) {
     const container = document.getElementById('table-courses');
-    const emptyEl = container.querySelector('.course-cards-empty');
-    // 清空除 empty 占位元素外的所有卡片
-    container.querySelectorAll('.course-card').forEach(el => el.remove());
+    const tbody = container.querySelector('tbody');
+    const emptyEl = container.querySelector('.course-table-empty');
+    tbody.innerHTML = '';
     if (!rows.length) {
         if (emptyEl) emptyEl.style.display = 'block';
         return;
     }
     if (emptyEl) emptyEl.style.display = 'none';
     rows.forEach(r => {
-        const campusText = getCampusDisplayText(r.campus_permission);
-        const card = document.createElement('div');
-        card.className = 'course-card';
-        card.innerHTML = `
-            <div class="course-card-body">
-                <div class="course-card-main">
-                    <h4 class="course-card-name">${esc(r.name)}</h4>
-                    <div class="course-card-subjects">
-                        <span class="course-tag course-tag-level1">${esc(r.subject_level1) || '-'}</span>
-                        ${r.subject_level2 ? '<span class="course-tag course-tag-level2">' + esc(r.subject_level2) + '</span>' : ''}
-                    </div>
-                </div>
-                <div class="course-card-meta">
-                    <span class="course-meta-item"><span class="course-meta-label">校区</span>${campusText || '-'}</span>
-                    <span class="course-meta-item"><span class="course-meta-label">小课包</span>${esc(r.small_package) || '-'}</span>
-                    <span class="course-meta-item"><span class="course-meta-label">低幼龄</span>${esc(r.toddler) || '-'}</span>
-                </div>
-                <div class="course-card-actions">
-                    <button class="btn-card-action btn-card-price" onclick="showPriceModal(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}', '${esc(r.small_package || '').replace(/'/g, "\\'")}')" title="设置价格">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
-                        <span>设置价格</span>
-                    </button>
-                    <button class="btn-card-action btn-card-edit" onclick="editCourse(${r.id})" title="编辑">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
-                        <span>编辑</span>
-                    </button>
-                    <button class="btn-card-action btn-card-delete" onclick="deleteCourse(${r.id})" title="删除">
-                        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-                        <span>删除</span>
-                    </button>
-                </div>
-            </div>
+        const campusPills = getCampusPillsHTML(r.campus_permission);
+        const badgeSmallPkg = getBooleanBadgeHTML(r.small_package);
+        const badgeToddler = getBooleanBadgeHTML(r.toddler);
+        const nameEsc = esc(r.name).replace(/'/g, "\\'");
+        const smallPkgEsc = (r.small_package || '').replace(/'/g, "\\'");
+        const tr = document.createElement('tr');
+        tr.className = 'course-row';
+        tr.innerHTML = `
+            <td class="col-name">
+                <span class="course-row-name">${esc(r.name)}</span>
+            </td>
+            <td class="col-subject">
+                <span class="course-tag course-tag-level1">${esc(r.subject_level1) || '-'}</span>
+                ${r.subject_level2 ? '<span class="course-tag course-tag-level2">' + esc(r.subject_level2) + '</span>' : ''}
+            </td>
+            <td class="col-campus">
+                <div class="course-campus-pills">${campusPills}</div>
+            </td>
+            <td class="col-bool">${badgeSmallPkg}</td>
+            <td class="col-bool">${badgeToddler}</td>
+            <td class="col-actions">
+                <button class="btn-row-action btn-row-price" onclick="showPriceModal(${r.id}, '${nameEsc}', '${smallPkgEsc}')" title="设置价格">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+                    <span>价格</span>
+                </button>
+                <button class="btn-row-action btn-row-edit" onclick="editCourse(${r.id})" title="编辑">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                    <span>编辑</span>
+                </button>
+                <button class="btn-row-action btn-row-delete" onclick="deleteCourse(${r.id})" title="删除">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                    <span>删除</span>
+                </button>
+            </td>
         `;
-        container.appendChild(card);
+        tbody.appendChild(tr);
     });
 }
 
@@ -3246,6 +3273,8 @@ async function showActivityForm(id = null) {
             showToast('加载活动详情失败: ' + e.message, 'error');
         }
     }
+    // Initialize new UI components
+    setTimeout(initActivityFormUI, 50);
 }
 
 function backToActivityList() {
@@ -3302,6 +3331,262 @@ function onActivityFeeModeChange(type) {
         if (priceRow) priceRow.style.display = 'none';
         if (deductSection) deductSection.style.display = 'none';
     }
+    // Sync pricing cards
+    syncActivityPricingCards(type);
+    updateActivitySubmitState();
+}
+
+/* ===== Pricing Card Click Handler ===== */
+function initActivityPricingCards() {
+    document.querySelectorAll('.price-card').forEach(card => {
+        // Remove old handlers by cloning
+        const clone = card.cloneNode(true);
+        card.parentNode.replaceChild(clone, card);
+        clone.addEventListener('click', function() {
+            const feeType = this.dataset.feeType;
+            const value = this.dataset.priceValue;
+            const select = document.getElementById('activity-' + feeType + '-fee-mode');
+            if (select) {
+                // Toggle: if already selected, deselect
+                if (select.value === value) {
+                    select.value = '';
+                } else {
+                    select.value = value;
+                }
+                select.dispatchEvent(new Event('change'));
+            }
+        });
+        clone.addEventListener('keydown', function(e) {
+            if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); this.click(); }
+        });
+    });
+}
+
+function syncActivityPricingCards(type) {
+    const mode = document.getElementById('activity-' + type + '-fee-mode').value;
+    document.querySelectorAll('.price-card[data-fee-type="' + type + '"]').forEach(card => {
+        if (card.dataset.priceValue === mode && mode !== '') {
+            card.classList.add('selected');
+        } else {
+            card.classList.remove('selected');
+        }
+    });
+}
+
+/* ===== Fee Tab Switch ===== */
+function initActivityFeeTabs() {
+    document.querySelectorAll('.fee-tab-btn').forEach(btn => {
+        btn.addEventListener('click', function() {
+            const tab = this.dataset.feeTab;
+            document.querySelectorAll('.fee-tab-btn').forEach(b => b.classList.remove('active'));
+            this.classList.add('active');
+            document.querySelectorAll('.fee-panel').forEach(p => p.style.display = 'none');
+            const panel = document.getElementById('fee-panel-' + tab);
+            if (panel) panel.style.display = '';
+        });
+    });
+}
+
+/* ===== Campus Search & Tags ===== */
+function initActivityCampusUI() {
+    const searchInput = document.getElementById('campus-search-input');
+    const selectAllBtn = document.getElementById('campus-select-all');
+    const deselectAllBtn = document.getElementById('campus-deselect-all');
+    const batchCapInput = document.getElementById('batch-capacity-value');
+    const applyBatchBtn = document.getElementById('apply-batch-cap');
+
+    if (searchInput) {
+        searchInput.addEventListener('input', filterActivityCampuses);
+    }
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function() {
+            document.querySelectorAll('#activity-campus-rows .activity-campus-check').forEach(cb => {
+                if (!cb.closest('.campus-capacity-row') || !cb.closest('.campus-capacity-row').classList.contains('hidden-by-search')) {
+                    cb.checked = true;
+                }
+            });
+            syncActivityCampusTags();
+            updateActivitySubmitState();
+        });
+    }
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function() {
+            document.querySelectorAll('#activity-campus-rows .activity-campus-check').forEach(cb => { cb.checked = false; });
+            syncActivityCampusTags();
+            updateActivitySubmitState();
+        });
+    }
+    if (applyBatchBtn) {
+        applyBatchBtn.addEventListener('click', function() {
+            const val = batchCapInput ? batchCapInput.value : '0';
+            document.querySelectorAll('#activity-campus-rows .activity-campus-check:checked').forEach(cb => {
+                const row = cb.closest('.campus-capacity-row');
+                if (row) {
+                    const capInput = row.querySelector('.activity-campus-capacity');
+                    if (capInput) capInput.value = val;
+                }
+            });
+        });
+    }
+}
+
+function filterActivityCampuses() {
+    const q = (document.getElementById('campus-search-input')?.value || '').trim().toLowerCase();
+    let hasVisible = false;
+    document.querySelectorAll('#activity-campus-rows .campus-capacity-row').forEach(row => {
+        const nameSpan = row.querySelector('label');
+        const name = nameSpan ? nameSpan.textContent.trim().toLowerCase() : '';
+        if (!q || name.includes(q)) {
+            row.classList.remove('hidden-by-search');
+            row.style.display = '';
+            hasVisible = true;
+        } else {
+            row.classList.add('hidden-by-search');
+            row.style.display = 'none';
+        }
+    });
+    // Show empty state
+    const emptyEl = document.getElementById('campus-empty-msg');
+    if (emptyEl) emptyEl.style.display = hasVisible ? 'none' : '';
+}
+
+function syncActivityCampusTags() {
+    const tagsEl = document.getElementById('campus-tags');
+    if (!tagsEl) return;
+    tagsEl.innerHTML = '';
+    document.querySelectorAll('#activity-campus-rows .activity-campus-check:checked').forEach(cb => {
+        const row = cb.closest('.campus-capacity-row');
+        const label = row ? row.querySelector('label') : null;
+        const campusName = label ? label.textContent.trim() : '';
+        const tag = document.createElement('span');
+        tag.className = 'campus-tag';
+        tag.innerHTML = campusName + ' <button class="campus-tag-remove" title="移除">×</button>';
+        tag.querySelector('.campus-tag-remove').addEventListener('click', function() {
+            cb.checked = false;
+            syncActivityCampusTags();
+            updateActivitySubmitState();
+        });
+        tagsEl.appendChild(tag);
+    });
+    updateActivitySubmitState();
+}
+
+// Override renderActivityCampusRows to add change listeners
+const origRenderActivityCampusRows = renderActivityCampusRows;
+renderActivityCampusRows = function(campuses) {
+    origRenderActivityCampusRows(campuses);
+    // Add change listeners to checkboxes
+    document.querySelectorAll('#activity-campus-rows .activity-campus-check').forEach(cb => {
+        cb.addEventListener('change', function() {
+            syncActivityCampusTags();
+            updateActivitySubmitState();
+        });
+    });
+    syncActivityCampusTags();
+};
+
+/* ===== Real-time Validation ===== */
+function initActivityValidation() {
+    document.querySelectorAll('[data-validate="required"]').forEach(field => {
+        field.addEventListener('blur', function() {
+            validateActivityField(this);
+            updateActivitySubmitState();
+        });
+        field.addEventListener('input', function() {
+            if (this.classList.contains('input-error')) {
+                validateActivityField(this);
+                updateActivitySubmitState();
+            }
+        });
+    });
+    // Date cross-validation
+    const regEnd = document.getElementById('activity-reg-end');
+    if (regEnd) {
+        regEnd.addEventListener('change', function() {
+            validateActivityField(this);
+            updateActivitySubmitState();
+        });
+    }
+}
+
+function validateActivityField(field) {
+    const errEl = field.parentElement.querySelector('.field-error-msg');
+    if (!errEl) return true;
+    const val = field.value.trim();
+    if (!val) {
+        field.classList.add('input-error');
+        errEl.style.display = '';
+        errEl.textContent = '此项为必填';
+        return false;
+    }
+    // Date cross-check
+    if (field.id === 'activity-reg-end') {
+        const startVal = document.getElementById('activity-reg-start')?.value || '';
+        if (startVal && val < startVal) {
+            field.classList.add('input-error');
+            errEl.style.display = '';
+            errEl.textContent = '结束日期不能早于开始日期';
+            return false;
+        }
+    }
+    field.classList.remove('input-error');
+    errEl.style.display = 'none';
+    return true;
+}
+
+function validateActivityAllFields() {
+    let allValid = true;
+    document.querySelectorAll('[data-validate="required"]').forEach(field => {
+        if (!validateActivityField(field)) allValid = false;
+    });
+    return allValid;
+}
+
+/* ===== Submit Button State ===== */
+function updateActivitySubmitState() {
+    const btn = document.getElementById('btn-save-activity');
+    const hint = document.getElementById('footer-validation-hint');
+    if (!btn || !hint) return;
+
+    const hasName = (document.getElementById('activity-name')?.value || '').trim() !== '';
+    const hasStart = (document.getElementById('activity-reg-start')?.value || '') !== '';
+    const hasEnd = (document.getElementById('activity-reg-end')?.value || '') !== '';
+    const hasCampus = document.querySelectorAll('#activity-campus-rows .activity-campus-check:checked').length > 0;
+    const hasAdultMode = (document.getElementById('activity-adult-fee-mode')?.value || '') !== '';
+    const hasStudentMode = (document.getElementById('activity-student-fee-mode')?.value || '') !== '';
+    const hasAnyFee = hasAdultMode || hasStudentMode;
+
+    // Count errors
+    let errCount = 0;
+    document.querySelectorAll('.field-error-msg').forEach(el => {
+        if (el.style.display !== 'none' && el.textContent) errCount++;
+    });
+
+    const issues = [];
+    if (!hasName) issues.push('未填写活动名称');
+    if (!hasStart || !hasEnd) issues.push('未填写报名日期');
+    if (!hasAnyFee) issues.push('未设置收费模式');
+    if (!hasCampus) issues.push('未选择校区');
+    if (errCount > 0) issues.push(errCount + ' 项校验未通过');
+
+    if (issues.length > 0) {
+        btn.disabled = true;
+        hint.textContent = issues.join(' · ');
+        hint.style.color = 'var(--color-danger)';
+    } else {
+        btn.disabled = false;
+        hint.textContent = '信息已完善，可以发布';
+        hint.style.color = 'var(--color-success)';
+    }
+}
+
+/* ===== Init Activity Form on Show ===== */
+function initActivityFormUI() {
+    initActivityPricingCards();
+    initActivityFeeTabs();
+    initActivityCampusUI();
+    initActivityValidation();
+    updateActivitySubmitState();
 }
 
 async function addActivityDeductRow(type, subjectId, subjectName, deductLessons) {
@@ -3362,11 +3647,13 @@ function addActivityCampusRow() {
 async function saveActivity() {
     const id = parseInt(document.getElementById('edit-activity-id').value) || 0;
     const name = document.getElementById('activity-name').value.trim();
-    if (!name) { showToast('请输入活动名称', 'error'); return; }
+    if (!name) { showToast('请输入活动名称', 'error'); document.getElementById('activity-name').focus(); return; }
     const subjectLevel1 = document.getElementById('activity-subject-level1').value;
     const regStart = document.getElementById('activity-reg-start').value;
     const regEnd = document.getElementById('activity-reg-end').value;
-    if (!regStart || !regEnd) { showToast('请选择报名日期', 'error'); return; }
+    if (!regStart) { showToast('请选择报名开始日期', 'error'); return; }
+    if (!regEnd) { showToast('请选择报名结束日期', 'error'); return; }
+    if (regEnd < regStart) { showToast('结束日期不能早于开始日期', 'error'); return; }
     const adultFeeMode = document.getElementById('activity-adult-fee-mode').value;
     const studentFeeMode = document.getElementById('activity-student-fee-mode').value;
     const adultPrice = parseFloat(document.getElementById('activity-adult-price').value) || 0;
@@ -3699,7 +3986,7 @@ async function preloadInlineDiscountData() {
     try {
         const [discountRes, courseCouponRes, productCouponRes, teachingAidRes] = await Promise.all([
             api('list_discount_plans', { plan_type: plan.plan_type, page_size: 200 }, 'GET'),
-            api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET'),
+            api('list_coupons', { coupon_type: '课程券', plan_type: plan.plan_type, page_size: 200 }, 'GET'),
             api('list_coupons', { coupon_type: '商品券', page_size: 200 }, 'GET'),
             api('list_teaching_aids', { page_size: 200 }, 'GET')
         ]);
@@ -3907,6 +4194,15 @@ function enterInlineEdit(tr, item) {
 
     // 绑定联动事件
     bindInlinePriceRecalc(tr);
+    // 如果已有教材包选中 → 按学科加载商品券
+    const existingAid = tr.querySelector('[data-field="teaching_aid_id"]');
+    if (existingAid && existingAid.value) {
+        const aidId = parseInt(existingAid.value);
+        const aid = priceItemTeachingAids.find(a => a.id === aidId);
+        if (aid && aid.subject_id) {
+            reloadInlineProductCoupons(tr, aid.subject_id);
+        }
+    }
     // 绑定键盘事件
     bindInlineKeyboard(tr);
 }
@@ -3994,7 +4290,40 @@ function bindInlinePriceRecalc(tr) {
     discountSelect?.addEventListener('change', recalc);
     courseCouponSelect?.addEventListener('change', recalc);
     productCouponSelect?.addEventListener('change', recalc);
-    teachingAidSelect?.addEventListener('change', recalc);
+    teachingAidSelect?.addEventListener('change', function() {
+        recalc();
+        // 教材包切换 → 重新加载商品券
+        const aidId = parseInt(this.value) || 0;
+        if (aidId > 0) {
+            const aid = priceItemTeachingAids.find(a => a.id === aidId);
+            reloadInlineProductCoupons(tr, aid ? (aid.subject_id || 0) : 0);
+        } else {
+            reloadInlineProductCoupons(tr, 0);
+        }
+    });
+}
+
+// 根据教材包学科重新加载 inline 编辑的商品券下拉
+async function reloadInlineProductCoupons(tr, subjectId) {
+    const select = tr.querySelector('[data-field="product_coupon_id"]');
+    if (!select) return;
+    const currentVal = select.value;
+    select.classList.add('loading');
+    try {
+        const params = { coupon_type: '商品券', page_size: 200 };
+        if (subjectId && subjectId > 0) params.subject_id = subjectId;
+        const res = await api('list_coupons', params, 'GET');
+        priceItemCoupons = res.data || [];
+    } catch (e) {
+        // 加载失败保留原数据
+    }
+    select.classList.remove('loading');
+    // 重建下拉
+    let html = '<option value="">不使用商品券</option>';
+    html += priceItemCoupons.map(c =>
+        `<option value="${c.id}"${String(c.id) === currentVal ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
+    ).join('');
+    select.innerHTML = html;
 }
 
 function bindInlineKeyboard(tr) {
@@ -4496,7 +4825,7 @@ async function loadPriceItemDiscountOptions(selectedValue) {
 }
 
 // 加载商品券下拉
-async function loadPriceItemCouponOptions(selectedValue) {
+async function loadPriceItemCouponOptions(selectedValue, subjectId) {
     const select = document.getElementById('price-item-coupon');
     if (!select) return;
 
@@ -4505,7 +4834,9 @@ async function loadPriceItemCouponOptions(selectedValue) {
     select.innerHTML = '<option value="">加载中...</option>';
 
     try {
-        const res = await api('list_coupons', { coupon_type: '商品券', page_size: 200 }, 'GET');
+        const params = { coupon_type: '商品券', page_size: 200 };
+        if (subjectId && subjectId > 0) params.subject_id = subjectId;
+        const res = await api('list_coupons', params, 'GET');
         priceItemCoupons = res.data || [];
         select.innerHTML = '<option value="">不使用商品券</option>' +
             priceItemCoupons.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`).join('');
@@ -4525,12 +4856,23 @@ async function loadPriceItemCourseCouponOptions(selectedValue) {
     const select = document.getElementById('price-item-course-coupon');
     if (!select) return;
 
+    const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
+    const planType = plan ? (plan.plan_type || '') : '';
+
+    // 无方案类型不加载
+    if (!planType) {
+        select.innerHTML = '<option value="">不使用课时优惠券</option>';
+        return;
+    }
+
     // loading 态
     select.classList.add('loading');
     select.innerHTML = '<option value="">加载中...</option>';
 
     try {
-        const res = await api('list_coupons', { coupon_type: '课程券', page_size: 200 }, 'GET');
+        const params = { coupon_type: '课程券', page_size: 200 };
+        if (planType) params.plan_type = planType;
+        const res = await api('list_coupons', params, 'GET');
         priceItemCourseCoupons = res.data || [];
         select.innerHTML = '<option value="">不使用课时优惠券</option>' +
             priceItemCourseCoupons.map(c => `<option value="${c.id}">${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`).join('');
@@ -4559,7 +4901,18 @@ async function loadPriceItemTeachingAidOptions(selectedValue) {
         priceItemTeachingAids = (res.data || []).filter(a => a.type === '教材包');
         select.innerHTML = '<option value="">不使用教材包</option>' +
             priceItemTeachingAids.map(a => `<option value="${a.id}">${esc(a.name)}（¥${Number(a.price).toFixed(2)}）</option>`).join('');
-        select.onchange = recalcItemActualPrice;
+        select.onchange = function() {
+            recalcItemActualPrice();
+            // 选中教材包后，重新加载商品券（按教材包所属学科过滤）
+            const aidId = parseInt(this.value) || 0;
+            if (aidId > 0) {
+                const aid = priceItemTeachingAids.find(a => a.id === aidId);
+                const sid = aid ? (aid.subject_id || 0) : 0;
+                loadPriceItemCouponOptions(undefined, sid);
+            } else {
+                loadPriceItemCouponOptions();
+            }
+        };
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
             select.value = selectedValue;
         }
@@ -5496,6 +5849,11 @@ async function showClassroomForm(id) {
     document.getElementById('classroom-name').value = '';
     document.getElementById('classroom-capacity').value = '';
     document.getElementById('classroom-remark').value = '';
+    document.getElementById('classroom-name').classList.remove('error');
+
+    // Reset char counter
+    const counterEl = document.getElementById('classroom-char-count');
+    if (counterEl) { counterEl.textContent = '0 / 200'; counterEl.style.color = ''; }
 
     // Load campus dropdown
     const campusSel = document.getElementById('classroom-campus');
@@ -5525,6 +5883,8 @@ async function showClassroomForm(id) {
                     document.getElementById('classroom-capacity').value = cr.capacity || '';
                     document.getElementById('classroom-campus').value = cr.campus || '';
                     document.getElementById('classroom-remark').value = cr.remark || '';
+                    // Sync char counter for edit mode
+                    if (counterEl) { const len = (cr.remark || '').length; counterEl.textContent = len + ' / 200'; counterEl.style.color = len > 180 ? '#E74C3C' : ''; }
                 }
             }
         } catch (e) { /* ignore */ }
@@ -5540,7 +5900,18 @@ async function saveClassroom() {
     const campus = document.getElementById('classroom-campus').value;
     const remark = document.getElementById('classroom-remark').value.trim();
 
-    if (!name) return showToast('教室名称不能为空', 'error');
+    // Validation with inline error highlight
+    let valid = true;
+    const nameEl = document.getElementById('classroom-name');
+    const campusEl = document.getElementById('classroom-campus');
+    [nameEl, campusEl].forEach(el => el.classList.remove('error'));
+
+    if (!name) {
+        nameEl.classList.add('error');
+        nameEl.focus();
+        showToast('教室名称不能为空', 'error');
+        return;
+    }
 
     const data = { name, capacity, campus, remark };
     if (id) data.id = id;
@@ -5552,6 +5923,19 @@ async function saveClassroom() {
     closeModal('modal-classroom-form');
     loadClassrooms();
 }
+
+/* Classroom character counter */
+document.addEventListener('DOMContentLoaded', function () {
+    const remarkEl = document.getElementById('classroom-remark');
+    const counterEl = document.getElementById('classroom-char-count');
+    if (remarkEl && counterEl) {
+        remarkEl.addEventListener('input', function () {
+            const len = this.value.length;
+            counterEl.textContent = len + ' / 200';
+            counterEl.style.color = len > 180 ? '#E74C3C' : '';
+        });
+    }
+});
 
 async function deleteClassroom(id) {
     showCustomConfirm('确定删除该教室？', async () => {
@@ -8276,7 +8660,7 @@ async function showClassEnrollModal(studentId) {
     currentEnrollStudentId = studentId;
     document.getElementById('modal-class-enroll-title').textContent = '分班';
     const tbody = document.getElementById('class-enroll-tbody');
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     openModal('modal-class-enroll');
     // 加载所有班级
     try {
@@ -8321,7 +8705,7 @@ async function showClassEnrollModal(studentId) {
             </tr>`;
         }).join('');
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
@@ -11807,6 +12191,7 @@ async function showCouponForm(id) {
     // 清空表单
     document.getElementById('coupon-name').value = '';
     document.getElementById('coupon-type').value = '课程券';
+    document.getElementById('coupon-plan-type').value = '';
     document.getElementById('coupon-amount').value = '';
     document.getElementById('coupon-start').value = '';
     document.getElementById('coupon-end').value = '';
@@ -11828,6 +12213,7 @@ async function showCouponForm(id) {
             const detail = await api('get_coupon', { id: id }, 'GET');
             document.getElementById('coupon-name').value = detail.name || '';
             document.getElementById('coupon-type').value = detail.coupon_type || '课程券';
+            document.getElementById('coupon-plan-type').value = detail.plan_type || '';
             document.getElementById('coupon-amount').value = detail.amount || '';
             document.getElementById('coupon-start').value = detail.start_date || '';
             document.getElementById('coupon-end').value = detail.end_date || '';
@@ -11857,6 +12243,7 @@ async function saveCoupon() {
     const id = couponEditingId;
     const name = document.getElementById('coupon-name').value.trim();
     const couponType = document.getElementById('coupon-type').value;
+    const planType = document.getElementById('coupon-plan-type').value;
     const amount = parseFloat(document.getElementById('coupon-amount').value);
     const startDate = document.getElementById('coupon-start').value;
     const endDate = document.getElementById('coupon-end').value;
@@ -11874,6 +12261,7 @@ async function saveCoupon() {
     const payload = {
         name: name,
         coupon_type: couponType,
+        plan_type: planType,
         discount_amount: amount,
         start_date: startDate,
         end_date: endDate,
@@ -13177,7 +13565,8 @@ async function openActivityAttendanceModal(activityId, activityOrderId, studentI
         adultMax: parseInt(row.adult_count) || 0, studentMax: parseInt(row.student_count) || 0,
         adultCount: 0, studentCount: 0, adultDeduct: 0, studentDeduct: 0, totalDeduct: 0,
         adultRule: null, studentRule: null,
-        selectedPackageId: null, selectedPackageData: null, deductions: { adult: [], student: [] }
+        selectedPackageId: null, selectedPackageData: null, deductions: { adult: [], student: [] },
+        attendanceId: row.attendance_id || 0, isModify: !!(row.attendance_id)
     };
 
     var d = activityAttendanceData;
@@ -13198,12 +13587,14 @@ async function openActivityAttendanceModal(activityId, activityOrderId, studentI
     document.getElementById('att-student-reg').textContent = d.studentMax;
     var adultInput = document.getElementById('att-adult-count');
     var studentInput = document.getElementById('att-student-count');
-    adultInput.max = d.adultMax; adultInput.value = d.adultMax;  // 默认全部出勤
-    studentInput.max = d.studentMax; studentInput.value = d.studentMax;
+    adultInput.max = d.adultMax;
+    adultInput.value = (d.isModify && row.adult_attended !== undefined) ? (row.adult_attended || 0) : d.adultMax;
+    studentInput.max = d.studentMax;
+    studentInput.value = (d.isModify && row.student_attended !== undefined) ? (row.student_attended || 0) : d.studentMax;
 
     // 设置日期
     var dateEl = document.getElementById('att-confirm-date');
-    if (dateEl) dateEl.value = new Date().toISOString().split('T')[0];
+    if (dateEl) dateEl.value = (d.isModify && row.att_session_date) ? row.att_session_date : new Date().toISOString().split('T')[0];
 
     // 加载扣课规则
     await loadAttDeductionRulesSimple();
@@ -13212,6 +13603,13 @@ async function openActivityAttendanceModal(activityId, activityOrderId, studentI
     await loadAttPackages();
 
     // 加载老师列表
+    // 修改考勤时从 deduction_breakdown 提取老师名
+    if (d.isModify && row.deduction_breakdown) {
+        try {
+            var bd = JSON.parse(row.deduction_breakdown);
+            if (bd && bd.teacher) window.__prefillAttTeacher = bd.teacher;
+        } catch(e) {}
+    }
     loadAttTeachers();
 
     // 计算初始扣课时
@@ -13278,7 +13676,7 @@ function onAttPackageSelect() {
 }
 
 async function loadAttTeachers() {
-    var sel = document.getElementById('att-teacher');
+    var sel = document.getElementById('att-activity-teacher');
     if (!sel) return;
     sel.innerHTML = '<option value="">请选择</option>';
     try {
@@ -13293,6 +13691,11 @@ async function loadAttTeachers() {
                 sel.appendChild(opt);
             }
         });
+        // 修改考勤时预填老师
+        if (window.__prefillAttTeacher) {
+            sel.value = window.__prefillAttTeacher;
+            window.__prefillAttTeacher = null;
+        }
     } catch(e) { console.error('loadAttTeachers error:', e); }
 }
 
@@ -13303,7 +13706,7 @@ async function confirmActivityAttendance() {
     if (d.totalDeduct > 0 && !d.selectedPackageId) { showToast('请选择扣课课包', 'error'); return; }
     if (adultCnt === 0 && studentCnt === 0) { showToast('成人或学员出勤人数至少填写一个', 'error'); return; }
     var date = document.getElementById('att-confirm-date').value;
-    var teacher = document.getElementById('att-teacher').value;
+    var teacher = document.getElementById('att-activity-teacher').value;
     var breakdown = JSON.stringify({
         adult: { count: adultCnt, per_lesson: d.adultRule ? d.adultRule.deduct_lessons : 0, total: d.adultDeduct },
         student: { count: studentCnt, per_lesson: d.studentRule ? d.studentRule.deduct_lessons : 0, total: d.studentDeduct },
@@ -13317,6 +13720,7 @@ async function confirmActivityAttendance() {
             adult_attended: adultCnt, student_attended: studentCnt,
             deduction_breakdown: breakdown
         };
+        if (d.attendanceId) payload.attendance_id = d.attendanceId;
         var res = await api('save_activity_attendance', payload, 'POST');
         if (res.error) { showToast(res.error, 'error'); return; }
         showToast('考勤成功');
@@ -13333,7 +13737,7 @@ async function loadActivityAttendanceList(page = 1) {
     const keyword = document.getElementById('att-activity-search')?.value || '';
     const campus = document.getElementById('att-activity-campus-filter')?.value || '';
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         let url = API_BASE + 'list_activity_attendance&page=' + page + '&page_size=20';
         if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
@@ -13344,15 +13748,38 @@ async function loadActivityAttendanceList(page = 1) {
         const total = data.total || 0;
         window._activityAttendanceRows = rows;
         loadActivityAttendanceCampuses();
-        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无活动考勤记录</td></tr>'; pagination.innerHTML = ''; return; }
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#999;padding:30px;">暂无活动考勤记录</td></tr>'; pagination.innerHTML = ''; return; }
         tbody.innerHTML = rows.map((r, i) => {
-            const statusTag = r.attendance_status === '已考勤' ? '<span class="activity-att-pill attended">已考勤</span>' : '<span class="activity-att-pill unattended">未考勤</span>';
-            const actionBtn = r.attendance_status === '已考勤' ? '<span style="color:#999;font-size:12px;">已考勤</span>' : '<button class="btn btn-sm btn-activity-att" onclick="openActivityAttendanceFromList(' + i + ')">考勤</button>';
-            return '<tr><td>' + esc(r.student_name || '') + '</td><td>' + esc(r.activity_name || '') + '</td><td>' + esc(r.campus || '') + '</td><td>' + (r.enroll_time || r.created_at || '').substring(0, 19) + '</td><td>' + statusTag + '</td><td>' + actionBtn + '</td></tr>';
+            const isAttended = r.attendance_status === '已考勤';
+            const statusTag = isAttended
+                ? '<span class="activity-att-pill pill-attended">已考勤</span>'
+                : '<span class="activity-att-pill pill-unattended">待考勤</span>';
+            const actionBtn = isAttended
+                ? '<button class="btn-activity-att btn-edit" onclick="openActivityAttendanceFromList(' + i + ')">修改考勤</button>'
+                : '<button class="btn-activity-att btn-do" onclick="openActivityAttendanceFromList(' + i + ')">考勤</button>';
+            const feeDisplay = parseFloat(r.total_price) ? '¥' + parseFloat(r.total_price).toFixed(2) : '<span style="color:#c0c4cc;">—</span>';
+            const enrollTime = (r.enroll_time || r.created_at || '').substring(0, 16);
+            const attTime = (r.attendance_time || '').substring(0, 16);
+            const displayVal = function(v) { return v ? esc(v) : '<span style="color:#c0c4cc;">—</span>'; };
+            return '<tr>' +
+                '<td>' + displayVal(r.student_name) + '</td>' +
+                '<td>' + displayVal(r.student_phone) + '</td>' +
+                '<td>' + displayVal(r.student_no) + '</td>' +
+                '<td>' + displayVal(r.activity_name) + '</td>' +
+                '<td>' + displayVal(r.campus) + '</td>' +
+                '<td class="col-nowrap">' + (enrollTime || '<span style="color:#c0c4cc;">—</span>') + '</td>' +
+                '<td class="col-right">' + feeDisplay + '</td>' +
+                '<td>' + displayVal(r.subject_level1) + '</td>' +
+                '<td>' + displayVal(r.subject_level2) + '</td>' +
+                '<td class="col-nowrap">' + (attTime || '<span style="color:#c0c4cc;">—</span>') + '</td>' +
+                '<td>' + displayVal(r.teacher) + '</td>' +
+                '<td class="col-center">' + statusTag + '</td>' +
+                '<td class="col-center">' + actionBtn + '</td>' +
+                '</tr>';
         }).join('');
         const totalPages = Math.ceil(total / 20);
-        pagination.innerHTML = totalPages > 1 ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadActivityAttendanceList(' + (page - 1) + ')"') + '>上一页</button><span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span><button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadActivityAttendanceList(' + (page + 1) + ')"') + '>下一页</button>' : '';
-    } catch (e) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+        pagination.innerHTML = totalPages > 1 ? '<button class="btn-page" ' + (page <= 1 ? 'disabled' : 'onclick="loadActivityAttendanceList(' + (page - 1) + ')"') + '>上一页</button><span class="page-info">' + page + ' / ' + totalPages + '</span><button class="btn-page" ' + (page >= totalPages ? 'disabled' : 'onclick="loadActivityAttendanceList(' + (page + 1) + ')"') + '>下一页</button>' : '';
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
 }
 
 function openActivityAttendanceFromList(index) {
@@ -13364,7 +13791,12 @@ function openActivityAttendanceFromList(index) {
         adult_count: r.adult_count || r.activity_adult_count || 0,
         student_count: r.student_count || r.activity_student_count || 0,
         total_price: r.total_price || r.actual_price || 0,
-        enroll_time: r.enroll_time || r.created_at || ''
+        enroll_time: r.enroll_time || r.created_at || '',
+        attendance_id: r.attendance_id || 0,
+        adult_attended: r.adult_attended || 0,
+        student_attended: r.student_attended || 0,
+        deduction_breakdown: r.deduction_breakdown || '',
+        att_session_date: r.att_session_date || ''
     });
 }
 
@@ -13391,7 +13823,7 @@ async function loadActivityConsumption(page = 1) {
     const dateFrom = document.getElementById('act-consume-from')?.value || '';
     const dateTo = document.getElementById('act-consume-to')?.value || '';
     if (!tbody) return;
-    tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     try {
         let url = API_BASE + 'list_activity_consumptions&page=' + page + '&page_size=20';
         if (keyword) url += '&keyword=' + encodeURIComponent(keyword);
@@ -13401,9 +13833,28 @@ async function loadActivityConsumption(page = 1) {
         const data = await res.json();
         const rows = data.data || [];
         const total = data.total || 0;
-        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#999;padding:30px;">暂无活动课耗记录</td></tr>'; pagination.innerHTML = ''; return; }
-        tbody.innerHTML = rows.map(r => '<tr><td>' + esc(r.student_name || '') + '</td><td>' + esc(r.activity_name || '') + '</td><td>' + (r.session_date || '') + '</td><td style="text-align:center;">' + (r.deducted_lessons || 0) + '</td><td>' + esc(r.source_course_name || '') + '</td><td style="text-align:right;">¥' + (parseFloat(r.consumed_amount) || 0).toFixed(2) + '</td></tr>').join('');
+        if (rows.length === 0) { tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#999;padding:30px;">暂无活动课耗记录</td></tr>'; pagination.innerHTML = ''; return; }
+        tbody.innerHTML = rows.map(r => {
+            const displayVal = function(v) { return v ? esc(v) : '<span style="color:#c0c4cc;">—</span>'; };
+            const feeVal = parseFloat(r.consumed_amount) || 0;
+            const attFeeVal = parseFloat(r.activity_attended_fee) || 0;
+            const attTime = (r.attendance_time || '').substring(0, 19);
+            return '<tr>' +
+                '<td>' + displayVal(r.student_name) + '</td>' +
+                '<td>' + displayVal(r.student_phone) + '</td>' +
+                '<td>' + displayVal(r.student_no) + '</td>' +
+                '<td>' + displayVal(r.activity_name) + '</td>' +
+                '<td>' + (r.session_date || '<span style="color:#c0c4cc;">—</span>') + '</td>' +
+                '<td style="text-align:center;">' + (r.deducted_lessons || 0) + '</td>' +
+                '<td>' + displayVal(r.source_course_name) + '</td>' +
+                '<td>' + displayVal(r.subject_level1) + '</td>' +
+                '<td>' + displayVal(r.subject_level2) + '</td>' +
+                '<td style="white-space:nowrap;">' + (attTime || '<span style="color:#c0c4cc;">—</span>') + '</td>' +
+                '<td style="text-align:right;">¥' + feeVal.toFixed(2) + '</td>' +
+                '<td style="text-align:right;">' + (attFeeVal > 0 ? '¥' + attFeeVal.toFixed(2) : '<span style="color:#c0c4cc;">—</span>') + '</td>' +
+                '</tr>';
+        }).join('');
         const totalPages = Math.ceil(total / 20);
         pagination.innerHTML = totalPages > 1 ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadActivityConsumption(' + (page - 1) + ')"') + '>上一页</button><span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span><button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadActivityConsumption(' + (page + 1) + ')"') + '>下一页</button>' : '';
-    } catch (e) { tbody.innerHTML = '<tr><td colspan="6" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+    } catch (e) { tbody.innerHTML = '<tr><td colspan="12" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
 }
