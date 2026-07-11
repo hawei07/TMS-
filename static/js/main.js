@@ -4233,7 +4233,12 @@ function editItem(itemId) {
     loadPriceItemDiscountOptions();
     loadPriceItemTeachingAidOptions();
     loadPriceItemCourseCouponOptions();
-    loadPriceItemCouponOptions();
+    // 编辑时先禁用商品券，等 setTimeout 里根据教材包状态决定
+    const couponSelectEdit = document.getElementById('price-item-coupon');
+    if (couponSelectEdit) {
+        couponSelectEdit.innerHTML = '<option value="">加载中...</option>';
+        couponSelectEdit.disabled = true;
+    }
 
     const isSmall = plan.plan_type === '小课包';
     const giftCard = document.getElementById('pi-gift-card');
@@ -4249,11 +4254,26 @@ function editItem(itemId) {
 
     // 延迟设置下拉选中值（等下拉加载完成）
     setTimeout(() => {
+        const couponSelect = document.getElementById('price-item-coupon');
         if (!isSmall) {
             document.getElementById('price-item-discount-plan').value = item.discount_plan_id || '';
             document.getElementById('price-item-teaching-aid').value = item.teaching_aid_id || '';
             document.getElementById('price-item-course-coupon').value = item.coupon_id || '';
-            document.getElementById('price-item-coupon').value = item.product_coupon_id || '';
+
+            // 根据教材包选中状态加载商品券
+            const taId = parseInt(item.teaching_aid_id) || 0;
+            if (taId > 0 && couponSelect) {
+                couponSelect.disabled = false;
+                const aid = priceItemTeachingAids.find(a => a.id === taId);
+                const sid = aid ? (aid.subject_id || 0) : 0;
+                loadPriceItemCouponOptions(item.product_coupon_id || '', sid);
+            } else if (couponSelect) {
+                couponSelect.innerHTML = '<option value="">请先选择教材包</option>';
+                couponSelect.disabled = true;
+            }
+        } else if (couponSelect) {
+            couponSelect.innerHTML = '<option value="">小课包不使用商品券</option>';
+            couponSelect.disabled = true;
         }
     }, 300);
 }
@@ -4275,7 +4295,12 @@ function addItem() {
     loadPriceItemDiscountOptions();
     loadPriceItemTeachingAidOptions();
     loadPriceItemCourseCouponOptions();
-    loadPriceItemCouponOptions();
+    // 新增时教材包未选，商品券不可用
+    const couponSelect = document.getElementById('price-item-coupon');
+    if (couponSelect) {
+        couponSelect.innerHTML = '<option value="">请先选择教材包</option>';
+        couponSelect.disabled = true;
+    }
     // 小课包时隐藏赠送课时卡片
     const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
     const isSmall = plan && plan.plan_type === '小课包';
@@ -4565,12 +4590,16 @@ async function loadPriceItemTeachingAidOptions(selectedValue) {
             recalcItemActualPrice();
             // 选中教材包后，重新加载商品券（按教材包所属学科过滤）
             const aidId = parseInt(this.value) || 0;
+            const couponSelect = document.getElementById('price-item-coupon');
             if (aidId > 0) {
+                couponSelect.disabled = false;
                 const aid = priceItemTeachingAids.find(a => a.id === aidId);
                 const sid = aid ? (aid.subject_id || 0) : 0;
                 loadPriceItemCouponOptions(undefined, sid);
             } else {
-                loadPriceItemCouponOptions();
+                // 未选教材包，商品券不可用
+                couponSelect.innerHTML = '<option value="">请先选择教材包</option>';
+                couponSelect.disabled = true;
             }
         };
         if (selectedValue !== undefined && selectedValue !== null && selectedValue !== '') {
@@ -11645,6 +11674,27 @@ async function loadDiscountSubjectTree() {
     } catch (e) {
         container.innerHTML = '<span style="color:#e6a23c;font-size:13px;">加载学科失败</span>';
     }
+    ensureDiscountSubjectTreeListener();
+}
+
+// 折扣学科树 click 委托 — 支持整行点击切换
+let _discountSubjectTreeListenerBound = false;
+function ensureDiscountSubjectTreeListener() {
+    if (_discountSubjectTreeListenerBound) return;
+    const tree = document.getElementById('discount-subject-tree');
+    if (!tree) return;
+    tree.addEventListener('click', function(e) {
+        if (e.target.closest('.campus-tree-arrow')) return;
+        const row = e.target.closest('.campus-tree-row');
+        if (!row) return;
+        const check = row.querySelector('.campus-tree-check');
+        if (!check) return;
+        if (e.target.classList.contains('campus-tree-check')) return;
+        check.checked = !check.checked;
+        check.indeterminate = false;
+        onDiscountSubjectCheck(check);
+    });
+    _discountSubjectTreeListenerBound = true;
 }
 
 function renderDiscountSubjectNode(node, level) {
@@ -11756,19 +11806,34 @@ function updateDiscountSubjectCount() {
     badge.classList.toggle('has-selection', n > 0);
 }
 
-// 折扣校区树 click 委托 — 用于更新 badge 和行选中态（toggleCampusTreeNode 是共享函数，不改动）
+// 折扣校区树 click 委托 — 支持整行点击切换 + 更新 badge 和行选中态
 let _discountCampusTreeListenerBound = false;
 function ensureDiscountCampusTreeListener() {
     if (_discountCampusTreeListenerBound) return;
     const tree = document.getElementById('discount-campus-tree');
     if (!tree) return;
     tree.addEventListener('click', function(e) {
+        // 不处理箭头点击（展开/收起）
+        if (e.target.closest('.campus-tree-arrow')) return;
+        const row = e.target.closest('.campus-tree-row');
+        if (!row) return;
+        // 找到该行的 checkbox
+        const check = row.querySelector('.campus-tree-check');
+        if (!check) return;
+        // 如果直接点击 checkbox，走原有逻辑（toggleCampusTreeNode 由 inline onclick 触发）
         if (e.target.classList.contains('campus-tree-check')) {
             setTimeout(function() {
                 syncAllDiscountCampusRows();
                 updateDiscountCampusCount();
             }, 0);
+            return;
         }
+        // 点击其他区域 — 切换 checkbox 并触发级联更新
+        check.checked = !check.checked;
+        check.indeterminate = false;
+        toggleCampusTreeNode(check);
+        syncAllDiscountCampusRows();
+        updateDiscountCampusCount();
     });
     _discountCampusTreeListenerBound = true;
 }
