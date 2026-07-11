@@ -1043,20 +1043,24 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 
 /* 基础类型设置 Tab */
 .basic-type-tabs {
-    display: flex; gap: 0; border-bottom: 2px solid var(--color-border);
-    margin-bottom: 16px;
+    display: flex; gap: 2px; border-bottom: 1.5px solid #e9ebf0;
+    padding: 0 20px; margin-bottom: 16px;
 }
 .bt-tab {
-    padding: 8px 20px; border: none; background: none;
-    font-size: 14px; color: var(--color-text-secondary);
+    padding: 10px 20px; border: none; background: none;
+    font-size: 13.5px; color: #64748b;
     cursor: pointer; border-bottom: 2px solid transparent;
-    margin-bottom: -2px; transition: var(--transition);
+    margin-bottom: -1.5px;
+    transition: color 0.2s cubic-bezier(0.25,1,0.5,1), border-color 0.2s cubic-bezier(0.25,1,0.5,1), background 0.15s cubic-bezier(0.25,1,0.5,1);
+    border-radius: 8px 8px 0 0; letter-spacing: 0.01em;
 }
 .bt-tab.active {
     color: var(--color-primary); border-bottom-color: var(--color-primary);
-    font-weight: 600;
+    font-weight: 600; background: rgba(124,58,237,0.04);
 }
-.bt-tab:hover:not(.active) { color: var(--color-text); }
+.bt-tab:hover:not(.active) {
+    color: var(--color-primary); background: rgba(124,58,237,0.04);
+}
 .basic-type-panel { }
 
 /* ==================== 跟进状态标签 ==================== */
@@ -1692,8 +1696,8 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 /* ==================== 学员详情标签页 ==================== */
 .student-detail-tabs {
     display: flex;
-    gap: 0;
-    border-bottom: 2px solid var(--color-border);
+    gap: 2px;
+    border-bottom: 1.5px solid #e9ebf0;
     padding: 0 16px;
     margin-top: 8px;
 }
@@ -1703,21 +1707,25 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
+    margin-bottom: -1.5px;
     cursor: pointer;
-    font-size: 14px;
-    color: #666;
-    transition: color .2s, border-color .2s;
+    font-size: 13.5px;
+    color: #64748b;
+    transition: color 0.2s cubic-bezier(0.25,1,0.5,1), border-color 0.2s cubic-bezier(0.25,1,0.5,1), background 0.15s cubic-bezier(0.25,1,0.5,1);
+    border-radius: 8px 8px 0 0;
+    letter-spacing: 0.01em;
 }
 
 .sdt-tab:hover {
     color: var(--color-primary);
+    background: rgba(124,58,237,0.04);
 }
 
 .sdt-tab.active {
     color: var(--color-primary);
     border-bottom-color: var(--color-primary);
-    font-weight: 500;
+    font-weight: 600;
+    background: rgba(124,58,237,0.04);
 }
 
 .student-detail-tab-content {
@@ -2492,7 +2500,8 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 
 .class-detail-tabs {
     display: flex;
-    border-bottom: 2px solid var(--color-border-light);
+    gap: 2px;
+    border-bottom: 1.5px solid #e9ebf0;
     padding: 0 20px;
     background: #fff;
 }
@@ -2502,21 +2511,25 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
+    margin-bottom: -1.5px;
     cursor: pointer;
-    font-size: 14px;
-    color: #666;
-    transition: color .2s, border-color .2s;
+    font-size: 13.5px;
+    color: #64748b;
+    transition: color 0.2s cubic-bezier(0.25,1,0.5,1), border-color 0.2s cubic-bezier(0.25,1,0.5,1), background 0.15s cubic-bezier(0.25,1,0.5,1);
+    border-radius: 8px 8px 0 0;
+    letter-spacing: 0.01em;
 }
 
 .cdt-tab:hover {
     color: var(--color-primary);
+    background: rgba(124,58,237,0.04);
 }
 
 .cdt-tab.active {
     color: var(--color-primary);
     border-bottom-color: var(--color-primary);
-    font-weight: 500;
+    font-weight: 600;
+    background: rgba(124,58,237,0.04);
 }
 
 .class-detail-tab-content {
@@ -2534,31 +2547,37 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
 /* 考勤页签 */
 .attendance-tabs {
     display: flex;
-    gap: 0;
-    border-bottom: 2px solid #eee;
-    padding: 0 16px;
+    gap: 2px;
+    border-bottom: 1.5px solid #e9ebf0;
+    padding: 0 20px;
+    margin-bottom: 0;
 }
 
 .att-tab {
-    padding: 10px 20px;
+    padding: 11px 18px;
     background: transparent;
     border: none;
     border-bottom: 2px solid transparent;
-    margin-bottom: -2px;
+    margin-bottom: -1.5px;
     cursor: pointer;
-    font-size: 14px;
-    color: #666;
-    transition: color .2s, border-color .2s;
+    font-size: 13.5px;
+    color: #64748b;
+    transition: color 0.2s cubic-bezier(0.25,1,0.5,1), border-color 0.2s cubic-bezier(0.25,1,0.5,1), background 0.15s cubic-bezier(0.25,1,0.5,1);
+    border-radius: 8px 8px 0 0;
+    letter-spacing: 0.01em;
+    position: relative;
 }
 
 .att-tab:hover {
-    color: var(--color-primary);
+    color: var(--color-primary, #7C3AED);
+    background: rgba(124,58,237,0.04);
 }
 
 .att-tab.active {
-    color: var(--color-primary);
-    border-bottom-color: var(--color-primary);
-    font-weight: 500;
+    color: var(--color-primary, #7C3AED);
+    border-bottom-color: var(--color-primary, #7C3AED);
+    font-weight: 600;
+    background: rgba(124,58,237,0.04);
 }
 
 .att-panel {
@@ -7293,57 +7312,39 @@ tbody td {
     gap: 10px;
 }
 
-/* -- Tab 按钮（少儿美术风格） -- */
+/* -- Tab 按钮 -- */
 #ta-tabs {
     display: flex;
-    gap: 4px;
-    border-bottom: 3px solid #f0f0f0;
+    gap: 2px;
+    border-bottom: 1.5px solid #e9ebf0;
     margin-bottom: 20px;
     padding: 0 4px;
-    background: linear-gradient(180deg, #fffef9 0%, #fff 100%);
-    border-radius: 14px 14px 0 0;
 }
 #ta-tabs .sec-tab {
-    padding: 12px 22px;
+    padding: 11px 20px;
     border: none;
     background: none;
-    font-size: 14px;
-    font-weight: 500;
-    color: #999;
+    font-size: 13.5px;
+    font-weight: 580;
+    color: #64748b;
     cursor: pointer;
-    border-bottom: 3px solid transparent;
-    margin-bottom: -3px;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    border-radius: 10px 10px 0 0;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1.5px;
+    transition: color 0.2s cubic-bezier(0.25,1,0.5,1), border-color 0.2s cubic-bezier(0.25,1,0.5,1), background 0.15s cubic-bezier(0.25,1,0.5,1);
+    border-radius: 8px 8px 0 0;
     position: relative;
+    letter-spacing: 0.01em;
 }
 #ta-tabs .sec-tab:hover {
-    color: #555;
-    background: rgba(255,224,102,0.15);
+    color: var(--color-primary);
+    background: rgba(124,58,237,0.04);
 }
 #ta-tabs .sec-tab.active {
-    color: #FF7675;
-    border-bottom-color: #FF7675;
-    font-weight: 700;
-    background: rgba(255,118,117,0.06);
+    color: var(--color-primary);
+    border-bottom-color: var(--color-primary);
+    font-weight: 600;
+    background: rgba(124,58,237,0.04);
 }
-/* Tab 序号装饰圆点 */
-#ta-tabs .sec-tab::before {
-    content: '';
-    display: inline-block;
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    margin-right: 8px;
-    vertical-align: middle;
-    opacity: 0;
-    transition: all 0.25s;
-}
-#ta-tabs .sec-tab:nth-child(1)::before { background: #FFE066; }
-#ta-tabs .sec-tab:nth-child(2)::before { background: #FF7675; }
-#ta-tabs .sec-tab:nth-child(3)::before { background: #74B9FF; }
-#ta-tabs .sec-tab.active::before { opacity: 1; width: 8px; height: 8px; }
-#ta-tabs .sec-tab:hover::before { opacity: 0.5; }
 
 /* -- 学员搜索区 -- */
 .ta-purchase-student {
@@ -9336,21 +9337,21 @@ tbody td {
     line-height: 1.4;
 }
 .btn-activity-att.btn-do {
-    background: #6366f1;
+    background: var(--color-primary, #7C3AED);
     color: #fff;
 }
 .btn-activity-att.btn-do:hover {
-    background: #4f46e5;
-    box-shadow: 0 2px 8px rgba(99,102,241,0.25);
+    background: #6D28D9;
+    box-shadow: 0 2px 8px rgba(124,58,237,0.25);
 }
 .btn-activity-att.btn-edit {
     background: #fff;
-    color: #4f46e5;
-    border: 1.5px solid #c7d2fe;
+    color: var(--color-primary, #7C3AED);
+    border: 1.5px solid #ddd6fe;
 }
 .btn-activity-att.btn-edit:hover {
-    background: #eef2ff;
-    border-color: #818cf8;
+    background: #f5f3ff;
+    border-color: #a78bfa;
 }
 .btn-activity-att.btn-revoke {
     background: #fff;
@@ -9613,84 +9614,141 @@ tbody td {
 }
 
 /* ==================== 考勤模块 — 活动考勤 Tab ==================== */
+/* Card wrapper — unifies toolbar + table into a single elevated surface */
+#tab-activity-attendance {
+    padding: 20px;
+    gap: 0;
+}
+
 /* Toolbar */
 #tab-activity-attendance .act-toolbar {
     display: flex;
     align-items: center;
-    gap: 10px;
-    padding: 14px 20px;
-    background: #fafbfc;
-    border-bottom: 1px solid #eef0f2;
+    gap: 12px;
+    padding: 16px 20px;
+    background: #fff;
+    border: 1px solid #e8eaef;
+    border-radius: 10px 10px 0 0;
     flex-wrap: wrap;
 }
 #tab-activity-attendance .act-toolbar input,
 #tab-activity-attendance .act-toolbar select {
-    height: 34px;
-    padding: 0 10px;
-    border: 1px solid #d0d5dd;
-    border-radius: 6px;
+    height: 36px;
+    padding: 0 12px;
+    border: 1px solid #dcdfe6;
+    border-radius: 7px;
     font-size: 13px;
-    color: #333;
-    background: #fff;
+    color: #1e293b;
+    background: #f9fafb;
     outline: none;
-    transition: border-color 0.15s, box-shadow 0.15s;
+    transition: border-color 0.2s cubic-bezier(0.25,1,0.5,1), box-shadow 0.2s cubic-bezier(0.25,1,0.5,1), background 0.2s cubic-bezier(0.25,1,0.5,1);
 }
 #tab-activity-attendance .act-toolbar input:focus,
 #tab-activity-attendance .act-toolbar select:focus {
-    border-color: #6366f1;
-    box-shadow: 0 0 0 3px rgba(99,102,241,0.10);
+    background: #fff;
+    border-color: var(--color-primary, #7C3AED);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.10);
 }
-#tab-activity-attendance .act-toolbar input { width: 180px; }
-#tab-activity-attendance .act-toolbar select { width: 140px; }
+#tab-activity-attendance .act-toolbar input:hover:not(:focus),
+#tab-activity-attendance .act-toolbar select:hover:not(:focus) {
+    border-color: #c4c9d4;
+}
+#tab-activity-attendance .act-toolbar input {
+    width: 200px;
+    padding-left: 36px;
+    background: #f9fafb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%2394a3b8' stroke-width='1.5' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") 12px center no-repeat;
+    background-size: 16px;
+}
+#tab-activity-attendance .act-toolbar input:focus {
+    padding-left: 36px;
+    background: #fff url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' fill='none' stroke='%237C3AED' stroke-width='1.5' viewBox='0 0 24 24'%3E%3Ccircle cx='11' cy='11' r='7'/%3E%3Cpath d='m21 21-4.3-4.3'/%3E%3C/svg%3E") 12px center no-repeat;
+    background-size: 16px;
+}
+#tab-activity-attendance .act-toolbar select {
+    width: 140px;
+    padding-right: 28px;
+    appearance: none;
+    cursor: pointer;
+    background: #f9fafb url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%2394a3b8' stroke-width='1.5' viewBox='0 0 24 24'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E") right 10px center no-repeat;
+}
 #tab-activity-attendance .act-toolbar .btn-search {
-    height: 34px;
-    padding: 0 18px;
-    background: #6366f1;
+    height: 36px;
+    padding: 0 20px;
+    background: var(--color-primary, #7C3AED);
     color: #fff;
     border: none;
-    border-radius: 6px;
+    border-radius: 7px;
     font-size: 13px;
     font-weight: 600;
     cursor: pointer;
-    transition: background 0.15s;
+    transition: background 0.2s cubic-bezier(0.25,1,0.5,1), box-shadow 0.2s cubic-bezier(0.25,1,0.5,1), transform 0.15s cubic-bezier(0.25,1,0.5,1);
+    letter-spacing: 0.01em;
 }
 #tab-activity-attendance .act-toolbar .btn-search:hover {
-    background: #4f46e5;
+    background: #6D28D9;
+    box-shadow: 0 2px 10px rgba(124,58,237,0.22);
+}
+#tab-activity-attendance .act-toolbar .btn-search:active {
+    transform: scale(0.97);
+}
+
+/* Toolbar divider line between toolbar and table */
+#tab-activity-attendance .act-toolbar {
+    border-bottom: 1px solid #eef0f4;
 }
 
 /* Table */
 #tab-activity-attendance .activity-att-table {
     width: 100%;
-    border-collapse: collapse;
+    border-collapse: separate;
+    border-spacing: 0;
     font-size: 13px;
 }
 #tab-activity-attendance .activity-att-table thead th {
     position: sticky;
     top: 0;
-    background: #f8f9fb;
-    color: #5f6b7a;
+    z-index: 1;
+    background: #f7f8fb;
+    color: #475569;
     font-size: 12px;
     font-weight: 600;
-    padding: 10px 12px;
-    border-bottom: 2px solid #e2e5ea;
+    padding: 11px 14px;
+    border-bottom: 1.5px solid #e5e7ee;
     white-space: nowrap;
-    letter-spacing: 0.01em;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    font-size: 11px;
 }
 #tab-activity-attendance .activity-att-table td {
-    padding: 10px 12px;
-    border-bottom: 1px solid #f0f2f5;
-    color: #2d3748;
+    padding: 11px 14px;
+    border-bottom: 1px solid #f1f3f7;
+    color: #1e293b;
     vertical-align: middle;
-    line-height: 1.45;
+    line-height: 1.5;
+    background: #fff;
 }
 #tab-activity-attendance .activity-att-table tbody tr {
-    transition: background 0.12s;
+    transition: background 0.15s cubic-bezier(0.25,1,0.5,1);
 }
-#tab-activity-attendance .activity-att-table tbody tr:nth-child(even) {
-    background: #fafbfc;
+#tab-activity-attendance .activity-att-table tbody tr:nth-child(even) td {
+    background: #fafbfd;
 }
-#tab-activity-attendance .activity-att-table tbody tr:hover {
-    background: #eef1ff;
+#tab-activity-attendance .activity-att-table tbody tr:hover td {
+    background: #f4f0ff;
+}
+#tab-activity-attendance .activity-att-table tbody tr:last-child td:first-child {
+    border-radius: 0 0 0 10px;
+}
+#tab-activity-attendance .activity-att-table tbody tr:last-child td:last-child {
+    border-radius: 0 0 10px 0;
+}
+
+/* Table wrapper — adds bottom border and shadow to complete the card */
+#tab-activity-attendance .table-wrap {
+    border: 1px solid #e8eaef;
+    border-top: none;
+    border-radius: 0 0 10px 10px;
+    overflow: hidden;
 }
 
 /* Column alignment */
@@ -9706,32 +9764,38 @@ tbody td {
     display: flex;
     align-items: center;
     justify-content: center;
-    gap: 8px;
-    padding: 12px 16px;
+    gap: 4px;
+    padding: 14px 16px 10px;
 }
 #activity-attendance-pagination .btn-page {
-    height: 32px;
-    padding: 0 14px;
+    height: 34px;
+    padding: 0 16px;
     background: #fff;
-    color: #4b5563;
-    border: 1px solid #d1d5db;
-    border-radius: 6px;
+    color: #475569;
+    border: 1px solid #e2e5ee;
+    border-radius: 7px;
     font-size: 13px;
     cursor: pointer;
-    transition: all 0.15s;
+    transition: all 0.2s cubic-bezier(0.25,1,0.5,1);
+    font-weight: 500;
 }
 #activity-attendance-pagination .btn-page:hover:not(:disabled) {
-    border-color: #6366f1;
-    color: #6366f1;
+    border-color: var(--color-primary, #7C3AED);
+    color: var(--color-primary, #7C3AED);
+    background: #f8f6ff;
+}
+#activity-attendance-pagination .btn-page:active:not(:disabled) {
+    transform: scale(0.96);
 }
 #activity-attendance-pagination .btn-page:disabled {
-    opacity: 0.4;
+    opacity: 0.35;
     cursor: default;
 }
 #activity-attendance-pagination .page-info {
     font-size: 13px;
-    color: #6b7280;
-    padding: 0 4px;
+    color: #64748b;
+    padding: 0 8px;
+    font-weight: 500;
 }
 
 /* ==================== 考勤模块 — 活动课耗 Tab ==================== */
@@ -9818,12 +9882,12 @@ tbody td {
 
 /* 活动考勤/课耗 Tab 颜色指示器 */
 #panel-attendance .att-tab:nth-child(3).active {
-    border-bottom-color: #74B9FF;
-    color: #74B9FF;
+    border-bottom-color: var(--color-primary, #7C3AED);
+    color: var(--color-primary, #7C3AED);
 }
 #panel-attendance .att-tab:nth-child(5).active {
-    border-bottom-color: #55EFC4;
-    color: #55EFC4;
+    border-bottom-color: #059669;
+    color: #059669;
 }
 
 /* 活动费用框架展示区 */
@@ -10483,34 +10547,35 @@ tbody td {
 /* --- Section Tabs – unified to purple brand --- */
 .section-tabs {
     display: flex;
-    border-bottom: 2px solid oklch(91% 0.01 290);
+    gap: 2px;
+    border-bottom: 1.5px solid #e9ebf0;
     padding: 0 24px;
-    background: var(--color-surface);
-    gap: 0;
+    background: transparent;
 }
 .sec-tab {
-    padding: 12px 24px;
+    padding: 11px 20px;
     border: none;
     background: none;
     cursor: pointer;
-    font-size: 14px;
-    font-weight: 550;
-    color: oklch(55% 0.01 290);
-    border-bottom: 3px solid transparent;
-    margin-bottom: -2px;
-    transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
-    border-radius: 10px 10px 0 0;
+    font-size: 13.5px;
+    font-weight: 580;
+    color: #64748b;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1.5px;
+    transition: color 0.2s cubic-bezier(0.25,1,0.5,1), border-color 0.2s cubic-bezier(0.25,1,0.5,1), background 0.15s cubic-bezier(0.25,1,0.5,1);
+    border-radius: 8px 8px 0 0;
     position: relative;
+    letter-spacing: 0.01em;
 }
 .sec-tab:hover {
-    color: oklch(35% 0.04 290);
-    background: oklch(94% 0.015 290);
+    color: var(--color-primary);
+    background: rgba(124,58,237,0.04);
 }
 .sec-tab.active {
-    color: oklch(32% 0.1 290);
+    color: var(--color-primary);
     border-bottom-color: var(--color-primary);
-    background: linear-gradient(to bottom, oklch(93% 0.03 290 / 0.5), transparent);
-    font-weight: 620;
+    font-weight: 600;
+    background: rgba(124,58,237,0.04);
 }
 
 /* --- Action Button Group --- */
