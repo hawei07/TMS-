@@ -9675,22 +9675,6 @@ if (intval($countBt) === 0) {
                 </div>
             </div>
 
-            <!-- 卡片：赠送课时（仅非小课包方案显示） -->
-            <div class="pi-card" id="pi-gift-card">
-                <div class="pi-card-title">🎁 赠送课时</div>
-                <div class="pi-card-body">
-                    <div class="form-group">
-                        <label>赠送课时数（选偶数）</label>
-                        <div class="stepper-group">
-                            <button type="button" class="stepper-btn" onclick="stepGiftedLessons(-2)">−</button>
-                            <input type="number" id="price-item-gifted-lessons" value="0" min="0" step="2" readonly>
-                            <button type="button" class="stepper-btn" onclick="stepGiftedLessons(2)">+</button>
-                        </div>
-                        <small style="color:#999;">最小 0，步进 2（只能选偶数），小课包不适用</small>
-                    </div>
-                </div>
-            </div>
-
             <!-- 卡片：价格设置 -->
             <div class="pi-card">
                 <div class="pi-card-title">💰 价格设置</div>
@@ -9731,6 +9715,22 @@ if (intval($countBt) === 0) {
                             <label>商品券</label>
                             <select id="price-item-coupon"><option value="">不使用商品券</option></select>
                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 卡片：赠送课时（仅非小课包方案显示） -->
+            <div class="pi-card" id="pi-gift-card">
+                <div class="pi-card-title">🎁 赠送课时</div>
+                <div class="pi-card-body">
+                    <div class="form-group">
+                        <label>赠送课时数（选偶数）</label>
+                        <div class="stepper-group">
+                            <button type="button" class="stepper-btn" onclick="stepGiftedLessons(-2)">−</button>
+                            <input type="number" id="price-item-gifted-lessons" value="0" min="0" step="2" readonly>
+                            <button type="button" class="stepper-btn" onclick="stepGiftedLessons(2)">+</button>
+                        </div>
+                        <small style="color:#999;">最小 0，步进 2（只能选偶数），小课包不适用</small>
                     </div>
                 </div>
             </div>
