@@ -7133,7 +7133,7 @@ json([
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
 
-            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.consumed_amount_post_tax, ca.campus, ca.deduction_json, ca.adult_attended, ca.student_attended, ca.deduction_breakdown, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name, s.phone AS student_phone, s.student_no, o.actual_price AS activity_total_price, o.activity_adult_count, o.activity_student_count FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id LEFT JOIN orders o ON ca.activity_order_id = o.id AND o.order_type = '活动' $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT ca.id AS attendance_id, ca.session_date, ca.deducted_lessons, ca.consumed_amount, ca.consumed_amount_post_tax, o.campus, ca.deduction_json, ca.adult_attended, ca.student_attended, ca.deduction_breakdown, ca.activity_id, ca.activity_order_id, ca.created_at, a.name AS activity_name, s.name AS student_name, s.phone AS student_phone, s.student_no, o.actual_price AS activity_total_price, o.activity_adult_count, o.activity_student_count FROM class_attendance ca LEFT JOIN activities a ON ca.activity_id = a.id LEFT JOIN students s ON ca.student_id = s.id LEFT JOIN orders o ON ca.activity_order_id = o.id AND o.order_type = '活动' $whereStr ORDER BY ca.created_at DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, PDO::PARAM_STR);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);

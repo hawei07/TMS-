@@ -126,7 +126,7 @@ market-system-php/
 
 ## 三、数据库设计
 
-### 3.1 表概览（26 张表）
+### 3.1 表概览（27 张表）
 
 | 表名 | 用途 | 关联 |
 |------|------|------|
@@ -153,6 +153,7 @@ market-system-php/
 | `price_items` | 报价单明细 | plan_id → price_plans.id |
 | `orders` | 交易订单（含活动订单） | student_id → students.id, course_id → courses.id, activity_id → activities.id |
 | `class_attendance` | 班级/活动考勤记录 | student_id → students.id, activity_id → activities.id |
+| `tax_rates` | 校区税率配置（课耗/产品） | campus_id → organizations.id |
 | `parent_orders` | 父订单（汇总同一录单的所有子订单） | parent_order_no → orders.parent_order_no |
 | `refund_records` | 退费记录（申请→三级审批→财务确认） | order_id → orders.id, student_id → students.id |
 | `student_subject_teacher` | 学员-校区-学科-授课老师关联 | student_id → students.id, campus_id → organizations.id, subject_id → subjects.id, teacher_id → employees.id |
@@ -468,6 +469,17 @@ class_attendance 新增以下活动考勤字段（2026-07-10）：
 | adult_attended | INT | 0 | 成人实际出勤人数 |
 | student_attended | INT | 0 | 学员实际出勤人数 |
 | deduction_breakdown | TEXT | NULL | 扣课时明细 JSON |
+| consumed_amount_post_tax | DECIMAL(10,2) | NULL | 课耗金额-税后（固化值。考勤保存时从 orders 表反查校区税率计算并写入；NULL 时前端显示"—"并降级实时计算） |
+
+### 3.26 tax_rates（校区税率表）
+
+| 字段 | 类型 | 默认值 | 说明 |
+|------|------|--------|------|
+| id | INT PK | AUTO_INCREMENT | 主键 |
+| campus_id | INT | — | 校区 ID → organizations.id（唯一） |
+| course_tax_rate | DECIMAL(10,2) | 0 | 课耗税率（%） |
+| product_tax_rate | DECIMAL(10,2) | 0 | 产品税率（%） |
+| updated_at | VARCHAR(500) | '' | 更新时间 |
 
 ### 3.20 attendance_records（上课记录表）
 
@@ -681,7 +693,7 @@ subjects                  courses              ┌──────────
 
 ## 四、后端 API 完整列表
 
-所有 API 通过 `?action=<name>` 路由，统一返回 JSON。共 **88 个** action。
+所有 API 通过 `?action=<name>` 路由，统一返回 JSON。共 **90 个** action。
 
 ### 4.1 资源管理（9 个）
 
@@ -881,6 +893,13 @@ subjects                  courses              ┌──────────
 | action | 方法 | 说明 |
 |--------|------|------|
 | `get_stats` | GET | 返回 {my_resources, sea_resources, appointments, employees, courses} 五个计数 |
+
+### 4.21 税率设置（2 个）
+
+| action | 方法 | 说明 |
+|--------|------|------|
+| `list_tax_rates` | GET | 返回所有校区的税率配置（JOIN organizations 确保每校区一条记录） |
+| `save_tax_rate` | POST | 保存或更新指定校区的课耗税率/产品税率 |
 
 ---
 
@@ -1481,6 +1500,18 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 ---
 
 ## 九、更新日志
+
+### 2026-07-11
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| feat | **课耗金额-税后字段全链路实现**：`attendance_records` 和 `class_attendance` 两表新增 `consumed_amount_post_tax DECIMAL(10,2)`。公式 `consumedAmount / (1 + 校区课耗税率/100)`，考勤保存时固化写入；`add_attendance`、`update_attendance`、批量考勤 INSERT、活动考勤 INSERT/UPDATE 五处均计算并存储。前端课耗列表、学员详情上课记录、活动课耗列表均展示此列，历史 NULL 值时降级实时查询税率计算 | `index.php`、`static/js/main.js` | 6afbad8、587cd6e、9967074、9f55de1、74f1867 |
+| feat | **税率设置功能**：新增 `tax_rates` 表（campus_id + course_tax_rate + product_tax_rate）；新增 `list_tax_rates`（LEFT JOIN organizations 确保每校区一条记录，修复 t.campus_id→o.id AS campus_id 的 NULL 值问题）和 `save_tax_rate` API；前端基础设置面板新增税率设置标签页 | `index.php`、`static/js/main.js` | 7d4178d |
+| fix | **活动课耗列表加载失败**：SQL 中 `ca.campus` 在 `class_attendance` 表不存在，改为从已 JOIN 的 `orders` 表取 `o.campus` | `index.php` | — |
+| refactor | **导航栏重构为左右分栏**：左侧主菜单 + 右侧二级面板，renderSubNav 改用 DOM API 构建，修复二级导航面板不显示问题 | `static/js/main.js` | 07bf91e、f99f293、e551c25 |
+| refactor | **我的资源面板 UI 优化**：移除添加沟通记录按钮，筛选区域 UI 重构，所有页签统一样式 | `index.php`、`static/js/main.js`、`static/css/style.css` | 3d1d8b6、267198f、33693bc |
+| fix | **报读活动列表对齐活动考勤列表**：`get_student_activities` SQL 与 `list_activity_attendance` 字段对齐，新增 teacher 列 | `index.php` | e381d51 |
+| fix | **class_attendance 缺 teacher 列**：报读活动查询失败，ALTER TABLE 补充 teacher 列 | `index.php` | 56f5a14 |
 
 ### 2026-07-01
 
