@@ -6753,7 +6753,7 @@ json([
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
                 // 查询考勤状态
-                $attStmt = $db->prepare("SELECT id, status, adult_attended, student_attended, deduction_breakdown, session_date, created_at, deduction_json FROM class_attendance WHERE activity_id = :aid AND activity_order_id = :aoid LIMIT 1");
+                $attStmt = $db->prepare("SELECT id, status, adult_attended, student_attended, deduction_breakdown, session_date, created_at, deduction_json, teacher FROM class_attendance WHERE activity_id = :aid AND activity_order_id = :aoid LIMIT 1");
                 $attStmt->bindValue(':aid', $r['activity_id'], PDO::PARAM_INT);
                 $attStmt->bindValue(':aoid', $r['order_id'], PDO::PARAM_INT);
                 $attStmt->execute();
