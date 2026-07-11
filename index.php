@@ -1009,7 +1009,7 @@ $stmt->execute();
             json(['data' => $rows]);
 
         case 'list_tax_rates':
-            $sql = "SELECT t.id, t.campus_id, o.name AS campus_name, COALESCE(t.course_tax_rate,0) AS course_tax_rate, COALESCE(t.product_tax_rate,0) AS product_tax_rate, COALESCE(t.updated_at,'') AS updated_at FROM organizations o LEFT JOIN tax_rates t ON t.campus_id = o.id WHERE o.type='校区' ORDER BY o.name";
+            $sql = "SELECT t.id, o.id AS campus_id, o.name AS campus_name, COALESCE(t.course_tax_rate,0) AS course_tax_rate, COALESCE(t.product_tax_rate,0) AS product_tax_rate, COALESCE(t.updated_at,'') AS updated_at FROM organizations o LEFT JOIN tax_rates t ON t.campus_id = o.id WHERE o.type='校区' ORDER BY o.name";
             $stmt = $db->query($sql);
             $rows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) {
