@@ -7496,12 +7496,6 @@ if (intval($countBt) === 0) {
                         </span>
                         <span class="action-btn-label">批量分配</span>
                     </button>
-                                                          <button class="action-btn" onclick="openBatchCommunication()" title="添加沟通记录（请先勾选资源）">
-                        <span class="action-btn-icon">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
-                        </span>
-                        <span class="action-btn-label">添加沟通记录</span>
-                    </button>
                     <button class="action-btn action-btn-warn" onclick="batchMoveToSea()" title="移入公海">
                         <span class="action-btn-icon">
                             <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M16 1H4c-1.1 0-2 .9-2 2v14h2V3h12V1zm-1 4H8c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h7c1.1 0 2-.9 2-2V7c0-1.1-.9-2-2-2zm0 16H8V7h7v14z"/></svg>
