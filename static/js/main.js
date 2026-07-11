@@ -4127,6 +4127,16 @@ function enterInlineEdit(tr, item) {
     // 快照原始值，用于 Esc 还原
     tr._snapshot = {};
 
+    // 确定商品券学科过滤（根据当前报价单的教材包学科）
+    let inlineProductCouponSubjectId = 0;
+    if (!isSmallPack) {
+        const itemTaId = parseInt(item.teaching_aid_id) || 0;
+        if (itemTaId > 0) {
+            const itemTa = priceItemTeachingAids.find(a => a.id === itemTaId);
+            if (itemTa && itemTa.subject_id) inlineProductCouponSubjectId = itemTa.subject_id;
+        }
+    }
+
     tr.querySelectorAll('td.pi-editable, td.pi-readonly').forEach(td => {
         const field = td.dataset.field;
         const original = td.dataset.original || td.textContent.trim();
@@ -4157,7 +4167,7 @@ function enterInlineEdit(tr, item) {
             if (isSmallPack) {
                 td.innerHTML = '<span style="color:#999;">—</span>';
             } else {
-                td.innerHTML = buildInlineProductCouponSelect(field, original);
+                td.innerHTML = buildInlineProductCouponSelect(field, original, inlineProductCouponSubjectId);
             }
         } else if (field === 'name') {
             td.innerHTML = `<input type="text" class="inline-edit-input" value="${escAttr(item.name || '')}" data-field="name">`;
@@ -4231,11 +4241,18 @@ function buildInlineCourseCouponSelect(field, selectedValue) {
     return html;
 }
 
-function buildInlineProductCouponSelect(field, selectedValue) {
+function buildInlineProductCouponSelect(field, selectedValue, subjectId = 0) {
+    let coupons = priceItemCoupons;
+    if (subjectId > 0) {
+        coupons = coupons.filter(c => {
+            if (!c.subject_ids || c.subject_ids === '') return true; // 未限制学科 → 适用所有
+            return c.subject_ids.split(',').map(Number).includes(subjectId);
+        });
+    }
     let html = `<select class="inline-edit-select" data-field="${field}">`;
     html += '<option value="">不使用商品券</option>';
-    if (priceItemCoupons.length > 0) {
-        html += priceItemCoupons.map(c =>
+    if (coupons.length > 0) {
+        html += coupons.map(c =>
             `<option value="${c.id}"${String(c.id) === String(selectedValue) ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
         ).join('');
     }
@@ -4309,18 +4326,19 @@ async function reloadInlineProductCoupons(tr, subjectId) {
     if (!select) return;
     const currentVal = select.value;
     select.classList.add('loading');
+    let filteredData = priceItemCoupons;
     try {
         const params = { coupon_type: '商品券', page_size: 200 };
         if (subjectId && subjectId > 0) params.subject_id = subjectId;
         const res = await api('list_coupons', params, 'GET');
-        priceItemCoupons = res.data || [];
+        filteredData = res.data || [];
     } catch (e) {
         // 加载失败保留原数据
     }
     select.classList.remove('loading');
     // 重建下拉
     let html = '<option value="">不使用商品券</option>';
-    html += priceItemCoupons.map(c =>
+    html += filteredData.map(c =>
         `<option value="${c.id}"${String(c.id) === currentVal ? ' selected' : ''}>${esc(c.name)}（¥${Number(c.amount || 0).toFixed(2)}）</option>`
     ).join('');
     select.innerHTML = html;

@@ -2372,7 +2372,7 @@ $stmt->execute();
                 $where[] = 'c.coupon_type = ' . $db->quote($couponType);
             }
             if ($planType !== '') {
-                $where[] = 'c.plan_type = ' . $db->quote($planType);
+                $where[] = '(c.plan_type = ' . $db->quote($planType) . ' OR c.plan_type IS NULL OR c.plan_type = \'\')';
             }
             if ($campusId > 0) {
                 $where[] = '(c.id IN (SELECT coupon_id FROM coupon_campuses WHERE campus_id=' . $campusId . ') OR c.id NOT IN (SELECT coupon_id FROM coupon_campuses))';

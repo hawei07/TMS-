@@ -10400,49 +10400,78 @@ tbody td {
 
 /* --- Action Button Group --- */
 .action-button-group {
-    padding: 16px 24px 8px;
+    padding: 12px 24px 8px;
 }
 .action-btn {
     display: inline-flex;
     align-items: center;
-    gap: 8px;
-    padding: 9px 18px;
-    border: 1.5px solid var(--color-primary);
-    border-radius: 10px;
+    gap: 5px;
+    padding: 6px 14px;
+    border: none;
+    border-radius: 7px;
     background: var(--color-primary);
     color: #fff;
     cursor: pointer;
-    font-size: 13px;
-    font-weight: 550;
+    font-size: 12.5px;
+    font-weight: 560;
     font-family: inherit;
-    transition: all 0.2s ease;
-    box-shadow: 0 1px 3px rgba(124, 58, 237, 0.18);
+    letter-spacing: 0.15px;
+    transition: 
+        transform 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+        box-shadow 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94),
+        opacity 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    box-shadow: 
+        0 0.5px 1.5px rgba(124, 58, 237, 0.12),
+        0 1px 3px rgba(124, 58, 237, 0.08);
+    position: relative;
+    overflow: hidden;
+}
+.action-btn::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    background: oklch(100% 0 0 / 0);
+    transition: background 0.25s cubic-bezier(0.25, 0.46, 0.45, 0.94);
+    border-radius: inherit;
+    pointer-events: none;
 }
 .action-btn:hover {
     background: oklch(38% 0.16 290);
-    border-color: oklch(38% 0.16 290);
-    box-shadow: 0 2px 8px rgba(124, 58, 237, 0.28);
-    transform: translateY(-1px);
+    box-shadow: 
+        0 1px 3px rgba(124, 58, 237, 0.18),
+        0 3px 8px rgba(124, 58, 237, 0.12);
+    transform: translateY(-0.5px);
+}
+.action-btn:hover::after {
+    background: oklch(100% 0 0 / 0.06);
 }
 .action-btn:active {
-    transform: translateY(0);
-    box-shadow: 0 1px 2px rgba(124, 58, 237, 0.15);
+    transform: translateY(0) scale(0.975);
+    box-shadow: 0 0.5px 1px rgba(124, 58, 237, 0.10);
+}
+.action-btn:active::after {
+    background: oklch(0% 0 0 / 0.08);
+}
+.action-btn:focus-visible {
+    outline: 2px solid oklch(55% 0.15 290);
+    outline-offset: 2px;
 }
 .action-btn-icon {
     display: flex;
     align-items: center;
     justify-content: center;
-    width: 20px;
-    height: 20px;
+    width: 16px;
+    height: 16px;
     flex-shrink: 0;
 }
 .action-btn-icon svg {
-    width: 18px;
-    height: 18px;
+    width: 15px;
+    height: 15px;
 }
 .action-btn-label {
-    font-size: 13px;
-    font-weight: 550;
+    font-size: 12.5px;
+    font-weight: 560;
+    line-height: 1;
 }
 
 /* --- Filter Bar --- */
