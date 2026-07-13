@@ -1790,58 +1790,6 @@ $stmt->execute();
             }
             json(['message' => $msg, 'order_ids' => $orderIds, 'count' => count($orderIds)]);
 
-        case 'save_price_plan':
-            if ($method !== 'POST') json(['error' => 'Method not allowed']);
-            $courseId = intval($input['course_id'] ?? 0);
-            $planName = trim($input['plan_name'] ?? '');
-            $planType = trim($input['plan_type'] ?? '');
-            $items = $input['items'] ?? [];
-            if (!$courseId) json(['error' => '课程ID无效']);
-            if (!$planName) json(['error' => '方案名称不能为空']);
-            if (!is_array($items) || count($items) === 0) json(['error' => '至少需要一个报价单']);
-
-            $planId = intval($input['plan_id'] ?? 0);
-            if ($planId > 0) {
-                // 编辑：更新方案名称，全量替换报价单
-                $existing = $db->query("SELECT * FROM price_plans WHERE id=$planId")->fetch(PDO::FETCH_ASSOC);
-                if (!$existing) json(['error' => '价格方案不存在']);
-                $db->exec("UPDATE price_plans SET name=" . $db->quote($planName) . ", plan_type=" . $db->quote($planType) . " WHERE id=$planId");
-                $db->exec("DELETE FROM price_items WHERE plan_id=$planId");
-            } else {
-                // 新增
-                $db->exec("INSERT INTO price_plans (course_id, name, plan_type, created_at) VALUES ($courseId, " . $db->quote($planName) . ", " . $db->quote($planType) . ", '" . now() . "')");
-                $planId = $db->lastInsertId();
-            }
-
-            // 插入报价单
-            foreach ($items as $idx => $item) {
-                $itemName = trim($item['name'] ?? '');
-                $lessonCount = intval($item['lesson_count'] ?? 0);
-                $unitPrice = floatval($item['unit_price'] ?? 0);
-                $actualPrice = floatval($item['actual_price'] ?? $unitPrice);
-                $sortOrder = intval($item['sort_order'] ?? $idx);
-                $discountPlanId = intval($item['discount_plan_id'] ?? 0);
-                $productCouponId = intval($item['product_coupon_id'] ?? 0);
-                $couponId = intval($item['coupon_id'] ?? 0);
-                $teachingAidId = intval($item['teaching_aid_id'] ?? 0);
-                $giftedLessons = intval($item['gifted_lessons'] ?? 0);
-                if (!$itemName || $lessonCount <= 0) continue;
-                $db->exec("INSERT INTO price_items (plan_id, name, lesson_count, unit_price, actual_price, discount_plan_id, coupon_id, teaching_aid_id, product_coupon_id, gifted_lessons, sort_order) VALUES ($planId, " . $db->quote($itemName) . ", $lessonCount, $unitPrice, $actualPrice, "
-                    . ($discountPlanId > 0 ? $discountPlanId : 'NULL') . ", "
-                    . ($couponId > 0 ? $couponId : 'NULL') . ", "
-                    . ($teachingAidId > 0 ? $teachingAidId : 'NULL') . ", "
-                    . ($productCouponId > 0 ? $productCouponId : 'NULL') . ", $giftedLessons, $sortOrder)");
-            }
-            json(['id' => $planId, 'message' => $planId ? '价格方案保存成功' : '价格方案保存成功']);
-
-        case 'delete_price_plan':
-            if ($method !== 'POST') json(['error' => 'Method not allowed']);
-            $planId = intval($input['plan_id'] ?? 0);
-            if (!$planId) json(['error' => '方案ID无效']);
-            $db->exec("DELETE FROM price_items WHERE plan_id=$planId");
-            $db->exec("DELETE FROM price_plans WHERE id=$planId");
-            json(['message' => '价格方案删除成功']);
-
 // ==================== 学科设置 API ====================
         case 'list_subjects':
             $res = $db->query("SELECT s.* FROM subjects s INNER JOIN (SELECT MIN(id) as mid FROM subjects GROUP BY name, parent_id) AS t ON s.id = t.mid ORDER BY s.sort_order, s.id");
@@ -2797,52 +2745,6 @@ $stmt->execute();
             break;
 
         // ==================== 交易订单 API ====================
-        case 'void_order':
-            if ($method !== 'POST') json(['error' => 'Method not allowed']);
-            $oid = intval($input['order_id'] ?? 0);
-            if ($oid <= 0) { json(['success' => false, 'message' => '订单ID无效']); break; }
-            $order = $db->query("SELECT student_id, course_id, lesson_count, consumed_lessons, is_voided, order_type, activity_id, activity_campus, activity_adult_count, activity_student_count, account_amount FROM orders WHERE id = $oid")->fetch();
-            if (!$order) { json(['success' => false, 'message' => '订单不存在']); break; }
-            if ($order['is_voided'] === '是') { json(['success' => false, 'message' => '该订单已作废']); break; }
-
-            // 活动订单：单独处理
-            if (($order['order_type'] ?? '') === '活动') {
-                // 检查是否已有考勤
-                $attCount = $db->query("SELECT COUNT(*) FROM class_attendance WHERE activity_order_id = $oid")->fetchColumn();
-                if (intval($attCount) > 0) json(['success' => false, 'message' => '该活动已有考勤记录，请先删除考勤后再作废']);
-                
-                // 归还账户余额
-                $accountAmount = floatval($order['account_amount'] ?? 0);
-                if ($accountAmount > 0) {
-                    $sid = intval($order['student_id']);
-                    $db->exec("UPDATE student_accounts SET balance = balance + $accountAmount, total_consume = GREATEST(0, total_consume - $accountAmount) WHERE student_id = $sid");
-                }
-                
-                // 作废订单
-                $db->exec("UPDATE orders SET is_voided = '是' WHERE id = $oid");
-                
-                // 更新活动报名人数统计
-                $activityId = intval($order['activity_id'] ?? 0);
-                $campusName = $order['activity_campus'] ?? '';
-                $adultCount = intval($order['activity_adult_count'] ?? 0);
-                $studentCount = intval($order['activity_student_count'] ?? 0);
-                if ($activityId > 0 && $campusName) {
-                    $db->exec("UPDATE activity_enrollment_counts SET adult_count = GREATEST(0, adult_count - $adultCount), student_count = GREATEST(0, student_count - $studentCount) WHERE activity_id = $activityId AND campus_name = " . $db->quote($campusName));
-                }
-                
-                json(['success' => true, 'message' => '活动订单已作废']);
-                break;
-            }
-
-            // 课程订单：原有逻辑
-            $lc = intval($order['lesson_count']);
-            $cl = intval($order['consumed_lessons']);
-            $remaining = $lc - $cl;
-            if ($lc != $remaining) { json(['success' => false, 'message' => '该订单已有课时消耗，无法作废']); break; }
-            $db->exec("UPDATE orders SET is_voided = '是' WHERE id = $oid");
-            json(['success' => true]);
-            break;
-
 // ==================== 退费记录 API ====================
         // 提交退费申请
         case 'submit_refund':

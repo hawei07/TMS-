@@ -13,6 +13,9 @@ function orderApiRoutes(): array
         'list_orders' => 'listOrders',
         'get_order_detail' => 'getOrderDetail',
         'list_parent_orders' => 'listParentOrders',
+        'void_order' => 'voidOrder',
+        'save_price_plan' => 'savePricePlan',
+        'delete_price_plan' => 'deletePricePlan',
     ];
 }
 
@@ -528,4 +531,308 @@ function listParentOrders(PDO $db, string $method, array $query, array $input): 
         'page' => $page,
         'page_size' => $pageSize,
     ]);
+}
+function voidOrder(PDO $db, string $method, array $query, array $input): void
+{
+    if ($method !== 'POST') {
+        json(['error' => 'Method not allowed']);
+    }
+
+    $orderId = (int)($input['order_id'] ?? 0);
+    if ($orderId <= 0) {
+        json(['success' => false, 'message' => '订单ID无效']);
+    }
+
+    $db->beginTransaction();
+    try {
+        $orderStmt = $db->prepare(
+            'SELECT student_id,
+                    course_id,
+                    lesson_count,
+                    consumed_lessons,
+                    is_voided,
+                    order_type,
+                    activity_id,
+                    activity_campus,
+                    activity_adult_count,
+                    activity_student_count,
+                    account_amount
+             FROM orders
+             WHERE id = :id
+             FOR UPDATE'
+        );
+        $orderStmt->execute([':id' => $orderId]);
+        $order = $orderStmt->fetch(PDO::FETCH_ASSOC);
+        if (!$order) {
+            $db->rollBack();
+            json(['success' => false, 'message' => '订单不存在']);
+        }
+        if (($order['is_voided'] ?? '') === '是') {
+            $db->rollBack();
+            json(['success' => false, 'message' => '该订单已作废']);
+        }
+
+        if (($order['order_type'] ?? '') === '活动') {
+            $attendanceStmt = $db->prepare(
+                'SELECT id
+                 FROM class_attendance
+                 WHERE activity_order_id = :order_id
+                 LIMIT 1
+                 FOR UPDATE'
+            );
+            $attendanceStmt->execute([':order_id' => $orderId]);
+            if ($attendanceStmt->fetch(PDO::FETCH_ASSOC)) {
+                $db->rollBack();
+                json(['success' => false, 'message' => '该活动已有考勤记录，请先删除考勤后再作废']);
+            }
+
+            $accountAmount = (float)($order['account_amount'] ?? 0);
+            if ($accountAmount > 0) {
+                $accountStmt = $db->prepare(
+                    'UPDATE student_accounts
+                     SET balance = balance + :amount,
+                         total_consume = GREATEST(0, total_consume - :consume_amount)
+                     WHERE student_id = :student_id'
+                );
+                $accountStmt->execute([
+                    ':amount' => $accountAmount,
+                    ':consume_amount' => $accountAmount,
+                    ':student_id' => (int)$order['student_id'],
+                ]);
+            }
+
+            $voidStmt = $db->prepare("UPDATE orders SET is_voided = '是' WHERE id = :id");
+            $voidStmt->execute([':id' => $orderId]);
+
+            $activityId = (int)($order['activity_id'] ?? 0);
+            $campusName = $order['activity_campus'] ?? '';
+            if ($activityId > 0 && $campusName !== '') {
+                $countStmt = $db->prepare(
+                    'UPDATE activity_enrollment_counts
+                     SET adult_count = GREATEST(0, adult_count - :adult_count),
+                         student_count = GREATEST(0, student_count - :student_count)
+                     WHERE activity_id = :activity_id AND campus_name = :campus_name'
+                );
+                $countStmt->execute([
+                    ':adult_count' => (int)($order['activity_adult_count'] ?? 0),
+                    ':student_count' => (int)($order['activity_student_count'] ?? 0),
+                    ':activity_id' => $activityId,
+                    ':campus_name' => $campusName,
+                ]);
+            }
+
+            $db->commit();
+            json(['success' => true, 'message' => '活动订单已作废']);
+        }
+
+        $lessonCount = (int)$order['lesson_count'];
+        $consumedLessons = (int)$order['consumed_lessons'];
+        $remainingLessons = $lessonCount - $consumedLessons;
+        if ($lessonCount !== $remainingLessons) {
+            $db->rollBack();
+            json(['success' => false, 'message' => '该订单已有课时消耗，无法作废']);
+        }
+
+        $voidStmt = $db->prepare("UPDATE orders SET is_voided = '是' WHERE id = :id");
+        $voidStmt->execute([':id' => $orderId]);
+        $db->commit();
+        json(['success' => true]);
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('void_order failed: ' . $e->getMessage());
+        json(['success' => false, 'message' => '订单作废失败']);
+    }
+}
+/**
+ * @param array<int,mixed> $items
+ */
+function validatePricePlanReferences(PDO $db, array $items): void
+{
+    $references = [
+        'discount_plan_id' => ['discount_plans', '优惠方案不存在'],
+        'coupon_id' => ['coupons', '课时优惠券不存在'],
+        'teaching_aid_id' => ['teaching_aids', '教材包不存在'],
+        'product_coupon_id' => ['coupons', '商品券不存在'],
+    ];
+    $statements = [];
+    $checked = [];
+
+    foreach ($items as $item) {
+        if (!is_array($item)) {
+            continue;
+        }
+        foreach ($references as $field => [$table, $error]) {
+            $id = (int)($item[$field] ?? 0);
+            if ($id <= 0 || isset($checked[$table][$id])) {
+                continue;
+            }
+
+            $statements[$table] ??= $db->prepare("SELECT id FROM {$table} WHERE id = :id");
+            $statements[$table]->execute([':id' => $id]);
+            if (!$statements[$table]->fetch(PDO::FETCH_ASSOC)) {
+                json(['error' => $error]);
+            }
+            $checked[$table][$id] = true;
+        }
+    }
+}
+
+function savePricePlan(PDO $db, string $method, array $query, array $input): void
+{
+    if ($method !== 'POST') {
+        json(['error' => 'Method not allowed']);
+    }
+
+    $courseId = (int)($input['course_id'] ?? 0);
+    $planName = trim($input['plan_name'] ?? '');
+    $planType = trim($input['plan_type'] ?? '');
+    $items = $input['items'] ?? [];
+    if ($courseId <= 0) {
+        json(['error' => '课程ID无效']);
+    }
+    if ($planName === '') {
+        json(['error' => '方案名称不能为空']);
+    }
+    if (!is_array($items) || count($items) === 0) {
+        json(['error' => '至少需要一个报价单']);
+    }
+
+    $courseStmt = $db->prepare('SELECT id FROM courses WHERE id = :id');
+    $courseStmt->execute([':id' => $courseId]);
+    if (!$courseStmt->fetch(PDO::FETCH_ASSOC)) {
+        json(['error' => '课程不存在']);
+    }
+    validatePricePlanReferences($db, $items);
+
+    $planId = (int)($input['plan_id'] ?? 0);
+    $db->beginTransaction();
+    try {
+        if ($planId > 0) {
+            $existingStmt = $db->prepare(
+                'SELECT id, course_id FROM price_plans WHERE id = :id FOR UPDATE'
+            );
+            $existingStmt->execute([':id' => $planId]);
+            $existing = $existingStmt->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) {
+                $db->rollBack();
+                json(['error' => '价格方案不存在']);
+            }
+            if ((int)$existing['course_id'] !== $courseId) {
+                $db->rollBack();
+                json(['error' => '价格方案与课程不匹配']);
+            }
+
+            $updateStmt = $db->prepare(
+                'UPDATE price_plans SET name = :name, plan_type = :plan_type WHERE id = :id'
+            );
+            $updateStmt->execute([
+                ':name' => $planName,
+                ':plan_type' => $planType,
+                ':id' => $planId,
+            ]);
+
+            $deleteItems = $db->prepare('DELETE FROM price_items WHERE plan_id = :plan_id');
+            $deleteItems->execute([':plan_id' => $planId]);
+        } else {
+            $insertPlan = $db->prepare(
+                'INSERT INTO price_plans (course_id, name, plan_type, created_at)
+                 VALUES (:course_id, :name, :plan_type, :created_at)'
+            );
+            $insertPlan->execute([
+                ':course_id' => $courseId,
+                ':name' => $planName,
+                ':plan_type' => $planType,
+                ':created_at' => now(),
+            ]);
+            $planId = $db->lastInsertId();
+        }
+
+        $insertItem = $db->prepare(
+            'INSERT INTO price_items
+                (plan_id, name, lesson_count, unit_price, actual_price,
+                 discount_plan_id, coupon_id, teaching_aid_id, product_coupon_id,
+                 gifted_lessons, sort_order)
+             VALUES
+                (:plan_id, :name, :lesson_count, :unit_price, :actual_price,
+                 :discount_plan_id, :coupon_id, :teaching_aid_id, :product_coupon_id,
+                 :gifted_lessons, :sort_order)'
+        );
+
+        foreach ($items as $index => $item) {
+            if (!is_array($item)) {
+                continue;
+            }
+            $itemName = trim($item['name'] ?? '');
+            $lessonCount = (int)($item['lesson_count'] ?? 0);
+            if ($itemName === '' || $lessonCount <= 0) {
+                continue;
+            }
+
+            $unitPrice = (float)($item['unit_price'] ?? 0);
+            $insertItem->execute([
+                ':plan_id' => $planId,
+                ':name' => $itemName,
+                ':lesson_count' => $lessonCount,
+                ':unit_price' => $unitPrice,
+                ':actual_price' => (float)($item['actual_price'] ?? $unitPrice),
+                ':discount_plan_id' => pricePlanNullableId($item['discount_plan_id'] ?? 0),
+                ':coupon_id' => pricePlanNullableId($item['coupon_id'] ?? 0),
+                ':teaching_aid_id' => pricePlanNullableId($item['teaching_aid_id'] ?? 0),
+                ':product_coupon_id' => pricePlanNullableId($item['product_coupon_id'] ?? 0),
+                ':gifted_lessons' => (int)($item['gifted_lessons'] ?? 0),
+                ':sort_order' => (int)($item['sort_order'] ?? $index),
+            ]);
+        }
+
+        $db->commit();
+        json(['id' => $planId, 'message' => '价格方案保存成功']);
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('save_price_plan failed: ' . $e->getMessage());
+        json(['error' => '价格方案保存失败']);
+    }
+}
+
+function pricePlanNullableId(mixed $value): ?int
+{
+    $id = (int)$value;
+    return $id > 0 ? $id : null;
+}
+
+function deletePricePlan(PDO $db, string $method, array $query, array $input): void
+{
+    if ($method !== 'POST') {
+        json(['error' => 'Method not allowed']);
+    }
+
+    $planId = (int)($input['plan_id'] ?? 0);
+    if ($planId <= 0) {
+        json(['error' => '方案ID无效']);
+    }
+
+    $db->beginTransaction();
+    try {
+        $planStmt = $db->prepare('SELECT id FROM price_plans WHERE id = :id FOR UPDATE');
+        $planStmt->execute([':id' => $planId]);
+        $planStmt->fetch(PDO::FETCH_ASSOC);
+
+        $deleteItems = $db->prepare('DELETE FROM price_items WHERE plan_id = :plan_id');
+        $deleteItems->execute([':plan_id' => $planId]);
+
+        $deletePlan = $db->prepare('DELETE FROM price_plans WHERE id = :id');
+        $deletePlan->execute([':id' => $planId]);
+
+        $db->commit();
+        json(['message' => '价格方案删除成功']);
+    } catch (Throwable $e) {
+        if ($db->inTransaction()) {
+            $db->rollBack();
+        }
+        error_log('delete_price_plan failed: ' . $e->getMessage());
+        json(['error' => '价格方案删除失败']);
+    }
 }

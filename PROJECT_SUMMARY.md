@@ -76,7 +76,7 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 - **系统名称**：TMS管理系统
 - **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、活动管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
 - **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 13700 行）+ CSS3（约 11000 行）
-- **架构模式**：仍以 `index.php` 单体业务入口为主，数据库配置、启动装配、公共函数和版本化迁移已经拆分；基础字典、组织、基础设置、画具、优惠配置和订单查询共 54 个 action 已通过兼容路由迁移到 `api/`，其余 action 继续由原 switch 处理。
+- **架构模式**：仍以 `index.php` 单体业务入口为主，数据库配置、启动装配、公共函数和版本化迁移已经拆分；基础字典、组织、基础设置、画具、优惠配置、订单查询、订单作废和报价写接口共 57 个 action 已通过兼容路由迁移到 `api/`，其余 action 继续由原 switch 处理。
 
 ---
 
@@ -114,7 +114,7 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 ```
 market-system-php/
-├── index.php                     # HTTP 入口、API 路由和 HTML（约 9818 行）
+├── index.php                     # HTTP 入口、API 路由和 HTML（约 9720 行）
 ├── app/
 │   ├── bootstrap.php             # 启动装配与迁移入口
 │   ├── database.php              # PDO 连接创建
@@ -130,7 +130,7 @@ market-system-php/
 │   ├── settings.php              # 校区、税率和上课时段 API
 │   ├── teaching_aids.php         # 画具管理与销售 API
 │   ├── discounts.php             # 优惠方案、优惠券与发放记录 API
-│   └── orders.php                # 报价与订单只读查询 API
+│   └── orders.php                # 报价管理、订单查询与订单作废 API
 ├── migrations/
 │   ├── MigrationRunner.php       # 迁移发现、并发锁与版本记录
 │   ├── migrate.php               # CLI 迁移入口
@@ -1531,7 +1531,9 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | refactor | **API 模块化第二批**：迁移组织架构、校区、税率和上课时段 11 个 action；新增重复路由检测，四个列表响应逐字兼容 | `api/`、`index.php` | d6bda66 |
 | refactor | **API 模块化第三批**：迁移画具管理与销售 9 个 action；保留余额锁、支付分摊、商品税率和账户流水事务，五个只读响应逐字兼容 | `api/`、`index.php` | d6bda66 |
 | refactor | **API 模块化第四批**：迁移优惠方案、优惠券和发放记录 13 个 action；保留关联表事务更新和报价单价格重算，五个只读响应逐字兼容 | `api/`、`index.php` | 4076ff7 |
-| refactor | **API 模块化第五批**：迁移报价方案、课程报价、订单列表、订单详情和父订单列表 5 个只读 action；筛选、支付汇总和详情金额响应逐字兼容 | `api/`、`index.php` | 待提交 |
+| refactor | **API 模块化第五批**：迁移报价方案、课程报价、订单列表、订单详情和父订单列表 5 个只读 action；筛选、支付汇总和详情金额响应逐字兼容 | `api/`、`index.php` | 06ff1ce |
+| refactor | **API 模块化第六批**：迁移 `void_order`；增加事务、订单行锁和活动考勤锁，统一保护余额返还、订单作废与活动人数回滚 | `api/orders.php`、`index.php` | 待提交 |
+| refactor | **API 模块化第七批**：迁移报价方案保存/删除；增加方案行锁、全量替换事务和课程/优惠/券/教材引用校验 | `api/orders.php`、`index.php` | 待提交 |
 
 ### 2026-07-11
 
