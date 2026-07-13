@@ -9701,24 +9701,28 @@ async function showApproveModal(id) {
         infoCardsHtml += `</div>
             <div class="approve-info-card card-amount card-full">
                 <div class="card-title">💰 金额明细</div>
-                <div class="amount-grid">
-                    <div class="amount-item"><div class="amount-label">报读课时</div><div class="amount-value">${parseInt(rr.total_lessons) || 0}</div></div>
-                    <div class="amount-item"><div class="amount-label">报读金额</div><div class="amount-value">¥${Number(rr.total_amount || 0).toFixed(2)}</div></div>
-                    <div class="amount-item"><div class="amount-label">消耗课时</div><div class="amount-value">${parseInt(rr.consumed_lessons) || 0}</div></div>
-                    <div class="amount-item"><div class="amount-label">消耗金额</div><div class="amount-value">¥${Number(rr.consumed_amount || 0).toFixed(2)}</div></div>
-                    <div class="amount-item"><div class="amount-label">剩余可退课时</div><div class="amount-value">${parseInt(rr.remaining_lessons) || 0}</div></div>
-                    <div class="amount-item"><div class="amount-label">剩余可退金额</div><div class="amount-value">¥${Number(rr.remaining_amount || 0).toFixed(2)}</div></div>
-                    <div class="amount-item"><div class="amount-label">自定义扣减</div><div class="amount-value">¥${Number(rr.custom_deduction || 0).toFixed(2)}</div></div>
-                    <div class="amount-item amount-hero"><div class="amount-label">实退金额</div><div class="amount-value">¥${Number(rr.actual_refund || 0).toFixed(2)}</div></div>
-                </div>
-                ${(returnTA && taName) ? `<div class="approve-ta-amount-note">
-                    <div class="approve-ta-amount-title">📦 教材包退还明细</div>
-                    <div class="amount-grid amount-grid-ta">
-                        <div class="amount-item"><div class="amount-label">教材包金额</div><div class="amount-value">¥${taPrice.toFixed(2)}</div></div>
-                        <div class="amount-item"><div class="amount-label">教材包优惠</div><div class="amount-value">-¥${taCoupon.toFixed(2)}</div></div>
-                        <div class="amount-item amount-hero"><div class="amount-label">教材包实退</div><div class="amount-value">¥${(taPrice - taCoupon).toFixed(2)}</div></div>
+                <div class="amount-rows">
+                    <div class="amount-row">
+                        <span class="amount-label">退还课时</span>
+                        <span class="amount-value">${parseInt(rr.remaining_lessons) || 0}</span>
                     </div>
-                </div>` : ''}
+                    <div class="amount-row">
+                        <span class="amount-label">退还课时金额</span>
+                        <span class="amount-value">¥${Number(rr.remaining_amount || 0).toFixed(2)}</span>
+                    </div>
+                    ${(taName) ? `<div class="amount-row">
+                        <span class="amount-label">教材包实退</span>
+                        <span class="amount-value">¥${returnTA ? (taPrice - taCoupon).toFixed(2) : '0.00'}</span>
+                    </div>` : ''}
+                    <div class="amount-row">
+                        <span class="amount-label">自定义扣减</span>
+                        <span class="amount-value">-¥${Number(rr.custom_deduction || 0).toFixed(2)}</span>
+                    </div>
+                    <div class="amount-row amount-row--result">
+                        <span class="amount-label">实退金额</span>
+                        <span class="amount-value">¥${Number(rr.actual_refund || 0).toFixed(2)}</span>
+                    </div>
+                </div>
             </div>
         </div>`;
 

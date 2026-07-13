@@ -5450,31 +5450,40 @@ tbody td {
     font-size: 12px;
 }
 
-/* 金额卡片 */
+/* 教材包分割线（订单信息卡片内） */
+#modal-refund-approve .approve-ta-divider {
+    height: 1px;
+    background: #EDE9FE;
+    margin: 8px 0;
+}
+
+/* 金额卡片 — 行式布局 */
 #modal-refund-approve .card-amount {
     background: linear-gradient(180deg, #FAF8FF 0%, #FFFFFF 100%);
     border: 1px solid #EDE9FE;
     border-top: 3px solid var(--color-primary);
 }
-#modal-refund-approve .card-amount .amount-grid {
-    display: grid;
-    grid-template-columns: repeat(4, 1fr);
-    gap: 16px;
+#modal-refund-approve .card-amount .amount-rows {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
 }
-#modal-refund-approve .card-amount .amount-item {
-    text-align: center;
-    padding: 12px 8px;
+#modal-refund-approve .card-amount .amount-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 10px 14px;
     border-radius: var(--radius-sm);
     background: #FAFAFE;
     transition: background 0.2s;
 }
-#modal-refund-approve .card-amount .amount-item:hover {
+#modal-refund-approve .card-amount .amount-row:hover {
     background: var(--color-primary-bg);
 }
 #modal-refund-approve .card-amount .amount-label {
-    font-size: 11px;
-    color: var(--color-text-muted);
-    margin-bottom: 6px;
+    font-size: 13px;
+    color: var(--color-text-secondary);
+    font-weight: 500;
 }
 #modal-refund-approve .card-amount .amount-value {
     font-size: 16px;
@@ -5484,54 +5493,22 @@ tbody td {
     font-family: 'SF Mono', 'Consolas', 'Menlo', monospace;
 }
 
-/* Hero：实退金额 */
-#modal-refund-approve .card-amount .amount-item.amount-hero {
+/* 实退金额行 */
+#modal-refund-approve .card-amount .amount-row.amount-row--result {
     background: linear-gradient(135deg, #FEF3C7 0%, #FFF7ED 100%);
     border: 1px solid #FCD34D;
-    position: relative;
+    margin-top: 4px;
+    padding: 14px;
 }
-#modal-refund-approve .card-amount .amount-item.amount-hero::before {
-    content: '';
-    position: absolute;
-    top: 0; left: 12px; right: 12px;
-    height: 2px;
-    background: linear-gradient(90deg, transparent, #F59E0B, transparent);
+#modal-refund-approve .card-amount .amount-row.amount-row--result .amount-label {
+    color: #92400E;
+    font-weight: 700;
+    font-size: 14px;
 }
-#modal-refund-approve .card-amount .amount-item.amount-hero .amount-value {
+#modal-refund-approve .card-amount .amount-row.amount-row--result .amount-value {
     color: #B45309;
     font-size: 22px;
     font-weight: 800;
-}
-#modal-refund-approve .card-amount .amount-item.amount-hero .amount-label {
-    color: #92400E;
-    font-weight: 600;
-}
-
-/* 教材包分割线 */
-#modal-refund-approve .approve-ta-divider {
-    height: 1px;
-    background: #EDE9FE;
-    margin: 8px 0;
-}
-
-/* 教材包退还明细 */
-#modal-refund-approve .approve-ta-amount-note {
-    margin-top: 16px;
-    padding-top: 14px;
-    border-top: 1px dashed #DDD6FE;
-}
-#modal-refund-approve .approve-ta-amount-title {
-    font-size: 11px;
-    font-weight: 600;
-    color: #7C3AED;
-    margin-bottom: 10px;
-}
-#modal-refund-approve .amount-grid.amount-grid-ta {
-    grid-template-columns: repeat(3, 1fr);
-    gap: 12px;
-}
-#modal-refund-approve .amount-grid.amount-grid-ta .amount-item .amount-value {
-    font-size: 14px;
 }
 
 /* --- 区域 2：进度条 --- */
@@ -5898,11 +5875,8 @@ tbody td {
     gap: 8px;
 }
 
-/* 响应式：1200px 以下金额卡片 2 列 / 信息卡片单列 */
+/* 响应式：1200px 以下信息卡片单列 */
 @media (max-width: 1200px) {
-    #modal-refund-approve .card-amount .amount-grid {
-        grid-template-columns: repeat(2, 1fr);
-    }
     #modal-refund-approve .approve-info-cards {
         grid-template-columns: 1fr;
     }
