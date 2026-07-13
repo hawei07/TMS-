@@ -12649,9 +12649,6 @@ async function initPurchaseTab() {
 
     if (studentSelected) {
         document.getElementById('ta-student-info').textContent = taPurchaseStudent.name + ' | ' + taPurchaseStudent.student_no + ' | ' + (taPurchaseStudent.campus_name || '无校区');
-        if (taPurchaseCampus) {
-            document.getElementById('ta-selected-campus').textContent = taPurchaseCampus;
-        }
         if (campusSelected) {
             loadStudentBalance();
         }
@@ -12722,33 +12719,44 @@ function clearPurchaseStudent() {
     updatePurchaseBtn();
 }
 
-function renderCampusSelection() {
-    if (!taPurchaseStudent || !taPurchaseStudent.campus_name) {
+async function renderCampusSelection() {
+    if (!taPurchaseStudent) return;
+    const studentCampuses = (taPurchaseStudent.campus_name || '').split(',').map(c => c.trim()).filter(Boolean);
+    
+    // 获取所有校区列表
+    const data = await api('list_campuses', {}, 'GET');
+    const allCampuses = (data.data || []).map(c => c.name);
+    
+    // 合并去重：学员校区 + 所有其他校区
+    const merged = [...new Set([...studentCampuses, ...allCampuses])];
+    
+    if (merged.length === 0) {
         onCampusSelected('');
         return;
     }
-    const campuses = taPurchaseStudent.campus_name.split(',').map(c => c.trim()).filter(Boolean);
-    if (campuses.length === 0) {
-        onCampusSelected('');
-        return;
+    
+    // 默认选中：学员校区只有一个时直接选，多个时随机选一个
+    let defaultCampus;
+    if (studentCampuses.length === 1) {
+        defaultCampus = studentCampuses[0];
+    } else if (studentCampuses.length > 1) {
+        defaultCampus = studentCampuses[Math.floor(Math.random() * studentCampuses.length)];
+    } else {
+        defaultCampus = merged[0];
     }
-    // 单校区直接选中，多校区随机展示一个作为默认
-    if (campuses.length === 1) {
-        onCampusSelected(campuses[0]);
-        return;
-    }
-    const defaultCampus = campuses[Math.floor(Math.random() * campuses.length)];
+    
     const section = document.getElementById('ta-campus-selection-section');
     section.style.display = 'block';
     const select = document.getElementById('ta-campus-select');
-    select.innerHTML = campuses.map(c => `<option value="${esc(c)}" ${c === defaultCampus ? 'selected' : ''}>${esc(c)}</option>`).join('');
+    select.innerHTML = merged.map(c => 
+        `<option value="${esc(c)}" ${c === defaultCampus ? 'selected' : ''}>${esc(c)}${studentCampuses.includes(c) ? '（学员校区）' : ''}</option>`
+    ).join('');
     select.onchange = function() { onCampusSelected(this.value); };
     onCampusSelected(defaultCampus);
 }
 
 function onCampusSelected(campus) {
     taPurchaseCampus = campus;
-    document.getElementById('ta-selected-campus').textContent = campus || '未指定';
     // 显示商品搜索、购物车、支付面板
     document.getElementById('ta-cart-section').style.display = 'block';
     document.getElementById('ta-product-search-wrap').style.display = 'block';

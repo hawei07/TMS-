@@ -9025,7 +9025,6 @@ if (intval($countBt) === 0) {
                                     <span class="ta-campus-label">购买校区：</span>
                                     <select id="ta-campus-select" class="form-input ta-campus-select-input">
                                     </select>
-                                    <span id="ta-selected-campus" class="ta-selected-campus-display" style="margin-left:8px;color:var(--ta-primary);font-weight:600;"></span>
                                 </div>
                             </div>
 
