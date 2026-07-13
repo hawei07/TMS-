@@ -21,10 +21,10 @@ AIGC:
 |------|-----|
 | PHP 路径 | Winget PHP 8.4（`php.exe` 在 PATH 中） |
 | 配置文件 | `C:\Users\吴赛\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.ini` |
-| 监听端口 | `0.0.0.0:5001` |
+| 监听端口 | 默认 `127.0.0.1:5001`；端口占用时可改用 `5002` |
 | 数据库 | **MySQL 8.4.9**；默认本地 `127.0.0.1:3306/tms_db`，可通过环境变量或私有配置覆盖 |
 | MySQL 安装路径 | `D:\dvptool\mysql\` |
-| 访问地址 | http://localhost:5001 |
+| 访问地址 | 默认 http://127.0.0.1:5001；本次架构优化验证使用 http://127.0.0.1:5002 |
 
 ### Git 版本管理
 
@@ -69,13 +69,15 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 5. **数据库迁移**：使用 `php migrations\migrate.php --status` 查看状态，使用 `php migrations\migrate.php` 执行待处理迁移。
 
+6. **内置服务器 API 地址**：本地验证使用 `http://127.0.0.1:<端口>/?action=<name>`。不要请求 `/index.php?action=<name>`；当前入口针对 `cli-server` 的静态文件短路会让该地址返回空响应。
+
 ---
 
 ## 一、项目概述
 
 - **系统名称**：TMS管理系统
 - **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、活动管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
-- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 13700 行）+ CSS3（约 11000 行）
+- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 13836 行）+ CSS3（约 11007 行）
 - **架构模式**：仍以 `index.php` 单体业务入口为主，数据库配置、启动装配、公共函数和版本化迁移已经拆分；基础字典、组织、基础设置、画具、优惠配置、订单查询、订单作废和报价写接口共 57 个 action 已通过兼容路由迁移到 `api/`，其余 action 继续由原 switch 处理。
 
 ---
@@ -86,17 +88,18 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 ```
 ┌──────────────────────────────────────────────────┐
-│                 index.php (~3200行)                │
-│  ┌────────────┐  ┌─────────────────────────────┐ │
-│  │  PHP 后端   │  │       HTML 内嵌前端          │ │
-│  │  - 建表     │  │  - 左侧树状导航（三级模块）   │ │
-│  │  - API路由  │  │  - 右侧多面板内容区           │ │
-│  │  - CSV导出  │  │  - 模态弹窗                   │ │
-│  │  - Excel导入│  │  - 组织树形结构               │ │
-│  └──────┬─────┘  └──────────┬──────────────────┘ │
-│         │                   │                     │
-│    MySQL (PDO)          main.js / style.css       │
-│   (tms_db, 3306)        (static/js/ & static/css/) │
+│                 index.php (~9720行)                │
+│  ┌───────────────────┐  ┌──────────────────────┐ │
+│  │ app/bootstrap.php │  │   HTML 内嵌前端       │ │
+│  │ 配置/PDO/迁移检查  │  │ main.js / style.css  │ │
+│  └─────────┬─────────┘  └──────────┬───────────┘ │
+│            │                        │             │
+│       api/router.php ← ?action=...  │             │
+│        ┌───┴──────────────┐         │             │
+│   api/*.php 57 actions    │         │             │
+│   legacy switch 105 cases │         │             │
+│        └───┬──────────────┘         │             │
+│          MySQL (PDO, tms_db:3306)                 │
 └──────────────────────────────────────────────────┘
 ```
 
@@ -106,7 +109,7 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 |------|----------|
 | PHP 内嵌 HTML | 单文件部署，`php -S` 零配置启动 |
 | MySQL 8.4 (PDO) | 关系型数据库，支持并发读写，外键约束，UTF-8 字符集 |
-| Vanilla JS | 无框架依赖，约 7550 行完成完整 SPA 交互 |
+| Vanilla JS | 无框架依赖，约 13836 行完成完整 SPA 交互 |
 | CSS Variables | 统一设计令牌（`--color-primary`/`--shadow-md` 等），便于主题定制 |
 | ZipArchive + XML | 纯 PHP 解析 .xlsx 文件，零第三方依赖 |
 
@@ -137,16 +140,176 @@ market-system-php/
 │   ├── bootstrap_schema.php      # Web 接入与历史兼容 schema
 │   └── versions/                 # 独立版本迁移文件
 ├── static/
-│   ├── js/main.js                # 前端逻辑（约 13700 行）
-│   └── css/style.css             # 样式表（约 11000 行）
+│   ├── js/main.js                # 前端逻辑（约 13836 行）
+│   └── css/style.css             # 样式表（约 11007 行）
 └── PROJECT_SUMMARY.md
 ```
+
+### 2.4 现有架构下继续开发（Agent 必读）
+
+#### 2.4.1 请求链路与兼容策略
+
+```text
+HTTP ?action=<name>
+  -> index.php
+  -> app/bootstrap.php（配置、PDO、迁移状态检查）
+  -> api/router.php
+       -> 命中已拆路由：调用 api/*.php handler
+       -> 未命中：回到 index.php 原 switch
+```
+
+当前代码实际可分发 **162 个 action**：
+
+- `api/` 模块化路由：57 个。
+- `index.php` 原 switch：105 个。
+- 兼容层允许继续开发新功能，不要求先完成全部架构拆分。
+
+模块 handler 统一签名：
+
+```php
+function handler(PDO $db, string $method, array $query, array $input): void
+```
+
+模块内使用 `$query` 读取 URL 参数、使用 `$input` 读取 JSON 请求体，不直接依赖 `$_GET`。输出继续使用公共 `json()` helper。
+
+#### 2.4.2 已模块化功能与文件归属（57 个 action）
+
+修改下列功能时必须进入对应模块，不要在 `index.php` 重复添加同名 `case`。
+
+##### `api/dictionaries.php`（16 个）
+
+- 渠道：`list_channels`、`add_channel`、`update_channel`、`delete_channel`。
+- 意向等级：`list_intention_levels`、`add_intention_level`、`update_intention_level`、`delete_intention_level`。
+- 基础类型：`list_basic_types`、`add_basic_type`、`update_basic_type`、`delete_basic_type`。
+- 岗位：`list_positions`、`add_position`、`update_position`、`delete_position`。
+
+##### `api/organizations.php`（4 个）
+
+- 组织架构：`list_organizations`、`add_organization`、`update_organization`、`delete_organization`。
+
+##### `api/settings.php`（7 个）
+
+- 校区：`list_campuses`。
+- 税率：`list_tax_rates`、`save_tax_rate`。
+- 上课时段：`list_class_periods`、`add_class_period`、`update_class_period`、`delete_class_period`。
+
+##### `api/teaching_aids.php`（9 个）
+
+- 画具/教材 CRUD：`list_teaching_aids`、`get_teaching_aid`、`add_teaching_aid`、`update_teaching_aid`、`delete_teaching_aid`。
+- 画具销售：`search_students_for_sale`、`list_available_teaching_aids`、`create_teaching_aid_sale`、`list_teaching_aid_sales`。
+- `create_teaching_aid_sale` 涉及账户余额、税率、销售明细和流水事务，修改时必须保留余额行锁及完整回滚。
+
+##### `api/discounts.php`（13 个）
+
+- 优惠方案：`list_discount_plans`、`get_discount_plan`、`add_discount_plan`、`update_discount_plan`、`delete_discount_plan`。
+- 优惠券：`list_coupons`、`get_coupon`、`add_coupon`、`update_coupon`、`delete_coupon`。
+- 发放记录：`list_coupon_records`、`add_coupon_record`、`delete_coupon_record`。
+- 修改优惠金额后会重算关联 `price_items.actual_price`，不能只更新主表而跳过重算。
+
+##### `api/orders.php`（8 个）
+
+- 报价读取：`list_price_plans`、`get_course_plans`。
+- 订单读取：`list_orders`、`get_order_detail`、`list_parent_orders`。
+- 订单作废：`void_order`。
+- 报价写入：`save_price_plan`、`delete_price_plan`。
+- `void_order` 使用事务、订单行锁和活动考勤锁；活动订单的余额返还、订单作废、报名人数回滚必须原子提交。
+- `save_price_plan` 是全量替换报价项，必须保留方案行锁、事务以及课程/优惠/券/教材引用校验。
+
+#### 2.4.3 尚未模块化的功能（仍在 `index.php`）
+
+以下 action 仍由原 switch 处理。新增或修改这些功能可以继续在 `index.php` 完成；若决定拆分，应先保存只读/无副作用响应基线，再迁移到新的 `api/*.php` 模块。
+
+- 资源与公海：`get_resources`、`add_resource`、`update_resource`、`delete_resource`、`batch_import`、`download_template`、`batch_assign`、`batch_pool`、`export_resources`。
+- 预约试听：`get_appointments`、`get_trial_campuses`、`get_trial_subjects`、`get_trial_courses`、`get_trial_classes`、`get_trial_sessions`、`search_trial_sessions`、`book_trial`、`cancel_trial`、`add_appointment`、`update_appointment`、`delete_appointment`。
+- 沟通与统计：`get_communications`、`add_communication`、`get_stats`。
+- 员工：`get_employees`、`add_employee`、`update_employee`、`delete_employee`、`batch_import_employees`、`export_employees`。
+- 课程：`list_courses`、`add_course`、`update_course`、`delete_course`、`export_courses`。
+- 活动配置：`list_activities`、`get_activity`、`save_activity`、`delete_activity`。
+- 录单与报名：`pay_enroll`、`enroll_course`、`enroll_from_resource`、`create_student_from_resource`。
+- 学科与教师：`list_subjects`、`add_subject`、`update_subject`、`delete_subject`、`batch_delete_subjects`、`get_campus_subjects`、`get_teachers`。
+- 学员：`list_students`、`get_student`、`add_student`、`update_student`、`delete_student`、`get_student_courses`。
+- 学员上课记录：`list_attendance`、`add_attendance`、`update_attendance`、`delete_attendance`、`list_absence_records`。
+- 退款：`submit_refund`、`list_refund_records`、`approve_refund`、`cancel_refund`、`get_refund_record`。
+- 学员账户：`get_student_account`、`top_up_account`。
+- 班级：`list_classes`、`add_class`、`update_class`、`delete_class`。
+- 排课：`list_schedules`、`get_schedule`、`add_schedule`、`update_schedule`、`delete_schedule`、`create_schedule_from_grid`、`get_schedule_view`。
+- 教室：`list_classrooms`、`add_classroom`、`update_classroom`、`delete_classroom`。
+- 班级学员与候选人：`list_class_students`、`add_class_student`、`remove_class_student`、`get_available_students`、`get_temp_student_candidates`。
+- 班级考勤：`get_class_attendance`、`save_temp_attendance`、`save_class_attendance`、`get_class_enrollable`、`list_attendance_sessions`、`list_all_attendance`。
+- 财务统计：`get_revenue_stats`、`get_cashflow_stats`。
+- 活动报名与考勤：`pay_activity_enroll`、`list_activities_for_enroll`、`get_student_activities`、`list_activity_attendance`、`get_activity_deduction_rules`、`save_activity_attendance`、`delete_activity_attendance`、`list_activity_consumptions`、`get_activity_enroll_detail`。
+
+#### 2.4.4 新功能开发必须遵守的三项规则
+
+1. **数据库变更只能新增版本迁移**
+   - 新建 `migrations/versions/YYYYMMDD_NNN_description.php`。
+   - 返回 `version`、`description`、`up(PDO $db)`，格式参考现有基线版本。
+   - 不要继续修改 `migrations/bootstrap_schema.php` 来承载新功能，不要修改已经执行过的版本文件。
+   - 开发前后运行 `php migrations\migrate.php --status`，新增迁移后运行 `php migrations\migrate.php`。
+
+   ```php
+   <?php
+   declare(strict_types=1);
+
+   return [
+       'version' => 'YYYYMMDD_NNN_description',
+       'description' => 'Describe the schema change',
+       'up' => static function (PDO $db): void {
+           $db->exec('ALTER TABLE ...');
+       },
+   ];
+   ```
+
+2. **按功能归属修改 API，不得创建重复 action**
+   - 已模块化功能只修改对应 `api/*.php`，并通过模块的 `*ApiRoutes()` 注册。
+   - 未模块化功能可以暂留 `index.php`；若新建模块，必须在 `api/router.php` 中 `require_once` 并加入 route group。
+   - 添加 action 前同时搜索 `api/` 路由表和 `index.php` case。`buildExtractedApiRoutes()` 会阻止模块之间的重复 action，但不会替你清理旧 switch case。
+
+   ```php
+   function featureApiRoutes(): array
+   {
+       return ['action_name' => 'actionHandler'];
+   }
+
+   function actionHandler(PDO $db, string $method, array $query, array $input): void
+   {
+       // Validate method/parameters, use prepared statements, then json(...).
+   }
+   ```
+
+3. **保持请求和响应兼容，写操作必须保护事务边界**
+   - 保持 `?action=` 名称、GET/POST 方法、参数名、JSON 字段、字段类型和错误消息兼容。
+   - SQL 使用预处理语句；涉及订单、账户余额、支付、退款、考勤扣课、报价全量替换时使用事务。
+   - 并发修改余额、订单或共享计数时使用 `SELECT ... FOR UPDATE` 或等价行锁。
+   - 拆旧接口前保存响应基线；写接口只先验证 GET、缺参、不存在记录、已处理记录等无副作用路径。
+
+#### 2.4.5 Agent 交接与验证清单
+
+```powershell
+git status --short
+php -l index.php
+Get-ChildItem app,api,config,migrations -Recurse -Filter *.php | ForEach-Object { php -l $_.FullName }
+node --check static\js\main.js
+php migrations\migrate.php --status
+php -r "require 'api/router.php'; echo count(buildExtractedApiRoutes()), PHP_EOL;"
+git diff --check
+```
+
+接口冒烟使用根路径：
+
+```text
+http://127.0.0.1:5001/?action=get_stats
+```
+
+当前模块化路由数量应为 `57`。如果数量变化，必须在提交说明和本文档中同步记录。
+
+当前架构基线提交为 `851f99c`。工作区可能存在个人计划、检查脚本和 `.bak` 文件；提交时使用 `git add -- <明确文件列表>`，不要直接使用 `git add -A`。
 
 ---
 
 ## 三、数据库设计
 
-### 3.1 表概览（27 张表）
+### 3.1 表概览（当前数据库 44 张表）
 
 | 表名 | 用途 | 关联 |
 |------|------|------|
@@ -177,6 +340,23 @@ market-system-php/
 | `parent_orders` | 父订单（汇总同一录单的所有子订单） | parent_order_no → orders.parent_order_no |
 | `refund_records` | 退费记录（申请→三级审批→财务确认） | order_id → orders.id, student_id → students.id |
 | `student_subject_teacher` | 学员-校区-学科-授课老师关联 | student_id → students.id, campus_id → organizations.id, subject_id → subjects.id, teacher_id → employees.id |
+| `attendance_records` | 学员上课记录/独立考勤明细 | student_id → students.id, order_id → orders.id |
+| `class_students` | 班级学员关系 | class_id → classes.id, student_id → students.id |
+| `absence_records` | 缺勤记录 | student_id → students.id, course_id → courses.id |
+| `class_periods` | 校区上课时段设置 | campus 保存校区名称 |
+| `student_accounts` | 学员账户余额与累计金额 | student_id → students.id |
+| `account_transactions` | 学员账户充值/消费/退款流水 | student_id → students.id, order_id → orders.id |
+| `discount_plans` | 优惠方案 | — |
+| `discount_plan_campuses` | 优惠方案适用校区 | plan_id → discount_plans.id |
+| `discount_plan_subjects` | 优惠方案适用学科 | plan_id → discount_plans.id |
+| `coupons` | 课时券/商品券 | — |
+| `coupon_campuses` | 优惠券适用校区 | coupon_id → coupons.id |
+| `coupon_subjects` | 优惠券适用学科 | coupon_id → coupons.id |
+| `coupon_records` | 优惠券发放记录 | coupon_id → coupons.id |
+| `teaching_aids` | 教材包与画具商品 | — |
+| `teaching_aid_campuses` | 教材/画具适用校区 | teaching_aid_id → teaching_aids.id |
+| `teaching_aid_sales` | 画具销售主记录 | student_id → students.id |
+| `schema_migrations` | 已执行数据库迁移版本 | version 唯一 |
 
 ### 3.2 resources（资源表）
 
@@ -711,9 +891,9 @@ subjects                  courses              ┌──────────
 | get_activity_deduction_rules | GET | 活动扣课规则 |
 | get_activity_enroll_detail | GET | 活动报名详情 |
 
-## 四、后端 API 完整列表
+## 四、后端 API 与路由归属
 
-所有 API 通过 `?action=<name>` 路由，统一返回 JSON。共 **90 个** action。
+所有 API 通过 `?action=<name>` 路由，统一返回 JSON。当前代码共 **162 个** action，其中 **57 个**由 `api/` 模块处理，**105 个**仍由 `index.php` switch 处理。下表是历史核心业务接口说明；开发时以 [2.4 现有架构下继续开发](#24-现有架构下继续开发agent-必读) 的文件归属和实际路由表为准。
 
 ### 4.1 资源管理（9 个）
 
@@ -811,8 +991,8 @@ subjects                  courses              ┌──────────
 | action | 方法 | 说明 |
 |--------|------|------|
 | `list_price_plans` | GET | 按课程查询价格方案列表（含关联报价单 price_items 和 plan_type） |
-| `save_price_plan` | POST | 新增/编辑价格方案（含批量保存报价单明细，接收并写入 plan_type） |
-| `delete_price_plan` | POST | 删除价格方案（级联删除关联报价单） |
+| `save_price_plan` | POST | 新增/编辑价格方案；事务化全量替换报价项，校验课程、优惠方案、优惠券、教材和商品券引用 |
+| `delete_price_plan` | POST | 在事务中删除价格方案及关联报价项；不存在的方案保持历史成功响应 |
 
 ### 4.11 学科设置（5 个）
 
@@ -881,7 +1061,7 @@ subjects                  courses              ┌──────────
 | `enroll_from_resource` | POST | 从资源入口报名：将资源转为学员并生成订单（保留兼容） |
 | `create_student_from_resource` | POST | 从资源创建学员记录（供 panel-enroll 前端调用） |
 | `list_orders` | GET | 订单列表（17 列：订单号/父订单号/学号/编号/学员姓名/课程名称/价格方案/报价单名称/订单类型/课时数量/订单金额/现金/美团/支付状态/是否作废/状态/报名时间），含 `payment_summary` 汇总和 order_type 字段，支持 keyword 搜索及 pay_status/is_voided 筛选 |
-| `void_order` | POST | **作废订单**：校验 consumed_lessons==0（无课耗），将 is_voided 设为'是'，作废后该订单对应报读课程从学员详情中消失 |
+| `void_order` | POST | **作废订单**：订单行锁+事务保护；课程订单校验无课耗，活动订单同时处理考勤检查、账户余额返还和活动人数回滚 |
 
 ### 4.17 退费管理（5 个）
 
@@ -1532,8 +1712,8 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | refactor | **API 模块化第三批**：迁移画具管理与销售 9 个 action；保留余额锁、支付分摊、商品税率和账户流水事务，五个只读响应逐字兼容 | `api/`、`index.php` | d6bda66 |
 | refactor | **API 模块化第四批**：迁移优惠方案、优惠券和发放记录 13 个 action；保留关联表事务更新和报价单价格重算，五个只读响应逐字兼容 | `api/`、`index.php` | 4076ff7 |
 | refactor | **API 模块化第五批**：迁移报价方案、课程报价、订单列表、订单详情和父订单列表 5 个只读 action；筛选、支付汇总和详情金额响应逐字兼容 | `api/`、`index.php` | 06ff1ce |
-| refactor | **API 模块化第六批**：迁移 `void_order`；增加事务、订单行锁和活动考勤锁，统一保护余额返还、订单作废与活动人数回滚 | `api/orders.php`、`index.php` | 待提交 |
-| refactor | **API 模块化第七批**：迁移报价方案保存/删除；增加方案行锁、全量替换事务和课程/优惠/券/教材引用校验 | `api/orders.php`、`index.php` | 待提交 |
+| refactor | **API 模块化第六批**：迁移 `void_order`；增加事务、订单行锁和活动考勤锁，统一保护余额返还、订单作废与活动人数回滚 | `api/orders.php`、`index.php` | 851f99c |
+| refactor | **API 模块化第七批**：迁移报价方案保存/删除；增加方案行锁、全量替换事务和课程/优惠/券/教材引用校验 | `api/orders.php`、`index.php` | 851f99c |
 
 ### 2026-07-11
 
