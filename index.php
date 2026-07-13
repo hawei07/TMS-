@@ -3344,10 +3344,11 @@ $stmt->execute();
                     $itemAccount = round($accountAmount * $ratio, 2);
                     // 校区优先用画具关联的校区，否则用学员校区
                     $itemCampus = $ta['campus_names'] ?: $studentCampus;
-                    // 查询校区商品税率，计算税后金额
+                    // 查询校区商品税率，计算税后金额（取第一个校区名匹配）
                     $productTaxRate = 0;
                     if ($itemCampus) {
-                        $taxRow = $db->query("SELECT COALESCE(t.product_tax_rate, 0) AS rate FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($itemCampus) . " AND o.type = '校区'")->fetch();
+                        $firstCampus = trim(explode(',', $itemCampus)[0]);
+                        $taxRow = $db->query("SELECT COALESCE(t.product_tax_rate, 0) AS rate FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($firstCampus) . " AND o.type = '校区'")->fetch();
                         $productTaxRate = floatval($taxRow['rate'] ?? 0);
                     }
                     $totalAfterTax = $productTaxRate > 0 ? round($totalItem / (1 + $productTaxRate / 100), 2) : $totalItem;
@@ -3409,7 +3410,7 @@ $stmt->execute();
             $whereStr = implode(' AND ', $where);
             $cnt = $db->query("SELECT COUNT(*) FROM teaching_aid_sales WHERE $whereStr")->fetchColumn();
             $total = intval($cnt);
-            $sql = "SELECT s.*, ROUND(s.total_amount / (1 + COALESCE(t.product_tax_rate, 0) / 100), 2) AS total_after_tax FROM teaching_aid_sales s LEFT JOIN organizations o ON o.name = s.campus AND o.type = '校区' LEFT JOIN tax_rates t ON t.campus_id = o.id WHERE $whereStr ORDER BY sold_at DESC LIMIT $offset, $pageSize";
+            $sql = "SELECT * FROM teaching_aid_sales WHERE $whereStr ORDER BY sold_at DESC LIMIT $offset, $pageSize";
             $res = $db->query($sql);
             $rows = [];
             while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
@@ -11254,7 +11255,7 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260713"></script>
+    <script src="static/js/main.js?v=20260713a"></script>
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 </body>
 </html>
