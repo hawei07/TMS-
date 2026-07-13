@@ -3344,7 +3344,14 @@ $stmt->execute();
                     $itemAccount = round($accountAmount * $ratio, 2);
                     // 校区优先用画具关联的校区，否则用学员校区
                     $itemCampus = $ta['campus_names'] ?: $studentCampus;
-                    $stmt = $db->prepare("INSERT INTO teaching_aid_sales (teaching_aid_id, student_id, student_name, student_no, teaching_aid_name, type, quantity, unit_price, total_amount, cash_amount, meituan_amount, account_amount, campus, sold_at, sold_by, remark, created_at) VALUES (:aid, :sid, :sname, :sno, :taname, :tatype, :qty, :uprice, :tamt, :cash, :mt, :acct, :campus, :soldat, :soldby, :rm, :ct)");
+                    // 查询校区商品税率，计算税后金额
+                    $productTaxRate = 0;
+                    if ($itemCampus) {
+                        $taxRow = $db->query("SELECT COALESCE(t.product_tax_rate, 0) AS rate FROM tax_rates t JOIN organizations o ON t.campus_id = o.id WHERE o.name = " . $db->quote($itemCampus) . " AND o.type = '校区'")->fetch();
+                        $productTaxRate = floatval($taxRow['rate'] ?? 0);
+                    }
+                    $totalAfterTax = $productTaxRate > 0 ? round($totalItem / (1 + $productTaxRate / 100), 2) : $totalItem;
+                    $stmt = $db->prepare("INSERT INTO teaching_aid_sales (teaching_aid_id, student_id, student_name, student_no, teaching_aid_name, type, quantity, unit_price, total_amount, total_after_tax, cash_amount, meituan_amount, account_amount, campus, sold_at, sold_by, remark, created_at) VALUES (:aid, :sid, :sname, :sno, :taname, :tatype, :qty, :uprice, :tamt, :tat, :cash, :mt, :acct, :campus, :soldat, :soldby, :rm, :ct)");
                     $stmt->bindValue(':aid', $ta['id'], PDO::PARAM_INT);
                     $stmt->bindValue(':sid', $sid, PDO::PARAM_INT);
                     $stmt->bindValue(':sname', $student['name'], PDO::PARAM_STR);
@@ -3354,6 +3361,7 @@ $stmt->execute();
                     $stmt->bindValue(':qty', $qty, PDO::PARAM_INT);
                     $stmt->bindValue(':uprice', $unitPrice);
                     $stmt->bindValue(':tamt', $totalItem);
+                    $stmt->bindValue(':tat', $totalAfterTax);
                     $stmt->bindValue(':cash', $itemCash);
                     $stmt->bindValue(':mt', $itemMeituan);
                     $stmt->bindValue(':acct', $itemAccount);
@@ -3401,12 +3409,13 @@ $stmt->execute();
             $whereStr = implode(' AND ', $where);
             $cnt = $db->query("SELECT COUNT(*) FROM teaching_aid_sales WHERE $whereStr")->fetchColumn();
             $total = intval($cnt);
-            $sql = "SELECT * FROM teaching_aid_sales WHERE $whereStr ORDER BY sold_at DESC LIMIT $offset, $pageSize";
+            $sql = "SELECT s.*, ROUND(s.total_amount / (1 + COALESCE(t.product_tax_rate, 0) / 100), 2) AS total_after_tax FROM teaching_aid_sales s LEFT JOIN organizations o ON o.name = s.campus AND o.type = '校区' LEFT JOIN tax_rates t ON t.campus_id = o.id WHERE $whereStr ORDER BY sold_at DESC LIMIT $offset, $pageSize";
             $res = $db->query($sql);
             $rows = [];
             while ($r = $res->fetch(PDO::FETCH_ASSOC)) {
                 $r['unit_price'] = floatval($r['unit_price']);
                 $r['total_amount'] = floatval($r['total_amount']);
+                $r['total_after_tax'] = $r['total_after_tax'] !== null ? floatval($r['total_after_tax']) : floatval($r['total_amount']);
                 $r['cash_amount'] = floatval($r['cash_amount']);
                 $r['meituan_amount'] = floatval($r['meituan_amount']);
                 $r['account_amount'] = floatval($r['account_amount']);
@@ -9117,6 +9126,7 @@ if (intval($countBt) === 0) {
                                 <col class="ta-sales-col-qty">
                                 <col class="ta-sales-col-price">
                                 <col class="ta-sales-col-total">
+                                <col class="ta-sales-col-after-tax">
                                 <col class="ta-sales-col-cash">
                                 <col class="ta-sales-col-meituan">
                                 <col class="ta-sales-col-account">
@@ -9132,6 +9142,7 @@ if (intval($countBt) === 0) {
                                     <th style="width:60px;">数量</th>
                                     <th style="width:80px;">单价</th>
                                     <th style="width:80px;">总金额</th>
+                                    <th style="width:90px;">总金额-税后</th>
                                     <th style="width:80px;">现金</th>
                                     <th style="width:80px;">美团</th>
                                     <th style="width:80px;">账户余额</th>
@@ -9139,7 +9150,7 @@ if (intval($countBt) === 0) {
                                 </tr>
                             </thead>
                             <tbody id="ta-sales-tbody">
-                                <tr><td colspan="12"><div class="empty-state">暂无销售记录</div></td></tr>
+                                <tr><td colspan="13"><div class="empty-state">暂无销售记录</div></td></tr>
                             </tbody>
                         </table>
                     </div>

@@ -12946,7 +12946,7 @@ async function loadTeachingAidSales(page = 1) {
 function renderTeachingAidSalesTable(rows) {
     const tbody = document.getElementById('ta-sales-tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="12"><div class="empty-state">暂无销售记录</div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state">暂无销售记录</div></td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
@@ -12967,6 +12967,7 @@ function renderTeachingAidSalesTable(rows) {
                 <td style="text-align:center;">${r.quantity}</td>
                 <td style="text-align:right;">¥${parseFloat(r.unit_price).toFixed(2)}</td>
                 <td style="text-align:right;color:#DC2626;font-weight:600;">¥${parseFloat(r.total_amount).toFixed(2)}</td>
+                <td style="text-align:right;color:#059669;font-weight:600;">${r.total_after_tax ? '¥' + parseFloat(r.total_after_tax).toFixed(2) : '—'}</td>
                 <td style="text-align:right;">${cash > 0 ? '¥' + cash.toFixed(2) : '—'}</td>
                 <td style="text-align:right;">${meituan > 0 ? '¥' + meituan.toFixed(2) : '—'}</td>
                 <td style="text-align:right;">${account > 0 ? '¥' + account.toFixed(2) : '—'}</td>
