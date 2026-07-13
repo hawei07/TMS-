@@ -9111,7 +9111,24 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
 
-                <!-- 卡片 2：费用计算 -->
+                <!-- 卡片 2：教材包退还（条件展示） -->
+                <div class="refund-card" id="refund-teaching-aid-card" style="display:none;">
+                    <div class="refund-card-header">
+                        <span class="card-icon card-icon--package">📦</span>
+                        <span>教材包退还</span>
+                    </div>
+                    <label class="refund-checkbox-label" id="refund-teaching-aid-label">
+                        <input type="checkbox" id="refund-return-teaching-aid" onchange="onReturnTeachingAidChange()">
+                        <span class="refund-checkbox-custom"></span>
+                        <span class="refund-teaching-aid-info">
+                            <span id="refund-teaching-aid-name">-</span>
+                            <span class="refund-teaching-aid-price" id="refund-teaching-aid-paid">¥0.00</span>
+                        </span>
+                    </label>
+                    <div class="refund-teaching-aid-hint">勾选后将在退费金额中加上教材包的实际支付金额</div>
+                </div>
+
+                <!-- 卡片 3：费用计算 -->
                 <div class="refund-card refund-card--calc">
                     <div class="refund-card-header">
                         <span class="card-icon card-icon--calc">💰</span>
@@ -9141,23 +9158,6 @@ if (intval($countBt) === 0) {
                         <span class="calc-label" style="color:rgba(255,255,255,0.8);">实退金额</span>
                         <span class="calc-value calc-value--result" id="refund-actual-amount-display">¥0.00</span>
                     </div>
-                </div>
-
-                <!-- 卡片 3：教材包退还（条件展示） -->
-                <div class="refund-card" id="refund-teaching-aid-card" style="display:none;">
-                    <div class="refund-card-header">
-                        <span class="card-icon card-icon--package">📦</span>
-                        <span>教材包退还</span>
-                    </div>
-                    <label class="refund-checkbox-label" id="refund-teaching-aid-label">
-                        <input type="checkbox" id="refund-return-teaching-aid" onchange="onReturnTeachingAidChange()">
-                        <span class="refund-checkbox-custom"></span>
-                        <span class="refund-teaching-aid-info">
-                            <span id="refund-teaching-aid-name">-</span>
-                            <span class="refund-teaching-aid-price" id="refund-teaching-aid-paid">¥0.00</span>
-                        </span>
-                    </label>
-                    <div class="refund-teaching-aid-hint">勾选后将在退费金额中加上教材包的实际支付金额</div>
                 </div>
 
                 <!-- 卡片 4：退费方式 -->
