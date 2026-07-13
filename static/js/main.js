@@ -9692,6 +9692,16 @@ async function showApproveModal(id) {
                 <div class="info-row"><span class="info-label">银行卡号</span><span class="info-value mono">${esc(rr.bank_account || '-')}</span></div>
                 <div class="info-row"><span class="info-label">开户人</span><span class="info-value">${esc(rr.account_holder || '-')}</span></div>`;
         }
+        // 教材包信息
+        const taName = rr.teaching_aid_name || '';
+        const returnTA = parseInt(rr.return_teaching_aid) === 1;
+        const taPrice = parseFloat(rr.teaching_aid_price) || 0;
+        const taCoupon = parseFloat(rr.product_coupon_amount) || 0;
+        if (taName) {
+            infoCardsHtml += `<div class="approve-ta-divider"></div>
+                <div class="info-row"><span class="info-label">教材包</span><span class="info-value">${esc(taName)}</span></div>
+                <div class="info-row"><span class="info-label">退还状态</span><span class="info-value">${returnTA ? '<span class="refund-badge refund-badge-transfer">已退还</span>' : '<span class="refund-badge" style="background:#f0f0f0;color:#999;">未退还</span>'}</span></div>`;
+        }
         infoCardsHtml += `</div>
             <div class="approve-info-card card-amount card-full">
                 <div class="card-title">💰 金额明细</div>
@@ -9705,6 +9715,14 @@ async function showApproveModal(id) {
                     <div class="amount-item"><div class="amount-label">自定义扣减</div><div class="amount-value">¥${Number(rr.custom_deduction || 0).toFixed(2)}</div></div>
                     <div class="amount-item amount-hero"><div class="amount-label">实退金额</div><div class="amount-value">¥${Number(rr.actual_refund || 0).toFixed(2)}</div></div>
                 </div>
+                ${(returnTA && taName) ? `<div class="approve-ta-amount-note">
+                    <div class="approve-ta-amount-title">📦 教材包退还明细</div>
+                    <div class="amount-grid amount-grid-ta">
+                        <div class="amount-item"><div class="amount-label">教材包金额</div><div class="amount-value">¥${taPrice.toFixed(2)}</div></div>
+                        <div class="amount-item"><div class="amount-label">教材包优惠</div><div class="amount-value">-¥${taCoupon.toFixed(2)}</div></div>
+                        <div class="amount-item amount-hero"><div class="amount-label">教材包实退</div><div class="amount-value">¥${(taPrice - taCoupon).toFixed(2)}</div></div>
+                    </div>
+                </div>` : ''}
             </div>
         </div>`;
 

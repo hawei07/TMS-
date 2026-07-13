@@ -5507,6 +5507,33 @@ tbody td {
     font-weight: 600;
 }
 
+/* 教材包分割线 */
+#modal-refund-approve .approve-ta-divider {
+    height: 1px;
+    background: #EDE9FE;
+    margin: 8px 0;
+}
+
+/* 教材包退还明细 */
+#modal-refund-approve .approve-ta-amount-note {
+    margin-top: 16px;
+    padding-top: 14px;
+    border-top: 1px dashed #DDD6FE;
+}
+#modal-refund-approve .approve-ta-amount-title {
+    font-size: 11px;
+    font-weight: 600;
+    color: #7C3AED;
+    margin-bottom: 10px;
+}
+#modal-refund-approve .amount-grid.amount-grid-ta {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 12px;
+}
+#modal-refund-approve .amount-grid.amount-grid-ta .amount-item .amount-value {
+    font-size: 14px;
+}
+
 /* --- 区域 2：进度条 --- */
 #modal-refund-approve .approval-steps {
     display: flex;
