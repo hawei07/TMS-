@@ -2328,7 +2328,7 @@ $stmt->execute();
             $pendingRefundIds = [];
             $refStmt = $db->query("SELECT DISTINCT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')");
             while ($refR = $refStmt->fetch(PDO::FETCH_ASSOC)) $pendingRefundIds[$refR['order_id']] = true;
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.id DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_name, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.id DESC");
             $orderRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
             // 批量查询考勤记录获取真实消耗课时。班级考勤以 deduction_json 的跨订单分摊为准。
@@ -2776,6 +2776,12 @@ $stmt->execute();
                                 if ($lessonCount > 0) {
                                     $remainingAmount = round($classPrice * $remainingLessons / $lessonCount, 2);
                                 }
+                // 教材包退还：实际支付金额 = 教材包价格 - 商品券抵扣
+                $returnTeachingAid = !empty($input['return_teaching_aid']) && $taPrice > 0 ? 1 : 0;
+                $taActualPaid = round($taPrice - $pcAmount, 2);
+                if ($returnTeachingAid && $taActualPaid > 0) {
+                    $remainingAmount = round($remainingAmount + $taActualPaid, 2);
+                }
                 $customDeduction = floatval($input['custom_deduction'] ?? 0);
                 if ($customDeduction < 0) { json(['error' => '扣减金额不能为负']); break; }
                 $actualRefund = round($remainingAmount - $customDeduction, 2);
@@ -2788,7 +2794,7 @@ $stmt->execute();
                 $refundMethod = (in_array($refundTo, ['balance', 'account'])) ? '账户' : '转账';
                 $courseName = $order['course_name'] ?? '';
                 $n = now();
-                $db->exec("INSERT INTO refund_records (project, content, subject_level1, refund_method, order_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
+                $db->exec("INSERT INTO refund_records (project, content, subject_level1, refund_method, order_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, return_teaching_aid, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
                     $db->quote('课程') . ", " .
                     $db->quote($courseName) . ", " .
                     $db->quote($order['subject_level1'] ?? '') . ", " .
@@ -2803,6 +2809,7 @@ $stmt->execute();
                     round($classPrice * $consumedLessons / max($lessonCount, 1), 2) . ", " .
                     "$remainingLessons, " .
                     "$remainingAmount, " .
+                    "$returnTeachingAid, " .
                     "$customDeduction, " .
                     "$actualRefund, " .
                     $db->quote($bankName) . ", " .
@@ -9135,7 +9142,24 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
 
-                <!-- 卡片 3：退费方式 -->
+                <!-- 卡片 3：教材包退还（条件展示） -->
+                <div class="refund-card" id="refund-teaching-aid-card" style="display:none;">
+                    <div class="refund-card-header">
+                        <span class="card-icon card-icon--package">📦</span>
+                        <span>教材包退还</span>
+                    </div>
+                    <label class="refund-checkbox-label" id="refund-teaching-aid-label">
+                        <input type="checkbox" id="refund-return-teaching-aid" onchange="onReturnTeachingAidChange()">
+                        <span class="refund-checkbox-custom"></span>
+                        <span class="refund-teaching-aid-info">
+                            <span id="refund-teaching-aid-name">-</span>
+                            <span class="refund-teaching-aid-price" id="refund-teaching-aid-paid">¥0.00</span>
+                        </span>
+                    </label>
+                    <div class="refund-teaching-aid-hint">勾选后将在退费金额中加上教材包的实际支付金额</div>
+                </div>
+
+                <!-- 卡片 4：退费方式 -->
                 <div class="refund-card">
                     <div class="refund-card-header">
                         <span class="card-icon card-icon--method">💳</span>
@@ -9159,7 +9183,7 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
 
-                <!-- 卡片 4：收款信息（条件显示，带收起动画） -->
+                <!-- 卡片 5：收款信息（条件显示，带收起动画） -->
                 <div class="refund-card" id="refund-bank-info-section">
                     <div class="refund-card-header">
                         <span class="card-icon card-icon--bank">🏦</span>
@@ -9181,7 +9205,7 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
 
-                <!-- 卡片 5：退费原因（始终可见） -->
+                <!-- 卡片 6：退费原因（始终可见） -->
                 <div class="refund-card">
                     <div class="refund-card-header">
                         <span class="card-icon card-icon--reason">📝</span>

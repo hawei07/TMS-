@@ -6110,6 +6110,64 @@ tbody td {
     font-weight: 600;
 }
 
+/* ==================== 教材包退还 ==================== */
+
+#modal-refund-apply .refund-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 8px 0;
+    cursor: pointer;
+    user-select: none;
+}
+#modal-refund-apply .refund-checkbox-label input[type="checkbox"] {
+    display: none;
+}
+#modal-refund-apply .refund-checkbox-label .refund-checkbox-custom {
+    width: 18px;
+    height: 18px;
+    border: 2px solid #d0d5dd;
+    border-radius: 4px;
+    flex-shrink: 0;
+    position: relative;
+    transition: all 0.2s;
+}
+#modal-refund-apply .refund-checkbox-label input[type="checkbox"]:checked + .refund-checkbox-custom {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+#modal-refund-apply .refund-checkbox-label input[type="checkbox"]:checked + .refund-checkbox-custom::after {
+    content: '';
+    position: absolute;
+    left: 5px;
+    top: 2px;
+    width: 5px;
+    height: 9px;
+    border: solid #fff;
+    border-width: 0 2px 2px 0;
+    transform: rotate(45deg);
+}
+#modal-refund-apply .refund-checkbox-label input[type="checkbox"]:disabled + .refund-checkbox-custom {
+    background: #f2f4f7;
+    border-color: #e4e7ec;
+    cursor: not-allowed;
+}
+#modal-refund-apply .refund-teaching-aid-info {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    font-size: 14px;
+}
+#modal-refund-apply .refund-teaching-aid-price {
+    color: var(--color-primary-dark);
+    font-weight: 600;
+}
+#modal-refund-apply .refund-teaching-aid-hint {
+    font-size: 12px;
+    color: #98a2b3;
+    margin-top: 4px;
+}
+
 /* ==================== 优惠方案弹窗 UI 优化 ==================== */
 
 /* --- 卡片系统 --- */

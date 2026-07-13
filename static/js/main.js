@@ -9205,6 +9205,7 @@ function initWorkRecordTabs() {
 
 // ==================== 退费申请（学员详情页） ====================
 let refundApplyRemainingAmount = 0;
+let refundApplyTaPaid = 0;
 
 async function showRefundApplyModal(orderId) {
     // 从当前学员课程数据中找到目标订单
@@ -9217,6 +9218,28 @@ async function showRefundApplyModal(orderId) {
     const remainingLessons = lc - cl;
     const remainingAmount = lc > 0 ? (ap * remainingLessons / lc) : 0;
     refundApplyRemainingAmount = remainingAmount;
+
+    // 教材包退还
+    const taName = orderRow.teaching_aid_name || '';
+    const taPrice = parseFloat(orderRow.teaching_aid_price) || 0;
+    const pcAmount = parseFloat(orderRow.product_coupon_amount) || 0;
+    refundApplyTaPaid = taPrice > 0 ? Math.round((taPrice - pcAmount) * 100) / 100 : 0;
+
+    const taCard = document.getElementById('refund-teaching-aid-card');
+    const taCheckbox = document.getElementById('refund-return-teaching-aid');
+    const taNameEl = document.getElementById('refund-teaching-aid-name');
+    const taPaidEl = document.getElementById('refund-teaching-aid-paid');
+
+    if (taName && taPrice > 0 && refundApplyTaPaid > 0) {
+        taCard.style.display = 'block';
+        taNameEl.textContent = taName;
+        taPaidEl.textContent = '¥' + refundApplyTaPaid.toFixed(2);
+        taCheckbox.checked = false;
+        taCheckbox.disabled = false;
+    } else {
+        taCard.style.display = 'none';
+        taCheckbox.checked = false;
+    }
 
     document.getElementById('refund-apply-order-id').value = orderId;
     document.getElementById('refund-auto-campus').textContent = orderRow.campus || '-';
@@ -9241,8 +9264,16 @@ async function showRefundApplyModal(orderId) {
 
 function calcActualRefund() {
     const deduction = parseFloat(document.getElementById('refund-custom-deduction').value) || 0;
-    const actual = Math.max(0, refundApplyRemainingAmount - deduction);
+    const taBonus = document.getElementById('refund-return-teaching-aid').checked ? (refundApplyTaPaid || 0) : 0;
+    const base = (refundApplyRemainingAmount || 0) + taBonus;
+    const actual = Math.max(0, base - deduction);
     document.getElementById('refund-actual-amount-display').textContent = '¥' + actual.toFixed(2);
+    // 同步更新计算基础显示
+    document.getElementById('refund-calc-base-amount').textContent = '¥' + base.toFixed(2);
+}
+
+function onReturnTeachingAidChange() {
+    calcActualRefund();
 }
 
 function onRefundMethodChange() {
@@ -9270,6 +9301,9 @@ async function submitRefundApply() {
     // 读取退费方式
     const refundTo = document.querySelector('input[name="refund-method"]:checked')?.value || 'cash';
 
+    // 教材包退还标记
+    const returnTeachingAid = document.getElementById('refund-return-teaching-aid').checked ? 1 : 0;
+
     // 退到银行卡时校验银行信息
     if (refundTo === 'cash') {
         if (!bankName) { showToast('请填写转账银行', 'error'); return; }
@@ -9292,7 +9326,8 @@ async function submitRefundApply() {
                 bank_account: bankAccount,
                 account_holder: accountHolder,
                 refund_reason: refundReason,
-                refund_to: refundTo
+                refund_to: refundTo,
+                return_teaching_aid: returnTeachingAid
             })
         });
         const data = await res.json();
