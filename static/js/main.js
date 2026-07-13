@@ -6268,7 +6268,7 @@ function renderStudentCoursesTable(rows) {
     const tableDiv = document.getElementById('student-courses-table');
     if (!tableDiv) return;
     tableDiv.innerHTML = `<div class="table-wrap"><table><thead><tr>
-        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>剩余课时</th><th>剩余金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
+        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>剩余课时</th><th>剩余金额</th><th>教材包</th><th>教材包金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
     </tr></thead><tbody>
     ${rows.map(r => {
         const refundStatus = (r.refund_status || '正常');
@@ -6316,6 +6316,8 @@ function renderStudentCoursesTable(rows) {
         <td>${r.refunded_lessons || 0}</td>
         <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
         <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
+        <td>${esc(r.teaching_aid_name || '-')}</td>
+        <td>${r.teaching_aid_paid != null && r.teaching_aid_paid > 0 ? '¥' + Number(r.teaching_aid_paid).toFixed(2) : '-'}</td>
         <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
         <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
         <td>${refundStatusHtml}</td>

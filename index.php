@@ -2416,6 +2416,7 @@ $stmt->execute();
                 }
                 // 报读课程实际价格排除教材包和商品券（与课耗算法一致）
                 $r['actual_price'] = round($ap - $taPrice + $pcAmount, 2);
+                $r['teaching_aid_paid'] = max(0, round($taPrice - $pcAmount, 2));
                 $rows[] = $r;
 
                 // --- 赠课虚拟记录 ---
@@ -2433,6 +2434,8 @@ $stmt->execute();
                         'coupon_amount' => 0,
                         'teaching_aid_price' => 0,
                         'product_coupon_amount' => 0,
+                        'teaching_aid_name' => '',
+                        'teaching_aid_paid' => 0,
                         'status' => $r['status'],
                         'order_id' => $r['order_id'],
                         'order_no' => $r['order_no'],
