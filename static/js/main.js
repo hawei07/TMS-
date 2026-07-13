@@ -12632,25 +12632,33 @@ function switchTaTab(tab) {
 
 // ===== 购买画具 =====
 let taPurchaseStudent = null;   // 选中学员 {id, name, student_no, campus_name}
+let taPurchaseCampus = null;    // 购买时选择的校区名称
 let taCartItems = {};           // {teaching_aid_id: {id, name, unit, price, type, quantity}}
 let taSelectedProduct = null;   // 当前搜索选中商品 {id, name, price, type, unit}
 let taSelectedQty = 1;          // 当前选中商品数量
 
 async function initPurchaseTab() {
     const studentSelected = taPurchaseStudent !== null;
-    document.getElementById('tab-ta-purchase').querySelector('#ta-no-student-hint').style.display = studentSelected ? 'none' : 'block';
+    const campusSelected = studentSelected; // 选了学员就会进入校区选择
+    document.getElementById('ta-no-student-hint').style.display = studentSelected ? 'none' : 'block';
     document.getElementById('ta-selected-student').style.display = studentSelected ? 'block' : 'none';
-    document.getElementById('ta-cart-section').style.display = studentSelected ? 'block' : 'none';
-    document.getElementById('ta-product-search-wrap').style.display = studentSelected ? 'block' : 'none';
+    document.getElementById('ta-cart-section').style.display = campusSelected ? 'block' : 'none';
+    document.getElementById('ta-product-search-wrap').style.display = campusSelected ? 'block' : 'none';
+    document.getElementById('ta-payment-panel').style.display = campusSelected ? 'block' : 'none';
+    document.getElementById('ta-campus-selection-section').style.display = studentSelected ? 'block' : 'none';
 
     if (studentSelected) {
         document.getElementById('ta-student-info').textContent = taPurchaseStudent.name + ' | ' + taPurchaseStudent.student_no + ' | ' + (taPurchaseStudent.campus_name || '无校区');
-        // 加载账户余额
-        loadStudentBalance();
-        // 重置支付金额
+        if (taPurchaseCampus) {
+            document.getElementById('ta-selected-campus').textContent = taPurchaseCampus;
+        }
+        if (campusSelected) {
+            loadStudentBalance();
+        }
         document.getElementById('ta-pay-cash').value = '0';
         document.getElementById('ta-pay-meituan').value = '0';
         document.getElementById('ta-pay-account').value = '0';
+        renderCart();
         updatePurchaseBtn();
     }
 }
@@ -12664,7 +12672,7 @@ async function searchPurchaseStudent(keyword) {
     const data = await api('search_students_for_sale', { keyword: keyword.trim() }, 'GET');
     const students = data.data || [];
     if (students.length === 0) {
-        dropdown.innerHTML = '<div class="ta-student-dropdown-item" style="color:#999;">未找到匹配学员</div>';
+        dropdown.innerHTML = '<div class="ta-student-dropdown-item" style="color:var(--ta-surface-500);">未找到匹配学员</div>';
     } else {
         dropdown.innerHTML = students.map(s => 
             `<div class="ta-student-dropdown-item" onclick="selectPurchaseStudent(${s.id}, '${esc(s.name)}', '${esc(s.student_no || '')}', '${esc(s.campus || '')}')">${esc(s.name)} — ${esc(s.student_no || '无学号')} — ${esc(s.campus || '无校区')}</div>`
@@ -12683,21 +12691,24 @@ function selectPurchaseStudent(id, name, studentNo, campusName) {
     document.getElementById('ta-no-student-hint').style.display = 'none';
     document.getElementById('ta-student-dropdown').style.display = 'none';
     document.getElementById('ta-purchase-student-search').value = '';
-    document.getElementById('ta-cart-section').style.display = 'block';
-    document.getElementById('ta-product-search-wrap').style.display = 'block';
+    document.getElementById('ta-cart-section').style.display = 'none';
+    document.getElementById('ta-product-search-wrap').style.display = 'none';
+    document.getElementById('ta-payment-panel').style.display = 'none';
     document.getElementById('ta-product-search-input').value = '';
     document.getElementById('ta-product-dropdown').style.display = 'none';
     document.getElementById('ta-selected-product').style.display = 'none';
     document.getElementById('ta-pay-cash').value = '0';
     document.getElementById('ta-pay-meituan').value = '0';
     document.getElementById('ta-pay-account').value = '0';
+    // 进入校区选择步骤
+    renderCampusSelection();
     renderCart();
     updatePurchaseBtn();
-    loadStudentBalance();
 }
 
 function clearPurchaseStudent() {
     taPurchaseStudent = null;
+    taPurchaseCampus = null;
     taCartItems = {};
     taSelectedProduct = null;
     taSelectedQty = 1;
@@ -12705,8 +12716,44 @@ function clearPurchaseStudent() {
     document.getElementById('ta-no-student-hint').style.display = 'block';
     document.getElementById('ta-cart-section').style.display = 'none';
     document.getElementById('ta-product-search-wrap').style.display = 'none';
+    document.getElementById('ta-payment-panel').style.display = 'none';
+    document.getElementById('ta-campus-selection-section').style.display = 'none';
     renderCart();
     updatePurchaseBtn();
+}
+
+function renderCampusSelection() {
+    if (!taPurchaseStudent || !taPurchaseStudent.campus_name) {
+        onCampusSelected('');
+        return;
+    }
+    const campuses = taPurchaseStudent.campus_name.split(',').map(c => c.trim()).filter(Boolean);
+    if (campuses.length === 0) {
+        onCampusSelected('');
+        return;
+    }
+    // 单校区直接选中，多校区随机展示一个作为默认
+    if (campuses.length === 1) {
+        onCampusSelected(campuses[0]);
+        return;
+    }
+    const defaultCampus = campuses[Math.floor(Math.random() * campuses.length)];
+    const section = document.getElementById('ta-campus-selection-section');
+    section.style.display = 'block';
+    const select = document.getElementById('ta-campus-select');
+    select.innerHTML = campuses.map(c => `<option value="${esc(c)}" ${c === defaultCampus ? 'selected' : ''}>${esc(c)}</option>`).join('');
+    select.onchange = function() { onCampusSelected(this.value); };
+    onCampusSelected(defaultCampus);
+}
+
+function onCampusSelected(campus) {
+    taPurchaseCampus = campus;
+    document.getElementById('ta-selected-campus').textContent = campus || '未指定';
+    // 显示商品搜索、购物车、支付面板
+    document.getElementById('ta-cart-section').style.display = 'block';
+    document.getElementById('ta-product-search-wrap').style.display = 'block';
+    document.getElementById('ta-payment-panel').style.display = 'block';
+    loadStudentBalance();
 }
 
 async function loadStudentBalance() {
@@ -12726,7 +12773,7 @@ async function searchPurchaseProduct(keyword) {
     const data = await api('list_available_teaching_aids', { keyword: keyword.trim() }, 'GET');
     const products = data.data || [];
     if (products.length === 0) {
-        dropdown.innerHTML = '<div class="ta-student-dropdown-item" style="color:#999;">未找到匹配商品</div>';
+        dropdown.innerHTML = '<div class="ta-student-dropdown-item" style="color:var(--ta-surface-500);">未找到匹配商品</div>';
     } else {
         dropdown.innerHTML = products.map(p =>
             `<div class="ta-student-dropdown-item" onclick="selectPurchaseProduct(${p.id}, '${esc(p.name)}', ${p.price}, '${esc(p.type || '')}', '${esc(p.unit || '')}')">${esc(p.name)} — ¥${p.price.toFixed(2)} — ${esc(p.type || '')} / ${esc(p.unit || '')}</div>`
@@ -12755,7 +12802,6 @@ function addSelectedToCart() {
     if (!taSelectedProduct || !taPurchaseStudent) return;
     const aid = taSelectedProduct.id;
     if (taCartItems[aid]) {
-        // 已存在则增加数量
         taCartItems[aid].quantity += taSelectedQty;
     } else {
         taCartItems[aid] = {
@@ -12767,7 +12813,6 @@ function addSelectedToCart() {
             quantity: taSelectedQty
         };
     }
-    // 重置选中状态
     taSelectedProduct = null;
     taSelectedQty = 1;
     document.getElementById('ta-selected-product').style.display = 'none';
@@ -12798,7 +12843,7 @@ function renderCart() {
     const cartKeys = Object.keys(taCartItems);
     
     if (cartKeys.length === 0) {
-        cartContainer.innerHTML = '<div style="color:#999;font-size:13px;padding:8px;">购物车为空，请搜索商品并加入购物车</div>';
+        cartContainer.innerHTML = '<div style="color:var(--ta-surface-500);font-size:13px;padding:12px;text-align:center;">购物车为空，请搜索商品并加入购物车</div>';
         summaryDiv.style.display = 'none';
         document.getElementById('ta-cart-total').textContent = '¥0.00';
         return;
@@ -12815,18 +12860,18 @@ function renderCart() {
                     <span class="ta-cart-item-name">${esc(item.name)}</span>
                     <span class="ta-cart-item-price">¥${item.price.toFixed(2)} × </span>
                     <span class="ta-cart-item-qty">
-                        <button class="ta-qty-btn" onclick="changeCartQty(${aid}, -1)">−</button>
+                        <button class="ta-qty-btn" onclick="changeCartQty(${aid}, -1)">&minus;</button>
                         <span class="ta-qty-val">${item.quantity}</span>
                         <button class="ta-qty-btn" onclick="changeCartQty(${aid}, 1)">+</button>
                     </span>
                     <span class="ta-cart-item-subtotal">= ¥${subtotal.toFixed(2)}</span>
-                    <button class="ta-cart-item-remove" onclick="toggleCartItem(${aid})" title="移除">×</button>
+                    <button class="ta-cart-item-remove" onclick="toggleCartItem(${aid})" title="移除">&times;</button>
                 </div>
             </div>
         `;
     }).join('');
     
-    summaryDiv.style.display = 'block';
+    summaryDiv.style.display = 'flex';
     document.getElementById('ta-cart-total').textContent = '¥' + total.toFixed(2);
 }
 
@@ -12834,9 +12879,7 @@ function getCartTotal() {
     return Object.values(taCartItems).reduce((sum, item) => sum + item.price * item.quantity, 0);
 }
 
-function recalcTaPayment() {
-    updatePurchaseBtn();
-}
+function recalcTaPayment() { updatePurchaseBtn(); }
 
 function updatePurchaseBtn() {
     const total = getCartTotal();
@@ -12854,13 +12897,13 @@ function updatePurchaseBtn() {
     
     if (hasStudent && hasItems && total > 0) {
         if (isMatch) {
-            matchDiv.style.display = 'block';
+            matchDiv.style.display = 'flex';
             matchDiv.className = 'ta-payment-match ta-payment-match-ok';
-            matchText.textContent = '支付金额与商品总价匹配 ✓';
+            matchText.textContent = '✓ 支付金额与商品总价匹配';
             btn.disabled = false;
             btn.title = '';
         } else {
-            matchDiv.style.display = 'block';
+            matchDiv.style.display = 'flex';
             matchDiv.className = 'ta-payment-match ta-payment-match-err';
             const diff = paymentSum - total;
             matchText.textContent = diff > 0 ? `支付金额超出 ¥${diff.toFixed(2)}，请调整` : `还需支付 ¥${Math.abs(diff).toFixed(2)}`;
@@ -12882,6 +12925,7 @@ async function confirmPurchase() {
     const remark = document.getElementById('ta-purchase-remark').value.trim();
     
     if (!taPurchaseStudent) { showToast('请先选择学员', 'error'); return; }
+    if (!taPurchaseCampus) { showToast('请选择校区', 'error'); return; }
     if (Object.keys(taCartItems).length === 0) { showToast('请选择商品', 'error'); return; }
     if (Math.abs(cash + meituan + account - total) > 0.01) { showToast('支付金额与商品总价不匹配', 'error'); return; }
     
@@ -12893,10 +12937,15 @@ async function confirmPurchase() {
     const studentName = taPurchaseStudent.name;
     const itemList = Object.values(taCartItems).map(i => i.name + ' ×' + i.quantity).join('、');
     
-    showCustomConfirm(`确认为学员「${studentName}」购买以下商品？\n\n${itemList}\n总金额：¥${total.toFixed(2)}\n现金 ¥${cash.toFixed(2)} | 美团 ¥${meituan.toFixed(2)} | 账户 ¥${account.toFixed(2)}`, async () => {
+    showCustomConfirm(`确认为学员「${studentName}」购买以下商品？
+
+${itemList}
+总金额：¥${total.toFixed(2)}
+现金 ¥${cash.toFixed(2)} | 美团 ¥${meituan.toFixed(2)} | 账户 ¥${account.toFixed(2)}`, async () => {
         const result = await api('create_teaching_aid_sale', {
             student_id: taPurchaseStudent.id,
             items: items,
+            campus: taPurchaseCampus,
             cash_amount: cash,
             meituan_amount: meituan,
             account_amount: account,
@@ -12906,7 +12955,6 @@ async function confirmPurchase() {
         if (result.error) { showToast(result.error, 'error'); return; }
         
         showToast('购买成功', 'success');
-        // 清空购物车
         taCartItems = {};
         renderCart();
         document.getElementById('ta-pay-cash').value = '0';
@@ -12914,9 +12962,7 @@ async function confirmPurchase() {
         document.getElementById('ta-pay-account').value = '0';
         document.getElementById('ta-purchase-remark').value = '';
         updatePurchaseBtn();
-        // 刷新账户余额
         loadStudentBalance();
-        // 切换到销售记录 tab
         switchTaTab('sales');
     });
 }
@@ -12946,7 +12992,7 @@ async function loadTeachingAidSales(page = 1) {
 function renderTeachingAidSalesTable(rows) {
     const tbody = document.getElementById('ta-sales-tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="13"><div class="empty-state">暂无销售记录</div></td></tr>';
+        tbody.innerHTML = '<tr><td colspan="14"><div class="empty-state">暂无销售记录</div></td></tr>';
             return;
         }
         tbody.innerHTML = rows.map(r => {
@@ -12962,6 +13008,7 @@ function renderTeachingAidSalesTable(rows) {
                 <td>${esc(r.created_at || '')}</td>
                 <td>${esc(r.student_name)}</td>
                 <td>${esc(r.student_no)}</td>
+                <td>${esc(r.campus || '—')}</td>
                 <td><strong>${esc(r.teaching_aid_name)}</strong></td>
                 <td>${typeTag}</td>
                 <td style="text-align:center;">${r.quantity}</td>

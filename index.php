@@ -3291,6 +3291,7 @@ $stmt->execute();
             $meituanAmount = floatval($input['meituan_amount'] ?? 0);
             $accountAmount = floatval($input['account_amount'] ?? 0);
             $remark = trim($input['remark'] ?? '');
+            $selectedCampus = trim($input['campus'] ?? '');  // 前端传入的购买校区
             // 计算总金额并预查画具信息
             $totalCalc = 0;
             $itemDetails = [];
@@ -3342,9 +3343,9 @@ $stmt->execute();
                     $itemCash = round($cashAmount * $ratio, 2);
                     $itemMeituan = round($meituanAmount * $ratio, 2);
                     $itemAccount = round($accountAmount * $ratio, 2);
-                    // 校区优先用画具关联的校区，否则用学员校区
-                    $itemCampus = $ta['campus_names'] ?: $studentCampus;
-                    // 查询校区商品税率，计算税后金额（取第一个校区名匹配）
+                    // 校区使用前端传入的购买校区
+                    $itemCampus = $selectedCampus ?: ($ta['campus_names'] ?: $studentCampus);
+                    // 查询校区商品税率，计算税后金额（使用购买时选择的校区）
                     $productTaxRate = 0;
                     if ($itemCampus) {
                         $firstCampus = trim(explode(',', $itemCampus)[0]);
@@ -8985,96 +8986,138 @@ if (intval($countBt) === 0) {
                     <!-- 分页 -->
                     <div class="pagination" id="pagination-teaching-aids"></div>
                 </div>
-
                 <!-- Tab 2: 购买画具 -->
                 <div class="sec-panel" id="tab-ta-purchase">
-                    <!-- 学员选择区 -->
-                    <div class="ta-purchase-student" id="ta-purchase-student-section">
-                        <div class="ta-student-search">
-                            <label style="font-size:13px;font-weight:600;margin-right:8px;">选择学员：</label>
-                            <div style="position:relative;flex:1;max-width:320px;">
-                                <input type="text" id="ta-purchase-student-search" class="form-input"
-                                       placeholder="输入学员姓名或学号搜索..."
-                                       oninput="searchPurchaseStudent(this.value)"
-                                       style="width:100%;">
-                                <div class="ta-student-dropdown" id="ta-student-dropdown" style="display:none;"></div>
+                    <div class="ta-purchase-layout">
+                        <!-- 左栏：学员选择 + 购物车 -->
+                        <div class="ta-purchase-left">
+                            <!-- 学员选择区 -->
+                            <div class="ta-purchase-student-new" id="ta-purchase-student-section">
+                                <div class="ta-section-head">
+                                    <span class="ta-section-bar"></span>
+                                    <span class="ta-section-title">选择学员</span>
+                                </div>
+                                <div class="ta-student-search-new">
+                                    <svg class="ta-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                                    <input type="text" id="ta-purchase-student-search" class="form-input"
+                                           placeholder="输入学员姓名或学号搜索..."
+                                           oninput="searchPurchaseStudent(this.value)"
+                                           autocomplete="off">
+                                    <div class="ta-student-dropdown" id="ta-student-dropdown" style="display:none;"></div>
+                                </div>
+                                <div id="ta-selected-student" style="display:none;">
+                                    <span class="ta-student-chip-new" id="ta-student-info-wrap">
+                                        <span class="ta-chip-avatar"></span>
+                                        <span id="ta-student-info"></span>
+                                        <button class="ta-chip-close" onclick="clearPurchaseStudent()" title="取消选择">&times;</button>
+                                    </span>
+                                </div>
+                                <div id="ta-no-student-hint" class="ta-empty-hint">请先选择学员</div>
                             </div>
-                        </div>
-                        <div id="ta-selected-student" style="display:none;margin-top:10px;">
-                            <div class="ta-student-chip">
-                                <span id="ta-student-info"></span>
-                                <span class="ta-student-chip-close" onclick="clearPurchaseStudent()" title="取消选择">×</span>
-                            </div>
-                        </div>
-                        <div id="ta-no-student-hint" style="color:#999;font-size:13px;margin-top:8px;">请先选择学员</div>
-                    </div>
 
-                    <!-- 搜索商品区 -->
-                    <div id="ta-product-search-wrap" style="margin-top:16px;display:none;">
-                        <h4 style="margin:0 0 10px 0;font-size:14px;">搜索商品</h4>
-                        <div class="ta-student-search">
-                            <div style="position:relative;flex:1;max-width:400px;">
-                                <input type="text" id="ta-product-search-input" class="form-input"
-                                       placeholder="输入商品名称搜索..."
-                                       oninput="searchPurchaseProduct(this.value)"
-                                       style="width:100%;">
-                                <div class="ta-student-dropdown" id="ta-product-dropdown" style="display:none;"></div>
+                            <!-- 校区选择区 -->
+                            <div id="ta-campus-selection-section" class="ta-block" style="display:none;">
+                                <div class="ta-section-head">
+                                    <span class="ta-section-bar"></span>
+                                    <span class="ta-section-title">选择校区</span>
+                                </div>
+                                <div class="ta-campus-select-row">
+                                    <span class="ta-campus-label">购买校区：</span>
+                                    <select id="ta-campus-select" class="form-input ta-campus-select-input">
+                                    </select>
+                                    <span id="ta-selected-campus" class="ta-selected-campus-display" style="margin-left:8px;color:var(--ta-primary);font-weight:600;"></span>
+                                </div>
                             </div>
-                        </div>
-                        <!-- 选中商品信息 -->
-                        <div id="ta-selected-product" style="display:none;margin-top:12px;">
-                            <div style="display:flex;align-items:center;gap:12px;flex-wrap:wrap;">
-                                <span style="font-weight:600;">已选：</span>
-                                <span id="ta-selected-product-info" style="color:#1a73e8;font-weight:600;"></span>
-                                <span class="ta-cart-item-qty" style="display:inline-flex;align-items:center;">
-                                    <button class="ta-qty-btn" onclick="changeSelectedQty(-1)">−</button>
-                                    <span class="ta-qty-val" id="ta-selected-qty">1</span>
-                                    <button class="ta-qty-btn" onclick="changeSelectedQty(1)">+</button>
-                                </span>
-                                <button class="btn btn-primary" onclick="addSelectedToCart()" style="font-size:12px;">加入购物车</button>
-                            </div>
-                        </div>
-                    </div>
 
-                    <!-- 购物车 -->
-                    <div id="ta-cart-section" style="margin-top:16px;display:none;">
-                        <h4 style="margin:0 0 10px 0;font-size:14px;">购物车</h4>
-                        <div class="ta-cart-items" id="ta-cart-items"></div>
-                        <div class="ta-cart-summary" id="ta-cart-summary" style="display:none;">
-                            <span>合计：<strong id="ta-cart-total">¥0.00</strong></span>
+                            <!-- 商品搜索区 -->
+                            <div id="ta-product-search-wrap" class="ta-block" style="display:none;">
+                                <div class="ta-section-head">
+                                    <span class="ta-section-bar"></span>
+                                    <span class="ta-section-title">搜索商品</span>
+                                </div>
+                                <div class="ta-student-search-new">
+                                    <svg class="ta-search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                                    <input type="text" id="ta-product-search-input" class="form-input"
+                                           placeholder="输入商品名称搜索..."
+                                           oninput="searchPurchaseProduct(this.value)"
+                                           autocomplete="off">
+                                    <div class="ta-student-dropdown" id="ta-product-dropdown" style="display:none;"></div>
+                                </div>
+                                <div id="ta-selected-product" style="display:none;margin-top:10px;">
+                                    <div class="ta-selected-row">
+                                        <span class="ta-selected-label">已选：</span>
+                                        <span id="ta-selected-product-info" class="ta-selected-name"></span>
+                                        <span class="ta-qty-stepper-new">
+                                            <button class="ta-qty-btn-new" onclick="changeSelectedQty(-1)">&minus;</button>
+                                            <span class="ta-qty-val-new" id="ta-selected-qty">1</span>
+                                            <button class="ta-qty-btn-new" onclick="changeSelectedQty(1)">+</button>
+                                        </span>
+                                        <button class="btn btn-primary ta-add-cart-btn" onclick="addSelectedToCart()">加入购物车</button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- 购物车 -->
+                            <div id="ta-cart-section" class="ta-block" style="display:none;">
+                                <div class="ta-section-head">
+                                    <span class="ta-section-bar"></span>
+                                    <span class="ta-section-title">购物车</span>
+                                </div>
+                                <div class="ta-cart-list" id="ta-cart-items"></div>
+                                <div class="ta-cart-summary-new" id="ta-cart-summary" style="display:none;">
+                                    <span class="ta-summary-label">合计</span>
+                                    <span class="ta-summary-amount" id="ta-cart-total">¥0.00</span>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- 支付区 -->
-                        <div class="ta-payment-section" style="margin-top:16px;">
-                            <h4 style="margin:0 0 10px 0;font-size:14px;">支付信息</h4>
-                            <div class="ta-payment-row">
-                                <label>现金：</label>
-                                <input type="number" id="ta-pay-cash" class="form-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" style="width:140px;">
-                                <span style="margin-left:4px;">元</span>
+                        <!-- 右栏：支付信息 -->
+                        <div class="ta-purchase-right" id="ta-payment-panel">
+                            <div class="ta-section-head">
+                                <span class="ta-section-bar"></span>
+                                <span class="ta-section-title">支付信息</span>
                             </div>
-                            <div class="ta-payment-row">
-                                <label>美团：</label>
-                                <input type="number" id="ta-pay-meituan" class="form-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" style="width:140px;">
-                                <span style="margin-left:4px;">元</span>
+                            <div class="ta-payment-form">
+                                <div class="ta-payment-field">
+                                    <label for="ta-pay-cash">现金</label>
+                                    <div class="ta-input-wrap">
+                                        <span class="ta-input-prefix">¥</span>
+                                        <input type="number" id="ta-pay-cash" class="form-input ta-pay-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" placeholder="0.00">
+                                        <span class="ta-input-suffix">元</span>
+                                    </div>
+                                </div>
+                                <div class="ta-payment-field">
+                                    <label for="ta-pay-meituan">美团</label>
+                                    <div class="ta-input-wrap">
+                                        <span class="ta-input-prefix">¥</span>
+                                        <input type="number" id="ta-pay-meituan" class="form-input ta-pay-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" placeholder="0.00">
+                                        <span class="ta-input-suffix">元</span>
+                                    </div>
+                                </div>
+                                <div class="ta-payment-field">
+                                    <label for="ta-pay-account">账户余额</label>
+                                    <div class="ta-input-wrap">
+                                        <span class="ta-input-prefix">¥</span>
+                                        <input type="number" id="ta-pay-account" class="form-input ta-pay-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" placeholder="0.00">
+                                        <span class="ta-input-hint">可用 <strong id="ta-account-balance">¥0.00</strong></span>
+                                    </div>
+                                </div>
+                                <div class="ta-payment-field">
+                                    <label for="ta-purchase-remark">备注</label>
+                                    <input type="text" id="ta-purchase-remark" class="form-input ta-remark-input" placeholder="可选备注">
+                                </div>
                             </div>
-                            <div class="ta-payment-row">
-                                <label>账户余额：</label>
-                                <input type="number" id="ta-pay-account" class="form-input" min="0" step="0.01" value="0" oninput="recalcTaPayment()" style="width:140px;">
-                                <span style="margin-left:4px;">元（可用：<strong id="ta-account-balance">¥0.00</strong>）</span>
-                            </div>
-                            <div class="ta-payment-row" style="margin-top:8px;">
-                                <label>备注：</label>
-                                <input type="text" id="ta-purchase-remark" class="form-input" placeholder="可选备注" style="width:300px;">
-                            </div>
-                            <div class="ta-payment-match" id="ta-payment-match" style="display:none;margin-top:10px;">
+                            <div class="ta-payment-match" id="ta-payment-match" style="display:none;">
                                 <span id="ta-payment-match-text"></span>
                             </div>
-                            <div style="margin-top:12px;">
-                                <button class="btn btn-primary" id="ta-purchase-btn" onclick="confirmPurchase()" disabled>确认购买</button>
-                            </div>
+                            <button class="btn ta-purchase-btn-new" id="ta-purchase-btn" onclick="confirmPurchase()" disabled>
+                                确认购买
+                                <svg class="ta-btn-arrow" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
+                            </button>
                         </div>
                     </div>
                 </div>
+
 
                 <!-- Tab 3: 销售记录 -->
                 <div class="sec-panel" id="tab-ta-sales">
@@ -9122,6 +9165,7 @@ if (intval($countBt) === 0) {
                                 <col class="ta-sales-col-time">
                                 <col class="ta-sales-col-student">
                                 <col class="ta-sales-col-no">
+                                <col class="ta-sales-col-campus">
                                 <col class="ta-sales-col-product">
                                 <col class="ta-sales-col-type">
                                 <col class="ta-sales-col-qty">
@@ -9138,6 +9182,7 @@ if (intval($countBt) === 0) {
                                     <th style="width:140px;">销售时间</th>
                                     <th>学员</th>
                                     <th style="width:100px;">学号</th>
+                                    <th style="width:90px;">校区</th>
                                     <th>商品</th>
                                     <th style="width:70px;">类型</th>
                                     <th style="width:60px;">数量</th>
@@ -11255,7 +11300,7 @@ if (intval($countBt) === 0) {
         </div>
     </div>
 
-    <script src="static/js/main.js?v=20260713a"></script>
+    <script src="static/js/main.js?v=20260713b"></script>
     <div class="sidebar-overlay" onclick="toggleSidebar()"></div>
 </body>
 </html>

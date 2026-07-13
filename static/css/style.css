@@ -7287,525 +7287,367 @@ tbody td {
 
 
 /* ==================== 画具管理 - 购买画具 & 销售记录 ==================== */
-/* 少儿美术风格：鹅黄#FFE066 / 珊瑚#FF7675 / 天蓝#74B9FF / 草绿#55EFC4 */
+/* OKLCH warm-terracotta palette — frontend-design skill */
 
-/* -- 面板级主题变量 -- */
 #panel-teaching-aids {
-    --ta-yellow: #FFE066;
-    --ta-coral: #FF7675;
-    --ta-sky: #74B9FF;
-    --ta-mint: #55EFC4;
-    --ta-yellow-bg: #FFF9E0;
-    --ta-coral-bg: #FFF0F0;
-    --ta-sky-bg: #F0F7FF;
-    --ta-mint-bg: #F0FFF8;
+    --ta-brand-hue: 22;
+    --ta-brand-50:  oklch(96% 0.012 var(--ta-brand-hue));
+    --ta-brand-100: oklch(90% 0.028 var(--ta-brand-hue));
+    --ta-brand-200: oklch(82% 0.055 var(--ta-brand-hue));
+    --ta-brand-300: oklch(72% 0.085 var(--ta-brand-hue));
+    --ta-brand-400: oklch(62% 0.115 var(--ta-brand-hue));
+    --ta-brand-500: oklch(53% 0.138 var(--ta-brand-hue));
+    --ta-brand-600: oklch(44% 0.128 var(--ta-brand-hue));
+    --ta-surface-0:   oklch(100% 0 none);
+    --ta-surface-50:  oklch(98% 0.005 30);
+    --ta-surface-100: oklch(95% 0.008 30);
+    --ta-surface-200: oklch(91% 0.012 30);
+    --ta-surface-300: oklch(85% 0.015 30);
+    --ta-surface-500: oklch(62% 0.018 30);
+    --ta-surface-700: oklch(37% 0.012 30);
+    --ta-surface-800: oklch(25% 0.010 30);
+    --ta-surface-900: oklch(17% 0.008 30);
+    --ta-success:     oklch(58% 0.155 155);
+    --ta-success-bg:  oklch(92% 0.038 155);
+    --ta-danger:      oklch(53% 0.18 22);
+    --ta-danger-bg:   oklch(94% 0.028 22);
+    --ta-ease-out:    cubic-bezier(0.25, 1, 0.5, 1);
+    --ta-ease-expo:   cubic-bezier(0.16, 1, 0.3, 1);
 }
 
-/* -- 面板头部装饰 -- */
-#panel-teaching-aids .panel-header {
-    position: relative;
-    overflow: hidden;
-}
-#panel-teaching-aids .panel-header::after {
-    content: '';
-    position: absolute;
-    right: 20px;
-    top: 50%;
-    transform: translateY(-50%);
-    width: 40px;
-    height: 40px;
-    border-radius: 50%;
-    opacity: 0.25;
-    pointer-events: none;
-}
+/* -- Panel header -- */
+#panel-teaching-aids .panel-header { position: relative; overflow: hidden; }
 #panel-teaching-aids .panel-header h3 {
-    display: flex;
-    align-items: center;
-    gap: 10px;
+    display: flex; align-items: center; gap: 10px;
 }
 
-/* -- Tab 按钮 -- */
+/* -- Tab buttons -- */
 #ta-tabs {
-    display: flex;
-    gap: 2px;
-    border-bottom: 1.5px solid #e9ebf0;
-    margin-bottom: 20px;
-    padding: 0 4px;
+    display: flex; gap: 2px;
+    border-bottom: 1.5px solid var(--ta-surface-200);
+    margin-bottom: 20px; padding: 0 4px;
 }
 #ta-tabs .sec-tab {
-    padding: 11px 20px;
-    border: none;
-    background: none;
-    font-size: 13.5px;
-    font-weight: 580;
-    color: #64748b;
-    cursor: pointer;
-    border-bottom: 2px solid transparent;
+    padding: 11px 20px; border: none; background: none;
+    font-size: 13.5px; font-weight: 580; color: var(--ta-surface-500);
+    cursor: pointer; border-bottom: 2px solid transparent;
     margin-bottom: -1.5px;
-    transition: color 0.2s cubic-bezier(0.25,1,0.5,1), border-color 0.2s cubic-bezier(0.25,1,0.5,1), background 0.15s cubic-bezier(0.25,1,0.5,1);
-    border-radius: 8px 8px 0 0;
-    position: relative;
-    letter-spacing: 0.01em;
+    transition: color 0.2s var(--ta-ease-out), border-color 0.2s var(--ta-ease-out), background 0.15s var(--ta-ease-out);
+    border-radius: 8px 8px 0 0; position: relative; letter-spacing: 0.01em;
 }
 #ta-tabs .sec-tab:hover {
-    color: var(--color-primary);
-    background: rgba(124,58,237,0.04);
+    color: var(--ta-brand-500);
+    background: oklch(62% 0.115 22 / 0.06);
 }
 #ta-tabs .sec-tab.active {
-    color: var(--color-primary);
-    border-bottom-color: var(--color-primary);
-    font-weight: 600;
-    background: rgba(124,58,237,0.04);
+    color: var(--ta-brand-500); border-bottom-color: var(--ta-brand-500);
+    font-weight: 600; background: oklch(62% 0.115 22 / 0.06);
 }
 
-/* -- 学员搜索区 -- */
-.ta-purchase-student {
-    background: linear-gradient(135deg, #FFFEF5 0%, #FFF9E0 40%, #fff 100%);
-    border: 2px solid #FFE066;
+/* ===== Purchase Layout ===== */
+.ta-purchase-layout {
+    display: grid;
+    grid-template-columns: 1fr 340px;
+    gap: 24px;
+    align-items: start;
+}
+.ta-purchase-left { display: flex; flex-direction: column; gap: 20px; }
+.ta-purchase-right {
+    background: var(--ta-surface-0);
+    border: 1px solid var(--ta-surface-200);
     border-radius: 14px;
+    padding: 20px 22px;
+    position: sticky; top: 16px;
+    box-shadow: 0 2px 8px oklch(0% 0 0 / 0.04);
+}
+
+/* -- Section heading -- */
+.ta-section-head {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 14px;
+}
+.ta-section-bar {
+    width: 3.5px; height: 18px; background: var(--ta-brand-400);
+    border-radius: 2px; flex-shrink: 0;
+}
+.ta-section-title {
+    font-size: 14px; font-weight: 700; color: var(--ta-surface-900);
+    letter-spacing: -0.01em;
+}
+
+/* -- Block container -- */
+.ta-block {
+    background: var(--ta-surface-0);
+    border: 1px solid var(--ta-surface-200);
+    border-radius: 12px;
     padding: 18px 20px;
-    position: relative;
-    overflow: hidden;
 }
-/* 装饰小圆点 */
-.ta-purchase-student::before {
-    content: '';
-    position: absolute;
-    top: -15px;
-    right: -15px;
-    width: 50px;
-    height: 50px;
-    border-radius: 50%;
-    background: rgba(255,224,102,0.3);
-    pointer-events: none;
-}
-.ta-student-search {
+
+/* -- Campus selection -- */
+.ta-campus-select-row {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
 }
-.ta-student-search label {
-    font-size: 13px;
-    font-weight: 700;
-    color: #e67e22;
+.ta-campus-label {
+    font-size: 14px;
+    color: var(--ta-surface-700);
+    white-space: nowrap;
 }
+.ta-campus-select-input {
+    width: 200px;
+}
+
+/* -- Student selection -- */
+.ta-purchase-student-new {
+    background: var(--ta-surface-50);
+    border: 1px solid var(--ta-surface-200);
+    border-radius: 12px;
+    padding: 18px 20px;
+}
+.ta-student-search-new {
+    position: relative;
+    display: flex; align-items: center;
+}
+.ta-student-search-new .ta-search-icon {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    width: 16px; height: 16px; color: var(--ta-surface-500); pointer-events: none;
+    z-index: 2;
+}
+.ta-student-search-new input.form-input {
+    width: 100%; height: 40px;
+    padding-left: 34px; padding-right: 12px;
+    border: 1.5px solid var(--ta-surface-200);
+    border-radius: 8px; font-size: 13px;
+    transition: border-color 0.15s var(--ta-ease-out), box-shadow 0.15s var(--ta-ease-out);
+}
+.ta-student-search-new input.form-input:focus {
+    border-color: var(--ta-brand-300);
+    box-shadow: 0 0 0 3px oklch(72% 0.085 22 / 0.12);
+}
+
+/* Dropdown */
 .ta-student-dropdown {
-    position: absolute;
-    top: 100%;
-    left: 0;
-    right: 0;
-    background: #fff;
-    border: 2px solid #FFE066;
-    border-radius: 10px;
-    box-shadow: 0 6px 24px rgba(255,118,117,0.12);
-    z-index: 100;
-    max-height: 240px;
-    overflow-y: auto;
-    margin-top: 4px;
+    position: absolute; top: 100%; left: 0; right: 0;
+    background: var(--ta-surface-0);
+    border: 1.5px solid var(--ta-surface-200);
+    border-radius: 10px; box-shadow: 0 6px 20px oklch(0% 0 0 / 0.08);
+    z-index: 100; max-height: 240px; overflow-y: auto; margin-top: 4px;
 }
 .ta-student-dropdown-item {
-    padding: 11px 14px;
-    font-size: 13px;
-    cursor: pointer;
-    border-bottom: 1px solid #fef5e7;
-    transition: all 0.15s;
-    display: flex;
-    align-items: center;
+    padding: 10px 14px; font-size: 13px; cursor: pointer;
+    border-bottom: 1px solid var(--ta-surface-100);
+    transition: all 0.12s var(--ta-ease-out);
 }
 .ta-student-dropdown-item:last-child { border-bottom: none; }
 .ta-student-dropdown-item:hover {
-    background: #FFF0F0;
-    color: #FF7675;
-    padding-left: 18px;
+    background: var(--ta-brand-50); color: var(--ta-brand-600);
 }
 
-/* -- 选中学员 Chip（珊瑚色） -- */
-.ta-student-chip {
-    display: inline-flex;
-    align-items: center;
-    gap: 8px;
-    background: #FFF0F0;
-    border: 2px solid #FF7675;
-    border-radius: 24px;
-    padding: 7px 16px;
-    font-size: 13px;
-    font-weight: 600;
-    color: #FF7675;
-    box-shadow: 0 2px 8px rgba(255,118,117,0.15);
-    transition: all 0.2s;
+/* Selected student chip */
+.ta-student-chip-new {
+    display: inline-flex; align-items: center; gap: 8px;
+    background: var(--ta-surface-0);
+    border: 1.5px solid var(--ta-surface-200);
+    border-radius: 24px; padding: 6px 14px 6px 6px;
+    font-size: 13px; font-weight: 600; color: var(--ta-surface-800);
+    margin-top: 10px;
 }
-.ta-student-chip:hover {
-    transform: translateY(-1px);
-    box-shadow: 0 3px 12px rgba(255,118,117,0.2);
+.ta-chip-avatar {
+    width: 28px; height: 28px; border-radius: 50%;
+    background: var(--ta-brand-100);
+    flex-shrink: 0;
 }
-.ta-student-chip-close {
-    cursor: pointer;
-    font-size: 18px;
-    font-weight: bold;
-    line-height: 1;
-    opacity: 0.6;
-    transition: all 0.15s;
-    width: 20px;
-    height: 20px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    border-radius: 50%;
+.ta-chip-close {
+    background: none; border: none; font-size: 18px; line-height: 1;
+    color: var(--ta-surface-500); cursor: pointer;
+    padding: 0 2px; border-radius: 50%;
+    transition: all 0.12s var(--ta-ease-out);
+    width: 22px; height: 22px; display: flex; align-items: center; justify-content: center;
 }
-.ta-student-chip-close:hover {
-    opacity: 1;
-    background: rgba(255,118,117,0.15);
+.ta-chip-close:hover { color: var(--ta-danger); background: var(--ta-danger-bg); }
+.ta-empty-hint { color: var(--ta-surface-500); font-size: 13px; margin-top: 8px; font-style: italic; }
+
+/* Selected product row */
+.ta-selected-row {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+.ta-selected-label { font-weight: 600; font-size: 13px; color: var(--ta-surface-700); }
+.ta-selected-name  { color: var(--ta-brand-500); font-weight: 700; font-size: 13px; }
+.ta-add-cart-btn   { font-size: 12px !important; padding: 6px 14px !important; }
+
+/* Quantity stepper */
+.ta-qty-stepper-new {
+    display: inline-flex; align-items: center;
+    border: 1px solid var(--ta-surface-200); border-radius: 6px; overflow: hidden;
+}
+.ta-qty-btn-new {
+    width: 28px; height: 28px; border: none; background: var(--ta-surface-0);
+    font-size: 15px; font-weight: 600; color: var(--ta-surface-700);
+    cursor: pointer; transition: all 0.15s var(--ta-ease-out);
+    display: flex; align-items: center; justify-content: center;
+}
+.ta-qty-btn-new:hover { background: var(--ta-surface-100); color: var(--ta-surface-900); }
+.ta-qty-btn-new:active { background: var(--ta-surface-200); transform: scale(0.94); }
+.ta-qty-val-new {
+    width: 32px; text-align: center; font-size: 13px; font-weight: 700;
+    color: var(--ta-surface-800);
 }
 
-/* -- 商品卡片网格 -- */
-.ta-product-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fill, minmax(185px, 1fr));
-    gap: 14px;
-    max-height: 420px;
-    overflow-y: auto;
-    padding: 4px;
-    scroll-behavior: smooth;
-}
-/* 自定义滚动条 */
-.ta-product-grid::-webkit-scrollbar { width: 6px; }
-.ta-product-grid::-webkit-scrollbar-track { background: transparent; }
-.ta-product-grid::-webkit-scrollbar-thumb { background: #ffe0d0; border-radius: 3px; }
-.ta-product-grid::-webkit-scrollbar-thumb:hover { background: #FF7675; }
-
-/* -- 商品卡片 -- */
-.ta-product-card {
-    position: relative;
-    background: #fff;
-    border: 2px solid #f0f0f0;
-    border-radius: 14px;
-    padding: 16px 14px 14px;
-    cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-    user-select: none;
-    overflow: hidden;
-}
-/* 卡片顶部彩色装饰条 */
-.ta-product-card::after {
-    content: '';
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    height: 4px;
-    border-radius: 14px 14px 0 0;
-    background: #e5e7eb;
-    transition: all 0.25s;
-}
-/* 不同位置卡片不同颜色装饰条 */
-.ta-product-card:nth-child(4n+1)::after { background: #FFE066; }
-.ta-product-card:nth-child(4n+2)::after { background: #FF7675; }
-.ta-product-card:nth-child(4n+3)::after { background: #74B9FF; }
-.ta-product-card:nth-child(4n+4)::after { background: #55EFC4; }
-
-.ta-product-card:hover {
-    border-color: #ddd;
-    box-shadow: 0 6px 20px rgba(0,0,0,0.08);
-    transform: translateY(-3px);
-}
-.ta-product-card:hover::after { height: 5px; }
-
-/* 选中态 */
-.ta-product-card-selected {
-    border-color: #FF7675;
-    background: linear-gradient(135deg, #FFF5F5 0%, #FFF0F0 100%);
-    box-shadow: 0 4px 16px rgba(255,118,117,0.18);
-}
-.ta-product-card-selected::after {
-    height: 5px;
-    background: #FF7675 !important;
-}
-
-/* -- 选中勾号 -- */
-.ta-product-check {
-    position: absolute;
-    top: 10px;
-    right: 10px;
-    width: 26px;
-    height: 26px;
-    border-radius: 50%;
-    background: #FF7675;
-    color: #fff;
-    font-size: 14px;
-    font-weight: bold;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    box-shadow: 0 2px 8px rgba(255,118,117,0.35);
-    animation: taPopIn 0.3s cubic-bezier(0.68, -0.55, 0.27, 1.55);
-}
-@keyframes taPopIn {
-    0% { transform: scale(0); opacity: 0; }
-    60% { transform: scale(1.2); }
-    100% { transform: scale(1); opacity: 1; }
-}
-
-/* -- 卡片内容排版 -- */
-.ta-product-card-name {
-    font-size: 14px;
-    font-weight: 700;
-    color: #2d2d2d;
-    margin-bottom: 8px;
-    margin-right: 30px;
-    line-height: 1.4;
-}
-.ta-product-card-meta {
-    font-size: 12px;
-    color: #999;
-    margin-bottom: 6px;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-}
-.ta-product-card-price {
-    font-size: 17px;
-    font-weight: 800;
-    color: #FF7675;
-    margin-bottom: 6px;
-    letter-spacing: -0.5px;
-}
-.ta-product-card-campus {
-    font-size: 11px;
-    color: #bbb;
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    padding-top: 4px;
-    border-top: 1px dashed #f0f0f0;
-}
-
-/* -- 购物车区域 -- */
-.ta-cart-items {
-    background: #fff;
-    border: 2px solid #f0f0f0;
-    border-radius: 14px;
-    overflow: hidden;
+/* Cart list */
+.ta-cart-list {
+    border: 1px solid var(--ta-surface-200); border-radius: 10px;
+    overflow: hidden; background: var(--ta-surface-0);
 }
 .ta-cart-item {
-    padding: 12px 16px;
-    border-bottom: 1px solid #faf0f0;
-    display: flex;
-    align-items: center;
-    transition: background 0.15s;
+    padding: 10px 14px; border-bottom: 1px solid var(--ta-surface-100);
+    display: flex; align-items: center; gap: 8px;
+    transition: background 0.12s var(--ta-ease-out);
 }
-.ta-cart-item:hover { background: #fffdf7; }
 .ta-cart-item:last-child { border-bottom: none; }
+.ta-cart-item:hover { background: var(--ta-surface-50); }
 .ta-cart-item-info {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    flex-wrap: wrap;
-    width: 100%;
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap; width: 100%;
 }
 .ta-cart-item-name {
-    font-weight: 700;
-    font-size: 13px;
-    min-width: 100px;
-    color: #2d2d2d;
+    font-weight: 700; font-size: 13px; min-width: 90px; color: var(--ta-surface-800);
 }
-.ta-cart-item-price {
-    color: #999;
-    font-size: 13px;
+.ta-cart-item-price  { color: var(--ta-surface-500); font-size: 12px; }
+.ta-cart-item-qty .ta-qty-btn {
+    width: 26px; height: 26px; font-size: 14px;
 }
-
-/* -- 数量步进器 -- */
-.ta-cart-item-qty {
-    display: inline-flex;
-    align-items: center;
-    gap: 2px;
-    background: #fafafa;
-    border-radius: 8px;
-    padding: 2px;
+.ta-cart-item-qty .ta-qty-val {
+    min-width: 28px; font-size: 13px;
 }
-.ta-qty-btn {
-    width: 28px;
-    height: 28px;
-    border: none;
-    border-radius: 6px;
-    background: #f0f0f0;
-    cursor: pointer;
-    font-size: 16px;
-    font-weight: bold;
-    color: #666;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: all 0.18s;
-}
-.ta-qty-btn:hover {
-    background: #FF7675;
-    color: #fff;
-    transform: scale(1.08);
-}
-.ta-qty-btn:active { transform: scale(0.95); }
-.ta-qty-val {
-    display: inline-block;
-    min-width: 32px;
-    text-align: center;
-    font-weight: 700;
-    font-size: 14px;
-    color: #2d2d2d;
-}
-
-/* -- 购物车小计 -- */
 .ta-cart-item-subtotal {
-    font-weight: 700;
-    color: #FF7675;
-    font-size: 14px;
-    margin-left: auto;
-    letter-spacing: -0.3px;
+    font-weight: 700; color: var(--ta-brand-500); font-size: 14px;
+    margin-left: auto; letter-spacing: -0.3px;
 }
 .ta-cart-item-remove {
-    background: none;
-    border: none;
-    color: #ccc;
-    cursor: pointer;
-    font-size: 20px;
-    line-height: 1;
-    padding: 2px 6px;
-    transition: all 0.15s;
-    border-radius: 50%;
+    background: none; border: none; color: var(--ta-surface-300);
+    cursor: pointer; font-size: 18px; line-height: 1;
+    padding: 2px 4px; transition: all 0.12s var(--ta-ease-out); border-radius: 50%;
 }
-.ta-cart-item-remove:hover {
-    color: #FF7675;
-    background: #FFF0F0;
-}
+.ta-cart-item-remove:hover { color: var(--ta-danger); background: var(--ta-danger-bg); }
 
-/* -- 购物车合计行 -- */
-.ta-cart-summary {
-    background: linear-gradient(135deg, #FFF5F5 0%, #fff 100%);
-    border: 2px solid #f0f0f0;
-    border-top: 2px dashed #FFE066;
-    border-radius: 0 0 14px 14px;
-    padding: 14px 18px;
-    text-align: right;
-    font-size: 14px;
-    color: #666;
+/* Cart summary */
+.ta-cart-summary-new {
+    display: flex; justify-content: space-between; align-items: baseline;
+    padding: 12px 0 0; margin-top: 10px;
+    border-top: 1.5px dashed var(--ta-surface-200);
 }
-.ta-cart-summary strong {
-    font-size: 20px;
-    color: #FF7675;
-    letter-spacing: -0.5px;
-}
+.ta-summary-label  { font-size: 13px; font-weight: 500; color: var(--ta-surface-500); }
+.ta-summary-amount { font-size: 18px; font-weight: 800; color: var(--ta-brand-500); }
 
-/* -- 支付区 -- */
-.ta-payment-section {
-    background: #fff;
-    border: 2px solid #f0f0f0;
-    border-radius: 14px;
-    padding: 18px 20px;
-    position: relative;
+/* Payment form */
+.ta-payment-form { display: flex; flex-direction: column; gap: 14px; margin-bottom: 14px; }
+.ta-payment-field { display: flex; align-items: center; gap: 10px; }
+.ta-payment-field label {
+    width: 62px; text-align: right; font-size: 13px; font-weight: 600;
+    color: var(--ta-surface-700); flex-shrink: 0;
 }
-/* 支付区标题 */
-.ta-payment-section h4 {
-    margin: 0 0 14px 0 !important;
-    font-size: 14px;
-    font-weight: 700;
-    color: #2d2d2d;
-    display: flex;
-    align-items: center;
-    gap: 8px;
+.ta-input-wrap {
+    position: relative; display: flex; align-items: center; flex: 1;
 }
-.ta-payment-section h4::after {
-    content: '';
-    flex: 1;
-    height: 2px;
-    background: linear-gradient(90deg, #FFE066, transparent);
-    border-radius: 1px;
+.ta-input-prefix {
+    position: absolute; left: 10px; top: 50%; transform: translateY(-50%);
+    font-size: 12px; color: var(--ta-surface-500); pointer-events: none; z-index: 2;
 }
+.ta-pay-input {
+    width: 100%; height: 38px;
+    padding-left: 20px; padding-right: 10px;
+    font-size: 14px; font-weight: 600; text-align: right;
+    border: 1.5px solid var(--ta-surface-200); border-radius: 7px;
+    transition: border-color 0.15s var(--ta-ease-out), box-shadow 0.15s var(--ta-ease-out), background 0.15s var(--ta-ease-out);
+}
+.ta-pay-input:focus {
+    border-color: var(--ta-brand-300);
+    box-shadow: 0 0 0 3px oklch(72% 0.085 22 / 0.12);
+    outline: none; background: var(--ta-surface-0);
+}
+.ta-input-suffix { margin-left: 6px; font-size: 12px; color: var(--ta-surface-500); flex-shrink: 0; }
+.ta-input-hint   { margin-left: 6px; font-size: 11px; color: var(--ta-surface-500); white-space: nowrap; }
+.ta-input-hint strong { color: var(--ta-surface-700); }
+.ta-remark-input { width: 100%; height: 38px; font-size: 13px; }
 
-/* -- 支付行 -- */
-.ta-payment-row {
-    display: flex;
-    align-items: center;
-    gap: 10px;
-    margin-bottom: 10px;
-    font-size: 13px;
-    padding: 8px 12px;
-    border-radius: 10px;
-    background: #fafafa;
-    transition: background 0.2s;
-}
-.ta-payment-row:focus-within { background: #fffdf5; }
-.ta-payment-row:nth-child(1) label { color: #e67e22; } /* 现金 - 鹅黄系 */
-.ta-payment-row:nth-child(2) label { color: #FF7675; } /* 美团 - 珊瑚系 */
-.ta-payment-row:nth-child(3) label { color: #74B9FF; } /* 账户 - 天蓝系 */
-.ta-payment-row label {
-    width: 80px;
-    text-align: right;
-    font-weight: 600;
-    white-space: nowrap;
-}
-/* 支付输入框 */
-.ta-payment-row input[type="number"] {
-    border: 2px solid #f0f0f0;
-    border-radius: 8px;
-    padding: 7px 10px;
-    font-size: 14px;
-    font-weight: 600;
-    color: #2d2d2d;
-    transition: all 0.2s;
-    background: #fff;
-}
-.ta-payment-row:nth-child(1) input[type="number"]:focus { border-color: #FFE066; }
-.ta-payment-row:nth-child(2) input[type="number"]:focus { border-color: #FF7675; }
-.ta-payment-row:nth-child(3) input[type="number"]:focus { border-color: #74B9FF; }
-
-/* -- 支付匹配指示 -- */
+/* Payment match */
 .ta-payment-match {
-    padding: 10px 16px;
-    border-radius: 10px;
-    font-size: 13px;
-    font-weight: 600;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    animation: taFadeIn 0.3s ease;
+    padding: 10px 14px; border-radius: 8px; font-size: 12px; font-weight: 600;
+    margin-bottom: 14px; display: flex; align-items: center; gap: 6px;
 }
-@keyframes taFadeIn {
-    from { opacity: 0; transform: translateY(-4px); }
-    to { opacity: 1; transform: translateY(0); }
-}
-.ta-payment-match-ok {
-    background: #F0FFF8;
-    color: #0d7d4a;
-    border: 2px solid #55EFC4;
-}
-.ta-payment-match-err {
-    background: #FFF5F5;
-    color: #c0392b;
-    border: 2px solid #FF7675;
-}
+.ta-payment-match-ok  { background: var(--ta-success-bg); color: #0d7d4a; border: 1.5px solid var(--ta-success); }
+.ta-payment-match-err { background: var(--ta-danger-bg);  color: #c0392b; border: 1.5px solid var(--ta-danger); }
 
-/* -- 确认购买按钮 -- */
-#ta-purchase-btn {
-    font-weight: 700;
-    font-size: 15px;
-    padding: 10px 28px;
-    border-radius: 24px;
-    transition: all 0.25s;
+/* Purchase button */
+.ta-purchase-btn-new {
+    display: flex !important; align-items: center; justify-content: center; gap: 6px;
+    width: 100%; height: 46px;
+    font-weight: 700 !important; font-size: 15px !important;
+    border-radius: 10px !important; letter-spacing: 0.01em;
+    transition: all 0.2s var(--ta-ease-out) !important;
+    border: none !important;
 }
 #ta-purchase-btn:not(:disabled) {
-    background: #FF7675;
-    border-color: #FF7675;
-    box-shadow: 0 4px 14px rgba(255,118,117,0.35);
+    background: var(--ta-brand-500) !important;
+    color: #fff !important;
+    box-shadow: 0 3px 10px oklch(53% 0.138 22 / 0.3);
 }
 #ta-purchase-btn:not(:disabled):hover {
-    background: #e86867;
-    box-shadow: 0 6px 20px rgba(255,118,117,0.45);
-    transform: translateY(-2px);
+    background: var(--ta-brand-600) !important;
+    box-shadow: 0 5px 16px oklch(44% 0.128 22 / 0.35);
+    transform: translateY(-1px);
 }
+#ta-purchase-btn:not(:disabled):hover .ta-btn-arrow { transform: translateX(3px); }
 #ta-purchase-btn:not(:disabled):active { transform: translateY(0); }
 #ta-purchase-btn:disabled {
-    background: #e0e0e0;
-    border-color: #e0e0e0;
-    color: #aaa;
-    cursor: not-allowed;
+    background: var(--ta-surface-200) !important;
+    border-color: var(--ta-surface-200) !important;
+    color: var(--ta-surface-500) !important;
+    cursor: not-allowed; box-shadow: none !important;
+}
+.ta-btn-arrow {
+    transition: transform 0.2s var(--ta-ease-expo);
+}
+
+/* Old qty buttons compatibility */
+.ta-cart-item-qty {
+    display: inline-flex; align-items: center; gap: 2px;
+    background: var(--ta-surface-50); border-radius: 6px; padding: 2px;
+}
+.ta-qty-btn {
+    width: 26px; height: 26px; border: none; border-radius: 4px;
+    background: var(--ta-surface-100); cursor: pointer;
+    font-size: 14px; font-weight: 600; color: var(--ta-surface-600);
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.15s var(--ta-ease-out);
+}
+.ta-qty-btn:hover { background: var(--ta-brand-400); color: #fff; }
+.ta-qty-btn:active { transform: scale(0.94); }
+.ta-qty-val {
+    display: inline-block; min-width: 28px; text-align: center;
+    font-weight: 700; font-size: 13px; color: var(--ta-surface-800);
+}
+
+/* Responsive */
+@media (max-width: 780px) {
+    .ta-purchase-layout { grid-template-columns: 1fr; }
+    .ta-purchase-right { position: static; }
+}
+
+/* Cart animations */
+@keyframes taCartFadeIn {
+    from { opacity: 0; transform: translateY(4px); }
+    to   { opacity: 1; transform: translateY(0); }
+}
+.ta-cart-item {
+    animation: taCartFadeIn 0.3s var(--ta-ease-expo) both;
+}
+.ta-cart-item:nth-child(1) { animation-delay: 0ms; }
+.ta-cart-item:nth-child(2) { animation-delay: 50ms; }
+.ta-cart-item:nth-child(3) { animation-delay: 100ms; }
+.ta-cart-item:nth-child(4) { animation-delay: 150ms; }
+.ta-cart-item:nth-child(5) { animation-delay: 200ms; }
+@media (prefers-reduced-motion: reduce) {
+    .ta-cart-item { animation: none; }
 }
 
 /* -- 销售记录表格 -- */
@@ -7826,6 +7668,7 @@ tbody td {
 #table-ta-sales .ta-sales-col-cash,
 #table-ta-sales .ta-sales-col-meituan,
 #table-ta-sales .ta-sales-col-account { width: 80px; }
+#table-ta-sales .ta-sales-col-campus { width: 90px; }
 #table-ta-sales .ta-sales-col-remark { width: 140px; }
 #table-ta-sales th,
 #table-ta-sales td {
