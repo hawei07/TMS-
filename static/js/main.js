@@ -6158,6 +6158,7 @@ async function loadStudentCourses(sid) {
         }
         renderStudentCoursesFilters(rows);
         renderStudentCoursesTable(rows);
+        initStudentCoursesTableScrollSync();
     } catch (e) {
         container.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载失败</div>';
     }
@@ -6262,12 +6263,16 @@ function filterStudentCourses() {
     if (nameKw) filtered = filtered.filter(r => (r.name || '').toLowerCase().includes(nameKw));
     document.getElementById('student-courses-count').textContent = filtered.length;
     renderStudentCoursesTable(filtered);
+    initStudentCoursesTableScrollSync();
 }
 
 function renderStudentCoursesTable(rows) {
     const tableDiv = document.getElementById('student-courses-table');
     if (!tableDiv) return;
-    tableDiv.innerHTML = `<div class="table-wrap"><table><thead><tr>
+    tableDiv.innerHTML = `<div class="table-scroll-wrapper">
+        <div class="table-scroll-top"><div class="table-scroll-top-inner"></div></div>
+        <div class="table-scroll-body">
+            <table id="table-student-courses"><thead><tr>
         <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>剩余课时</th><th>剩余金额</th><th>教材包</th><th>教材包金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
     </tr></thead><tbody>
     ${rows.map(r => {
@@ -6324,7 +6329,9 @@ function renderStudentCoursesTable(rows) {
         <td>${optHtml}</td>
     </tr>`;
     }).join('')}
-    </tbody></table></div>`;
+            </tbody></table>
+        </div>
+    </div>`;
 }
 
 // ==================== 课耗明细弹窗 ====================
@@ -8199,6 +8206,21 @@ function initOrderTableScrollSync() {
 function syncOrderTableScrollWidth() {
     const table = document.getElementById('table-orders');
     const inner = document.querySelector('#panel-orders .table-scroll-top-inner');
+    if (table && inner) {
+        inner.style.width = table.scrollWidth + 'px';
+    }
+}
+
+// ==================== 学员课程表格水平滚动联动 ====================
+function initStudentCoursesTableScrollSync() {
+    const topScroll = document.querySelector('#tab-courses .table-scroll-top');
+    const bodyScroll = document.querySelector('#tab-courses .table-scroll-body');
+    if (!topScroll || !bodyScroll) return;
+    topScroll.onscroll = function() { bodyScroll.scrollLeft = this.scrollLeft; };
+    bodyScroll.onscroll = function() { topScroll.scrollLeft = this.scrollLeft; };
+    // sync width
+    const table = document.getElementById('table-student-courses');
+    const inner = document.querySelector('#tab-courses .table-scroll-top-inner');
     if (table && inner) {
         inner.style.width = table.scrollWidth + 'px';
     }
