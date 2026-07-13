@@ -12761,6 +12761,7 @@ function onCampusSelected(campus) {
     document.getElementById('ta-cart-section').style.display = 'block';
     document.getElementById('ta-product-search-wrap').style.display = 'block';
     document.getElementById('ta-payment-panel').style.display = 'block';
+    document.getElementById('ta-selected-product').style.display = 'none';
     loadStudentBalance();
 }
 
@@ -12791,11 +12792,16 @@ async function searchPurchaseProduct(keyword) {
 }
 
 function selectPurchaseProduct(id, name, price, type, unit) {
-    taSelectedProduct = { id, name, price, type, unit };
-    taSelectedQty = 1;
-    document.getElementById('ta-selected-product-info').textContent = name + ' ¥' + price.toFixed(2);
-    document.getElementById('ta-selected-qty').textContent = '1';
-    document.getElementById('ta-selected-product').style.display = 'block';
+    if (!taPurchaseStudent) return;
+    const aid = id;
+    if (taCartItems[aid]) {
+        taCartItems[aid].quantity += 1;
+    } else {
+        taCartItems[aid] = { id, name, unit, price, type, quantity: 1 };
+    }
+    renderCart();
+    updatePurchaseBtn();
+    // 清空搜索下拉
     document.getElementById('ta-product-dropdown').style.display = 'none';
     document.getElementById('ta-product-search-input').value = '';
 }
