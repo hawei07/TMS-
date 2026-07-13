@@ -76,7 +76,7 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 - **系统名称**：TMS管理系统
 - **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、活动管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
 - **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 13700 行）+ CSS3（约 11000 行）
-- **架构模式**：仍以 `index.php` 单体业务入口为主，数据库配置、启动装配、公共函数和版本化迁移已经拆分；基础字典、组织、基础设置和画具共 36 个 action 已通过兼容路由迁移到 `api/`，其余 action 继续由原 switch 处理。
+- **架构模式**：仍以 `index.php` 单体业务入口为主，数据库配置、启动装配、公共函数和版本化迁移已经拆分；基础字典、组织、基础设置、画具和优惠配置共 49 个 action 已通过兼容路由迁移到 `api/`，其余 action 继续由原 switch 处理。
 
 ---
 
@@ -114,7 +114,7 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 ```
 market-system-php/
-├── index.php                     # HTTP 入口、API 路由和 HTML（约 10600 行）
+├── index.php                     # HTTP 入口、API 路由和 HTML（约 10138 行）
 ├── app/
 │   ├── bootstrap.php             # 启动装配与迁移入口
 │   ├── database.php              # PDO 连接创建
@@ -128,7 +128,8 @@ market-system-php/
 │   ├── dictionaries.php          # 第一批基础字典 API
 │   ├── organizations.php         # 组织树与组织 CRUD
 │   ├── settings.php              # 校区、税率和上课时段 API
-│   └── teaching_aids.php         # 画具管理与销售 API
+│   ├── teaching_aids.php         # 画具管理与销售 API
+│   └── discounts.php             # 优惠方案、优惠券与发放记录 API
 ├── migrations/
 │   ├── MigrationRunner.php       # 迁移发现、并发锁与版本记录
 │   ├── migrate.php               # CLI 迁移入口
@@ -1523,11 +1524,12 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 
 | 类型 | 描述 | 涉及文件 | 提交 |
 |------|------|----------|------|
-| refactor | **数据库配置与启动层拆分**：数据库配置支持环境变量和本机私有覆盖；PDO、通用 helper、编号 helper 从入口拆出 | `app/`、`config/`、`index.php` | 待提交 |
-| refactor | **迁移系统正规化**：新增 `schema_migrations`、版本运行器、并发锁、CLI 和首个历史基线版本；移除 `temp/schema_init.cache` 依赖 | `migrations/`、`app/bootstrap.php` | 待提交 |
-| refactor | **API 模块化第一批**：新增兼容分发器，迁移渠道、意向等级、基础类型和岗位 16 个 action；列表响应逐字兼容，修复 PDO `changes()` 调用 | `api/`、`index.php` | 待提交 |
-| refactor | **API 模块化第二批**：迁移组织架构、校区、税率和上课时段 11 个 action；新增重复路由检测，四个列表响应逐字兼容 | `api/`、`index.php` | 待提交 |
-| refactor | **API 模块化第三批**：迁移画具管理与销售 9 个 action；保留余额锁、支付分摊、商品税率和账户流水事务，五个只读响应逐字兼容 | `api/`、`index.php` | 待提交 |
+| refactor | **数据库配置与启动层拆分**：数据库配置支持环境变量和本机私有覆盖；PDO、通用 helper、编号 helper 从入口拆出 | `app/`、`config/`、`index.php` | d6bda66 |
+| refactor | **迁移系统正规化**：新增 `schema_migrations`、版本运行器、并发锁、CLI 和首个历史基线版本；移除 `temp/schema_init.cache` 依赖 | `migrations/`、`app/bootstrap.php` | d6bda66 |
+| refactor | **API 模块化第一批**：新增兼容分发器，迁移渠道、意向等级、基础类型和岗位 16 个 action；列表响应逐字兼容，修复 PDO `changes()` 调用 | `api/`、`index.php` | d6bda66 |
+| refactor | **API 模块化第二批**：迁移组织架构、校区、税率和上课时段 11 个 action；新增重复路由检测，四个列表响应逐字兼容 | `api/`、`index.php` | d6bda66 |
+| refactor | **API 模块化第三批**：迁移画具管理与销售 9 个 action；保留余额锁、支付分摊、商品税率和账户流水事务，五个只读响应逐字兼容 | `api/`、`index.php` | d6bda66 |
+| refactor | **API 模块化第四批**：迁移优惠方案、优惠券和发放记录 13 个 action；保留关联表事务更新和报价单价格重算，五个只读响应逐字兼容 | `api/`、`index.php` | 待提交 |
 
 ### 2026-07-11
 
