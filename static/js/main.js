@@ -4348,7 +4348,7 @@ function stepGiftedLessons(delta) {
     el.value = val;
 }
 
-function editItem(itemId) {
+async function editItem(itemId) {
     if (!currentSelectedPlanId) { showToast('请先选择左侧价格方案', 'error'); return; }
     const plan = currentPlans.find(p => p.id === currentSelectedPlanId);
     if (!plan) { showToast('价格方案不存在', 'error'); return; }
@@ -4362,16 +4362,6 @@ function editItem(itemId) {
     document.getElementById('price-item-unit-price').value = Number(item.unit_price || 0).toFixed(2);
     document.getElementById('price-item-actual-price').value = Number(item.actual_price || 0).toFixed(2);
 
-    loadPriceItemDiscountOptions();
-    loadPriceItemTeachingAidOptions();
-    loadPriceItemCourseCouponOptions();
-    // 编辑时先禁用商品券，等 setTimeout 里根据教材包状态决定
-    const couponSelectEdit = document.getElementById('price-item-coupon');
-    if (couponSelectEdit) {
-        couponSelectEdit.innerHTML = '<option value="">加载中...</option>';
-        couponSelectEdit.disabled = true;
-    }
-
     const isSmall = plan.plan_type === '小课包';
     const giftCard = document.getElementById('pi-gift-card');
     if (giftCard) giftCard.style.display = isSmall ? 'none' : '';
@@ -4382,32 +4372,38 @@ function editItem(itemId) {
         document.getElementById('price-item-gifted-lessons').value = '0';
     }
 
+    // 编辑时先禁用商品券，加载完成后根据教材包状态决定
+    const couponSelect = document.getElementById('price-item-coupon');
+    if (couponSelect) {
+        couponSelect.innerHTML = '<option value="">加载中...</option>';
+        couponSelect.disabled = true;
+    }
+
     openModal('modal-price-item');
 
-    // 延迟设置下拉选中值（等下拉加载完成）
-    setTimeout(() => {
-        const couponSelect = document.getElementById('price-item-coupon');
-        if (!isSmall) {
-            document.getElementById('price-item-discount-plan').value = item.discount_plan_id || '';
-            document.getElementById('price-item-teaching-aid').value = item.teaching_aid_id || '';
-            document.getElementById('price-item-course-coupon').value = item.coupon_id || '';
+    // 加载下拉选项并设置已选值（await 确保加载完成后才赋值，避免 setTimeout 竞态）
+    if (!isSmall) {
+        await loadPriceItemDiscountOptions(item.discount_plan_id || '');
+        await loadPriceItemTeachingAidOptions(item.teaching_aid_id || '');
+        await loadPriceItemCourseCouponOptions(item.coupon_id || '');
 
-            // 根据教材包选中状态加载商品券
-            const taId = parseInt(item.teaching_aid_id) || 0;
-            if (taId > 0 && couponSelect) {
-                couponSelect.disabled = false;
-                const aid = priceItemTeachingAids.find(a => a.id === taId);
-                const sid = aid ? (aid.subject_id || 0) : 0;
-                loadPriceItemCouponOptions(item.product_coupon_id || '', sid);
-            } else if (couponSelect) {
-                couponSelect.innerHTML = '<option value="">请先选择教材包</option>';
-                couponSelect.disabled = true;
-            }
+        const taId = parseInt(item.teaching_aid_id) || 0;
+        if (taId > 0 && couponSelect) {
+            couponSelect.disabled = false;
+            const aid = priceItemTeachingAids.find(a => a.id === taId);
+            const sid = aid ? (aid.subject_id || 0) : 0;
+            await loadPriceItemCouponOptions(item.product_coupon_id || '', sid);
         } else if (couponSelect) {
+            couponSelect.innerHTML = '<option value="">请先选择教材包</option>';
+            couponSelect.disabled = true;
+        }
+    } else {
+        await loadPriceItemTeachingAidOptions();
+        if (couponSelect) {
             couponSelect.innerHTML = '<option value="">小课包不使用商品券</option>';
             couponSelect.disabled = true;
         }
-    }, 300);
+    }
 }
 
 function addItem() {
