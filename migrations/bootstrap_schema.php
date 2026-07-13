@@ -2,26 +2,25 @@
 
 declare(strict_types=1);
 
+require_once __DIR__ . '/MigrationRunner.php';
+
+function createMigrationRunner(PDO $db): MigrationRunner
+{
+    return new MigrationRunner($db, __DIR__ . '/versions');
+}
+
 function ensureSchema(PDO $db): void
 {
-    $projectRoot = dirname(__DIR__);
-    // Schema bootstrap is cached so normal API requests do not rerun DDL checks.
-    $schemaCacheVersion = '2026-07-09-perf-v1';
-    $schemaCacheFile = $projectRoot . '/temp/schema_init.cache';
-    $forceSchemaInit = isset($_GET['migrate']) && $_GET['migrate'] === '1';
-    $schemaReady = false;
-    if (!$forceSchemaInit && is_file($schemaCacheFile)) {
-        $schemaReady = trim((string)@file_get_contents($schemaCacheFile)) === $schemaCacheVersion;
-        if ($schemaReady) {
-            try {
-                $schemaReady = (bool)$db->query("SHOW TABLES LIKE 'orders'")->fetch();
-            } catch (PDOException $e) {
-                $schemaReady = false;
-            }
-        }
-    }
-    if (!$schemaReady) {
-        $db->exec("CREATE TABLE IF NOT EXISTS channels (
+    $force = PHP_SAPI !== 'cli'
+        && isset($_GET['migrate'])
+        && $_GET['migrate'] === '1';
+
+    createMigrationRunner($db)->migrate($force);
+}
+
+function applyLegacySchema(PDO $db): void
+{
+    $db->exec("CREATE TABLE IF NOT EXISTS channels (
         id INT PRIMARY KEY AUTO_INCREMENT,
         name VARCHAR(500) NOT NULL DEFAULT '',
         created_at VARCHAR(500) DEFAULT ''
@@ -840,10 +839,4 @@ function ensureSchema(PDO $db): void
             $db->exec("CREATE INDEX {$idxDef[1]} ON {$idxDef[0]} ({$idxDef[2]})");
         } catch (PDOException $e) {}
     }
-    $schemaCacheDir = dirname($schemaCacheFile);
-    if (!is_dir($schemaCacheDir)) @mkdir($schemaCacheDir, 0777, true);
-    @file_put_contents($schemaCacheFile, $schemaCacheVersion);
-    }
-
-
 }

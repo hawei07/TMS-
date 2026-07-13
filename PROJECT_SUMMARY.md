@@ -22,7 +22,7 @@ AIGC:
 | PHP 路径 | Winget PHP 8.4（`php.exe` 在 PATH 中） |
 | 配置文件 | `C:\Users\吴赛\AppData\Local\Microsoft\WinGet\Packages\PHP.PHP.8.4_Microsoft.Winget.Source_8wekyb3d8bbwe\php.ini` |
 | 监听端口 | `0.0.0.0:5001` |
-| 数据库 | **MySQL 8.4.9**（`tms_db`，127.0.0.1:3306，root/root） |
+| 数据库 | **MySQL 8.4.9**；默认本地 `127.0.0.1:3306/tms_db`，可通过环境变量或私有配置覆盖 |
 | MySQL 安装路径 | `D:\dvptool\mysql\` |
 | 访问地址 | http://localhost:5001 |
 
@@ -60,12 +60,14 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 2. **PHP 扩展**：需启用 `pdo_mysql` 和 `mbstring` 扩展。已在 php.ini 中配置 `extension=pdo_mysql` 和 `extension=mbstring`。
 
-3. **数据库连接**：`index.php` 通过 PDO 连接 `mysql:host=127.0.0.1;port=3306;dbname=tms_db;charset=utf8mb4`，异常模式下自动抛出 PDOException。
+3. **数据库连接**：`config/database.php` 提供本地默认值，并支持 `TMS_DB_*` 环境变量；`config/database.local.php` 可覆盖本机参数且不会进入 Git。`app/database.php` 负责创建 PDO。
 
 4. **MySQL 启动命令**：
    ```powershell
    Start-Process "D:\dvptool\mysql\bin\mysqld.exe" -ArgumentList "--defaults-file=`"D:\dvptool\mysql\my.ini`"" -WindowStyle Hidden
    ```
+
+5. **数据库迁移**：使用 `php migrations\migrate.php --status` 查看状态，使用 `php migrations\migrate.php` 执行待处理迁移。
 
 ---
 
@@ -73,8 +75,8 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 - **系统名称**：TMS管理系统
 - **系统定位**：教育培训行业市场资源与教务管理工具，覆盖资源录入、跟进、预约试听、公海流转、课程管理、活动管理、学员管理、学科设置、交易订单、报价方案、员工管理、组织架构管理等完整业务闭环
-- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 13200 行）+ CSS3（约 9300 行）
-- **架构模式**：单体 PHP 单文件应用（`index.php`，约 11000 行），前端内嵌于同一文件，API 通过 `?action=` 路由分发，所有 API 统一返回 JSON
+- **技术栈**：PHP 8.4（内嵌 HTML）+ MySQL 8.4.9（PDO）+ Vanilla JS（约 13700 行）+ CSS3（约 11000 行）
+- **架构模式**：仍以 `index.php` 单体业务入口为主，数据库配置、启动装配、公共函数和版本化迁移已经拆分；基础字典、组织、基础设置和画具共 36 个 action 已通过兼容路由迁移到 `api/`，其余 action 继续由原 switch 处理。
 
 ---
 
@@ -112,14 +114,30 @@ Start-Process -FilePath "php" -ArgumentList "-S", "127.0.0.1:5001" -WorkingDirec
 
 ```
 market-system-php/
-├── index.php              # 主程序（后端 API + 前端 HTML，约 6700 行）
-├── .gitignore             # Git 忽略规则（php_errors.log / temp/）
+├── index.php                     # HTTP 入口、API 路由和 HTML（约 10600 行）
+├── app/
+│   ├── bootstrap.php             # 启动装配与迁移入口
+│   ├── database.php              # PDO 连接创建
+│   ├── helpers.php               # 通用公共函数
+│   └── order_helpers.php         # 订单号、学号生成
+├── config/
+│   ├── database.php              # 公共数据库配置和环境变量
+│   └── database.local.php.example
+├── api/
+│   ├── router.php                # 模块化 API 兼容分发
+│   ├── dictionaries.php          # 第一批基础字典 API
+│   ├── organizations.php         # 组织树与组织 CRUD
+│   ├── settings.php              # 校区、税率和上课时段 API
+│   └── teaching_aids.php         # 画具管理与销售 API
+├── migrations/
+│   ├── MigrationRunner.php       # 迁移发现、并发锁与版本记录
+│   ├── migrate.php               # CLI 迁移入口
+│   ├── bootstrap_schema.php      # Web 接入与历史兼容 schema
+│   └── versions/                 # 独立版本迁移文件
 ├── static/
-│   ├── js/
-│   │   └── main.js        # 前端逻辑（约 7550 行）
-│   └── css/
-│       └── style.css      # 样式表（约 3280 行）
-└── PROJECT_SUMMARY.md     # 本文档
+│   ├── js/main.js                # 前端逻辑（约 13700 行）
+│   └── css/style.css             # 样式表（约 11000 行）
+└── PROJECT_SUMMARY.md
 ```
 
 ---
@@ -1500,6 +1518,16 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 ---
 
 ## 九、更新日志
+
+### 2026-07-13
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| refactor | **数据库配置与启动层拆分**：数据库配置支持环境变量和本机私有覆盖；PDO、通用 helper、编号 helper 从入口拆出 | `app/`、`config/`、`index.php` | 待提交 |
+| refactor | **迁移系统正规化**：新增 `schema_migrations`、版本运行器、并发锁、CLI 和首个历史基线版本；移除 `temp/schema_init.cache` 依赖 | `migrations/`、`app/bootstrap.php` | 待提交 |
+| refactor | **API 模块化第一批**：新增兼容分发器，迁移渠道、意向等级、基础类型和岗位 16 个 action；列表响应逐字兼容，修复 PDO `changes()` 调用 | `api/`、`index.php` | 待提交 |
+| refactor | **API 模块化第二批**：迁移组织架构、校区、税率和上课时段 11 个 action；新增重复路由检测，四个列表响应逐字兼容 | `api/`、`index.php` | 待提交 |
+| refactor | **API 模块化第三批**：迁移画具管理与销售 9 个 action；保留余额锁、支付分摊、商品税率和账户流水事务，五个只读响应逐字兼容 | `api/`、`index.php` | 待提交 |
 
 ### 2026-07-11
 
