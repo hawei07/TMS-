@@ -6620,7 +6620,7 @@ async function loadStudentOrders(sid) {
             <td>${orderTypeHtml}</td>
             <td>${renderPayStatus(r.pay_status)}</td>
             <td>${renderVoidedStatus(r.is_voided)}</td>
-            <td>${r.is_voided === '否' ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button>` : '-'}</td>
+            <td>${r.is_voided === '否' && !(parseInt(r.transferred_lessons) > 0) ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button>` : '-'}</td>
         </tr>`;
         }).join('')}
         </tbody></table></div>`;
@@ -8003,7 +8003,7 @@ function renderOrderTable(rows) {
             <td>${renderPayStatus(r.pay_status)}</td>
             <td>${renderVoidedStatus(r.is_voided)}</td>
             <td>
-                ${r.is_voided === '否' ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button> ` : ''}
+                ${r.is_voided === '否' && !(parseInt(r.transferred_lessons) > 0) ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button> ` : ''}
                 <button class="btn btn-link btn-sm" onclick="viewOrderDetail('${esc(r.order_no)}')" style="font-size:11px;padding:1px 6px;color:#7c3aed;">详情</button>
             </td>
         </tr>`;

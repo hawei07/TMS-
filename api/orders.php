@@ -558,7 +558,8 @@ function voidOrder(PDO $db, string $method, array $query, array $input): void
                     activity_campus,
                     activity_adult_count,
                     activity_student_count,
-                    account_amount
+                    account_amount,
+                    transferred_lessons
              FROM orders
              WHERE id = :id
              FOR UPDATE'
@@ -629,10 +630,15 @@ function voidOrder(PDO $db, string $method, array $query, array $input): void
 
         $lessonCount = (int)$order['lesson_count'];
         $consumedLessons = (int)$order['consumed_lessons'];
+        $transferredLessons = (int)($order['transferred_lessons'] ?? 0);
         $remainingLessons = $lessonCount - $consumedLessons;
         if ($lessonCount !== $remainingLessons) {
             $db->rollBack();
             json(['success' => false, 'message' => '该订单已有课时消耗，无法作废']);
+        }
+        if ($transferredLessons > 0) {
+            $db->rollBack();
+            json(['success' => false, 'message' => '该订单已发生转校，无法作废']);
         }
 
         $voidStmt = $db->prepare("UPDATE orders SET is_voided = '是' WHERE id = :id");
