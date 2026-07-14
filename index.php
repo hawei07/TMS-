@@ -3585,6 +3585,7 @@ $stmt->execute();
             if ($scheduleId <= 0) json(['error' => '排课ID无效']);
             $row = $db->query("SELECT * FROM schedules WHERE id=$scheduleId")->fetch(PDO::FETCH_ASSOC);
             if (!$row) json(['error' => '排课记录不存在']);
+            $row['sessions'] = computeSessions($row);
             json(['data' => $row]);
             break;
 
@@ -8698,6 +8699,16 @@ if (intval($countBt) === 0) {
                     </div>
                 </div>
             </div>
+            <!-- 已生成课次（仅编辑时显示） -->
+            <div class="form-section" id="schedule-sessions-section" style="display:none;margin-top:4px;">
+                <div class="form-section-header"><span class="form-section-title">📅 已生成课次</span></div>
+                <div class="table-wrap" style="max-height:220px;overflow-y:auto;">
+                    <table class="mini-table">
+                        <thead><tr><th>序号</th><th>日期</th><th>星期</th><th>时间</th><th>老师</th><th>教室</th></tr></thead>
+                        <tbody id="schedule-sessions-tbody"></tbody>
+                    </table>
+                </div>
+            </div>
         </div>
         <div class="modal-footer"><button class="btn btn-outline" onclick="closeModal('modal-schedule-form')">取消</button><button class="btn btn-primary" onclick="saveSchedule()">确认排课</button></div></div>
     </div>
@@ -9062,6 +9073,32 @@ if (intval($countBt) === 0) {
         #modal-schedule-form .modal-footer .btn-outline:hover {
             border-color: #7C3AED;
             color: #7C3AED;
+        }
+
+        /* 课次列表（编辑排课时） */
+        #schedule-sessions-section .mini-table {
+            width: 100%;
+            border-collapse: collapse;
+            font-size: 13px;
+        }
+        #schedule-sessions-section .mini-table th {
+            background: #f7f5ff;
+            color: #5B4A9A;
+            font-weight: 600;
+            padding: 8px 10px;
+            text-align: left;
+            border-bottom: 2px solid #e0d8f5;
+            font-size: 12px;
+            position: sticky;
+            top: 0;
+        }
+        #schedule-sessions-section .mini-table td {
+            padding: 6px 10px;
+            border-bottom: 1px solid #f0f0f0;
+            color: #333;
+        }
+        #schedule-sessions-section .mini-table tbody tr:hover {
+            background: #faf9ff;
         }
         /* ========== 考勤弹窗样式 ========== */
         .modal-attendance { max-width: 860px; width: 94vw; }

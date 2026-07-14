@@ -5533,8 +5533,41 @@ async function showScheduleForm(classId, scheduleId) {
                 setTimeout(() => setScheduleTimeSlots(timeSlots), 100);
                 document.getElementById('schedule-teacher').value = sch.teacher || '';
                 document.getElementById('schedule-classroom').value = sch.classroom || '';
+
+                // 展示已生成课次
+                const sessionsSection = document.getElementById('schedule-sessions-section');
+                const sessionsTbody = document.getElementById('schedule-sessions-tbody');
+                const sessions = sch.sessions || [];
+                if (sessions.length > 0) {
+                    sessionsSection.style.display = 'block';
+                    // 按日期排序
+                    sessions.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+                    sessionsTbody.innerHTML = sessions.map((s, i) => {
+                        const timeStr = (s.start && s.end) ? (s.start + '-' + s.end) : '-';
+                        const dayMap = ['日', '一', '二', '三', '四', '五', '六'];
+                        let dayOfWeek = s.dayOfWeek || '';
+                        if (!dayOfWeek && s.date) {
+                            const d = new Date(s.date);
+                            if (!isNaN(d)) dayOfWeek = '周' + dayMap[d.getDay()];
+                        }
+                        return `<tr>
+                            <td>${i + 1}</td>
+                            <td>${s.date || '-'}</td>
+                            <td>${dayOfWeek}</td>
+                            <td>${timeStr}</td>
+                            <td>${esc(sch.teacher || '-')}</td>
+                            <td>${esc(sch.classroom || '-')}</td>
+                        </tr>`;
+                    }).join('');
+                } else {
+                    sessionsSection.style.display = 'none';
+                }
             }
         } catch (e) { /* ignore */ }
+    } else {
+        // 新增模式，隐藏课次区域
+        const sessionsSection = document.getElementById('schedule-sessions-section');
+        if (sessionsSection) sessionsSection.style.display = 'none';
     }
 
     openModal('modal-schedule-form');
