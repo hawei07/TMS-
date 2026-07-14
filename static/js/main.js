@@ -9504,7 +9504,7 @@ async function submitTransfer() {
         if (data.error) { showToast(data.error, 'error'); if (btn) { btn.disabled = false; btn.textContent = '提交申请'; } return; }
         showToast(data.message || '转校申请已提交', 'success');
         closeTransferModal();
-        loadStudentCourses(getUrlStudentId());
+        loadStudentCourses(currentViewStudentId);
     } catch (e) {
         showToast('提交失败：' + e.message, 'error');
         if (btn) { btn.disabled = false; btn.textContent = '提交申请'; }
