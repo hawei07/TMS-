@@ -641,6 +641,16 @@ function voidOrder(PDO $db, string $method, array $query, array $input): void
             json(['success' => false, 'message' => '该订单已发生转校，无法作废']);
         }
 
+        // 检查是否有待审批的转校申请（此时 transferred_lessons 尚未更新）
+        $pendingTransfer = $db->prepare(
+            "SELECT COUNT(*) FROM transfer_records WHERE order_id = :oid AND status = '待审批'"
+        );
+        $pendingTransfer->execute([':oid' => $orderId]);
+        if ((int)$pendingTransfer->fetchColumn() > 0) {
+            $db->rollBack();
+            json(['success' => false, 'message' => '该订单存在待审批的转校申请，无法作废']);
+        }
+
         $voidStmt = $db->prepare("UPDATE orders SET is_voided = '是' WHERE id = :id");
         $voidStmt->execute([':id' => $orderId]);
         $db->commit();
