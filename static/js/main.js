@@ -6305,9 +6305,15 @@ function renderStudentCoursesTable(rows) {
         const lc = parseInt(r.lesson_count) || 0;
         const cl = parseInt(r.consumed_lessons) || 0;
         const hasRemaining = lc > cl && refundStatus === '正常';
-        // 退费按钮
+        // 检测是否有赠课
+        const isGifted = r.actual_price === 0 && r.lesson_count > 0 && (r.item_name || '').includes('（赠送）');
+        const remainingGt0 = (parseInt(r.remaining_lessons) || 0) > 0;
+        // 操作按钮
         let optHtml = '';
-        if (hasRemaining) {
+        if (remainingGt0 && !isGifted && refundStatus === '正常') {
+            optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
+<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+        } else if (hasRemaining) {
             optHtml = `<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
         } else if (refundStatus === '退费申请中') {
             optHtml = '<span style="color:#999;font-size:12px;">审批中</span>';
@@ -6316,8 +6322,6 @@ function renderStudentCoursesTable(rows) {
         } else if (lc <= cl) {
             optHtml = '<span style="color:#999;font-size:12px;">无剩余课时</span>';
         }
-        // 检测是否有赠课，付费视图也需知道 paidLessonCount 以过滤赠课部分
-        const isGifted = r.actual_price === 0 && r.lesson_count > 0 && (r.item_name || '').includes('（赠送）');
         let paidLessonCount = 0;
         const allRows = studentCoursesAllRows || rows;
         const giftRow = allRows.find(rr => rr.order_id === r.order_id && rr.actual_price === 0 && rr.lesson_count > 0 && (rr.item_name || '').includes('（赠送）'));
@@ -9235,9 +9239,253 @@ function initWorkRecordTabs() {
             if (targetId === 'tab-refund-records') {
                 refundPage = 1;
                 loadRefundRecords();
+            } else if (targetId === 'tab-transfer-records') {
+                transferPage = 1;
+                loadTransferRecords();
             }
         });
     });
+}
+
+// ==================== 转校记录（工作记录面板） ====================
+let transferPage = 1;
+let transferPageSize = 20;
+
+function getUserDisplayName() {
+    const stored = sessionStorage.getItem('operator_name');
+    if (stored) return stored;
+    const name = prompt('请输入操作人姓名：', '');
+    if (name && name.trim()) {
+        sessionStorage.setItem('operator_name', name.trim());
+        return name.trim();
+    }
+    return '';
+}
+
+async function loadTransferRecords(page) {
+    if (page) transferPage = page;
+    const status = document.getElementById('filter-transfer-status')?.value || '';
+    const search = document.getElementById('filter-transfer-search')?.value || '';
+    const params = new URLSearchParams({ action: 'list_transfer_records', page: transferPage, page_size: transferPageSize });
+    if (status) params.set('status', status);
+    if (search) params.set('search', search);
+
+    try {
+        const resp = await fetch(`?${params.toString()}`);
+        const data = await resp.json();
+        if (data.error) { console.error(data.error); return; }
+        renderTransferRecords(data.data || [], data.total || 0);
+    } catch (e) {
+        console.error('加载转校记录失败', e);
+    }
+}
+
+function renderTransferRecords(rows, total) {
+    const tbody = document.querySelector('#table-transfer-records tbody');
+    if (!tbody) return;
+    tbody.innerHTML = rows.map(r => {
+        const statusClass = r.status === '待审批' ? 'tag-warning' : r.status === '已通过' ? 'tag-success' : 'tag-danger';
+        let opHtml = '';
+        if (r.status === '待审批') {
+            opHtml = `<button class="btn btn-success btn-sm" onclick="approveTransferRecord(${r.id})" style="font-size:11px;padding:2px 6px;">通过</button>
+<button class="btn btn-danger btn-sm" onclick="rejectTransferRecord(${r.id})" style="font-size:11px;padding:2px 6px;margin-left:4px;">驳回</button>`;
+        }
+        return `<tr>
+            <td>${esc(r.order_no)}</td>
+            <td>${esc(r.student_name)}</td>
+            <td>${esc(r.course_name)}</td>
+            <td>${esc(r.from_campus)}</td>
+            <td>${esc(r.to_campus)}</td>
+            <td>${r.transfer_lessons}</td>
+            <td>${parseFloat(r.transfer_amount).toFixed(2)}</td>
+            <td><span class="tag ${statusClass}">${esc(r.status)}</span></td>
+            <td>${esc(r.applicant)}</td>
+            <td>${esc(r.created_at ? r.created_at.substring(0, 10) : '')}</td>
+            <td>${opHtml}</td>
+        </tr>`;
+    }).join('');
+
+    const pagDiv = document.getElementById('pagination-transfer');
+    if (pagDiv) {
+        const totalPages = Math.ceil(total / transferPageSize);
+        let pagHtml = `<span>共 ${total} 条，第 ${transferPage}/${Math.max(1,totalPages)} 页</span>`;
+        if (transferPage > 1) pagHtml += ` <a href="#" onclick="loadTransferRecords(${transferPage-1});return false;">上一页</a>`;
+        if (transferPage < totalPages) pagHtml += ` <a href="#" onclick="loadTransferRecords(${transferPage+1});return false;">下一页</a>`;
+        pagDiv.innerHTML = pagHtml;
+    }
+}
+
+async function approveTransferRecord(id) {
+    if (!confirm('确认通过该转校申请？将在目标校区生成新课程。')) return;
+    try {
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('action', 'approve');
+        formData.append('approver', getUserDisplayName());
+        const resp = await fetch('?action=approve_transfer', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.error) { alert(data.error); return; }
+        alert(data.message || '审批通过');
+        loadTransferRecords();
+    } catch (e) {
+        alert('操作失败：' + e.message);
+    }
+}
+
+async function rejectTransferRecord(id) {
+    const reason = prompt('请输入驳回原因：');
+    if (reason === null) return;
+    if (!reason.trim()) { alert('请填写驳回原因'); return; }
+    try {
+        const formData = new FormData();
+        formData.append('id', id);
+        formData.append('action', 'reject');
+        formData.append('reject_reason', reason.trim());
+        formData.append('approver', getUserDisplayName());
+        const resp = await fetch('?action=approve_transfer', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.error) { alert(data.error); return; }
+        alert(data.message || '已驳回');
+        loadTransferRecords();
+    } catch (e) {
+        alert('操作失败：' + e.message);
+    }
+}
+
+// ==================== 转校申请（学员详情页） ====================
+let transferTargetOrderId = 0;
+let transferTargetCampus = '';
+let transferTargetLessons = 0;
+
+async function showTransferModal(orderId) {
+    const orderRow = studentCoursesAllRows.find(r => r.order_id == orderId && !((r.item_name || '').includes('（赠送')));
+    if (!orderRow) { alert('未找到课程信息'); return; }
+
+    transferTargetOrderId = orderId;
+    const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
+    const remainingAmount = parseFloat(orderRow.remaining_amount) || 0;
+
+    // 获取校区列表
+    let campusOptions = '<option value="">请选择目标校区</option>';
+    try {
+        const resp = await fetch(`?action=list_campuses`);
+        const data = await resp.json();
+        if (data.data && Array.isArray(data.data)) {
+            const currentCampus = orderRow.campus || '';
+            data.data.forEach(c => {
+                if (c.name !== currentCampus) {
+                    campusOptions += `<option value="${esc(c.name)}">${esc(c.name)}</option>`;
+                }
+            });
+        }
+    } catch (e) { /* fallback */ }
+
+    const html = `
+    <div id="transfer-modal" class="modal" style="display:flex;">
+        <div class="modal-content" style="max-width:520px;">
+            <div class="modal-header">
+                <h3>转校申请</h3>
+                <button class="close-btn" onclick="closeTransferModal()">&times;</button>
+            </div>
+            <div class="modal-body">
+                <table style="width:100%;margin-bottom:16px;border-collapse:collapse;">
+                    <tr><td style="padding:6px 12px;background:#f5f5f5;width:100px;">课程名称</td><td style="padding:6px 12px;">${esc(orderRow.name)}</td></tr>
+                    <tr><td style="padding:6px 12px;background:#f5f5f5;">当前校区</td><td style="padding:6px 12px;">${esc(orderRow.campus || '-')}</td></tr>
+                    <tr><td style="padding:6px 12px;background:#f5f5f5;">剩余课时</td><td style="padding:6px 12px;font-weight:bold;color:#1890ff;">${remainingLessons} 课时</td></tr>
+                    <tr><td style="padding:6px 12px;background:#f5f5f5;">剩余金额</td><td style="padding:6px 12px;font-weight:bold;color:#1890ff;">${remainingAmount.toFixed(2)} 元</td></tr>
+                </table>
+                <div class="form-group">
+                    <label>目标校区</label>
+                    <select id="transfer-to-campus" class="form-control" onchange="onTransferCampusChange()">
+                        ${campusOptions}
+                    </select>
+                </div>
+                <div class="form-group">
+                    <label>转移课时 <span style="color:#999;font-size:12px;">（最多 ${remainingLessons} 课时）</span></label>
+                    <input type="number" id="transfer-lessons" class="form-control" min="1" max="${remainingLessons}" value="" placeholder="请输入转移课时数" onchange="onTransferLessonsChange()" />
+                </div>
+                <div id="transfer-preview" style="margin-top:12px;padding:12px;background:#f0f7ff;border-radius:4px;display:none;">
+                    <span style="color:#666;">预计转移金额：</span>
+                    <span id="transfer-preview-amount" style="font-weight:bold;color:#1890ff;font-size:16px;"></span>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-default" onclick="closeTransferModal()">取消</button>
+                <button class="btn btn-primary" id="btn-submit-transfer" onclick="submitTransfer()" disabled>提交申请</button>
+            </div>
+        </div>
+    </div>`;
+    const container = document.getElementById('modal-container');
+    if (container) container.innerHTML = html;
+}
+
+function closeTransferModal() {
+    const modal = document.getElementById('transfer-modal');
+    if (modal) modal.remove();
+    transferTargetOrderId = 0;
+    transferTargetCampus = '';
+    transferTargetLessons = 0;
+}
+
+function onTransferCampusChange() {
+    transferTargetCampus = document.getElementById('transfer-to-campus').value;
+    updateTransferSubmitState();
+}
+
+function onTransferLessonsChange() {
+    transferTargetLessons = parseInt(document.getElementById('transfer-lessons').value) || 0;
+    const orderRow = studentCoursesAllRows.find(r => r.order_id == transferTargetOrderId && !((r.item_name || '').includes('（赠送')));
+    if (!orderRow) return;
+    const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
+    const remainingAmount = parseFloat(orderRow.remaining_amount) || 0;
+
+    if (transferTargetLessons > 0 && transferTargetLessons <= remainingLessons) {
+        const unitPrice = remainingLessons > 0 ? remainingAmount / remainingLessons : 0;
+        const previewAmount = (unitPrice * transferTargetLessons).toFixed(2);
+        document.getElementById('transfer-preview').style.display = 'block';
+        document.getElementById('transfer-preview-amount').textContent = previewAmount + ' 元';
+    } else {
+        document.getElementById('transfer-preview').style.display = 'none';
+    }
+    updateTransferSubmitState();
+}
+
+function updateTransferSubmitState() {
+    const btn = document.getElementById('btn-submit-transfer');
+    if (!btn) return;
+    const orderRow = studentCoursesAllRows.find(r => r.order_id == transferTargetOrderId && !((r.item_name || '').includes('（赠送')));
+    if (!orderRow) { btn.disabled = true; return; }
+    const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
+    if (transferTargetCampus && transferTargetLessons > 0 && transferTargetLessons <= remainingLessons) {
+        btn.disabled = false;
+    } else {
+        btn.disabled = true;
+    }
+}
+
+async function submitTransfer() {
+    if (!transferTargetOrderId || !transferTargetCampus || transferTargetLessons <= 0) {
+        alert('请完善转校信息');
+        return;
+    }
+    const btn = document.getElementById('btn-submit-transfer');
+    if (btn) { btn.disabled = true; btn.textContent = '提交中...'; }
+    try {
+        const formData = new FormData();
+        formData.append('order_id', transferTargetOrderId);
+        formData.append('to_campus', transferTargetCampus);
+        formData.append('transfer_lessons', transferTargetLessons);
+        formData.append('applicant', getUserDisplayName());
+        const resp = await fetch('?action=submit_transfer', { method: 'POST', body: formData });
+        const data = await resp.json();
+        if (data.error) { alert(data.error); if (btn) { btn.disabled = false; btn.textContent = '提交申请'; } return; }
+        alert(data.message || '转校申请已提交');
+        closeTransferModal();
+        loadStudentCourses(getUrlStudentId());
+    } catch (e) {
+        alert('提交失败：' + e.message);
+        if (btn) { btn.disabled = false; btn.textContent = '提交申请'; }
+    }
 }
 
 // ==================== 退费申请（学员详情页） ====================
