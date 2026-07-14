@@ -135,6 +135,8 @@ function buildOrderListWhere(array $query): array
         $params[':pay_date_end'] = $payDateEnd . ' 23:59:59';
     }
 
+    $conditions[] = "(o.order_type != '转校' OR o.order_type IS NULL)";
+
     return [
         $conditions === [] ? '' : 'WHERE ' . implode(' AND ', $conditions),
         $params,

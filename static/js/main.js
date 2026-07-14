@@ -6344,18 +6344,22 @@ function renderStudentCoursesTable(rows) {
         // 检测是否有赠课
         const isGifted = r.actual_price === 0 && r.lesson_count > 0 && (r.item_name || '').includes('（赠送）');
         const remainingGt0 = (parseInt(r.remaining_lessons) || 0) > 0;
+        const hasOrderId = (parseInt(r.order_id) || 0) > 0;
+        const isTransferCourse = !!(r.transfer_id);
         // 操作按钮
         let optHtml = '';
-        if (transferred > 0) {
+        if (isTransferCourse) {
+            optHtml = '<span style="color:#0D9488;font-size:12px;">转校课包</span>';
+        } else if (transferred > 0) {
             if (remainingGt0 && !isGifted && refundStatus === '正常') {
                 optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">转校</button>`;
             } else {
                 optHtml = '<span style="color:#999;font-size:12px;">已转校</span>';
             }
-        } else if (remainingGt0 && !isGifted && refundStatus === '正常') {
+        } else if (remainingGt0 && !isGifted && refundStatus === '正常' && hasOrderId) {
             optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
 <button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
-        } else if (hasRemaining) {
+        } else if (hasRemaining && !isTransferCourse) {
             optHtml = `<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
         } else if (refundStatus === '退费申请中') {
             optHtml = '<span style="color:#999;font-size:12px;">审批中</span>';
@@ -6582,6 +6586,7 @@ async function loadStudentOrders(sid) {
             else if (ot === '续费') orderTypeHtml = '<span class="tag tag-renewal">续费</span>';
             else if (ot === '小课包') orderTypeHtml = '<span class="tag tag-small-pack">小课包</span>';
             else if (ot === '账户充值') orderTypeHtml = '<span class="tag tag-account-recharge">账户充值</span>';
+            else if (ot === '转校') orderTypeHtml = '<span class="tag tag-transfer">转校</span>';
             return `<tr>
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
             <td style="font-family:monospace;font-size:12px;">${esc(r.parent_order_no || '')}</td>

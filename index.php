@@ -2475,6 +2475,44 @@ $stmt->execute();
                     $rows[] = $giftRow;
                 }
             }
+            // ===== 转校课包：从 transfer_records 中读取已通过的转校记录 =====
+            $trStmt = $db->query("SELECT tr.*, c.name AS course_name, c.subject_level1 AS course_sl1, c.subject_level2 AS course_sl2 FROM transfer_records tr LEFT JOIN courses c ON tr.course_id = c.id WHERE tr.student_id = $sid AND tr.status = '已通过' ORDER BY tr.id DESC");
+            while ($tr = $trStmt->fetch(PDO::FETCH_ASSOC)) {
+                $transferLessons = intval($tr['transfer_lessons'] ?? 0);
+                $transferAmount = floatval($tr['transfer_amount'] ?? 0);
+                $row = [
+                    'id' => 0,
+                    'name' => $tr['course_name'] ?? $tr['course_name'],
+                    'subject_level1' => $tr['course_sl1'] ?? $tr['subject_level1'] ?? '',
+                    'subject_level2' => $tr['course_sl2'] ?? $tr['subject_level2'] ?? '',
+                    'plan_name' => $tr['plan_name'] ?? '',
+                    'item_name' => ($tr['item_name'] ?? '') . '（转校）',
+                    'lesson_count' => $transferLessons,
+                    'actual_price' => $transferAmount,
+                    'discount_plan_amount' => 0,
+                    'coupon_amount' => 0,
+                    'teaching_aid_price' => 0,
+                    'product_coupon_amount' => 0,
+                    'teaching_aid_name' => '',
+                    'teaching_aid_paid' => 0,
+                    'status' => '已报名',
+                    'order_id' => 0,
+                    'order_no' => '',
+                    'created_at' => $tr['updated_at'] ?? $tr['created_at'] ?? '',
+                    'consumed_lessons' => 0,
+                    'campus' => $tr['to_campus'] ?? '',
+                    'is_voided' => '否',
+                    'refund_status' => '正常',
+                    'consumed_amount' => 0,
+                    'refunded_lessons' => 0,
+                    'remaining_lessons' => $transferLessons,
+                    'remaining_amount' => $transferAmount,
+                    'transferred_lessons' => 0,
+                    'gifted_lessons' => 0,
+                    'transfer_id' => intval($tr['id']),
+                ];
+                $rows[] = $row;
+            }
             json(['data' => $rows]);
             break;
 
@@ -3297,36 +3335,11 @@ $stmt->execute();
                 // 1. 更新原订单 transferred_lessons
                 $db->exec("UPDATE orders SET transferred_lessons = transferred_lessons + $transferLessons WHERE id=$orderId");
 
-                // 2. 生成子订单（目标校区）
-                $orderInfo = $db->query("SELECT * FROM orders WHERE id=$orderId")->fetch(PDO::FETCH_ASSOC);
-                $originalOrderNo = $orderInfo['order_no'];
-                // 转校订单号与原订单号一致
-                $newOrderNo = $originalOrderNo;
-                $newActualPrice = $transferAmount;
-                $newLessonCount = $transferLessons;
-
-                $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, order_no, created_at, campus, pay_status, is_voided, refund_status, order_type, subject_level1, subject_level2, status) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :ono, :ct, :campus, '已支付', '否', '正常', '转校', :sl1, :sl2, '已报名')");
-                $stmt->bindValue(':sid', intval($orderInfo['student_id']), PDO::PARAM_INT);
-                $stmt->bindValue(':cid', intval($orderInfo['course_id'] ?? 0), PDO::PARAM_INT);
-                $stmt->bindValue(':pn', $orderInfo['plan_name'] ?? '', PDO::PARAM_STR);
-                $stmt->bindValue(':inm', $orderInfo['item_name'] ?? '', PDO::PARAM_STR);
-                $stmt->bindValue(':lc', $newLessonCount, PDO::PARAM_INT);
-                $stmt->bindValue(':ap', $newActualPrice);
-                $stmt->bindValue(':ca', $newActualPrice);
-                $stmt->bindValue(':ma', 0);
-                $stmt->bindValue(':ono', $newOrderNo, PDO::PARAM_STR);
-                $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
-                $stmt->bindValue(':campus', $toCampus, PDO::PARAM_STR);
-                $stmt->bindValue(':sl1', $tr['subject_level1'] ?? '', PDO::PARAM_STR);
-                $stmt->bindValue(':sl2', $tr['subject_level2'] ?? '', PDO::PARAM_STR);
-                $stmt->execute();
-                $newOrderId = intval($db->lastInsertId());
-
-                // 3. 更新转校记录
-                $db->exec("UPDATE transfer_records SET status='已通过', approver=" . $db->quote($approver) . ", new_order_id=$newOrderId, updated_at='$n' WHERE id=$id");
+                // 2. 更新转校记录（不再生成订单，课包由 get_student_courses 从 transfer_records 读取）
+                $db->exec("UPDATE transfer_records SET status='已通过', approver=" . $db->quote($approver) . ", updated_at='$n' WHERE id=$id");
 
                 $db->commit();
-                json(['message' => '转校审批通过，已在目标校区生成课程']);
+                json(['message' => '转校审批通过，已在目标校区生成课包']);
             } catch (Exception $e) {
                 $db->rollBack();
                 json(['error' => '审批失败：' . $e->getMessage()]);
