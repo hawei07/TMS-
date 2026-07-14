@@ -6349,7 +6349,16 @@ function renderStudentCoursesTable(rows) {
         // 操作按钮
         let optHtml = '';
         if (isTransferCourse) {
-            optHtml = '<span style="color:#0D9488;font-size:12px;">转校课包</span>';
+            if (refundStatus === '退费申请中') {
+                optHtml = '<span style="color:#999;font-size:12px;">审批中（转校课包）</span>';
+            } else if (refundStatus === '已退费') {
+                optHtml = '<span style="color:#999;font-size:12px;">已退费（转校课包）</span>';
+            } else if (remainingGt0 && !isGifted) {
+                optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(0, ${r.transfer_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
+<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(0, ${r.transfer_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+            } else {
+                optHtml = '<span style="color:#0D9488;font-size:12px;">转校课包</span>';
+            }
         } else if (transferred > 0) {
             if (remainingGt0 && !isGifted && refundStatus === '正常') {
                 optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">转校</button>`;
@@ -9406,15 +9415,22 @@ async function rejectTransferRecord(id) {
 
 // ==================== 转校申请（学员详情页） ====================
 let transferTargetOrderId = 0;
+let transferTargetTransferId = 0;
 let transferTargetCampusId = 0;
 let transferTargetCampus = '';
 let transferTargetLessons = 0;
 
-async function showTransferModal(orderId) {
-    const orderRow = studentCoursesAllRows.find(r => r.order_id == orderId && !((r.item_name || '').includes('（赠送')));
+async function showTransferModal(orderId, transferId = 0) {
+    let orderRow;
+    if (transferId > 0) {
+        orderRow = studentCoursesAllRows.find(r => (r.transfer_id == transferId) && !((r.item_name || '').includes('（赠送')));
+    } else {
+        orderRow = studentCoursesAllRows.find(r => r.order_id == orderId && !((r.item_name || '').includes('（赠送')));
+    }
     if (!orderRow) { showToast('未找到课程信息', 'error'); return; }
 
     transferTargetOrderId = orderId;
+    transferTargetTransferId = transferId;
     const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
     const remainingAmount = parseFloat(orderRow.remaining_amount) || 0;
     transferTargetLessons = remainingLessons;
@@ -9470,6 +9486,7 @@ function closeTransferModal() {
     const modal = document.getElementById('transfer-modal');
     if (modal) modal.remove();
     transferTargetOrderId = 0;
+    transferTargetTransferId = 0;
     transferTargetCampusId = 0;
     transferTargetCampus = '';
     transferTargetLessons = 0;
@@ -9489,21 +9506,26 @@ function updateTransferSubmitState() {
 }
 
 async function submitTransfer() {
-    if (!transferTargetOrderId || !transferTargetCampusId) {
+    if ((!transferTargetOrderId && !transferTargetTransferId) || !transferTargetCampusId) {
         showToast('请选择目标校区', 'error');
         return;
     }
     const btn = document.getElementById('btn-submit-transfer');
     if (btn) { btn.disabled = true; btn.textContent = '提交中...'; }
     try {
+        const body = {
+            to_campus_id: transferTargetCampusId,
+            transfer_lessons: transferTargetLessons
+        };
+        if (transferTargetTransferId > 0) {
+            body.transfer_id = transferTargetTransferId;
+        } else {
+            body.order_id = transferTargetOrderId;
+        }
         const resp = await fetch('?action=submit_transfer', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                order_id: transferTargetOrderId,
-                to_campus_id: transferTargetCampusId,
-                transfer_lessons: transferTargetLessons
-            })
+            body: JSON.stringify(body)
         });
         const data = await resp.json();
         if (data.error) { showToast(data.error, 'error'); if (btn) { btn.disabled = false; btn.textContent = '提交申请'; } return; }
@@ -9520,9 +9542,14 @@ async function submitTransfer() {
 let refundApplyRemainingAmount = 0;
 let refundApplyTaPaid = 0;
 
-async function showRefundApplyModal(orderId) {
+async function showRefundApplyModal(orderId, transferId = 0) {
     // 从当前学员课程数据中找到目标订单
-    const orderRow = studentCoursesAllRows.find(r => r.order_id == orderId);
+    let orderRow;
+    if (transferId > 0) {
+        orderRow = studentCoursesAllRows.find(r => r.transfer_id == transferId);
+    } else {
+        orderRow = studentCoursesAllRows.find(r => r.order_id == orderId);
+    }
     if (!orderRow) { showToast('未找到订单信息', 'error'); return; }
     
     const cl = parseInt(orderRow.consumed_lessons) || 0;
@@ -9555,6 +9582,7 @@ async function showRefundApplyModal(orderId) {
     }
 
     document.getElementById('refund-apply-order-id').value = orderId;
+    document.getElementById('refund-apply-transfer-id').value = transferId;
     document.getElementById('refund-auto-campus').textContent = orderRow.campus || '-';
     document.getElementById('refund-auto-course').textContent = orderRow.name || '-';
     document.getElementById('refund-auto-total-lessons').textContent = lc;
@@ -9604,7 +9632,8 @@ function onRefundMethodChange() {
 
 async function submitRefundApply() {
     const orderId = parseInt(document.getElementById('refund-apply-order-id').value) || 0;
-    if (!orderId) { showToast('订单信息错误', 'error'); return; }
+    const transferId = parseInt(document.getElementById('refund-apply-transfer-id').value) || 0;
+    if (!orderId && !transferId) { showToast('订单信息错误', 'error'); return; }
     const customDeduction = parseFloat(document.getElementById('refund-custom-deduction').value) || 0;
     const bankName = document.getElementById('refund-bank-name').value.trim();
     const bankAccount = document.getElementById('refund-bank-account').value.trim();
@@ -9629,19 +9658,24 @@ async function submitRefundApply() {
         const btn = document.getElementById('btn-refund-submit');
         if (btn) btn.classList.add('loading');
 
+        const body = {
+            custom_deduction: customDeduction,
+            bank_name: bankName,
+            bank_account: bankAccount,
+            account_holder: accountHolder,
+            refund_reason: refundReason,
+            refund_to: refundTo,
+            return_teaching_aid: returnTeachingAid
+        };
+        if (transferId > 0) {
+            body.transfer_id = transferId;
+        } else {
+            body.order_id = orderId;
+        }
         const res = await fetch(API_BASE + 'submit_refund', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                order_id: orderId,
-                custom_deduction: customDeduction,
-                bank_name: bankName,
-                bank_account: bankAccount,
-                account_holder: accountHolder,
-                refund_reason: refundReason,
-                refund_to: refundTo,
-                return_teaching_aid: returnTeachingAid
-            })
+            body: JSON.stringify(body)
         });
         const data = await res.json();
         if (data.error) { showToast(data.error, 'error'); return; }
