@@ -6157,7 +6157,7 @@ async function loadStudentCourses(sid) {
             return;
         }
         renderStudentCoursesFilters(rows);
-        renderStudentCoursesTable(rows);
+        filterStudentCourses();
         initStudentCoursesTableScrollSync();
     } catch (e) {
         container.innerHTML = '<div style="text-align:center;color:#e74c3c;padding:20px;">加载失败</div>';
