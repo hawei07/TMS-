@@ -6191,7 +6191,7 @@ function renderStudentCoursesFilters(rows) {
         </select>
         <input type="text" id="filter-course-name" placeholder="搜索课程名称" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:180px;" autocomplete="off">
         <label class="switch-label" title="切换课程展示范围" style="margin-left:4px;">
-            <input type="checkbox" id="filter-show-all" checked onchange="filterStudentCourses()">
+            <input type="checkbox" id="filter-show-all" onchange="filterStudentCourses()">
             <span class="switch-slider"></span>
             <span id="filter-show-all-label" style="margin-left:8px;font-size:13px;color:#666;white-space:nowrap;">展示全部课程</span>
         </label>
