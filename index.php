@@ -7545,22 +7545,22 @@ if (intval($countBt) === 0) {
                     <!-- 退费记录 tab -->
                     <div class="sec-panel active" id="tab-refund-records">
                         <div class="toolbar">
-                            <div class="toolbar-left" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                <label style="font-size:13px;white-space:nowrap;">区域：</label>
-                                <select id="filter-refund-region" onchange="onRefundRegionChange()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:100px;">
+                            <div class="toolbar-left">
+                                <label>区域</label>
+                                <select id="filter-refund-region" onchange="onRefundRegionChange()">
                                     <option value="">全部区域</option>
                                 </select>
-                                <label style="font-size:13px;white-space:nowrap;">校区：</label>
-                                <select id="filter-refund-campus" onchange="loadRefundRecords()" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;min-width:120px;">
+                                <label>校区</label>
+                                <select id="filter-refund-campus" onchange="loadRefundRecords()">
                                     <option value="">全部校区</option>
                                 </select>
-                                <label style="font-size:13px;white-space:nowrap;">项目：</label>
-                                <select id="filter-refund-project" onchange="loadRefundRecords()" style="padding:6px 10px;border:1px solid #ddd;border-radius:6px;font-size:13px;">
+                                <label>项目</label>
+                                <select id="filter-refund-project" onchange="loadRefundRecords()">
                                     <option value="">全部</option>
                                     <option value="课程">课程退费</option>
                                     <option value="账户">账户退费</option>
                                 </select>
-                                <select id="filter-refund-status" onchange="loadRefundRecords()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                                <select id="filter-refund-status" onchange="loadRefundRecords()">
                                     <option value="">全部状态</option>
                                     <option value="待审批">待审批</option>
                                     <option value="一级审批通过">一级审批通过</option>
@@ -7569,12 +7569,12 @@ if (intval($countBt) === 0) {
                                     <option value="审批驳回">审批驳回</option>
                                 </select>
                             </div>
-                            <div class="toolbar-right" style="margin-left:auto;">
+                            <div class="toolbar-right">
                                 <input type="text" id="search-refund" placeholder="搜索学员/课程/订单号..." onkeyup="debounceSearch('refund')">
-                                <label style="font-size:13px;margin:0 6px;">申请时间：</label>
-                                <input type="date" id="filter-refund-date-from" style="width:140px;" onchange="loadRefundRecords()">
-                                <span style="margin:0 4px;color:#999;">至</span>
-                                <input type="date" id="filter-refund-date-to" style="width:140px;" onchange="loadRefundRecords()">
+                                <label>申请时间</label>
+                                <input type="date" id="filter-refund-date-from" onchange="loadRefundRecords()">
+                                <span class="date-sep">至</span>
+                                <input type="date" id="filter-refund-date-to" onchange="loadRefundRecords()">
                                 <button class="btn btn-primary btn-sm" onclick="loadRefundRecords()">搜索</button>
                             </div>
                         </div>

@@ -9850,61 +9850,67 @@ async function loadRefundRecords() {
 function renderRefundRecordTable(rows) {
     const tbody = document.querySelector('#table-refund-records tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr class="empty-row"><td colspan="12">暂无退费记录<span class="empty-subtitle">退费申请将在此处显示</span></td></tr>';
+        tbody.innerHTML = '<tr class="empty-row"><td colspan="12"><span class="empty-title">暂无退费记录</span><span class="empty-subtitle">退费申请将在此处显示</span></td></tr>';
         return;
     }
+    /* 状态到 CSS 类映射 */
+    function statusTag(status) {
+        const map = {
+            '待审批': 'tag-pending',
+            '一级审批通过': 'tag-approval1',
+            '二级审批通过': 'tag-approved',
+            '已退费': 'tag-refunded',
+            '审批驳回': 'tag-rejected',
+        };
+        const cls = map[status] || '';
+        return `<span class="tag ${cls}">${status}</span>`;
+    }
+
+    function projectBadge(project) {
+        const cls = project === '账户' ? 'badge-account' : 'badge-course';
+        return `<span class="badge ${cls}">${project}</span>`;
+    }
+
+    function methodBadge(method) {
+        const cls = method === '账户' ? 'badge-balance' : 'badge-transfer';
+        return `<span class="badge ${cls}">${method}</span>`;
+    }
+
     tbody.innerHTML = rows.map(r => {
         const project = r.project || '课程';
-        let projectBadge = '';
-        if (project === '账户') {
-            projectBadge = '<span class="refund-badge refund-badge-account">账户</span>';
-        } else {
-            projectBadge = '<span class="refund-badge refund-badge-course">课程</span>';
-        }
         const isAccount = (project === '账户');
         const ar = parseFloat(r.actual_refund) || 0;
         const cd = parseFloat(r.custom_deduction) || 0;
         const subject = r.subject_level1 || '-';
         const refundMethod = r.refund_method || '转账';
-        let methodBadge = '';
-        if (refundMethod === '账户') {
-            methodBadge = '<span class="refund-badge refund-badge-balance">账户</span>';
-        } else {
-            methodBadge = '<span class="refund-badge refund-badge-transfer">转账</span>';
-        }
         const status = r.status || '';
-        let statusHtml = '';
-        if (status === '待审批') statusHtml = '<span class="tag tag-orange">待审批</span>';
-        else if (status === '一级审批通过') statusHtml = '<span class="tag tag-blue">一级审批通过</span>';
-        else if (status === '二级审批通过') statusHtml = '<span class="tag tag-blue">二级审批通过</span>';
-        else if (status === '已退费') statusHtml = '<span class="tag tag-green">已退费</span>';
-        else if (status === '审批驳回') statusHtml = '<span class="tag tag-red">审批驳回</span>';
-        else statusHtml = status;
-        // 操作按钮
+
+        /* 操作按钮 */
         let btns = [];
         if (status === '待审批' || status === '一级审批通过' || status === '二级审批通过') {
-            btns.push(`<button class="btn btn-primary btn-sm" onclick="showApproveModal(${r.id})">审批</button>`);
-        } else {
-            btns.push(`<button class="btn-link" onclick="showApproveModal(${r.id})" style="padding:5px 0;">查看详情</button>`);
+            btns.push(`<button class="btn-refund-approve" onclick="showApproveModal(${r.id})">审批</button>`);
+            btns.push(`<button class="btn-refund-cancel" onclick="cancelRefund(${r.id})">撤销</button>`);
+        } else if (status === '已退费') {
+            btns.push(`<button class="btn-refund-detail" onclick="showApproveModal(${r.id})">查看详情</button>`);
+        } else if (status === '审批驳回') {
+            btns.push(`<button class="btn-refund-detail" onclick="showApproveModal(${r.id})">查看详情</button>`);
         }
-        // 撤销按钮：已退费或驳回不可撤销
-        if (status !== '已退费' && status !== '审批驳回') {
-            btns.push(`<button class="btn btn-warn btn-sm" onclick="cancelRefund(${r.id})">撤销</button>`);
-        }
-        let optHtml = btns.length > 0 ? `<div style="display:flex;gap:8px;align-items:center;flex-wrap:nowrap;">${btns.join('')}</div>` : '';
+        const optHtml = btns.length > 0 ? `<div class="action-btns">${btns.join('')}</div>` : '';
+
         const created = r.created_at ? r.created_at.slice(0, 16) : '';
+
         return `<tr>
-            <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
+            <td class="col-order-no">${esc(r.order_no || '')}</td>
             <td>${esc(r.student_name || '')}</td>
-            <td>${projectBadge}</td>
+            <td>${projectBadge(project)}</td>
             <td>${esc(r.content || r.course_name || '')}</td>
-            <td>${esc(subject)}</td>
+            <td class="${subject === '-' ? 'col-empty' : ''}">${esc(subject)}</td>
             <td>${esc(r.campus || '')}</td>
-            <td style="font-weight:bold;color:#e74c3c;">¥${ar.toFixed(2)}</td>
-            <td>${isAccount ? '¥0.00' : '¥'+cd.toFixed(2)}</td>
-            <td>${methodBadge}</td>
-            <td style="white-space:nowrap;">${statusHtml}</td>
-            <td>${created}</td>
+            <td class="col-amount">¥${ar.toFixed(2)}</td>
+            <td class="col-amount-deduct">${isAccount ? '—' : '¥'+cd.toFixed(2)}</td>
+            <td>${methodBadge(refundMethod)}</td>
+            <td>${statusTag(status)}</td>
+            <td class="col-date">${created}</td>
             <td>${optHtml}</td>
         </tr>`;
     }).join('');
