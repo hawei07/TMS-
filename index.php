@@ -7198,7 +7198,6 @@ if (intval($countBt) === 0) {
                 </div>
                 <div class="section-tabs">
                     <button class="sec-tab active" data-tab="tab-refund-records">退费记录</button>
-                    <button class="sec-tab" data-tab="tab-course-records">课程记录</button>
                 </div>
                 <div class="section-tab-content">
                     <!-- 退费记录 tab -->
@@ -7246,10 +7245,6 @@ if (intval($countBt) === 0) {
                             </table>
                         </div>
                         <div class="pagination" id="pagination-refund"></div>
-                    </div>
-                    <!-- 课程记录 tab（预留） -->
-                    <div class="sec-panel" id="tab-course-records">
-                        <div style="text-align:center;color:#999;padding:40px;">课程记录功能开发中...</div>
                     </div>
                 </div>
             </section>
