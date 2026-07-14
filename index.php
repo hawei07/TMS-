@@ -9281,6 +9281,8 @@ if (intval($countBt) === 0) {
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/flatpickr/dist/themes/light.css">
     <script src="https://cdn.jsdelivr.net/npm/flatpickr"></script>
     <script src="https://cdn.jsdelivr.net/npm/flatpickr/dist/l10n/zh.js"></script>
+    <!-- 动态弹窗容器 -->
+    <div id="modal-container"></div>
     <!-- 退费申请弹窗（学员详情页发起） -->
     <div class="modal-overlay" id="modal-refund-apply">
         <div class="modal modal-lg">
