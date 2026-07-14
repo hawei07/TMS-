@@ -2501,7 +2501,7 @@ $stmt->execute();
                     'teaching_aid_paid' => 0,
                     'status' => '已报名',
                     'order_id' => 0,
-                    'order_no' => '',
+                    'order_no' => $tr['order_no'] ?? '',
                     'created_at' => $tr['updated_at'] ?? $tr['created_at'] ?? '',
                     'consumed_lessons' => $totalTransferred,
                     'campus' => $tr['to_campus'] ?? '',
@@ -3309,7 +3309,23 @@ $stmt->execute();
                     $stmt->bindValue(':stid', $transferId, PDO::PARAM_INT);
                     $stmt->bindValue(':sid', intval($tr['student_id']), PDO::PARAM_INT);
                     $stmt->bindValue(':sname', $tr['student_name'] ?? '', PDO::PARAM_STR);
-                    $stmt->bindValue(':ono', $tr['order_no'] ?? '', PDO::PARAM_STR);
+                    // 沿 source_transfer_id 链回溯至最初订单的 order_no，确保链式转校后子订单号始终与原始课包一致
+                    $origOrderNo = $tr['order_no'] ?? '';
+                    if (!empty($tr['source_transfer_id'])) {
+                        $visited = [$transferId => true];
+                        $cursorId = intval($tr['source_transfer_id']);
+                        while ($cursorId > 0 && !isset($visited[$cursorId])) {
+                            $visited[$cursorId] = true;
+                            $cur = $db->query("SELECT order_no, source_transfer_id, order_id FROM transfer_records WHERE id=$cursorId")->fetch(PDO::FETCH_ASSOC);
+                            if (!$cur) break;
+                            if (!empty($cur['order_no'])) { $origOrderNo = $cur['order_no']; }
+                            $cursorId = intval($cur['source_transfer_id'] ?? 0);
+                        }
+                    } elseif (intval($tr['order_id'] ?? 0) > 0) {
+                        $srcOrderNo = $db->query("SELECT order_no FROM orders WHERE id=" . intval($tr['order_id']))->fetchColumn();
+                        if ($srcOrderNo) { $origOrderNo = $srcOrderNo; }
+                    }
+                    $stmt->bindValue(':ono', $origOrderNo, PDO::PARAM_STR);
                     $stmt->bindValue(':cid', intval($tr['course_id'] ?? 0), PDO::PARAM_INT);
                     $stmt->bindValue(':cname', $tr['course_name'] ?? '', PDO::PARAM_STR);
                     $stmt->bindValue(':sl1', $tr['subject_level1'] ?? '', PDO::PARAM_STR);
