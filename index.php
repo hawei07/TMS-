@@ -3300,9 +3300,8 @@ $stmt->execute();
                 // 2. 生成子订单（目标校区）
                 $orderInfo = $db->query("SELECT * FROM orders WHERE id=$orderId")->fetch(PDO::FETCH_ASSOC);
                 $originalOrderNo = $orderInfo['order_no'];
-                // 生成子订单号：原订单号-转1、原订单号-转2 ...
-                $existingCount = intval($db->query("SELECT COUNT(*) FROM orders WHERE order_no LIKE " . $db->quote($originalOrderNo . '-转%'))->fetchColumn());
-                $newOrderNo = $originalOrderNo . '-转' . ($existingCount + 1);
+                // 转校订单号与原订单号一致
+                $newOrderNo = $originalOrderNo;
                 $newActualPrice = $transferAmount;
                 $newLessonCount = $transferLessons;
 
