@@ -3559,6 +3559,7 @@ span.flatpickr-weekday {
 .tag-normal { background: #e8f5e9; color: #2e7d32; }
 .tag-refunded { background: #ffeaea; color: #c0392b; }
 .tag-refund-pending { background: #fff8e1; color: #f57f17; }
+.tag-transferred { background: #e8eaf6; color: #283593; }
 .tag-orange { background: #fff3e0; color: #e65100; }
 .tag-blue { background: #e3f2fd; color: #1565c0; }
 .tag-green { background: #e8f5e9; color: #2e7d32; }

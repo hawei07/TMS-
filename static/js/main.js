@@ -6294,23 +6294,32 @@ function renderStudentCoursesTable(rows) {
     </tr></thead><tbody>
     ${rows.map(r => {
         const refundStatus = (r.refund_status || '正常');
+        const transferred = parseInt(r.transferred_lessons) || 0;
         let refundStatusHtml = '';
         if (refundStatus === '已退费') {
             refundStatusHtml = '<span class="tag tag-refunded">已退费</span>';
         } else if (refundStatus === '退费申请中') {
             refundStatusHtml = '<span class="tag tag-refund-pending">退费申请中</span>';
+        } else if (transferred > 0) {
+            refundStatusHtml = '<span class="tag tag-transferred">已转校</span>';
         } else {
             refundStatusHtml = '<span class="tag tag-normal">正常</span>';
         }
         const lc = parseInt(r.lesson_count) || 0;
         const cl = parseInt(r.consumed_lessons) || 0;
-        const hasRemaining = lc > cl && refundStatus === '正常';
+        const hasRemaining = lc > cl && refundStatus === '正常' && transferred === 0;
         // 检测是否有赠课
         const isGifted = r.actual_price === 0 && r.lesson_count > 0 && (r.item_name || '').includes('（赠送）');
         const remainingGt0 = (parseInt(r.remaining_lessons) || 0) > 0;
         // 操作按钮
         let optHtml = '';
-        if (remainingGt0 && !isGifted && refundStatus === '正常') {
+        if (transferred > 0) {
+            if (remainingGt0 && !isGifted && refundStatus === '正常') {
+                optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">转校</button>`;
+            } else {
+                optHtml = '<span style="color:#999;font-size:12px;">已转校</span>';
+            }
+        } else if (remainingGt0 && !isGifted && refundStatus === '正常') {
             optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
 <button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
         } else if (hasRemaining) {
