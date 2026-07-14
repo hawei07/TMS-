@@ -9293,15 +9293,19 @@ function initWorkRecordTabs() {
 let transferPage = 1;
 let transferPageSize = 20;
 
-function getUserDisplayName() {
+async function getUserDisplayName() {
     const stored = sessionStorage.getItem('operator_name');
     if (stored) return stored;
-    const name = prompt('请输入操作人姓名：', '');
-    if (name && name.trim()) {
-        sessionStorage.setItem('operator_name', name.trim());
-        return name.trim();
-    }
-    return '';
+    return new Promise((resolve) => {
+        showCustomPrompt('请输入操作人姓名', '', (name) => {
+            if (name) {
+                sessionStorage.setItem('operator_name', name);
+                resolve(name);
+            } else {
+                resolve('');
+            }
+        }, () => resolve(''));
+    });
 }
 
 async function loadTransferRecords(page) {
@@ -9358,39 +9362,40 @@ function renderTransferRecords(rows, total) {
 }
 
 async function approveTransferRecord(id) {
-    if (!confirm('确认通过该转校申请？将在目标校区生成新课程。')) return;
-    try {
-        const resp = await fetch('?action=approve_transfer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, action: 'approve', approver: getUserDisplayName() })
-        });
-        const data = await resp.json();
-        if (data.error) { alert(data.error); return; }
-        alert(data.message || '审批通过');
-        loadTransferRecords();
-    } catch (e) {
-        alert('操作失败：' + e.message);
-    }
+    showCustomConfirm('确认通过该转校申请？将在目标校区生成新课程。', async () => {
+        try {
+            const resp = await fetch('?action=approve_transfer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, action: 'approve', approver: await getUserDisplayName() })
+            });
+            const data = await resp.json();
+            if (data.error) { showToast(data.error, 'error'); return; }
+            showToast(data.message || '审批通过', 'success');
+            loadTransferRecords();
+        } catch (e) {
+            showToast('操作失败：' + e.message, 'error');
+        }
+    });
 }
 
 async function rejectTransferRecord(id) {
-    const reason = prompt('请输入驳回原因：');
-    if (reason === null) return;
-    if (!reason.trim()) { alert('请填写驳回原因'); return; }
-    try {
-        const resp = await fetch('?action=approve_transfer', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ id, action: 'reject', reject_reason: reason.trim(), approver: getUserDisplayName() })
-        });
-        const data = await resp.json();
-        if (data.error) { alert(data.error); return; }
-        alert(data.message || '已驳回');
-        loadTransferRecords();
-    } catch (e) {
-        alert('操作失败：' + e.message);
-    }
+    showCustomPrompt('请输入驳回原因', '', async (reason) => {
+        if (!reason) { showToast('请填写驳回原因', 'error'); return; }
+        try {
+            const resp = await fetch('?action=approve_transfer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ id, action: 'reject', reject_reason: reason.trim(), approver: await getUserDisplayName() })
+            });
+            const data = await resp.json();
+            if (data.error) { showToast(data.error, 'error'); return; }
+            showToast(data.message || '已驳回', 'success');
+            loadTransferRecords();
+        } catch (e) {
+            showToast('操作失败：' + e.message, 'error');
+        }
+    });
 }
 
 // ==================== 转校申请（学员详情页） ====================
@@ -9400,7 +9405,7 @@ let transferTargetLessons = 0;
 
 async function showTransferModal(orderId) {
     const orderRow = studentCoursesAllRows.find(r => r.order_id == orderId && !((r.item_name || '').includes('（赠送')));
-    if (!orderRow) { alert('未找到课程信息'); return; }
+    if (!orderRow) { showToast('未找到课程信息', 'error'); return; }
 
     transferTargetOrderId = orderId;
     const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
@@ -9475,7 +9480,7 @@ function updateTransferSubmitState() {
 
 async function submitTransfer() {
     if (!transferTargetOrderId || !transferTargetCampus) {
-        alert('请选择目标校区');
+        showToast('请选择目标校区', 'error');
         return;
     }
     const btn = document.getElementById('btn-submit-transfer');
@@ -9491,12 +9496,12 @@ async function submitTransfer() {
             })
         });
         const data = await resp.json();
-        if (data.error) { alert(data.error); if (btn) { btn.disabled = false; btn.textContent = '提交申请'; } return; }
-        alert(data.message || '转校申请已提交');
+        if (data.error) { showToast(data.error, 'error'); if (btn) { btn.disabled = false; btn.textContent = '提交申请'; } return; }
+        showToast(data.message || '转校申请已提交', 'success');
         closeTransferModal();
         loadStudentCourses(getUrlStudentId());
     } catch (e) {
-        alert('提交失败：' + e.message);
+        showToast('提交失败：' + e.message, 'error');
         if (btn) { btn.disabled = false; btn.textContent = '提交申请'; }
     }
 }
