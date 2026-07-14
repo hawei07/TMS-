@@ -9318,11 +9318,11 @@ function renderTransferRecords(rows, total) {
 async function approveTransferRecord(id) {
     if (!confirm('确认通过该转校申请？将在目标校区生成新课程。')) return;
     try {
-        const formData = new FormData();
-        formData.append('id', id);
-        formData.append('action', 'approve');
-        formData.append('approver', getUserDisplayName());
-        const resp = await fetch('?action=approve_transfer', { method: 'POST', body: formData });
+        const resp = await fetch('?action=approve_transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, action: 'approve', approver: getUserDisplayName() })
+        });
         const data = await resp.json();
         if (data.error) { alert(data.error); return; }
         alert(data.message || '审批通过');
@@ -9337,12 +9337,11 @@ async function rejectTransferRecord(id) {
     if (reason === null) return;
     if (!reason.trim()) { alert('请填写驳回原因'); return; }
     try {
-        const formData = new FormData();
-        formData.append('id', id);
-        formData.append('action', 'reject');
-        formData.append('reject_reason', reason.trim());
-        formData.append('approver', getUserDisplayName());
-        const resp = await fetch('?action=approve_transfer', { method: 'POST', body: formData });
+        const resp = await fetch('?action=approve_transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ id, action: 'reject', reject_reason: reason.trim(), approver: getUserDisplayName() })
+        });
         const data = await resp.json();
         if (data.error) { alert(data.error); return; }
         alert(data.message || '已驳回');
@@ -9440,11 +9439,15 @@ async function submitTransfer() {
     const btn = document.getElementById('btn-submit-transfer');
     if (btn) { btn.disabled = true; btn.textContent = '提交中...'; }
     try {
-        const formData = new FormData();
-        formData.append('order_id', transferTargetOrderId);
-        formData.append('to_campus', transferTargetCampus);
-        formData.append('transfer_lessons', transferTargetLessons);
-        const resp = await fetch('?action=submit_transfer', { method: 'POST', body: formData });
+        const resp = await fetch('?action=submit_transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                order_id: transferTargetOrderId,
+                to_campus: transferTargetCampus,
+                transfer_lessons: transferTargetLessons
+            })
+        });
         const data = await resp.json();
         if (data.error) { alert(data.error); if (btn) { btn.disabled = false; btn.textContent = '提交申请'; } return; }
         alert(data.message || '转校申请已提交');
