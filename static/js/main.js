@@ -9381,11 +9381,11 @@ async function showTransferModal(orderId) {
     } catch (e) { /* fallback */ }
 
     const html = `
-    <div id="transfer-modal" class="modal" style="display:flex;">
-        <div class="modal-content" style="max-width:520px;">
+    <div id="transfer-modal" class="modal-overlay" style="display:flex;">
+        <div class="modal" style="max-width:520px;">
             <div class="modal-header">
                 <h3>转校申请</h3>
-                <button class="close-btn" onclick="closeTransferModal()">&times;</button>
+                <button class="modal-close" onclick="closeTransferModal()">&times;</button>
             </div>
             <div class="modal-body">
                 <table style="width:100%;margin-bottom:16px;border-collapse:collapse;">
