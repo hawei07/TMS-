@@ -8490,6 +8490,7 @@ async function loadClassSchedules() {
                 allSessions.push({
                     scheduleId: r.id,
                     classId: r.class_id,
+                    className: r.class_name || '',
                     seq: allSessions.length + 1,
                     date: s.date || '',
                     dayOfWeek: s.dayOfWeek || '',
@@ -8537,7 +8538,7 @@ async function loadClassSchedules() {
                     <div class="action-btns">
                         <button class="btn-link" onclick="showClassAttendanceModal(${s.classId}, ${s.scheduleId}, '${s.date}', '${s.date} ${timeStr}')">考勤</button>
                         <button class="btn-link" onclick="editScheduleFromDetail(${s.scheduleId})">编辑</button>
-                        <button class="btn-link-danger" onclick="deleteScheduleFromDetail(${s.scheduleId})">删除</button>
+                        <button class="btn-link-danger" onclick="deleteScheduleEntry(${s.scheduleId}, '${escAttr(s.className)}', '${s.date}', '${s.start}', '${s.end}', '${escAttr(s.teacher)}')">删除</button>
                     </div>
                 </td>
             </tr>`;
@@ -11147,7 +11148,11 @@ function deleteScheduleEntry(scheduleId, className, dateStr, startTime, endTime,
             if (res.error) { showToast(res.error, 'error'); return; }
             document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
             showToast('课次已取消', 'success');
-            loadScheduleView();
+            if (currentClassDetailId) {
+                loadClassSchedules();
+            } else {
+                loadScheduleView();
+            }
         });
     });
 }
