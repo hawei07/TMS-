@@ -11066,3 +11066,183 @@ tbody td {
     background: rgba(124,58,237,0.12);
     transform: translateX(2px);
 }
+
+/* ==================== 工作记录 · 转校记录 Redesign ==================== */
+#panel-work-records > .panel-header {
+    display: flex; align-items: baseline; gap: 14px;
+    padding: 24px 28px 12px;
+}
+#panel-work-records > .panel-header h3 {
+    font-size: 20px; font-weight: 720; letter-spacing: -0.3px;
+    color: var(--color-text);
+}
+#panel-work-records > .panel-header::before {
+    content: ''; width: 8px; height: 8px; border-radius: 50%;
+    background: var(--color-primary); flex-shrink: 0; margin-bottom: 2px;
+}
+#panel-work-records .section-tabs {
+    border-bottom-color: var(--color-border-light);
+    padding: 0 28px;
+}
+#panel-work-records .sec-tab::after {
+    content: ''; position: absolute; bottom: 0; left: 8px; right: 8px;
+    height: 2.5px; background: var(--color-primary);
+    border-radius: 2px 2px 0 0;
+    transform: scaleX(0);
+    transition: transform 0.25s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: center;
+}
+#panel-work-records .sec-tab.active::after { transform: scaleX(1); }
+
+/* 转校记录工具栏 */
+#tab-transfer-records .toolbar {
+    box-shadow: none;
+    padding: 16px 28px;
+    background: transparent;
+}
+#tab-transfer-records .toolbar-left {
+    display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+}
+#tab-transfer-records .toolbar-left label {
+    font-size: 12.5px; color: var(--color-text-secondary); font-weight: 550;
+}
+#tab-transfer-records .toolbar select,
+#tab-transfer-records .toolbar input[type="text"] {
+    padding: 7px 30px 7px 11px;
+    border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm);
+    font-size: 13px; color: var(--color-text); background: var(--color-surface);
+    transition: border-color 0.18s ease, box-shadow 0.18s ease;
+    font-family: inherit;
+}
+#tab-transfer-records .toolbar select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='10' viewBox='0 0 24 24' fill='none' stroke='%23999' stroke-width='2.5'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right 9px center;
+    cursor: pointer;
+}
+#tab-transfer-records .toolbar input[type="text"] {
+    padding-left: 32px;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='14' height='14' viewBox='0 0 24 24' fill='none' stroke='%239895A8' stroke-width='2.2'%3E%3Ccircle cx='11' cy='11' r='8'/%3E%3Cline x1='21' y1='21' x2='16.65' y2='16.65'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: left 10px center;
+    width: 220px;
+}
+#tab-transfer-records .toolbar input[type="text"]:focus,
+#tab-transfer-records .toolbar select:focus {
+    outline: none; border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.08);
+}
+
+/* 转校记录表格 */
+#table-transfer-records { width: 100%; border-collapse: collapse; font-size: 13px; }
+#table-transfer-records thead th {
+    text-align: left; padding: 13px 16px;
+    font-weight: 620; font-size: 11.5px;
+    text-transform: uppercase; letter-spacing: 0.4px;
+    color: var(--color-text-secondary);
+    background: oklch(98% 0.001 290);
+    border-bottom: 1px solid var(--color-border);
+    white-space: nowrap; user-select: none;
+}
+#table-transfer-records thead th:first-child { padding-left: 20px; }
+#table-transfer-records thead th:last-child { padding-right: 20px; }
+#table-transfer-records tbody td {
+    padding: 14px 16px; color: var(--color-text);
+    border-bottom: 1px solid var(--color-border-light); vertical-align: middle;
+}
+#table-transfer-records tbody td:first-child { padding-left: 20px; }
+#table-transfer-records tbody td:last-child { padding-right: 20px; }
+#table-transfer-records tbody tr { transition: background 0.12s ease; }
+#table-transfer-records tbody tr:hover { background: oklch(98.5% 0.003 290); }
+#table-transfer-records tbody tr:last-child td { border-bottom: none; }
+#table-transfer-records .col-order-no {
+    font-family: 'SF Mono', 'Cascadia Code', Consolas, monospace;
+    font-size: 12px; color: var(--color-text-muted); letter-spacing: 0.2px;
+}
+#table-transfer-records .col-lessons,
+#table-transfer-records .col-amount { font-variant-numeric: tabular-nums; }
+#table-transfer-records .col-amount { font-weight: 560; }
+#table-transfer-records .col-date { color: var(--color-text-secondary); font-size: 12.5px; }
+#table-transfer-records .col-empty { color: var(--color-text-muted); font-size: 12px; }
+
+/* 转校状态标签 */
+#table-transfer-records .tag {
+    display: inline-flex; align-items: center; gap: 5px;
+    padding: 4px 12px; border-radius: 20px; font-size: 11.5px; font-weight: 580;
+    white-space: nowrap;
+}
+#table-transfer-records .tag::before {
+    content: ''; width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0;
+}
+/* 待审批 - warm amber */
+#table-transfer-records .tag-warning {
+    background: oklch(96% 0.06 85); color: oklch(52% 0.08 75);
+}
+#table-transfer-records .tag-warning::before { background: oklch(52% 0.08 75); }
+/* 已通过 - sage */
+#table-transfer-records .tag-success {
+    background: oklch(95% 0.02 160); color: oklch(42% 0.06 160);
+}
+#table-transfer-records .tag-success::before { background: oklch(42% 0.06 160); }
+/* 已驳回 - warm rose */
+#table-transfer-records .tag-danger {
+    background: oklch(95% 0.025 20); color: oklch(42% 0.08 25);
+}
+#table-transfer-records .tag-danger::before { background: oklch(42% 0.08 25); }
+
+/* 操作按钮 */
+#table-transfer-records .btn-transfer-approve,
+#table-transfer-records .btn-transfer-reject {
+    padding: 5px 14px; border: none; border-radius: 20px;
+    font-size: 12px; font-weight: 600; cursor: pointer;
+    transition: all 0.15s ease; letter-spacing: 0.1px;
+}
+#table-transfer-records .btn-transfer-approve {
+    background: oklch(52% 0.12 155); color: white;
+}
+#table-transfer-records .btn-transfer-approve:hover {
+    background: oklch(45% 0.13 155); transform: translateY(-1px);
+    box-shadow: 0 2px 8px oklch(52% 0.12 155 / 0.3);
+}
+#table-transfer-records .btn-transfer-reject {
+    background: oklch(52% 0.16 25); color: white;
+}
+#table-transfer-records .btn-transfer-reject:hover {
+    background: oklch(44% 0.17 25); transform: translateY(-1px);
+    box-shadow: 0 2px 8px oklch(52% 0.16 25 / 0.3);
+}
+#table-transfer-records .btn-transfer-approve:active,
+#table-transfer-records .btn-transfer-reject:active {
+    transform: translateY(0) scale(0.97); box-shadow: none;
+}
+#table-transfer-records .action-btns { display: flex; gap: 8px; }
+
+/* 转校记录分页 */
+#pagination-transfer {
+    display: flex; align-items: center; justify-content: center;
+    gap: 14px; padding: 16px 20px;
+    font-size: 13px; color: var(--color-text-secondary);
+}
+#pagination-transfer span { font-weight: 520; }
+#pagination-transfer a {
+    padding: 5px 14px; border: 1px solid var(--color-border);
+    border-radius: var(--radius-sm); background: var(--color-surface);
+    color: var(--color-text-secondary); font-size: 12.5px; font-weight: 550;
+    text-decoration: none; transition: all 0.18s ease;
+}
+#pagination-transfer a:hover { border-color: var(--color-primary); color: var(--color-primary); }
+#pagination-transfer a:active { transform: scale(0.96); }
+
+/* 转校记录表格容器 */
+#tab-transfer-records .table-wrap {
+    margin: 0 28px; border-radius: var(--radius-md);
+    box-shadow: var(--shadow-sm); overflow: hidden;
+}
+
+/* 无障碍 */
+@media (prefers-reduced-motion: reduce) {
+    #table-transfer-records tbody tr { transition: none; }
+    #panel-work-records .sec-tab::after { transition: none; }
+    #table-transfer-records .btn-transfer-approve,
+    #table-transfer-records .btn-transfer-reject { transition: none; }
+}

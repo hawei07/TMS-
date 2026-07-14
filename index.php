@@ -7591,22 +7591,22 @@ if (intval($countBt) === 0) {
                     <!-- 转校记录 tab -->
                     <div class="sec-panel" id="tab-transfer-records">
                         <div class="toolbar">
-                            <div class="toolbar-left" style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
-                                <label style="font-size:13px;white-space:nowrap;">状态：</label>
-                                <select id="filter-transfer-status" onchange="loadTransferRecords()" style="padding:6px 10px;border:1px solid #ddd;border-radius:4px;font-size:13px;">
+                            <div class="toolbar-left">
+                                <label>状态</label>
+                                <select id="filter-transfer-status" onchange="loadTransferRecords()">
                                     <option value="">全部状态</option>
                                     <option value="待审批">待审批</option>
                                     <option value="已通过">已通过</option>
                                     <option value="已驳回">已驳回</option>
                                 </select>
-                                <input type="text" id="filter-transfer-search" placeholder="搜索学员/订单号/课程" style="padding:5px 8px;border:1px solid #ddd;border-radius:4px;width:200px;" onkeydown="if(event.key==='Enter')loadTransferRecords()">
+                                <input type="text" id="filter-transfer-search" placeholder="搜索学员 / 订单号 / 课程" onkeydown="if(event.key==='Enter')loadTransferRecords()">
                                 <button class="btn btn-primary btn-sm" onclick="loadTransferRecords()">搜索</button>
                             </div>
                         </div>
                         <div class="table-wrap">
                             <table id="table-transfer-records">
                                 <thead><tr>
-                                    <th width="80">原订单号</th><th>学员</th><th>课程</th><th>原校区</th><th>目标校区</th><th>转移课时</th><th>转移金额</th><th width="80">状态</th><th width="100">申请人</th><th width="120">申请时间</th><th width="100">操作</th>
+                                    <th style="width:130px">原订单号</th><th style="width:68px">学员</th><th style="width:88px">课程</th><th style="width:120px">原校区</th><th style="width:120px">目标校区</th><th style="width:72px">转移课时</th><th style="width:84px">转移金额</th><th style="width:80px">状态</th><th style="width:68px">申请人</th><th style="width:108px">申请时间</th><th style="width:120px">操作</th>
                                 </tr></thead>
                                 <tbody></tbody>
                             </table>

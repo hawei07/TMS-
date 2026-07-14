@@ -6323,7 +6323,7 @@ function renderStudentCoursesTable(rows) {
         <div class="table-scroll-top"><div class="table-scroll-top-inner"></div></div>
         <div class="table-scroll-body">
             <table id="table-student-courses"><thead><tr>
-        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>课时数量</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>剩余课时</th><th>剩余金额</th><th>教材包</th><th>教材包金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
+        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>报读课时</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>剩余课时</th><th>剩余金额</th><th>教材包</th><th>教材包金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
     </tr></thead><tbody>
     ${rows.map(r => {
         const refundStatus = (r.refund_status || '正常');
@@ -9344,32 +9344,40 @@ async function loadTransferRecords(page) {
 function renderTransferRecords(rows, total) {
     const tbody = document.querySelector('#table-transfer-records tbody');
     if (!tbody) return;
-    tbody.innerHTML = rows.map(r => {
-        const statusClass = r.status === '待审批' ? 'tag-warning' : r.status === '已通过' ? 'tag-success' : 'tag-danger';
-        let opHtml = '';
-        if (r.status === '待审批') {
-            opHtml = `<button class="btn btn-success btn-sm" onclick="approveTransferRecord(${r.id})" style="font-size:11px;padding:2px 6px;">通过</button>
-<button class="btn btn-danger btn-sm" onclick="rejectTransferRecord(${r.id})" style="font-size:11px;padding:2px 6px;margin-left:4px;">驳回</button>`;
-        }
-        return `<tr>
-            <td>${esc(r.order_no)}</td>
-            <td>${esc(r.student_name)}</td>
-            <td>${esc(r.course_name)}</td>
-            <td>${esc(r.from_campus)}</td>
-            <td>${esc(r.to_campus)}</td>
-            <td>${r.transfer_lessons}</td>
-            <td>${parseFloat(r.transfer_amount).toFixed(2)}</td>
-            <td><span class="tag ${statusClass}">${esc(r.status)}</span></td>
-            <td>${esc(r.applicant)}</td>
-            <td>${esc(r.created_at ? r.created_at.substring(0, 10) : '')}</td>
-            <td>${opHtml}</td>
-        </tr>`;
-    }).join('');
+    if (rows.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="11" style="text-align:center;padding:50px 20px;color:var(--color-text-muted);font-size:14px;font-weight:520;">没有匹配的转校记录</td></tr>`;
+    } else {
+        tbody.innerHTML = rows.map(r => {
+            const statusClass = r.status === '待审批' ? 'tag-warning' : r.status === '已通过' ? 'tag-success' : 'tag-danger';
+            let opHtml = '';
+            if (r.status === '待审批') {
+                opHtml = `<div class="action-btns">
+                    <button class="btn-transfer-approve" onclick="approveTransferRecord(${r.id})">通过</button>
+                    <button class="btn-transfer-reject" onclick="rejectTransferRecord(${r.id})">驳回</button>
+                </div>`;
+            } else {
+                opHtml = '<span class="col-empty">—</span>';
+            }
+            return `<tr>
+                <td class="col-order-no">${esc(r.order_no)}</td>
+                <td><strong>${esc(r.student_name)}</strong></td>
+                <td>${esc(r.course_name)}</td>
+                <td>${esc(r.from_campus)}</td>
+                <td>${esc(r.to_campus)}</td>
+                <td class="col-lessons">${r.transfer_lessons}</td>
+                <td class="col-amount">&yen;${parseFloat(r.transfer_amount).toFixed(2)}</td>
+                <td><span class="tag ${statusClass}">${esc(r.status)}</span></td>
+                <td>${esc(r.applicant)}</td>
+                <td class="col-date">${esc(r.created_at ? r.created_at.substring(0, 10) : '')}</td>
+                <td>${opHtml}</td>
+            </tr>`;
+        }).join('');
+    }
 
     const pagDiv = document.getElementById('pagination-transfer');
     if (pagDiv) {
         const totalPages = Math.ceil(total / transferPageSize);
-        let pagHtml = `<span>共 ${total} 条，第 ${transferPage}/${Math.max(1,totalPages)} 页</span>`;
+        let pagHtml = `<span>共 ${total} 条，第 ${transferPage} / ${Math.max(1, totalPages)} 页</span>`;
         if (transferPage > 1) pagHtml += ` <a href="#" onclick="loadTransferRecords(${transferPage-1});return false;">上一页</a>`;
         if (transferPage < totalPages) pagHtml += ` <a href="#" onclick="loadTransferRecords(${transferPage+1});return false;">下一页</a>`;
         pagDiv.innerHTML = pagHtml;
