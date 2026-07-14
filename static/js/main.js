@@ -11114,7 +11114,17 @@ function takeAttendanceFromSchedule(scheduleId, classId, className, campus, cour
 }
 
 function deleteScheduleEntry(scheduleId, className, dateStr, startTime, endTime, teacher) {
-    var msg = '确定删除课次「' + className + '」吗？';
+    // 先校验日期：不能删除今天及之前的课次
+    if (dateStr) {
+        var today = new Date();
+        today.setHours(0, 0, 0, 0);
+        var sessionDate = new Date(dateStr + 'T00:00:00');
+        if (sessionDate <= today) {
+            showToast('不能取消今天及之前的课次', 'error');
+            return;
+        }
+    }
+    var msg = '确定取消该课次吗？';
     if (dateStr) {
         var d = new Date(dateStr + 'T00:00:00');
         var weekdays = ['周日', '周一', '周二', '周三', '周四', '周五', '周六'];
@@ -11124,10 +11134,10 @@ function deleteScheduleEntry(scheduleId, className, dateStr, startTime, endTime,
     if (teacher) msg += ' 教师:' + teacher;
     msg += ' 此操作不可恢复，已产生的考勤记录不受影响。';
     showCustomConfirm(msg, function() {
-        api('delete_schedule', { id: scheduleId }, 'POST').then(function(res) {
+        api('cancel_schedule_session', { id: scheduleId, date: dateStr }, 'POST').then(function(res) {
             if (res.error) { showToast(res.error, 'error'); return; }
             document.querySelectorAll('.modal-overlay').forEach(m => m.remove());
-            showToast('课次已删除', 'success');
+            showToast('课次已取消', 'success');
             loadScheduleView();
         });
     });

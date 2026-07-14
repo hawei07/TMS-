@@ -167,6 +167,7 @@ function computeSessions($schedule) {
     
     if (empty($startDate) || empty($endDate)) return $sessions;
     
+    $cancelledDates = json_decode($schedule['cancelled_dates'] ?? '[]', true) ?: [];
     $dayOfWeekMap = ['周一', '周二', '周三', '周四', '周五', '周六', '周日'];
     
     if ($ruleType === '按规则排课') {
@@ -181,8 +182,10 @@ function computeSessions($schedule) {
             $dowKey = (string)$dow;
             if (!isset($weekdaySet[$dowKey])) continue;
             if (isset($timeSlots[$dowKey]) && is_array($timeSlots[$dowKey])) {
+                $sessionDate = $date->format('Y-m-d');
+                if (in_array($sessionDate, $cancelledDates)) continue;
                 $sessions[] = [
-                    'date' => $date->format('Y-m-d'),
+                    'date' => $sessionDate,
                     'dayOfWeek' => $dayOfWeekMap[$dow - 1],
                     'start' => $timeSlots[$dowKey]['start'] ?? '',
                     'end' => $timeSlots[$dowKey]['end'] ?? ''
@@ -197,9 +200,11 @@ function computeSessions($schedule) {
             foreach ($dates as $dateStr) {
                 $dateStr = trim($dateStr);
                 $date = new DateTime($dateStr);
+                $sessionDate = $date->format('Y-m-d');
+                if (in_array($sessionDate, $cancelledDates)) continue;
                 $dow = $date->format('N');
                 $sessions[] = [
-                    'date' => $date->format('Y-m-d'),
+                    'date' => $sessionDate,
                     'dayOfWeek' => $dayOfWeekMap[$dow - 1],
                     'start' => '',
                     'end' => ''
@@ -213,9 +218,11 @@ function computeSessions($schedule) {
             $interval = new DateInterval('P1D');
             $period = new DatePeriod($start, $interval, $end);
             foreach ($period as $date) {
+                $sessionDate = $date->format('Y-m-d');
+                if (in_array($sessionDate, $cancelledDates)) continue;
                 $dow = $date->format('N');
                 $sessions[] = [
-                    'date' => $date->format('Y-m-d'),
+                    'date' => $sessionDate,
                     'dayOfWeek' => $dayOfWeekMap[$dow - 1],
                     'start' => '',
                     'end' => ''
@@ -3649,6 +3656,25 @@ $stmt->execute();
             if ($id <= 0) json(['error' => '排课ID无效']);
             $db->exec("DELETE FROM schedules WHERE id=$id");
             json(['message' => '排课删除成功']);
+            break;
+
+        case 'cancel_schedule_session':
+            if ($method !== 'POST') json(['error' => 'Method not allowed']);
+            $id = intval($input['id'] ?? 0);
+            $date = trim($input['date'] ?? '');
+            if ($id <= 0) json(['error' => '排课ID无效']);
+            if (!$date) json(['error' => '课次日期无效']);
+            // 不允许取消今天及之前的课次
+            $today = date('Y-m-d');
+            if ($date <= $today) json(['error' => '不能取消今天及之前的课次']);
+            $row = $db->query("SELECT * FROM schedules WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$row) json(['error' => '排课记录不存在']);
+            $cancelled = json_decode($row['cancelled_dates'] ?? '[]', true) ?: [];
+            if (in_array($date, $cancelled)) json(['error' => '该课次已被取消']);
+            $cancelled[] = $date;
+            $newCancelled = json_encode($cancelled, JSON_UNESCAPED_UNICODE);
+            $db->exec("UPDATE schedules SET cancelled_dates='" . $db->quote($newCancelled) . "' WHERE id=$id");
+            json(['message' => '课次已取消']);
             break;
 
         case 'create_schedule_from_grid':
