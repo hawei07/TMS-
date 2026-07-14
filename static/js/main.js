@@ -9364,6 +9364,7 @@ async function showTransferModal(orderId) {
     transferTargetOrderId = orderId;
     const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
     const remainingAmount = parseFloat(orderRow.remaining_amount) || 0;
+    transferTargetLessons = remainingLessons;
 
     // 获取校区列表
     let campusOptions = '<option value="">请选择目标校区</option>';
@@ -9400,14 +9401,7 @@ async function showTransferModal(orderId) {
                         ${campusOptions}
                     </select>
                 </div>
-                <div class="form-group">
-                    <label>转移课时 <span style="color:#999;font-size:12px;">（最多 ${remainingLessons} 课时）</span></label>
-                    <input type="number" id="transfer-lessons" class="form-control" min="1" max="${remainingLessons}" value="" placeholder="请输入转移课时数" onchange="onTransferLessonsChange()" />
-                </div>
-                <div id="transfer-preview" style="margin-top:12px;padding:12px;background:#f0f7ff;border-radius:4px;display:none;">
-                    <span style="color:#666;">预计转移金额：</span>
-                    <span id="transfer-preview-amount" style="font-weight:bold;color:#1890ff;font-size:16px;"></span>
-                </div>
+                <p style="color:#666;font-size:13px;">将全部 <b style="color:#1890ff;">${remainingLessons}</b> 课时（<b style="color:#1890ff;">${remainingAmount.toFixed(2)}</b> 元）转至目标校区</p>
             </div>
             <div class="modal-footer">
                 <button class="btn btn-default" onclick="closeTransferModal()">取消</button>
@@ -9432,40 +9426,15 @@ function onTransferCampusChange() {
     updateTransferSubmitState();
 }
 
-function onTransferLessonsChange() {
-    transferTargetLessons = parseInt(document.getElementById('transfer-lessons').value) || 0;
-    const orderRow = studentCoursesAllRows.find(r => r.order_id == transferTargetOrderId && !((r.item_name || '').includes('（赠送')));
-    if (!orderRow) return;
-    const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
-    const remainingAmount = parseFloat(orderRow.remaining_amount) || 0;
-
-    if (transferTargetLessons > 0 && transferTargetLessons <= remainingLessons) {
-        const unitPrice = remainingLessons > 0 ? remainingAmount / remainingLessons : 0;
-        const previewAmount = (unitPrice * transferTargetLessons).toFixed(2);
-        document.getElementById('transfer-preview').style.display = 'block';
-        document.getElementById('transfer-preview-amount').textContent = previewAmount + ' 元';
-    } else {
-        document.getElementById('transfer-preview').style.display = 'none';
-    }
-    updateTransferSubmitState();
-}
-
 function updateTransferSubmitState() {
     const btn = document.getElementById('btn-submit-transfer');
     if (!btn) return;
-    const orderRow = studentCoursesAllRows.find(r => r.order_id == transferTargetOrderId && !((r.item_name || '').includes('（赠送')));
-    if (!orderRow) { btn.disabled = true; return; }
-    const remainingLessons = parseInt(orderRow.remaining_lessons) || 0;
-    if (transferTargetCampus && transferTargetLessons > 0 && transferTargetLessons <= remainingLessons) {
-        btn.disabled = false;
-    } else {
-        btn.disabled = true;
-    }
+    btn.disabled = !transferTargetCampus;
 }
 
 async function submitTransfer() {
-    if (!transferTargetOrderId || !transferTargetCampus || transferTargetLessons <= 0) {
-        alert('请完善转校信息');
+    if (!transferTargetOrderId || !transferTargetCampus) {
+        alert('请选择目标校区');
         return;
     }
     const btn = document.getElementById('btn-submit-transfer');
@@ -9475,7 +9444,6 @@ async function submitTransfer() {
         formData.append('order_id', transferTargetOrderId);
         formData.append('to_campus', transferTargetCampus);
         formData.append('transfer_lessons', transferTargetLessons);
-        formData.append('applicant', getUserDisplayName());
         const resp = await fetch('?action=submit_transfer', { method: 'POST', body: formData });
         const data = await resp.json();
         if (data.error) { alert(data.error); if (btn) { btn.disabled = false; btn.textContent = '提交申请'; } return; }
