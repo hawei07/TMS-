@@ -6190,6 +6190,11 @@ function renderStudentCoursesFilters(rows) {
             ${renderSubject2Options('')}
         </select>
         <input type="text" id="filter-course-name" placeholder="搜索课程名称" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:180px;" autocomplete="off">
+        <label class="switch-label" title="切换课程展示范围" style="margin-left:4px;">
+            <input type="checkbox" id="filter-show-all" checked onchange="filterStudentCourses()">
+            <span class="switch-slider"></span>
+            <span id="filter-show-all-label" style="margin-left:8px;font-size:13px;color:#666;white-space:nowrap;">展示全部课程</span>
+        </label>
         <span style="font-size:14px;color:#888;margin-left:auto;">共 <b id="student-courses-count">${rows.length}</b> 门课程</span>
         <button class="btn btn-primary btn-sm" onclick="showClassEnrollModal(${currentViewStudentId})">分班</button>
     </div>`;
@@ -6257,10 +6262,22 @@ function filterStudentCourses() {
     const subject1 = document.getElementById('student-filter-subject1')?.value || '';
     const subject2 = document.getElementById('student-filter-subject2')?.value || '';
     const nameKw = (document.getElementById('filter-course-name')?.value || '').trim().toLowerCase();
+    const showAll = document.getElementById('filter-show-all')?.checked ?? true;
+    // 更新开关标签
+    const labelEl = document.getElementById('filter-show-all-label');
+    if (labelEl) labelEl.textContent = showAll ? '展示全部课程' : '展示待消课程';
     let filtered = studentCoursesAllRows;
     if (subject1) filtered = filtered.filter(r => r.subject_level1 === subject1);
     if (subject2) filtered = filtered.filter(r => r.subject_level2 === subject2);
     if (nameKw) filtered = filtered.filter(r => (r.name || '').toLowerCase().includes(nameKw));
+    // 展示待消课程：只展示剩余课时>0或退费申请中的课程
+    if (!showAll) {
+        filtered = filtered.filter(r => {
+            const remaining = parseInt(r.remaining_lessons) || 0;
+            const refundStatus = r.refund_status || '正常';
+            return remaining > 0 || refundStatus === '退费申请中';
+        });
+    }
     document.getElementById('student-courses-count').textContent = filtered.length;
     renderStudentCoursesTable(filtered);
     initStudentCoursesTableScrollSync();
