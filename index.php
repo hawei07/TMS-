@@ -3162,12 +3162,19 @@ $stmt->execute();
         case 'submit_transfer':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $orderId = intval($input['order_id'] ?? 0);
-            $toCampus = trim($input['to_campus'] ?? '');
+            $toCampusId = intval($input['to_campus_id'] ?? 0);
             $transferLessons = intval($input['transfer_lessons'] ?? 0);
             $applicant = trim($input['applicant'] ?? '');
 
-            if ($orderId <= 0 || $transferLessons <= 0 || $toCampus === '') {
+            if ($orderId <= 0 || $transferLessons <= 0 || $toCampusId <= 0) {
                 json(['error' => '参数不完整']);
+                break;
+            }
+
+            // 通过 ID 查校区名称
+            $toCampus = $db->query("SELECT name FROM organizations WHERE id=$toCampusId AND type='校区'")->fetchColumn();
+            if (!$toCampus) {
+                json(['error' => '目标校区不存在']);
                 break;
             }
 

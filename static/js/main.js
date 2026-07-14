@@ -9400,6 +9400,7 @@ async function rejectTransferRecord(id) {
 
 // ==================== 转校申请（学员详情页） ====================
 let transferTargetOrderId = 0;
+let transferTargetCampusId = 0;
 let transferTargetCampus = '';
 let transferTargetLessons = 0;
 
@@ -9421,7 +9422,7 @@ async function showTransferModal(orderId) {
             const currentCampus = orderRow.campus || '';
             data.data.forEach(c => {
                 if (c.name !== currentCampus) {
-                    campusOptions += `<option value="${esc(c.name)}">${esc(c.name)}</option>`;
+                    campusOptions += `<option value="${c.id}">${esc(c.name)}</option>`;
                 }
             });
         }
@@ -9463,12 +9464,15 @@ function closeTransferModal() {
     const modal = document.getElementById('transfer-modal');
     if (modal) modal.remove();
     transferTargetOrderId = 0;
+    transferTargetCampusId = 0;
     transferTargetCampus = '';
     transferTargetLessons = 0;
 }
 
 function onTransferCampusChange() {
-    transferTargetCampus = document.getElementById('transfer-to-campus').value;
+    const sel = document.getElementById('transfer-to-campus');
+    transferTargetCampusId = parseInt(sel.value) || 0;
+    transferTargetCampus = sel.options[sel.selectedIndex]?.text || '';
     updateTransferSubmitState();
 }
 
@@ -9479,7 +9483,7 @@ function updateTransferSubmitState() {
 }
 
 async function submitTransfer() {
-    if (!transferTargetOrderId || !transferTargetCampus) {
+    if (!transferTargetOrderId || !transferTargetCampusId) {
         showToast('请选择目标校区', 'error');
         return;
     }
@@ -9491,7 +9495,7 @@ async function submitTransfer() {
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
                 order_id: transferTargetOrderId,
-                to_campus: transferTargetCampus,
+                to_campus_id: transferTargetCampusId,
                 transfer_lessons: transferTargetLessons
             })
         });
