@@ -877,6 +877,131 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     line-height: 1.5;
 }
 
+/* ==================== 作废确认弹窗 ==================== */
+.void-dialog-overlay {
+    display: none; position: fixed; top: 0; left: 0;
+    width: 100%; height: 100%;
+    background: rgba(30,27,46,0.35);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    z-index: 3100;
+    justify-content: center; align-items: center;
+}
+.void-dialog-overlay.show {
+    display: flex;
+    animation: voidOverlayIn 0.18s ease-out;
+}
+.void-dialog {
+    background: var(--color-surface);
+    border-radius: var(--radius-xl);
+    width: 440px; max-width: 92vw;
+    box-shadow: 0 24px 64px rgba(0,0,0,0.18), 0 4px 16px rgba(0,0,0,0.08);
+    animation: voidDialogIn 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    overflow: hidden;
+}
+.void-dialog-header {
+    display: flex; align-items: flex-start; gap: 14px;
+    padding: 28px 28px 20px;
+    border-bottom: 1px solid var(--color-border-light);
+}
+.void-dialog-icon {
+    width: 42px; height: 42px; min-width: 42px;
+    border-radius: 50%;
+    background: var(--color-danger-bg);
+    display: flex; align-items: center; justify-content: center;
+    font-size: 20px; line-height: 1;
+    color: var(--color-danger);
+}
+.void-dialog-header-text h3 {
+    font-size: 16px; font-weight: 700;
+    color: var(--color-text);
+    margin-bottom: 3px;
+}
+.void-dialog-header-text p {
+    font-size: 13px; color: var(--color-text-muted);
+    line-height: 1.5;
+}
+.void-dialog-body {
+    padding: 16px 28px 8px;
+}
+.void-dialog-info-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 2px 20px;
+    background: var(--color-bg);
+    border-radius: var(--radius-md);
+    padding: 16px 18px;
+}
+.void-dialog-info-item {
+    display: flex; flex-direction: column; gap: 2px;
+    padding: 4px 0;
+}
+.void-dialog-info-label {
+    font-size: 11px; text-transform: uppercase;
+    letter-spacing: 0.04em; color: var(--color-text-muted);
+    font-weight: 600;
+}
+.void-dialog-info-value {
+    font-size: 13px; font-weight: 600;
+    color: var(--color-text);
+}
+.void-dialog-info-value.mono {
+    font-family: 'SF Mono', 'Cascadia Code', 'Consolas', monospace;
+    font-size: 12px;
+}
+.void-dialog-info-value.price {
+    color: var(--color-danger);
+}
+.void-dialog-footer {
+    display: flex; justify-content: flex-end; gap: 10px;
+    padding: 18px 28px 24px;
+}
+.void-dialog-btn {
+    padding: 9px 22px; border: none; border-radius: var(--radius-md);
+    cursor: pointer; font-size: 13px; font-weight: 600;
+    transition: all 0.15s ease;
+    font-family: inherit;
+    outline: none;
+}
+.void-dialog-btn:focus-visible {
+    box-shadow: 0 0 0 3px rgba(124,58,237,0.18);
+}
+.void-dialog-btn-cancel {
+    background: var(--color-bg);
+    color: var(--color-text-secondary);
+    border: 1px solid var(--color-border);
+}
+.void-dialog-btn-cancel:hover {
+    background: var(--color-border-light);
+    color: var(--color-text);
+}
+.void-dialog-btn-danger {
+    background: var(--color-danger);
+    color: #fff;
+}
+.void-dialog-btn-danger:hover {
+    background: var(--color-danger-hover);
+    box-shadow: 0 3px 12px rgba(229,62,62,0.30);
+    transform: translateY(-1px);
+}
+.void-dialog-btn-danger:active {
+    transform: translateY(0) scale(0.98);
+}
+@keyframes voidOverlayIn {
+    from { opacity: 0; }
+    to { opacity: 1; }
+}
+@keyframes voidDialogIn {
+    from { opacity: 0; transform: scale(0.94) translateY(8px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+@media (prefers-reduced-motion: reduce) {
+    .void-dialog-overlay.show,
+    .void-dialog { animation: none; }
+    .void-dialog-btn-danger:hover { transform: none; }
+    .void-dialog-btn-danger:active { transform: none; }
+}
+
 /* ==================== 自定义弹窗（替换 alert/confirm） ==================== */
 .custom-dialog-overlay {
     display: none; position: fixed; top: 0; left: 0;
@@ -11069,7 +11194,7 @@ tbody td {
 
 /* ==================== 工作记录 · 转校记录 Redesign ==================== */
 #panel-work-records > .panel-header {
-    display: flex; align-items: baseline; gap: 14px;
+    display: flex; justify-content: flex-start; align-items: baseline; gap: 14px;
     padding: 24px 28px 12px;
 }
 #panel-work-records > .panel-header h3 {

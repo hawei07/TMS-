@@ -6620,7 +6620,7 @@ async function loadStudentOrders(sid) {
             <td>${orderTypeHtml}</td>
             <td>${renderPayStatus(r.pay_status)}</td>
             <td>${renderVoidedStatus(r.is_voided)}</td>
-            <td>${r.is_voided === '否' && !(parseInt(r.transferred_lessons) > 0) ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button>` : '-'}</td>
+            <td>${r.is_voided === '否' && !(parseInt(r.transferred_lessons) > 0) ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id}, '${esc(r.order_no)}', '${esc(r.student_name)}', '${esc(r.course_name)}', '${esc(r.campus)}', ${r.lesson_count || 0}, ${r.actual_price || 0})" style="font-size:11px;padding:1px 6px;">作废</button>` : '-'}</td>
         </tr>`;
         }).join('')}
         </tbody></table></div>`;
@@ -8003,7 +8003,7 @@ function renderOrderTable(rows) {
             <td>${renderPayStatus(r.pay_status)}</td>
             <td>${renderVoidedStatus(r.is_voided)}</td>
             <td>
-                ${r.is_voided === '否' && !(parseInt(r.transferred_lessons) > 0) ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id})" style="font-size:11px;padding:1px 6px;">作废</button> ` : ''}
+                ${r.is_voided === '否' && !(parseInt(r.transferred_lessons) > 0) ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id}, '${esc(r.order_no)}', '${esc(r.student_name)}', '${esc(r.course_name)}', '${esc(r.campus)}', ${r.lesson_count || 0}, ${r.actual_price || 0})" style="font-size:11px;padding:1px 6px;">作废</button> ` : ''}
                 <button class="btn btn-link btn-sm" onclick="viewOrderDetail('${esc(r.order_no)}')" style="font-size:11px;padding:1px 6px;color:#7c3aed;">详情</button>
             </td>
         </tr>`;
@@ -8219,8 +8219,95 @@ function switchToOrders() {
     loadOrders();
 }
 
-async function voidOrder(orderId) {
-    if (!confirm('确定作废该订单吗？作废后该笔订单对应的报读课程将被删除。')) return;
+/**
+ * 作废确认弹窗 — 替换浏览器原生 confirm
+ * @param {Object} order - { orderNo, studentName, courseName, campus, lessonCount, actualPrice }
+ * @returns {Promise<boolean>}
+ */
+function showVoidDialog(order) {
+    return new Promise((resolve) => {
+        const existing = document.querySelector('.void-dialog-overlay');
+        if (existing) existing.remove();
+
+        const overlay = document.createElement('div');
+        overlay.className = 'void-dialog-overlay';
+        overlay.innerHTML = `
+            <div class="void-dialog" role="alertdialog" aria-modal="true" aria-labelledby="void-dialog-title">
+                <div class="void-dialog-header">
+                    <div class="void-dialog-icon" aria-hidden="true">!</div>
+                    <div class="void-dialog-header-text">
+                        <h3 id="void-dialog-title">确认作废订单</h3>
+                        <p>作废后该订单对应的报读课程将被删除，此操作不可撤销。</p>
+                    </div>
+                </div>
+                <div class="void-dialog-body">
+                    <div class="void-dialog-info-grid">
+                        <div class="void-dialog-info-item">
+                            <span class="void-dialog-info-label">订单号</span>
+                            <span class="void-dialog-info-value mono">${esc(order.orderNo || '-')}</span>
+                        </div>
+                        <div class="void-dialog-info-item">
+                            <span class="void-dialog-info-label">学员</span>
+                            <span class="void-dialog-info-value">${esc(order.studentName || '-')}</span>
+                        </div>
+                        <div class="void-dialog-info-item">
+                            <span class="void-dialog-info-label">课程</span>
+                            <span class="void-dialog-info-value">${esc(order.courseName || '-')}</span>
+                        </div>
+                        <div class="void-dialog-info-item">
+                            <span class="void-dialog-info-label">校区</span>
+                            <span class="void-dialog-info-value">${esc(order.campus || '-')}</span>
+                        </div>
+                        <div class="void-dialog-info-item">
+                            <span class="void-dialog-info-label">课时</span>
+                            <span class="void-dialog-info-value">${order.lessonCount ?? '-'}</span>
+                        </div>
+                        <div class="void-dialog-info-item">
+                            <span class="void-dialog-info-label">金额</span>
+                            <span class="void-dialog-info-value price">${order.actualPrice != null ? '¥' + Number(order.actualPrice).toFixed(2) : '-'}</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="void-dialog-footer">
+                    <button class="void-dialog-btn void-dialog-btn-cancel" data-action="cancel">取消</button>
+                    <button class="void-dialog-btn void-dialog-btn-danger" data-action="confirm">确定作废</button>
+                </div>
+            </div>
+        `;
+
+        const dismiss = (value) => {
+            overlay.classList.remove('show');
+            overlay.addEventListener('transitionend', () => {
+                overlay.remove();
+                resolve(value);
+            }, { once: true });
+            // 兜底：transitionend 可能不触发
+            setTimeout(() => { if (overlay.parentNode) { overlay.remove(); resolve(value); } }, 300);
+        };
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) dismiss(false);
+        });
+
+        overlay.querySelector('[data-action="cancel"]').addEventListener('click', () => dismiss(false));
+        overlay.querySelector('[data-action="confirm"]').addEventListener('click', () => dismiss(true));
+
+        const onKey = (e) => {
+            if (e.key === 'Escape') { dismiss(false); document.removeEventListener('keydown', onKey); }
+        };
+        document.addEventListener('keydown', onKey);
+
+        document.body.appendChild(overlay);
+        requestAnimationFrame(() => overlay.classList.add('show'));
+        overlay.querySelector('.void-dialog-btn-cancel').focus();
+    });
+}
+
+async function voidOrder(orderId, orderNo, studentName, courseName, campus, lessonCount, actualPrice) {
+    const confirmed = await showVoidDialog({
+        orderNo, studentName, courseName, campus, lessonCount, actualPrice
+    });
+    if (!confirmed) return;
     try {
         const res = await fetch(API_BASE + 'void_order', {
             method: 'POST',
