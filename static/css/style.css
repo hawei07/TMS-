@@ -8872,62 +8872,53 @@ tbody td {
     background: #fffef9;
     border-bottom: 2px solid #f0f0f0;
 }
-.enroll-type-grid {
+/* 报名类型按钮行 */
+.enroll-type-btn-row {
     display: flex;
-    gap: 20px;
-    max-width: 700px;
-}
-.enroll-type-card {
-    flex: 1;
-    display: flex;
-    flex-direction: column;
+    gap: 8px;
     align-items: center;
-    gap: 12px;
-    padding: 32px 24px 24px;
-    background: #fff;
-    border: 2px solid #e8ecf1;
-    border-radius: 16px;
+}
+.enroll-type-btn {
+    height: 34px;
+    padding: 0 16px;
+    font-size: 13px;
+    font-weight: 580;
+    line-height: 1;
+    border-radius: 8px;
+    border: 1.5px solid var(--color-primary);
+    color: var(--color-primary);
+    background: transparent;
     cursor: pointer;
-    transition: all 0.25s cubic-bezier(0.4,0,0.2,1);
     user-select: none;
+    transition: transform 0.15s cubic-bezier(0.4,0,0.2,1), opacity 0.15s cubic-bezier(0.4,0,0.2,1);
+    white-space: nowrap;
 }
-.enroll-type-card:hover {
-    border-color: #FFE066;
-    box-shadow: 0 4px 20px rgba(255,224,102,0.18);
-    transform: translateY(-2px);
+.enroll-type-btn:hover {
+    background: oklch(95% 0.01 290);
 }
-.enroll-type-card.active {
-    border-color: #FF7675;
-    background: #FFF0F0;
-    box-shadow: 0 4px 24px rgba(255,118,117,0.2);
+.enroll-type-btn:active {
+    transform: scale(0.97);
+    background: oklch(92% 0.01 290);
 }
-.enroll-type-card-icon {
-    width: 80px;
-    height: 80px;
-    border-radius: 50%;
-    background: #f8f9fb;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    color: #888;
-    transition: all 0.25s;
+.enroll-type-btn:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
 }
-.enroll-type-card.active .enroll-type-card-icon {
-    background: #fff;
-    color: #FF7675;
+.enroll-type-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
 }
-.enroll-type-card-label {
-    font-size: 18px;
-    font-weight: 700;
-    color: #444;
+.enroll-type-btn.active {
+    background: var(--color-primary);
+    color: #fff;
+    border-color: var(--color-primary);
 }
-.enroll-type-card.active .enroll-type-card-label {
-    color: #FF7675;
+.enroll-type-btn.active:hover {
+    background: oklch(38% 0.12 290);
 }
-.enroll-type-card-desc {
-    font-size: 12px;
-    color: #999;
-    text-align: center;
+.enroll-type-btn.active:active {
+    transform: scale(0.97);
+    background: oklch(32% 0.12 290);
 }
 
 /* ==================== 活动报名流程容器 ==================== */
@@ -11611,3 +11602,478 @@ tbody td {
 
 /* 隐藏旧退费徽章样式（由新 badge-* 取代） */
 #table-refund-records .refund-badge { display: none; }
+
+/* ==================== 自定义搜索下拉组件 ==================== */
+/* Soft Industrial 风格 — 中性暖灰基底 oklch(0.25 0.01 260) 偏暖 */
+
+.enroll-referral-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+    margin-bottom: 16px;
+}
+.enroll-referral-row:last-child { margin-bottom: 0; }
+
+.enroll-referral-item { display: flex; flex-direction: column; gap: 6px; }
+.enroll-referral-item label {
+    font-size: 13px;
+    font-weight: 500;
+    color: #4A4754;
+}
+.enroll-referral-item label .required {
+    color: #DC2626;
+    margin-left: 2px;
+}
+
+/* ==================== 充值弹窗（Soft Industrial 重设计） ==================== */
+
+.recharge-modal {
+    background: oklch(0.99 0.002 265);
+    border-radius: 14px;
+    width: 680px;
+    max-width: 92vw;
+    max-height: 90vh;
+    overflow-y: auto;
+    box-shadow:
+        0 0 0 1px oklch(0.90 0.006 265),
+        0 4px 16px oklch(0.25 0.01 265 / 0.06),
+        0 16px 48px oklch(0.25 0.01 265 / 0.12);
+    animation: rechargeSlideIn 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    flex-direction: column;
+}
+
+@keyframes rechargeSlideIn {
+    from { opacity: 0; transform: scale(0.95) translateY(12px); }
+    to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* 标题栏 */
+.recharge-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 24px 14px;
+    border-bottom: 1px solid oklch(0.92 0.004 265);
+}
+
+.recharge-modal-title {
+    font-size: 17px;
+    font-weight: 650;
+    color: oklch(0.20 0.008 265);
+    margin: 0;
+    letter-spacing: 0.2px;
+}
+
+.recharge-modal-close {
+    background: none;
+    border: none;
+    width: 34px; height: 34px;
+    border-radius: 8px;
+    font-size: 20px;
+    color: oklch(0.45 0.008 265);
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    line-height: 1;
+}
+.recharge-modal-close:hover {
+    background: oklch(0.94 0.008 265);
+    color: oklch(0.20 0.008 265);
+}
+.recharge-modal-close:active {
+    transform: scale(0.92);
+}
+.recharge-modal-close:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+    border-radius: 8px;
+}
+
+/* 主体 */
+.recharge-modal-body {
+    padding: 20px 24px;
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+/* 分区 */
+.recharge-section {
+    background: oklch(0.985 0.002 265);
+    border-radius: 10px;
+    padding: 16px 18px;
+    box-shadow: 0 1px 3px oklch(0.25 0.01 265 / 0.04);
+}
+.recharge-section-last {
+    margin-bottom: 0;
+}
+
+.recharge-section-title {
+    font-size: 12.5px;
+    font-weight: 600;
+    color: oklch(0.38 0.012 265);
+    text-transform: uppercase;
+    letter-spacing: 0.6px;
+    margin-bottom: 14px;
+    padding-bottom: 8px;
+    border-bottom: 1px solid oklch(0.92 0.004 265);
+}
+
+/* 字段行 */
+.recharge-field-row {
+    display: flex;
+    gap: 14px;
+    margin-bottom: 12px;
+}
+.recharge-field-row:last-child {
+    margin-bottom: 0;
+}
+.recharge-row-3col .recharge-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.recharge-field {
+    flex: 1;
+    min-width: 0;
+}
+
+.recharge-label {
+    display: block;
+    font-size: 12.5px;
+    font-weight: 520;
+    color: oklch(0.42 0.012 265);
+    margin-bottom: 5px;
+    letter-spacing: 0.15px;
+}
+.recharge-required {
+    color: oklch(0.52 0.22 22);
+    font-weight: 600;
+}
+
+/* 输入框 / 下拉 */
+.recharge-input,
+.recharge-select {
+    width: 100%;
+    height: 40px;
+    padding: 0 12px;
+    font-size: 13.5px;
+    color: oklch(0.22 0.01 265);
+    background: oklch(0.995 0 0);
+    border: 1px solid oklch(0.86 0.008 265);
+    border-radius: 8px;
+    outline: none;
+    font-family: inherit;
+    box-shadow: 0 1px 2px oklch(0.25 0.01 265 / 0.03);
+    transition: border-color 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.18s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.18s cubic-bezier(0.4, 0, 0.2, 1);
+    box-sizing: border-box;
+}
+.recharge-select {
+    appearance: none;
+    background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8'%3E%3Cpath d='M1 1l5 5 5-5' stroke='%239995A5' stroke-width='1.5' fill='none'/%3E%3C/svg%3E");
+    background-repeat: no-repeat;
+    background-position: right 12px center;
+    padding-right: 32px;
+    cursor: pointer;
+}
+
+.recharge-input:hover,
+.recharge-select:hover {
+    border-color: oklch(0.78 0.015 265);
+}
+.recharge-input:focus,
+.recharge-select:focus {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px oklch(0.62 0.18 280 / 0.14);
+    background: oklch(1 0 0);
+}
+.recharge-input:active {
+    background: oklch(0.985 0.002 265);
+}
+.recharge-input:disabled,
+.recharge-select:disabled {
+    background: oklch(0.96 0.003 265);
+    color: oklch(0.55 0.008 265);
+    cursor: not-allowed;
+    border-color: oklch(0.88 0.004 265);
+}
+
+/* 底部按钮栏 */
+.recharge-modal-footer {
+    display: flex;
+    justify-content: flex-end;
+    gap: 10px;
+    padding: 14px 24px 18px;
+    border-top: 1px solid oklch(0.92 0.004 265);
+}
+
+.recharge-btn-cancel,
+.recharge-btn-submit {
+    height: 40px;
+    padding: 0 22px;
+    font-size: 13.5px;
+    font-weight: 550;
+    font-family: inherit;
+    border-radius: 8px;
+    cursor: pointer;
+    letter-spacing: 0.2px;
+    transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                background 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                box-shadow 0.15s cubic-bezier(0.4, 0, 0.2, 1),
+                border-color 0.15s cubic-bezier(0.4, 0, 0.2, 1);
+    border: none;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+}
+
+.recharge-btn-cancel {
+    background: oklch(0.96 0.004 265);
+    color: oklch(0.40 0.012 265);
+    box-shadow: 0 1px 2px oklch(0.25 0.01 265 / 0.04);
+}
+.recharge-btn-cancel:hover {
+    background: oklch(0.92 0.006 265);
+}
+.recharge-btn-cancel:active {
+    background: oklch(0.88 0.01 265);
+    transform: scale(0.97);
+}
+.recharge-btn-cancel:focus-visible {
+    outline: 2px solid var(--color-primary);
+    outline-offset: 2px;
+}
+.recharge-btn-cancel:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+}
+
+.recharge-btn-submit {
+    background: var(--color-primary);
+    color: #fff;
+    box-shadow:
+        0 1px 3px oklch(0.40 0.15 280 / 0.18),
+        0 2px 8px oklch(0.40 0.15 280 / 0.10);
+}
+.recharge-btn-submit:hover {
+    background: var(--color-primary-dark);
+    box-shadow:
+        0 2px 6px oklch(0.40 0.15 280 / 0.22),
+        0 4px 14px oklch(0.40 0.15 280 / 0.14);
+}
+.recharge-btn-submit:active {
+    background: oklch(0.38 0.15 280);
+    transform: scale(0.97);
+    box-shadow:
+        0 1px 2px oklch(0.40 0.15 280 / 0.14);
+}
+.recharge-btn-submit:focus-visible {
+    outline: 2px solid var(--color-primary-light);
+    outline-offset: 2px;
+}
+.recharge-btn-submit:disabled {
+    opacity: 0.45;
+    cursor: not-allowed;
+    box-shadow: none;
+}
+
+/* 弹窗内搜索下拉微调 */
+.recharge-field .searchable-dropdown .searchable-input {
+    height: 40px;
+    font-size: 13.5px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    .recharge-modal {
+        animation: none;
+    }
+    .recharge-modal-close,
+    .recharge-btn-cancel,
+    .recharge-btn-submit,
+    .recharge-input,
+    .recharge-select {
+        transition: none;
+    }
+}
+
+/* ==================== 搜索下拉组件 ==================== */
+.searchable-dropdown {
+    position: relative;
+    width: 100%;
+}
+.searchable-input {
+    width: 100%;
+    height: 44px;
+    padding: 0 14px;
+    font-size: 14px;
+    color: oklch(0.25 0.01 260);
+    background: oklch(0.99 0.002 260);
+    border: 1px solid oklch(0.85 0.008 260);
+    border-radius: 8px;
+    outline: none;
+    cursor: pointer;
+    transition: border-color 180ms ease-out, box-shadow 180ms ease-out;
+}
+.searchable-input:hover {
+    border-color: oklch(0.70 0.015 260);
+}
+.searchable-input:focus,
+.searchable-dropdown.open .searchable-input {
+    border-color: var(--color-primary);
+    box-shadow: 0 0 0 3px oklch(0.50 0.18 290 / 0.12);
+}
+.searchable-input.disabled {
+    opacity: 0.5;
+    pointer-events: none;
+}
+
+.searchable-menu {
+    position: absolute;
+    top: calc(100% + 4px);
+    left: 0;
+    right: 0;
+    max-height: 240px;
+    overflow-y: auto;
+    background: oklch(0.995 0.002 260);
+    border-radius: 10px;
+    box-shadow: 0 8px 32px oklch(0.15 0.015 260 / 0.12), 0 2px 8px oklch(0.15 0.015 260 / 0.06);
+    z-index: 1000;
+    opacity: 0;
+    transform: translateY(-4px) scale(0.98);
+    pointer-events: none;
+    transition: opacity 180ms ease-out-quint, transform 180ms ease-out-quint;
+}
+.searchable-dropdown.open .searchable-menu {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+    pointer-events: auto;
+}
+
+/* 分组头 */
+.searchable-menu-group {
+    padding: 8px 14px 4px;
+    font-size: 11px;
+    font-weight: 500;
+    color: oklch(0.50 0.005 260);
+    cursor: default;
+    user-select: none;
+}
+
+/* 组间分隔 */
+.searchable-menu-group-sep {
+    height: 1px;
+    margin: 4px 14px 2px;
+    background: oklch(0.85 0.01 260);
+}
+
+.searchable-menu-item {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 9px 14px;
+    min-height: 40px;
+    font-size: 14px;
+    color: oklch(0.25 0.01 260);
+    cursor: pointer;
+    transition: background 120ms ease-out;
+}
+.searchable-menu-item + .searchable-menu-item {
+    border-top: 1px solid oklch(0.92 0.003 260);
+}
+.searchable-menu-item:last-child {
+    border-bottom: none;
+}
+.searchable-menu-item:hover,
+.searchable-menu-item.highlighted {
+    background: oklch(0.95 0.01 250);
+}
+.searchable-menu-item.selected {
+    background: oklch(0.88 0.04 290 / 0.10);
+}
+
+/* 姓名（员工/学员共用） */
+.searchable-menu-item .item-name {
+    font-weight: 600;
+    color: oklch(0.22 0.01 260);
+    flex-shrink: 0;
+}
+
+/* 部门标签（仅员工水平布局使用） */
+.searchable-menu-item .item-dept {
+    font-size: 12px;
+    color: oklch(0.55 0.01 260);
+    background: oklch(0.96 0.003 260);
+    padding: 2px 8px;
+    border-radius: 4px;
+    white-space: nowrap;
+    max-width: 50%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    flex-shrink: 1;
+}
+
+/* 学员垂直布局保留 */
+.searchable-menu-item .item-main {
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    flex: 1;
+}
+.searchable-menu-item .item-sub { font-size: 12px; color: oklch(0.45 0.01 260); }
+
+/* 已弃用但保留兼容 */
+.searchable-menu-item .item-badge {
+    font-size: 11px;
+    padding: 3px 8px;
+    border-radius: 4px;
+    background: oklch(0.88 0.04 290 / 0.12);
+    color: var(--color-primary);
+    font-weight: 500;
+    white-space: nowrap;
+}
+.searchable-menu-divider {
+    height: 1px;
+    margin: 4px 12px;
+    background: oklch(0.88 0.008 260);
+}
+
+.searchable-menu-empty {
+    padding: 16px 14px;
+    text-align: center;
+    font-size: 13px;
+    color: oklch(0.50 0.01 260);
+}
+
+/* 备注区域两行布局 */
+.enroll-remark-row {
+    display: flex;
+    gap: 16px;
+}
+
+/* 订单列表关联人员列背景区分 */
+#table-orders .ref-col,
+#table-orders th.ref-col {
+    background-color: oklch(0.97 0.002 260);
+}
+#table-orders tbody tr:hover .ref-col {
+    background-color: oklch(0.94 0.003 260);
+}
+#table-orders-foot .ref-col {
+    background-color: oklch(0.97 0.002 260);
+}
+
+/* prefers-reduced-motion */
+@media (prefers-reduced-motion: reduce) {
+    .searchable-menu { transition: none; }
+    .searchable-menu-item { transition: none; }
+    .searchable-input { transition: none; }
+}

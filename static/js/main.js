@@ -7025,6 +7025,9 @@ async function goEnroll(studentId) {
     setEnrollProgress(1);
     activatePanel('panel-enroll');
     highlightLeafByPanel('panel-enroll');
+
+    // Init referral dropdowns
+    initEnrollReferralDropdowns();
 }
 
 async function goEnrollFromResource(resourceId) {
@@ -7072,6 +7075,9 @@ async function goEnrollFromResource(resourceId) {
     setEnrollProgress(1);
     activatePanel('panel-enroll');
     highlightLeafByPanel('panel-enroll');
+
+    // Init referral dropdowns
+    initEnrollReferralDropdowns();
 }
 
 // Campus select change → load course picker
@@ -7105,6 +7111,8 @@ document.addEventListener('DOMContentLoaded', function() {
             document.getElementById('enroll-type-select').style.display = '';
             // 预加载课程数据
             await loadEnrollCoursePicker(campusId);
+            // 刷新关联人员下拉（校区变化影响员工排序）
+            initEnrollReferralDropdowns();
         });
     }
 
@@ -7271,6 +7279,12 @@ function updatePaymentHint() {
 }
 
 async function confirmPayEnroll() {
+    // 课程顾问必填校验
+    const refData = getEnrollReferralData();
+    if (!refData.advisor_id || refData.advisor_id <= 0) {
+        return showToast('请选择课程顾问', 'error');
+    }
+
     // 支付金额校验
     const paymentCash = parseFloat(document.getElementById('enroll-payment-cash').value) || 0;
     const paymentMeituan = parseFloat(document.getElementById('enroll-payment-meituan').value) || 0;
@@ -7287,14 +7301,12 @@ async function confirmPayEnroll() {
         if (!currentEnrollPlanId) return showToast('请选择价格方案', 'error');
 
         showCustomConfirm('确认报名？系统将自动为该资源创建学员记录并生成订单。', async () => {
-            // Step 1: Create student from resource
             const createResult = await api('create_student_from_resource', {
                 resource_id: currentEnrollResourceId
             }, 'POST');
             if (createResult.error) { showToast(createResult.error, 'error'); return; }
             const studentId = createResult.student_id;
 
-            // Step 2: Pay enroll
             const result = await api('pay_enroll', {
                 student_id: studentId,
                 course_id: currentEnrollCourseId,
@@ -7304,11 +7316,13 @@ async function confirmPayEnroll() {
                 payment_meituan: paymentMeituan,
                 campus_id: currentEnrollCampusId || 0,
                 use_balance: paymentBalance > 0 ? 1 : 0,
-                balance_amount: paymentBalance
+                balance_amount: paymentBalance,
+                internal_remark: document.getElementById('enroll-internal-remark').value.trim(),
+                external_remark: document.getElementById('enroll-external-remark').value.trim(),
+                ...getEnrollReferralData()
             }, 'POST');
             if (result.error) { showToast(result.error, 'error'); return; }
             showToast(result.message);
-            // 跳转至交易订单列表
             activatePanel('panel-orders');
             highlightLeafByPanel('panel-orders');
             loadOrders();
@@ -7330,7 +7344,10 @@ async function confirmPayEnroll() {
             payment_meituan: paymentMeituan,
             campus_id: currentEnrollCampusId || 0,
             use_balance: paymentBalance > 0 ? 1 : 0,
-            balance_amount: paymentBalance
+            balance_amount: paymentBalance,
+            internal_remark: document.getElementById('enroll-internal-remark').value.trim(),
+            external_remark: document.getElementById('enroll-external-remark').value.trim(),
+            ...getEnrollReferralData()
         }, 'POST');
         if (result.error) { showToast(result.error, 'error'); return; }
         showToast(result.message);
@@ -7755,7 +7772,9 @@ async function confirmEnroll() {
         item_name: item.name,
         lesson_count: item.lesson_count,
         actual_price: item.actual_price,
-        campus_id: campusId
+        campus_id: campusId,
+        internal_remark: document.getElementById('enroll-internal-remark').value.trim(),
+        external_remark: document.getElementById('enroll-external-remark').value.trim()
     };
     const result = await api('enroll_course', data);
     if (result.error) { showToast(result.error, 'error'); return; }
@@ -7952,7 +7971,7 @@ function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="24" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="30" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
@@ -7999,6 +8018,14 @@ function renderOrderTable(rows) {
                         <td>${acct > 0 ? '¥' + acct.toFixed(2) : '-'}</td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
+            <td class="ref-col">${esc(r.advisor_name || '-')}</td>
+            <td class="ref-col">${esc(r.trial_teacher_name || '-')}</td>
+            <td class="ref-col">${esc(r.expansion_teacher_name || '-')}</td>
+            <td class="ref-col">${esc(r.renewal_teacher_name || '-')}</td>
+            <td class="ref-col">${esc(r.referral_teacher_name || '-')}</td>
+            <td class="ref-col">${esc(r.referral_student_name || '-')}</td>
+            <td class="ref-col" title="${esc(r.internal_remark || '-')}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.internal_remark || '-')}</td>
+            <td class="ref-col" title="${esc(r.external_remark || '-')}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.external_remark || '-')}</td>
             <td>${orderTypeHtml}</td>
             <td>${renderPayStatus(r.pay_status)}</td>
             <td>${renderVoidedStatus(r.is_voided)}</td>
@@ -8009,13 +8036,13 @@ function renderOrderTable(rows) {
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
-            <td colspan="13" style="text-align:right;font-weight:bold;">合计</td>
+            <td colspan="21" style="text-align:right;font-weight:bold;">合计</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalCourse.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalProduct.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalAccount.toFixed(2)}</td>
-            <td colspan="6"></td>
+            <td colspan="8"></td>
         </tr>`;
     tfoot.style.display = '';
     syncOrderTableScrollWidth();
@@ -11876,7 +11903,7 @@ const accountPageSize = 20;
 
 async function loadStudentAccount(sid) {
     const tbody = document.getElementById('account-transactions-tbody');
-    tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>';
     // Reset filters
     document.getElementById('account-filter-type').value = '';
     document.getElementById('account-filter-date-from').value = '';
@@ -11902,7 +11929,7 @@ async function loadStudentAccount(sid) {
         accountCurrentPage = 1;
         renderAccountTransactions(accountAllTransactions, 1);
     } catch (e) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>';
     }
 }
 
@@ -11926,8 +11953,13 @@ function renderAccountTransactions(transactions, page) {
     accountCurrentPage = page;
     const start = (page - 1) * accountPageSize;
     const rows = transactions.slice(start, start + accountPageSize);
+    function truncate(text, maxLen) {
+        if (!text) return '-';
+        var s = String(text);
+        return s.length > maxLen ? '<span title="' + escHtml(s) + '">' + escHtml(s.slice(0, maxLen)) + '…</span>' : escHtml(s);
+    }
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">暂无交易流水</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="16" style="text-align:center;color:#999;padding:20px;">暂无交易流水</td></tr>';
     } else {
         tbody.innerHTML = rows.map(function(r) {
             return '<tr>' +
@@ -11939,6 +11971,14 @@ function renderAccountTransactions(transactions, page) {
                 '<td>' + (esc(r.ref_no) || '-') + '</td>' +
                 '<td>' + esc(r.campus || '-') + '</td>' +
                 '<td>' + esc(r.note || '-') + '</td>' +
+                '<td>' + esc(r.advisor_name || '-') + '</td>' +
+                '<td>' + esc(r.trial_teacher_name || '-') + '</td>' +
+                '<td>' + esc(r.expansion_teacher_name || '-') + '</td>' +
+                '<td>' + esc(r.renewal_teacher_name || '-') + '</td>' +
+                '<td>' + esc(r.referral_teacher_name || '-') + '</td>' +
+                '<td>' + esc(r.referral_student_name || '-') + '</td>' +
+                '<td>' + truncate(r.internal_remark, 20) + '</td>' +
+                '<td>' + truncate(r.external_remark, 20) + '</td>' +
                 '</tr>';
         }).join('');
     }
@@ -12000,11 +12040,16 @@ async function loadCampusAndSubjects() {
 function showRechargeModal() {
     var existing = document.querySelector('.modal-overlay');
     if (existing) existing.remove();
+    // 清理旧的充值下拉实例
+    if (window.rechargeDropdowns) {
+        Object.values(window.rechargeDropdowns).forEach(function(dd) { if (dd && dd._closeHandler) document.removeEventListener('click', dd._closeHandler); });
+    }
+    window.rechargeDropdowns = {};
+
     var overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
-    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.4);z-index:9999;display:flex;align-items:center;justify-content:center;';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.35);z-index:9999;display:flex;align-items:center;justify-content:center;';
 
-    // 构建下拉的 helper：数据已加载则用真实数据，否则占位
     function buildCampusOptions() {
         if (campusList.length === 0) return '<option value="">加载中...</option>';
         var opts = '<option value="">请选择校区</option>';
@@ -12018,73 +12063,180 @@ function showRechargeModal() {
         return opts;
     }
 
-    overlay.innerHTML = '<div class="modal-content" style="background:#fff;border-radius:10px;padding:24px;max-width:440px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.2);">' +
-        '<h3 style="margin:0 0 20px;font-size:18px;">账户充值</h3>' +
-        // ① 金额
-        '<div style="margin-bottom:14px;">' +
-            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">充值金额 <span style="color:#e74c3c;">*</span></label>' +
-            '<input type="number" id="recharge-amount" placeholder="请输入充值金额" step="0.01" min="0.01" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
+    overlay.innerHTML = '<div class="recharge-modal">' +
+        '<div class="recharge-modal-header">' +
+            '<h3 class="recharge-modal-title">账户充值</h3>' +
+            '<button class="recharge-modal-close" onclick="this.closest(\'.modal-overlay\').remove()" aria-label="关闭">&times;</button>' +
         '</div>' +
-        // ② 支付方式
-        '<div style="margin-bottom:14px;">' +
-            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">支付方式</label>' +
-            '<select id="recharge-payment-method" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
-                '<option value="现金">现金</option>' +
-                '<option value="微信">微信</option>' +
-                '<option value="支付宝">支付宝</option>' +
-                '<option value="银行卡">银行卡</option>' +
-                '<option value="转账">转账</option>' +
-            '</select>' +
+        '<div class="recharge-modal-body">' +
+            // ── 第1区：充值信息 ──
+            '<div class="recharge-section">' +
+                '<div class="recharge-section-title">充值信息</div>' +
+                '<div class="recharge-field-row">' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">充值金额 <span class="recharge-required">*</span></label>' +
+                        '<input type="number" id="recharge-amount" placeholder="请输入充值金额" step="0.01" min="0.01" class="recharge-input">' +
+                    '</div>' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">支付方式</label>' +
+                        '<select id="recharge-payment-method" class="recharge-select">' +
+                            '<option value="现金">现金</option>' +
+                            '<option value="微信">微信</option>' +
+                            '<option value="支付宝">支付宝</option>' +
+                            '<option value="银行卡">银行卡</option>' +
+                            '<option value="转账">转账</option>' +
+                        '</select>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="recharge-field-row">' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">校区 <span class="recharge-required">*</span></label>' +
+                        '<select id="recharge-campus" class="recharge-select">' + buildCampusOptions() + '</select>' +
+                    '</div>' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">一级学科 <span class="recharge-required">*</span></label>' +
+                        '<select id="recharge-subject" class="recharge-select">' + buildSubjectOptions() + '</select>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            // ── 第2区：关联人员 ──
+            '<div class="recharge-section">' +
+                '<div class="recharge-section-title">关联人员</div>' +
+                '<div class="recharge-field-row recharge-row-3col">' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">课程顾问 <span class="recharge-required">*</span></label>' +
+                        '<div class="searchable-dropdown" id="recharge-dd-advisor">' +
+                            '<input type="text" class="searchable-input" placeholder="搜索员工..." autocomplete="off" data-placeholder="请选择课程顾问">' +
+                            '<input type="hidden" class="searchable-value" value="0">' +
+                            '<div class="searchable-menu"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">试听老师</label>' +
+                        '<div class="searchable-dropdown" id="recharge-dd-trial-teacher">' +
+                            '<input type="text" class="searchable-input" placeholder="搜索员工..." autocomplete="off" data-placeholder="请选择试听老师">' +
+                            '<input type="hidden" class="searchable-value" value="0">' +
+                            '<div class="searchable-menu"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">扩科老师</label>' +
+                        '<div class="searchable-dropdown" id="recharge-dd-expansion-teacher">' +
+                            '<input type="text" class="searchable-input" placeholder="搜索员工..." autocomplete="off" data-placeholder="请选择扩科老师">' +
+                            '<input type="hidden" class="searchable-value" value="0">' +
+                            '<div class="searchable-menu"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+                '<div class="recharge-field-row recharge-row-3col">' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">续费老师</label>' +
+                        '<div class="searchable-dropdown" id="recharge-dd-renewal-teacher">' +
+                            '<input type="text" class="searchable-input" placeholder="搜索员工..." autocomplete="off" data-placeholder="请选择续费老师">' +
+                            '<input type="hidden" class="searchable-value" value="0">' +
+                            '<div class="searchable-menu"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">转介绍老师</label>' +
+                        '<div class="searchable-dropdown" id="recharge-dd-referral-teacher">' +
+                            '<input type="text" class="searchable-input" placeholder="搜索员工..." autocomplete="off" data-placeholder="请选择转介绍老师">' +
+                            '<input type="hidden" class="searchable-value" value="0">' +
+                            '<div class="searchable-menu"></div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div class="recharge-field">' +
+                        '<label class="recharge-label">转介绍学员</label>' +
+                        '<div class="searchable-dropdown" id="recharge-dd-referral-student">' +
+                            '<input type="text" class="searchable-input" placeholder="搜索学员..." autocomplete="off" data-placeholder="请选择转介绍学员">' +
+                            '<input type="hidden" class="searchable-value" value="0">' +
+                            '<div class="searchable-menu"></div>' +
+                        '</div>' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
+            // ── 第3区：备注 ──
+            '<div class="recharge-section recharge-section-last">' +
+                '<div class="recharge-section-title">备注</div>' +
+                '<div class="recharge-field-row">' +
+                    '<div class="recharge-field">' +
+                        '<input type="text" id="recharge-internal-remark" class="recharge-input" placeholder="对内备注（选填，最多100字）" maxlength="100">' +
+                    '</div>' +
+                    '<div class="recharge-field">' +
+                        '<input type="text" id="recharge-external-remark" class="recharge-input" placeholder="对外备注（选填，最多100字）" maxlength="100">' +
+                    '</div>' +
+                '</div>' +
+            '</div>' +
         '</div>' +
-        // ③ 校区（必选）
-        '<div style="margin-bottom:14px;">' +
-            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">校区 <span style="color:#e74c3c;">*</span></label>' +
-            '<select id="recharge-campus" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
-                buildCampusOptions() +
-            '</select>' +
-        '</div>' +
-        // ④ 一级学科（必选）
-        '<div style="margin-bottom:14px;">' +
-            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">一级学科 <span style="color:#e74c3c;">*</span></label>' +
-            '<select id="recharge-subject" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
-                buildSubjectOptions() +
-            '</select>' +
-        '</div>' +
-        // ⑤ 备注
-        '<div style="margin-bottom:20px;">' +
-            '<label style="display:block;font-size:13px;color:#666;margin-bottom:6px;">备注</label>' +
-            '<input type="text" id="recharge-note" placeholder="可选备注" style="width:100%;padding:10px 12px;border:1px solid #ddd;border-radius:6px;font-size:14px;box-sizing:border-box;">' +
-        '</div>' +
-        '<div style="display:flex;gap:12px;justify-content:flex-end;">' +
-            '<button class="btn" onclick="this.closest(\'.modal-overlay\').remove()" style="padding:8px 20px;">取消</button>' +
-            '<button class="btn btn-primary" onclick="submitRecharge()" style="padding:8px 20px;">确认充值</button>' +
+        '<div class="recharge-modal-footer">' +
+            '<button class="recharge-btn-cancel" onclick="this.closest(\'.modal-overlay\').remove()">取消</button>' +
+            '<button class="recharge-btn-submit" onclick="submitRecharge()">确认充值</button>' +
         '</div>' +
     '</div>';
     document.body.appendChild(overlay);
-    // Click overlay background to close
+
     overlay.addEventListener('click', function(e) {
-        if (e.target === overlay) overlay.remove();
+        if (e.target === overlay) {
+            if (window.rechargeDropdowns) {
+                Object.values(window.rechargeDropdowns).forEach(function(dd) { if (dd && dd._closeHandler) document.removeEventListener('click', dd._closeHandler); });
+            }
+            overlay.remove();
+        }
     });
-    // 如果数据尚未加载，异步加载后刷新下拉
+
+    // 初始化搜索下拉组件
+    function initRechargeDropdowns(campusName) {
+        var employeeIds = ['recharge-dd-advisor', 'recharge-dd-trial-teacher', 'recharge-dd-expansion-teacher', 'recharge-dd-renewal-teacher', 'recharge-dd-referral-teacher'];
+        employeeIds.forEach(function(id) {
+            var el = document.getElementById(id);
+            if (el) {
+                var dd = new SearchableDropdown(el, 'employee');
+                dd.setCampus(campusName);
+                dd.loadData().catch(function() {});
+                window.rechargeDropdowns[id] = dd;
+            }
+        });
+        var studentEl = document.getElementById('recharge-dd-referral-student');
+        if (studentEl) {
+            var dd = new SearchableDropdown(studentEl, 'student');
+            dd.loadData().catch(function() {});
+            window.rechargeDropdowns['recharge-dd-referral-student'] = dd;
+        }
+    }
+
+    var campusSel = document.getElementById('recharge-campus');
+    var campusName = campusSel && campusSel.options[campusSel.selectedIndex] ? (campusSel.options[campusSel.selectedIndex].text || '') : '';
+    initRechargeDropdowns(campusName);
+
+    // 校区切换时更新员工下拉的 campus 排序
+    campusSel.addEventListener('change', function() {
+        var name = campusSel.options[campusSel.selectedIndex] ? (campusSel.options[campusSel.selectedIndex].text || '') : '';
+        ['recharge-dd-advisor', 'recharge-dd-trial-teacher', 'recharge-dd-expansion-teacher', 'recharge-dd-renewal-teacher', 'recharge-dd-referral-teacher'].forEach(function(id) {
+            var dd = window.rechargeDropdowns[id];
+            if (dd) { dd.setCampus(name); dd.loadData().catch(function() {}); }
+        });
+    });
+
+    // 异步加载下拉选项
     if (campusList.length === 0 || subjectLevel1List.length === 0) {
         loadCampusAndSubjects().then(function() {
-            var campusSel = document.getElementById('recharge-campus');
-            var subjectSel = document.getElementById('recharge-subject');
-            if (campusSel && campusList.length > 0) {
-                campusSel.innerHTML = '<option value="">请选择校区</option>';
-                campusList.forEach(function(c) { campusSel.innerHTML += '<option value="' + escHtml(c.name) + '">' + escHtml(c.name) + '</option>'; });
+            var cs = document.getElementById('recharge-campus');
+            var ss = document.getElementById('recharge-subject');
+            if (cs && campusList.length > 0) {
+                cs.innerHTML = '<option value="">请选择校区</option>';
+                campusList.forEach(function(c) { cs.innerHTML += '<option value="' + escHtml(c.name) + '">' + escHtml(c.name) + '</option>'; });
             }
-            if (subjectSel && subjectLevel1List.length > 0) {
-                subjectSel.innerHTML = '<option value="">请选择学科</option>';
-                subjectLevel1List.forEach(function(s) { subjectSel.innerHTML += '<option value="' + escHtml(s.name) + '">' + escHtml(s.name) + '</option>'; });
+            if (ss && subjectLevel1List.length > 0) {
+                ss.innerHTML = '<option value="">请选择学科</option>';
+                subjectLevel1List.forEach(function(s) { ss.innerHTML += '<option value="' + escHtml(s.name) + '">' + escHtml(s.name) + '</option>'; });
             }
         });
     }
-    // Focus amount input
+
     setTimeout(function() {
         var inp = document.getElementById('recharge-amount');
         if (inp) inp.focus();
-    }, 100);
+    }, 150);
 }
 
 async function submitRecharge() {
@@ -12095,13 +12247,49 @@ async function submitRecharge() {
     if (!campus) { showToast('请选择校区', 'error'); return; }
     var subject = document.getElementById('recharge-subject').value;
     if (!subject) { showToast('请选择一级学科', 'error'); return; }
-    var note = document.getElementById('recharge-note').value.trim();
+    var internalRemark = (document.getElementById('recharge-internal-remark') || {}).value || '';
+    internalRemark = typeof internalRemark === 'string' ? internalRemark.trim() : '';
+    var externalRemark = (document.getElementById('recharge-external-remark') || {}).value || '';
+    externalRemark = typeof externalRemark === 'string' ? externalRemark.trim() : '';
+
+    // 获取关联人员 ID
+    function getDropValue(key) {
+        var dd = window.rechargeDropdowns && window.rechargeDropdowns[key];
+        return dd && typeof dd.getValue === 'function' ? dd.getValue() : 0;
+    }
+    var advisorId = getDropValue('recharge-dd-advisor');
+    if (!advisorId || advisorId <= 0) { showToast('请选择课程顾问', 'error'); return; }
+    var trialTeacherId = getDropValue('recharge-dd-trial-teacher');
+    var expansionTeacherId = getDropValue('recharge-dd-expansion-teacher');
+    var renewalTeacherId = getDropValue('recharge-dd-renewal-teacher');
+    var referralTeacherId = getDropValue('recharge-dd-referral-teacher');
+    var referralStudentId = getDropValue('recharge-dd-referral-student');
+
     var sid = currentViewStudentId;
     if (!sid) { showToast('学员信息丢失，请重新打开详情', 'error'); return; }
     try {
-        var res = await api('top_up_account', { student_id: sid, amount: amount, payment_method: method, campus: campus, subject_level1: subject, note: note }, 'POST');
+        var res = await api('top_up_account', {
+            student_id: sid,
+            amount: amount,
+            payment_method: method,
+            campus: campus,
+            subject_level1: subject,
+            note: externalRemark || internalRemark,
+            advisor_id: advisorId,
+            trial_teacher_id: trialTeacherId,
+            expansion_teacher_id: expansionTeacherId,
+            renewal_teacher_id: renewalTeacherId,
+            referral_teacher_id: referralTeacherId,
+            referral_student_id: referralStudentId,
+            internal_remark: internalRemark,
+            external_remark: externalRemark
+        }, 'POST');
         if (res.error) { showToast(res.error, 'error'); return; }
         showToast(res.message || '充值成功');
+        // 清理下拉实例事件监听
+        if (window.rechargeDropdowns) {
+            Object.values(window.rechargeDropdowns).forEach(function(dd) { if (dd && dd._closeHandler) document.removeEventListener('click', dd._closeHandler); });
+        }
         document.querySelectorAll('.modal-overlay').forEach(function(m) { m.remove(); });
         loadStudentAccount(sid);
     } catch (e) {
@@ -14352,4 +14540,191 @@ async function loadActivityConsumption(page = 1) {
         const totalPages = Math.ceil(total / 20);
         pagination.innerHTML = totalPages > 1 ? '<button class="btn btn-sm btn-outline" ' + (page <= 1 ? 'disabled' : 'onclick="loadActivityConsumption(' + (page - 1) + ')"') + '>上一页</button><span style="margin:0 10px;">' + page + ' / ' + totalPages + '</span><button class="btn btn-sm btn-outline" ' + (page >= totalPages ? 'disabled' : 'onclick="loadActivityConsumption(' + (page + 1) + ')"') + '>下一页</button>' : '';
     } catch (e) { tbody.innerHTML = '<tr><td colspan="13" style="text-align:center;color:#e74c3c;padding:20px;">加载失败</td></tr>'; }
+}
+
+// ==================== 自定义搜索下拉组件 ====================
+class SearchableDropdown {
+    constructor(container, type, onSelect) {
+        this.container = container;
+        this.type = type;
+        this.onSelect = onSelect;
+        this.input = container.querySelector('.searchable-input');
+        this.valueInput = container.querySelector('.searchable-value');
+        this.menu = container.querySelector('.searchable-menu');
+        this.items = [];
+        this.filtered = [];
+        this.highlightIndex = -1;
+        this.selectedId = 0;
+        this.campusName = '';
+        this.open = false;
+        this.init();
+    }
+
+    setCampus(name) { this.campusName = name; }
+
+    _sortItems() {
+        if (this.type !== 'employee') return;
+        var self = this;
+        this.items.sort(function(a, b) {
+            var aCampus = (self.campusName && a.department === self.campusName);
+            var bCampus = (self.campusName && b.department === self.campusName);
+            if (aCampus && !bCampus) return -1;
+            if (!aCampus && bCampus) return 1;
+            if (aCampus) return (a.name || '').localeCompare(b.name || '', 'zh');
+            var deptDiff = (a.department || '').localeCompare(b.department || '', 'zh');
+            if (deptDiff !== 0) return deptDiff;
+            return (a.name || '').localeCompare(b.name || '', 'zh');
+        });
+    }
+
+    async loadData() {
+        if (this.type === 'employee') {
+            const res = await api('search_employees', { campus: this.campusName });
+            if (res.data) this.items = Object.values(res.data);
+        } else {
+            const res = await api('search_students');
+            if (res.data) this.items = Object.values(res.data);
+        }
+        this._sortItems();
+        this.filtered = [...this.items];
+        this.render();
+    }
+
+    filter(keyword) {
+        const kw = (keyword || '').trim().toLowerCase();
+        if (!kw) { this.filtered = [...this.items]; }
+        else { this.filtered = this.items.filter(item => (item.name || '').toLowerCase().includes(kw) || (item.phone || '').includes(kw)); }
+        this.highlightIndex = -1;
+        this.render();
+    }
+
+    render() {
+        if (!this.filtered.length) {
+            this.menu.innerHTML = '<div class="searchable-menu-empty">无匹配结果</div>';
+            return;
+        }
+        var self = this;
+        var html = '';
+
+        if (this.type === 'employee') {
+            var prevIsCampus = null;
+            this.filtered.forEach(function(item, idx) {
+                var isCampus = !!(self.campusName && item.department === self.campusName);
+                if (prevIsCampus === null) {
+                    html += '<div class="searchable-menu-group">' + (isCampus ? '本校区' : '其他校区') + '</div>';
+                } else if (prevIsCampus !== isCampus) {
+                    html += '<div class="searchable-menu-group-sep"></div>';
+                    html += '<div class="searchable-menu-group">' + (isCampus ? '本校区' : '其他校区') + '</div>';
+                }
+                prevIsCampus = isCampus;
+                var klass = idx === self.highlightIndex ? 'searchable-menu-item highlighted' : 'searchable-menu-item';
+                html += '<div class="' + klass + '" data-idx="' + idx + '" data-id="' + item.id + '">' +
+                    '<span class="item-name">' + escHtml(item.name) + '</span>' +
+                    '<span class="item-dept">' + escHtml(item.department || '') + '</span>' +
+                    '</div>';
+            });
+        } else {
+            // 学员下拉保持原有垂直布局
+            this.filtered.forEach(function(item, idx) {
+                var klass = idx === self.highlightIndex ? 'searchable-menu-item highlighted' : 'searchable-menu-item';
+                html += '<div class="' + klass + '" data-idx="' + idx + '" data-id="' + item.id + '">' +
+                    '<div class="item-main"><span class="item-name">' + escHtml(item.name) + '</span><span class="item-sub">' + escHtml(item.phone || '') + '</span></div>' +
+                    '</div>';
+            });
+        }
+        this.menu.innerHTML = html;
+    }
+
+    openMenu() {
+        if (this.open) return;
+        this.open = true;
+        this.container.classList.add('open');
+        this.input.value = '';
+        this.filter('');
+        this.input.focus();
+        document.addEventListener('click', this._closeHandler);
+    }
+
+    closeMenu() {
+        if (!this.open) return;
+        this.open = false;
+        this.container.classList.remove('open');
+        document.removeEventListener('click', this._closeHandler);
+        if (this.selectedId && this.items.length) {
+            const sel = this.items.find(x => x.id == this.selectedId);
+            this.input.value = sel ? sel.name : (this.input.dataset.placeholder || '');
+        } else {
+            this.input.value = this.input.dataset.placeholder || '';
+        }
+    }
+
+    selectItem(item) {
+        this.selectedId = item.id;
+        this.valueInput.value = item.id;
+        this.input.value = item.name;
+        this.closeMenu();
+        if (this.onSelect) this.onSelect(item.id, item, this);
+    }
+
+    init() {
+        this._closeHandler = (e) => { if (!this.container.contains(e.target)) this.closeMenu(); };
+        this.input.addEventListener('focus', () => { if (!this.open) this.openMenu(); });
+        this.input.addEventListener('click', () => { if (!this.open) this.openMenu(); });
+        this.input.addEventListener('input', () => { if (!this.open) this.openMenu(); this.filter(this.input.value); });
+        this.input.addEventListener('keydown', (e) => {
+            if (e.key === 'Escape') { this.closeMenu(); return; }
+            if (!this.open) return;
+            if (e.key === 'ArrowDown') { e.preventDefault(); this.highlightIndex = Math.min(this.highlightIndex + 1, this.filtered.length - 1); this.render(); this._scrollToHighlight(); }
+            else if (e.key === 'ArrowUp') { e.preventDefault(); this.highlightIndex = Math.max(this.highlightIndex - 1, 0); this.render(); this._scrollToHighlight(); }
+            else if (e.key === 'Enter') { e.preventDefault(); if (this.highlightIndex >= 0 && this.highlightIndex < this.filtered.length) this.selectItem(this.filtered[this.highlightIndex]); }
+        });
+        this.menu.addEventListener('click', (e) => {
+            const item = e.target.closest('.searchable-menu-item');
+            if (!item) return;
+            const idx = parseInt(item.dataset.idx);
+            if (idx >= 0 && idx < this.filtered.length) this.selectItem(this.filtered[idx]);
+        });
+        this.menu.addEventListener('mousemove', (e) => {
+            const item = e.target.closest('.searchable-menu-item');
+            if (item) { this.highlightIndex = parseInt(item.dataset.idx); this.render(); }
+        });
+    }
+
+    _scrollToHighlight() {
+        const el = this.menu.querySelector('.searchable-menu-item.highlighted');
+        if (el) el.scrollIntoView({ block: 'nearest' });
+    }
+
+    getValue() { return parseInt(this.valueInput.value) || 0; }
+    reset() { this.selectedId = 0; this.valueInput.value = '0'; this.input.value = this.input.dataset.placeholder || ''; this.closeMenu(); }
+}
+
+// ==================== 初始化录单页面下拉组件 ====================
+let enrollDropdowns = {};
+
+function initEnrollReferralDropdowns() {
+    const sel = document.getElementById('enroll-campus-select');
+    let campusName = '';
+    if (sel && sel.value) { campusName = sel.options[sel.selectedIndex]?.text || ''; }
+
+    ['dropdown-advisor', 'dropdown-trial-teacher', 'dropdown-expansion-teacher', 'dropdown-renewal-teacher', 'dropdown-referral-teacher'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { const dd = new SearchableDropdown(el, 'employee'); dd.setCampus(campusName); dd.loadData().catch(() => {}); enrollDropdowns[id] = dd; }
+    });
+
+    ['dropdown-referral-student'].forEach(id => {
+        const el = document.getElementById(id);
+        if (el) { const dd = new SearchableDropdown(el, 'student'); dd.loadData().catch(() => {}); enrollDropdowns[id] = dd; }
+    });
+}
+
+function getEnrollReferralData() {
+    return {
+        advisor_id: (enrollDropdowns['dropdown-advisor'] || {}).getValue?.() || 0,
+        trial_teacher_id: (enrollDropdowns['dropdown-trial-teacher'] || {}).getValue?.() || 0,
+        expansion_teacher_id: (enrollDropdowns['dropdown-expansion-teacher'] || {}).getValue?.() || 0,
+        renewal_teacher_id: (enrollDropdowns['dropdown-renewal-teacher'] || {}).getValue?.() || 0,
+        referral_teacher_id: (enrollDropdowns['dropdown-referral-teacher'] || {}).getValue?.() || 0,
+        referral_student_id: (enrollDropdowns['dropdown-referral-student'] || {}).getValue?.() || 0
+    };
 }

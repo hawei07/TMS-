@@ -208,10 +208,24 @@ function listOrders(PDO $db, string $method, array $query, array $input): void
                 o.activity_fee_type,
                 s.name AS student_name,
                 s.student_no,
-                c.name AS course_name
+                c.name AS course_name,
+                COALESCE(adv.name, '') AS advisor_name,
+                COALESCE(tt.name, '') AS trial_teacher_name,
+                COALESCE(et.name, '') AS expansion_teacher_name,
+                COALESCE(rt.name, '') AS renewal_teacher_name,
+                COALESCE(rft.name, '') AS referral_teacher_name,
+                COALESCE(rfs.name, '') AS referral_student_name,
+                o.internal_remark,
+                o.external_remark
          FROM orders o
          LEFT JOIN students s ON o.student_id = s.id
          LEFT JOIN courses c ON o.course_id = c.id
+         LEFT JOIN employees adv ON o.advisor_id = adv.id
+         LEFT JOIN employees tt ON o.trial_teacher_id = tt.id
+         LEFT JOIN employees et ON o.expansion_teacher_id = et.id
+         LEFT JOIN employees rt ON o.renewal_teacher_id = rt.id
+         LEFT JOIN employees rft ON o.referral_teacher_id = rft.id
+         LEFT JOIN students rfs ON o.referral_student_id = rfs.id
          {$where}
          ORDER BY o.id DESC
          LIMIT :limit OFFSET :offset"

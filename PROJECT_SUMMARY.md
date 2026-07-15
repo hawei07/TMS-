@@ -1726,6 +1726,13 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | refactor | **API 模块化第六批**：迁移 `void_order`；增加事务、订单行锁和活动考勤锁，统一保护余额返还、订单作废与活动人数回滚 | `api/orders.php`、`index.php` | 851f99c |
 | refactor | **API 模块化第七批**：迁移报价方案保存/删除；增加方案行锁、全量替换事务和课程/优惠/券/教材引用校验 | `api/orders.php`、`index.php` | 851f99c |
 
+### 2026-07-15
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| feat | **录单页面新增6个关联字段**：orders 表新增 advisor_id / trial_teacher_id / expansion_teacher_id / renewal_teacher_id / referral_teacher_id / referral_student_id 字段；后端新增 search_employees（按校区优先排序在职员工）和 search_students API；pay_enroll / enroll_course / list_orders 三接口适配新字段，list_orders LEFT JOIN employees + students 获取 name；订单列表新增 6 列（课程顾问/试听老师/扩科老师/续费老师/转介绍老师/转介绍学员），浅色背景区分 | `migrations/versions/20260715_001_add_enroll_referral_fields.php`、`index.php`、`api/orders.php`、`static/js/main.js`、`static/css/style.css` | — |
+| feat | **自定义搜索下拉组件 SearchableDropdown**：录单页面 6 个成员/学员下拉框均采用统一组件，支持模糊搜索、键盘导航（↑↓←Enter Escape）、本校区员工优先排序+分隔线+ badge 标记、课程顾问必填*标记与提交校验；组件 5 态完整（default/hover/active/focus/disabled），opacity+transform 动效，prefers-reduced-motion 兼容 | `static/js/main.js`、`static/css/style.css` | — |
+
 ### 2026-07-14
 
 | 类型 | 描述 | 涉及文件 | 提交 |
@@ -2033,5 +2040,14 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | fix | **课耗金额精度修复**：去掉中间 round(classPrice/lc, 2)，改为一步 round(classPrice/lc * consumed, 2)，消除 0.10 误差 | index.php | 51ae286 |
 | fix | **Code Review 修复**：selectEnrollPlan 列对齐、退费 remaining_lessons 负数保护（min(consumed, lessonCount)）、renderItemList 总计行多余 td | index.php main.js | 99d10be |
 | fix | **保存报价单后回到设置价格主弹窗**：saveItem 改用 openModal('modal-price') 而非 closeModal('modal-price-item') | main.js | 94a2ef4 |
+
+### 2026-07-15 — 录单关联字段 + 备注字段
+
+| 类型 | 变更说明 | 涉及文件 | Commit |
+|------|---------|---------|--------|
+| feat | **录单关联字段**：orders 表新增 6 个 INT 字段（advisor_id/trial_teacher_id/expansion_teacher_id/renewal_teacher_id/referral_teacher_id/referral_student_id）；迁移文件 20260715_001；新增 search_employees/search_students API；pay_enroll/enroll_course 适配 6 字段 + 课程顾问必填校验；list_orders LEFT JOIN 6 张关联表取 name | index.php main.js style.css | - |
+| feat | **录单备注字段**：orders 表新增 internal_remark/external_remark VARCHAR(100)；迁移文件 20260715_002；pay_enroll/enroll_course/list_orders 适配；panel-enroll 新增备注输入区域（两行布局，maxlength=100）；panel-orders 表格新增对内备注 + 对外备注列（ref-col 浅色背景，省略号截断 + title 属性） | index.php main.js style.css | - |
+| feat | **录单自定义搜索下拉组件**：SearchableDropdown 类（模糊搜索、键盘导航 ↑↓Enter/Escape、外部点击关闭、本校区 badge + 分隔线、员工/学员双模式）；6 个下拉分区（课程顾问必填红色*标记）；~135 行 Soft Industrial 风格（box-shadow 面板、opacity+transform 动效、5 态完整、prefers-reduced-motion 兼容） | main.js style.css | - |
+| feat | **订单列表新增关联人员 6 列**：课程顾问/试听老师/扩科老师/续费老师/转介绍老师/转介绍学员（ref-col 半透明背景）；tfoot colspan 从 19→21 适配 | index.php main.js | - |
 
 *（内容由AI生成，仅供参考）*

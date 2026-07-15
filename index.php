@@ -1605,6 +1605,56 @@ $stmt->execute();
             $db->exec("DELETE FROM activities WHERE id = $id");
             json(['message' => '活动删除成功']);
 
+// ==================== 员工搜索 API ====================
+        case 'search_employees':
+            $keyword = trim($query['keyword'] ?? '');
+            $campus = trim($query['campus'] ?? '');
+            $sql = "SELECT id, name, phone, department, position FROM employees WHERE status = '在职'";
+            $params = [];
+            if ($keyword !== '') {
+                $sql .= " AND (name LIKE :kw OR phone LIKE :kw2)";
+                $params[':kw'] = '%' . $keyword . '%';
+                $params[':kw2'] = '%' . $keyword . '%';
+            }
+            // 本校区优先排序
+            if ($campus !== '') {
+                $sql .= " ORDER BY CASE WHEN department = :cp THEN 0 ELSE 1 END, name ASC";
+                $params[':cp'] = $campus;
+            } else {
+                $sql .= " ORDER BY name ASC";
+            }
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+            $stmt->execute();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $data = [];
+            foreach ($rows as $r) {
+                $data[$r['id']] = $r;
+            }
+            json(['data' => $data]);
+
+// ==================== 学员搜索 API ====================
+        case 'search_students':
+            $keyword = trim($query['keyword'] ?? '');
+            $sql = "SELECT id, name, phone, student_no FROM students";
+            $params = [];
+            if ($keyword !== '') {
+                $sql .= " WHERE name LIKE :kw1 OR phone LIKE :kw2 OR student_no LIKE :kw3";
+                $params[':kw1'] = '%' . $keyword . '%';
+                $params[':kw2'] = '%' . $keyword . '%';
+                $params[':kw3'] = '%' . $keyword . '%';
+            }
+            $sql .= " ORDER BY name ASC";
+            $stmt = $db->prepare($sql);
+            foreach ($params as $k => $v) $stmt->bindValue($k, $v);
+            $stmt->execute();
+            $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+            $data = [];
+            foreach ($rows as $r) {
+                $data[$r['id']] = $r;
+            }
+            json(['data' => $data]);
+
 // ==================== 价格管理 API ====================
         case 'pay_enroll':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -1638,6 +1688,16 @@ $stmt->execute();
                 $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
                 $campusName = $campusRow['name'] ?? '';
             }
+            // 关联字段
+            $advisorId = intval($input['advisor_id'] ?? 0);
+            if ($advisorId <= 0) json(['error' => '请选择课程顾问']);
+            $trialTeacherId = intval($input['trial_teacher_id'] ?? 0);
+            $expansionTeacherId = intval($input['expansion_teacher_id'] ?? 0);
+            $renewalTeacherId = intval($input['renewal_teacher_id'] ?? 0);
+            $referralTeacherId = intval($input['referral_teacher_id'] ?? 0);
+            $referralStudentId = intval($input['referral_student_id'] ?? 0);
+            $internalRemark = trim($input['internal_remark'] ?? '');
+            $externalRemark = trim($input['external_remark'] ?? '');
             $itemPrices = array_map(function($it) { return floatval($it['actual_price']); }, $items);
             $totalPrice = array_sum($itemPrices);
             if (abs($paymentCash + $paymentMeituan + $balanceAmount - $totalPrice) > 0.01) {
@@ -1678,7 +1738,7 @@ $stmt->execute();
             $itemDiscounts = [];
             $itemRes2 = $db->query("SELECT pi.id, d.name AS dp_name, COALESCE(d.discount_amount,0) AS dp_amount, c.name AS cp_name, COALESCE(c.discount_amount,0) AS cp_amount, ta.name AS ta_name, COALESCE(ta.price,0) AS ta_price, pc.name AS pc_name, COALESCE(pc.discount_amount,0) AS pc_amount FROM price_items pi LEFT JOIN discount_plans d ON pi.discount_plan_id=d.id LEFT JOIN coupons c ON pi.coupon_id=c.id LEFT JOIN teaching_aids ta ON pi.teaching_aid_id=ta.id LEFT JOIN coupons pc ON pi.product_coupon_id=pc.id WHERE pi.plan_id=$planId");
             while ($row = $itemRes2->fetch(PDO::FETCH_ASSOC)) $itemDiscounts[$row['id']] = $row;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, discount_plan_name, discount_plan_amount, coupon_name, coupon_amount, teaching_aid_name, teaching_aid_price, product_coupon_name, product_coupon_amount, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, gifted_lessons, subject_level1, subject_level2) VALUES (:sid, :cid, :pn, :dpn, :dpa, :cn, :coa, :tan, :tap, :pcn, :pca, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv, :gl, :sl1, :sl2)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, discount_plan_name, discount_plan_amount, coupon_name, coupon_amount, teaching_aid_name, teaching_aid_price, product_coupon_name, product_coupon_amount, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, gifted_lessons, subject_level1, subject_level2, advisor_id, trial_teacher_id, expansion_teacher_id, renewal_teacher_id, referral_teacher_id, referral_student_id, internal_remark, external_remark) VALUES (:sid, :cid, :pn, :dpn, :dpa, :cn, :coa, :tan, :tap, :pcn, :pca, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv, :gl, :sl1, :sl2, :aid, :ttid, :etid, :rtid, :rftid, :rfsid, :irm, :erm)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
@@ -1724,6 +1784,14 @@ $stmt->execute();
                 $stmt->bindValue(':tap', floatval($di['ta_price'] ?? 0), PDO::PARAM_STR);
                 $stmt->bindValue(':pcn', $di['pc_name'] ?? '', PDO::PARAM_STR);
                 $stmt->bindValue(':pca', floatval($di['pc_amount'] ?? 0), PDO::PARAM_STR);
+                $stmt->bindValue(':aid', $advisorId, PDO::PARAM_INT);
+                $stmt->bindValue(':ttid', $trialTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':etid', $expansionTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':rtid', $renewalTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':rftid', $referralTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':rfsid', $referralStudentId, PDO::PARAM_INT);
+                $stmt->bindValue(':irm', $internalRemark, PDO::PARAM_STR);
+                $stmt->bindValue(':erm', $externalRemark, PDO::PARAM_STR);
                 $stmt->execute();
                 $orderIds[] = $db->lastInsertId();
                 $childOrderNos[] = $orderNo;
@@ -2189,6 +2257,16 @@ $stmt->execute();
                 $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
                 $campusName = $campusRow['name'] ?? '';
             }
+            // 关联字段
+            $advisorId = intval($input['advisor_id'] ?? 0);
+            if ($advisorId <= 0) { json(['error' => '请选择课程顾问']); break; }
+            $trialTeacherId = intval($input['trial_teacher_id'] ?? 0);
+            $expansionTeacherId = intval($input['expansion_teacher_id'] ?? 0);
+            $renewalTeacherId = intval($input['renewal_teacher_id'] ?? 0);
+            $referralTeacherId = intval($input['referral_teacher_id'] ?? 0);
+            $referralStudentId = intval($input['referral_student_id'] ?? 0);
+            $internalRemark = trim($input['internal_remark'] ?? '');
+            $externalRemark = trim($input['external_remark'] ?? '');
             // 余额支付
             $useBalance = !empty($input['use_balance']);
             $balanceAmount = $useBalance ? floatval($input['balance_amount'] ?? 0) : 0;
@@ -2219,7 +2297,7 @@ $stmt->execute();
                     $upd->execute();
                     $cashAmount = $balanceAmount;
                 }
-                $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, order_no, created_at, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :ono, :ct, :campus, :ps, :iv)");
+                $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, order_no, created_at, campus, pay_status, is_voided, advisor_id, trial_teacher_id, expansion_teacher_id, renewal_teacher_id, referral_teacher_id, referral_student_id, internal_remark, external_remark) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ca, :ma, :ono, :ct, :campus, :ps, :iv, :aid, :ttid, :etid, :rtid, :rftid, :rfsid, :irm, :erm)");
                 $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                 $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
                 $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2233,6 +2311,14 @@ $stmt->execute();
                 $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
                 $stmt->bindValue(':ps', '待支付', PDO::PARAM_STR);
                 $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
+                $stmt->bindValue(':aid', $advisorId, PDO::PARAM_INT);
+                $stmt->bindValue(':ttid', $trialTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':etid', $expansionTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':rtid', $renewalTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':rftid', $referralTeacherId, PDO::PARAM_INT);
+                $stmt->bindValue(':rfsid', $referralStudentId, PDO::PARAM_INT);
+                $stmt->bindValue(':irm', $internalRemark, PDO::PARAM_STR);
+                $stmt->bindValue(':erm', $externalRemark, PDO::PARAM_STR);
                 $stmt->execute();
                 $newOrderId = $db->lastInsertId();
                 // 写入账户流水
@@ -2288,9 +2374,19 @@ $stmt->execute();
                 $campusRow = $db->query("SELECT name FROM organizations WHERE id=$campusId AND type='校区'")->fetch(PDO::FETCH_ASSOC);
                 $campusName = $campusRow['name'] ?? '';
             }
+            // 关联字段
+            $advisorId = intval($input['advisor_id'] ?? 0);
+            if ($advisorId <= 0) { json(['error' => '请选择课程顾问']); break; }
+            $trialTeacherId = intval($input['trial_teacher_id'] ?? 0);
+            $expansionTeacherId = intval($input['expansion_teacher_id'] ?? 0);
+            $renewalTeacherId = intval($input['renewal_teacher_id'] ?? 0);
+            $referralTeacherId = intval($input['referral_teacher_id'] ?? 0);
+            $referralStudentId = intval($input['referral_student_id'] ?? 0);
+            $internalRemark = trim($input['internal_remark'] ?? '');
+            $externalRemark = trim($input['external_remark'] ?? '');
             $n = now();
             $orderNo = generateOrderNo($db);
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus, pay_status, is_voided) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus, :ps, :iv)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, order_no, created_at, campus, pay_status, is_voided, advisor_id, trial_teacher_id, expansion_teacher_id, renewal_teacher_id, referral_teacher_id, referral_student_id, internal_remark, external_remark) VALUES (:sid, :cid, :pn, :inm, :lc, :ap, :ono, :ct, :campus, :ps, :iv, :aid, :ttid, :etid, :rtid, :rftid, :rfsid, :irm, :erm)");
             $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
             $stmt->bindValue(':pn', $planName, PDO::PARAM_STR);
@@ -2302,6 +2398,14 @@ $stmt->execute();
             $stmt->bindValue(':campus', $campusName, PDO::PARAM_STR);
                 $stmt->bindValue(':ps', '待支付', PDO::PARAM_STR);
                 $stmt->bindValue(':iv', '否', PDO::PARAM_STR);
+            $stmt->bindValue(':aid', $advisorId, PDO::PARAM_INT);
+            $stmt->bindValue(':ttid', $trialTeacherId, PDO::PARAM_INT);
+            $stmt->bindValue(':etid', $expansionTeacherId, PDO::PARAM_INT);
+            $stmt->bindValue(':rtid', $renewalTeacherId, PDO::PARAM_INT);
+            $stmt->bindValue(':rftid', $referralTeacherId, PDO::PARAM_INT);
+            $stmt->bindValue(':rfsid', $referralStudentId, PDO::PARAM_INT);
+            $stmt->bindValue(':irm', $internalRemark, PDO::PARAM_STR);
+            $stmt->bindValue(':erm', $externalRemark, PDO::PARAM_STR);
             $stmt->execute();
             json(['message' => '报名成功，学员ID：' . $studentId, 'id' => $db->lastInsertId(), 'student_id' => $studentId]);
             break;
@@ -3533,7 +3637,7 @@ $stmt->execute();
             foreach ($params as $k => $v) $countStmt->bindValue($k, $v);
             $countStmt->execute(); $total = intval($countStmt->fetch(PDO::FETCH_NUM)[0]);
             $offset = ($page - 1) * $pageSize;
-            $sql = "SELECT at.id, at.type, at.amount, at.balance_after, at.ref_type, at.ref_id, at.campus, at.note, at.payment_method, at.created_at, o.order_no AS ref_no FROM account_transactions at LEFT JOIN orders o ON at.ref_id = o.id $whereStr ORDER BY at.created_at DESC LIMIT :lim OFFSET :off";
+            $sql = "SELECT at.id, at.type, at.amount, at.balance_after, at.ref_type, at.ref_id, at.campus, at.note, at.payment_method, at.created_at, o.order_no AS ref_no, e1.name AS advisor_name, e2.name AS trial_teacher_name, e3.name AS expansion_teacher_name, e4.name AS renewal_teacher_name, e5.name AS referral_teacher_name, s1.name AS referral_student_name, o.internal_remark, o.external_remark FROM account_transactions at LEFT JOIN orders o ON at.ref_id = o.id LEFT JOIN employees e1 ON o.advisor_id = e1.id LEFT JOIN employees e2 ON o.trial_teacher_id = e2.id LEFT JOIN employees e3 ON o.expansion_teacher_id = e3.id LEFT JOIN employees e4 ON o.renewal_teacher_id = e4.id LEFT JOIN employees e5 ON o.referral_teacher_id = e5.id LEFT JOIN students s1 ON o.referral_student_id = s1.id $whereStr ORDER BY at.created_at DESC LIMIT :lim OFFSET :off";
             $stmt = $db->prepare($sql);
             foreach ($params as $k => $v) $stmt->bindValue($k, $v);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
@@ -3563,8 +3667,17 @@ $stmt->execute();
             $note = trim($input['note'] ?? '');
             $campus = trim($input['campus'] ?? '');
             $subjectLevel1 = trim($input['subject_level1'] ?? '');
+            $advisorId = intval($input['advisor_id'] ?? 0);
+            $trialTeacherId = intval($input['trial_teacher_id'] ?? 0);
+            $expansionTeacherId = intval($input['expansion_teacher_id'] ?? 0);
+            $renewalTeacherId = intval($input['renewal_teacher_id'] ?? 0);
+            $referralTeacherId = intval($input['referral_teacher_id'] ?? 0);
+            $referralStudentId = intval($input['referral_student_id'] ?? 0);
+            $internalRemark = trim($input['internal_remark'] ?? '');
+            $externalRemark = trim($input['external_remark'] ?? '');
             if ($studentId <= 0) { json(['error' => '学员ID无效']); break; }
             if ($amount <= 0) { json(['error' => '充值金额必须大于0']); break; }
+            if ($advisorId <= 0) { json(['error' => '请选择课程顾问']); break; }
             // 查询当前余额（先锁行）
             $db->beginTransaction();
             try {
@@ -3592,7 +3705,7 @@ $stmt->execute();
                 $n = now();
                 $cashAmount = ($paymentMethod === '现金') ? $amount : 0;
                 $mtAmount = ($paymentMethod === '美团') ? $amount : 0;
-                $stmtOrder = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, subject_level1, subject_level2) VALUES (:sid, 0, '', '', 0, :ap, :ca, :ma, 0, :pa, :ono, '', :ct, :ct2, '账户充值', :campus, '已支付', '否', :sl1, '')");
+                $stmtOrder = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, subject_level1, subject_level2, advisor_id, trial_teacher_id, expansion_teacher_id, renewal_teacher_id, referral_teacher_id, referral_student_id, internal_remark, external_remark) VALUES (:sid, 0, '', '', 0, :ap, :ca, :ma, 0, :pa, :ono, '', :ct, :ct2, '账户充值', :campus, '已支付', '否', :sl1, '', :aid, :ttid, :etid, :rtid, :rftid, :rfsid, :irmk, :ermk)");
                 $stmtOrder->bindValue(':sid', $studentId, PDO::PARAM_INT);
                 $stmtOrder->bindValue(':ap', $amount);
                 $stmtOrder->bindValue(':ca', $cashAmount);
@@ -3603,6 +3716,14 @@ $stmt->execute();
                 $stmtOrder->bindValue(':ct2', $n, PDO::PARAM_STR);
                 $stmtOrder->bindValue(':campus', $campus, PDO::PARAM_STR);
                 $stmtOrder->bindValue(':sl1', $subjectLevel1, PDO::PARAM_STR);
+                $stmtOrder->bindValue(':aid', $advisorId, PDO::PARAM_INT);
+                $stmtOrder->bindValue(':ttid', $trialTeacherId, PDO::PARAM_INT);
+                $stmtOrder->bindValue(':etid', $expansionTeacherId, PDO::PARAM_INT);
+                $stmtOrder->bindValue(':rtid', $renewalTeacherId, PDO::PARAM_INT);
+                $stmtOrder->bindValue(':rftid', $referralTeacherId, PDO::PARAM_INT);
+                $stmtOrder->bindValue(':rfsid', $referralStudentId, PDO::PARAM_INT);
+                $stmtOrder->bindValue(':irmk', $internalRemark, PDO::PARAM_STR);
+                $stmtOrder->bindValue(':ermk', $externalRemark, PDO::PARAM_STR);
                 $stmtOrder->execute();
                 $orderId = $db->lastInsertId();
                 // 写入流水（含 payment_method + ref_id）
@@ -7217,10 +7338,10 @@ if (intval($countBt) === 0) {
                             <div class="table-wrap">
                                 <table>
                                     <thead><tr>
-                                        <th>日期时间</th><th>类型</th><th>支付方式</th><th>金额</th><th>余额变动后</th><th>关联单号</th><th>校区</th><th>备注</th>
+                                        <th>日期时间</th><th>类型</th><th>支付方式</th><th>金额</th><th>余额变动后</th><th>关联单号</th><th>校区</th><th>备注</th><th>课程顾问</th><th>试听老师</th><th>扩科老师</th><th>续费老师</th><th>转介绍老师</th><th>转介绍学员</th><th>对内备注</th><th>对外备注</th>
                                     </tr></thead>
                                     <tbody id="account-transactions-tbody">
-                                        <tr><td colspan="8" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
+                                        <tr><td colspan="16" style="text-align:center;color:#999;padding:20px;">加载中...</td></tr>
                                     </tbody>
                                 </table>
                             </div>
@@ -7263,31 +7384,9 @@ if (intval($countBt) === 0) {
 
                     <!-- 选择课程/活动（校区选定后显示） -->
                     <div class="enroll-type-select" id="enroll-type-select" style="display:none;">
-                        <div class="enroll-type-grid">
-                            <!-- 报名课程卡片 -->
-                            <div class="enroll-type-card active" id="enroll-type-course" onclick="selectEnrollType('course')">
-                                <div class="enroll-type-card-icon">
-                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/>
-                                        <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>
-                                        <line x1="8" y1="7" x2="16" y2="7"/>
-                                        <line x1="8" y1="11" x2="14" y2="11"/>
-                                    </svg>
-                                </div>
-                                <div class="enroll-type-card-label">报名课程</div>
-                                <div class="enroll-type-card-desc">选择课程 → 方案 → 支付</div>
-                            </div>
-                            <!-- 报名活动卡片 -->
-                            <div class="enroll-type-card" id="enroll-type-activity" onclick="selectEnrollType('activity')">
-                                <div class="enroll-type-card-icon">
-                                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-                                        <circle cx="12" cy="12" r="10"/>
-                                        <polygon points="10,8 16,12 10,16"/>
-                                    </svg>
-                                </div>
-                                <div class="enroll-type-card-label">报名活动</div>
-                                <div class="enroll-type-card-desc">选择活动 → 人数 → 支付</div>
-                            </div>
+                        <div class="enroll-type-btn-row">
+                            <button class="enroll-type-btn active" id="enroll-type-course" onclick="selectEnrollType('course')">课程报名</button>
+                            <button class="enroll-type-btn" id="enroll-type-activity" onclick="selectEnrollType('activity')">活动报名</button>
                         </div>
                     </div>
 
@@ -7342,6 +7441,78 @@ if (intval($countBt) === 0) {
                         <div class="enroll-total-bar">
                             <span class="enroll-total-label">合计金额</span>
                             <span class="enroll-total-amount" id="enroll-total-price">¥0.00</span>
+                        </div>
+
+                        <!-- 关联人员区域 -->
+                        <div class="enroll-section" id="enroll-referral-section">
+                            <div class="enroll-section-title">关联人员</div>
+                            <div class="enroll-referral-row">
+                                <div class="enroll-referral-item">
+                                    <label>课程顾问 <span class="required">*</span></label>
+                                    <div class="searchable-dropdown" id="dropdown-advisor">
+                                        <input type="text" class="searchable-input" placeholder="请选择课程顾问" autocomplete="off" data-placeholder="请选择课程顾问">
+                                        <input type="hidden" class="searchable-value" value="0">
+                                        <div class="searchable-menu"></div>
+                                    </div>
+                                </div>
+                                <div class="enroll-referral-item">
+                                    <label>试听老师</label>
+                                    <div class="searchable-dropdown" id="dropdown-trial-teacher">
+                                        <input type="text" class="searchable-input" placeholder="请选择试听老师" autocomplete="off" data-placeholder="请选择试听老师">
+                                        <input type="hidden" class="searchable-value" value="0">
+                                        <div class="searchable-menu"></div>
+                                    </div>
+                                </div>
+                                <div class="enroll-referral-item">
+                                    <label>扩科老师</label>
+                                    <div class="searchable-dropdown" id="dropdown-expansion-teacher">
+                                        <input type="text" class="searchable-input" placeholder="请选择扩科老师" autocomplete="off" data-placeholder="请选择扩科老师">
+                                        <input type="hidden" class="searchable-value" value="0">
+                                        <div class="searchable-menu"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="enroll-referral-row">
+                                <div class="enroll-referral-item">
+                                    <label>续费老师</label>
+                                    <div class="searchable-dropdown" id="dropdown-renewal-teacher">
+                                        <input type="text" class="searchable-input" placeholder="请选择续费老师" autocomplete="off" data-placeholder="请选择续费老师">
+                                        <input type="hidden" class="searchable-value" value="0">
+                                        <div class="searchable-menu"></div>
+                                    </div>
+                                </div>
+                                <div class="enroll-referral-item">
+                                    <label>转介绍老师</label>
+                                    <div class="searchable-dropdown" id="dropdown-referral-teacher">
+                                        <input type="text" class="searchable-input" placeholder="请选择转介绍老师" autocomplete="off" data-placeholder="请选择转介绍老师">
+                                        <input type="hidden" class="searchable-value" value="0">
+                                        <div class="searchable-menu"></div>
+                                    </div>
+                                </div>
+                                <div class="enroll-referral-item">
+                                    <label>转介绍学员</label>
+                                    <div class="searchable-dropdown" id="dropdown-referral-student">
+                                        <input type="text" class="searchable-input" placeholder="请选择转介绍学员" autocomplete="off" data-placeholder="请选择转介绍学员">
+                                        <input type="hidden" class="searchable-value" value="0">
+                                        <div class="searchable-menu"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- 备注信息 -->
+                        <div class="enroll-section" id="enroll-remark-section">
+                            <div class="enroll-section-title">备注信息</div>
+                            <div class="enroll-remark-row">
+                                <div class="form-group" style="flex:1;">
+                                    <label>对内备注</label>
+                                    <input type="text" id="enroll-internal-remark" class="form-input" maxlength="100" placeholder="对内备注（选填，最多100字）">
+                                </div>
+                                <div class="form-group" style="flex:1;">
+                                    <label>对外备注</label>
+                                    <input type="text" id="enroll-external-remark" class="form-input" maxlength="100" placeholder="对外备注（选填，最多100字）">
+                                </div>
+                            </div>
                         </div>
 
                         <!-- 支付方式 -->
@@ -7538,7 +7709,7 @@ if (intval($countBt) === 0) {
                     <div class="table-scroll-body">
                         <table id="table-orders">
                             <thead><tr>
-                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>课程金额</th><th>商品金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
+                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>课程金额</th><th>商品金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th class="ref-col">课程顾问</th><th class="ref-col">试听老师</th><th class="ref-col">扩科老师</th><th class="ref-col">续费老师</th><th class="ref-col">转介绍老师</th><th class="ref-col">转介绍学员</th><th class="ref-col">对内备注</th><th class="ref-col">对外备注</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
                             </tr></thead>
                             <tbody></tbody>
                             <tfoot id="table-orders-foot" style="display:none;"></tfoot>
