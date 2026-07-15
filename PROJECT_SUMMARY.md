@@ -1167,6 +1167,7 @@ subjects                  courses              ┌──────────
 | | 交易订单 | — | `panel-orders` |
 | | 报名详情 | — | `panel-enroll`（隐藏面板，通过按钮跳转） |
 | | 工作记录 | 退费记录 | `panel-work-log` |
+| | | 转校记录 | `panel-work-log` |
 | | | 课程记录 | `panel-work-log`（预留） |
 | | 基础设置 | 学科设置 | `panel-subjects` |
 | | | 教室管理 | `panel-classrooms` |
@@ -1189,7 +1190,7 @@ subjects                  courses              ┌──────────
 | **班级管理** | 班级 CRUD、排课入口 | 班级列表表格（ID/名称/关联课程/班级类型/招生人数/授课课时/是否可试听/校区/备注/创建时间/操作-排课/编辑/删除）+ 搜索框 + 新增班级按钮；新增/编辑时授课课时必须为偶数（前端+后端双重校验） |
 | **交易订单** | 订单列表查看（17 列） | 列：订单号、父订单号、学号、编号、学员姓名、课程名称、价格方案、报价单名称、订单类型、课时数量、订单金额、现金、美团、支付状态、是否作废、状态、报名时间；支付状态列以三色标签展示（已支付=绿/待支付=橙/已取消=灰），是否作废列（是=红/否=-）；订单类型列以三色标签展示（新报=蓝/续费=绿/小课包=橙）；列表顶部筛选栏含支付状态和是否作废下拉筛选；列表顶部**支付方式汇总卡片**（现金/美团/总计）；支持 keyword 搜索 |
 | **报名详情** | 独立报名流程页面（panel-enroll） | 展示学员/资源姓名+手机号（只读）→ 选择课程 → 展示价格方案卡片（含类型标签：新报=蓝/续费=绿/小课包=橙）→ 选中方案展示报价单明细表格 + 合计金额 → **支付方式区域**（现金+美团输入框，实时校验金额匹配）→ 确认支付 → 逐条生成子订单（逐个填满分配策略，所有子订单继承方案 plan_type）+ 父订单 → 返回来源页 |
-| **工作记录** | 双标签页（退费记录 / 课程记录） | **退费记录**标签：表格（订单号/学员/课程/报读课时/消耗课时/剩余课时/报读金额/实退金额/状态/申请时间/操作），状态颜色标签（待审批=橙/一级审批通过=蓝/二级审批通过=蓝/已退费=绿/审批驳回=红），支持 status 和日期筛选，操作列含审批按钮和查看详情；**审批弹窗**：三步审批进度条（当前步骤高亮），审批人输入框，通过/驳回（需填写驳回原因）；**课程记录**标签：预留空 |
+| **工作记录** | 三标签页（退费记录 / 转校记录 / 课程记录） | **退费记录**标签：Soft Industrial 风格 UI——5 色状态胶囊标签（待审批/一级审批通过/二级审批通过/已退费/审批驳回 oklch 圆点指示器），项目/退费方式 Badge，圆形胶囊操作按钮（审批品牌紫 + 撤销玫瑰红，hover 上浮+投影），工具栏图标化，空态双行提示，`prefers-reduced-motion`；**转校记录**标签：转校申请审批与历史记录查看；**审批弹窗**：三步审批进度条（当前步骤高亮），审批人输入框，通过/驳回（需填写驳回原因）；**课程记录**标签：预留空 |
 | **学科设置** | 两级学科树增删改、批量删除 | 一级学科 → 二级学科，支持拖拽排序 |
 | **教室管理** | 教室 CRUD | 教室列表表格（名称/容纳人数/所属校区/备注/创建时间/操作-编辑/删除）+ 搜索框 + 新增教室按钮；名称唯一校验，编辑时排除自身重复 |
 | **员工名册** | 员工 CRUD、批量导入/导出、部门/状态筛选 | 姓名+手机号双重唯一性校验，重复字段输入框红色高亮；**员工名册**列显示归属部门 |
@@ -1304,6 +1305,8 @@ subjects                  courses              ┌──────────
 | 支付状态流转 | 新增订单默认 pay_status='待支付'，支付后更新为'已支付'，取消后更新为'已取消' |
 | 前端筛选 | 订单列表支持 pay_status（已支付/待支付/已取消）和 is_voided（是/否）筛选，学员详情报读课程仅显示 is_voided='否' 的有效订单 |
 | 考勤排除 | 考勤重算课时消耗时自动跳过 refund_status='已退费' 的订单，防止 consumed_lessons 被覆盖归零 |
+| 转校限制 | 已转校订单（transferred_lessons > 0）禁止作废，前端按钮直接隐藏（显示 `-`），后端 voidOrder 强校验 |
+| 审批中转校限制 | 存在待审批 (`status='待审批'`) 转校申请的订单禁止作废，后端 voidOrder 先查 transfer_records 再拒绝 |
 
 ### 6.7 退费管理规则
 
@@ -1314,6 +1317,14 @@ subjects                  courses              ┌──────────
 | 审批流程 | 三步逐级审批：一级审批 → 二级审批 → 财务确认，必须按序完成不可跳过；任意阶段可驳回（需填写驳回原因），驳回后 status='审批驳回' |
 | 退费生效 | 财务确认通过后：orders.refund_status='已退费'，orders.consumed_lessons=lesson_count（剩余课时归零），refund_records.status='已退费' |
 | 状态流转 | 正常 → 退费申请中（提交申请）→ 已退费（审批通过）/ 正常（驳回后可重新申请） |
+### 6.8 转校规则
+
+| 场景 | 规则 |
+|------|------|
+| 数据模型 | `transfer_records` 表：`source_student_id` / `target_student_id` / `order_id` / `source_transfer_id`（链式回溯） / `transferred_lessons` / `status`（待审批→一级审批通过→二级审批通过→已完成） / `order_no`（原始订单号） |
+| 订单号继承 | 转校后新校区课包子订单号从 `transfer_records.order_no` 继承；`submit_transfer` 沿 `source_transfer_id` 链回溯至最原始订单号，带防循环保护 |
+| 反向操作禁止 | 已转校订单（`transferred_lessons > 0`）禁止作废；存在待审批转校申请的订单禁止作废；后端 `voidOrder` 同时检查 `orders.transferred_lessons` 和 `transfer_records` 待审批记录 |
+| 课包子归属 | 转校成功后，新学员获得全部剩余课时，旧学员报读课程列表中对应订单消失；`get_student_courses` 读取 `transfer_records.order_no` 填充新校区订单号 |
 ### 6.5 导出
 
 **资源导出**：
@@ -1714,6 +1725,17 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | refactor | **API 模块化第五批**：迁移报价方案、课程报价、订单列表、订单详情和父订单列表 5 个只读 action；筛选、支付汇总和详情金额响应逐字兼容 | `api/`、`index.php` | 06ff1ce |
 | refactor | **API 模块化第六批**：迁移 `void_order`；增加事务、订单行锁和活动考勤锁，统一保护余额返还、订单作废与活动人数回滚 | `api/orders.php`、`index.php` | 851f99c |
 | refactor | **API 模块化第七批**：迁移报价方案保存/删除；增加方案行锁、全量替换事务和课程/优惠/券/教材引用校验 | `api/orders.php`、`index.php` | 851f99c |
+
+### 2026-07-14
+
+| 类型 | 描述 | 涉及文件 | 提交 |
+|------|------|----------|------|
+| style | **退费记录 UI Soft Industrial 重设计**：5 色状态胶囊标签（待审批/一级审批通过/二级审批通过/已退费/审批驳回，带圆点指示器 oklch 色彩）；项目/退费方式徽章；圆形胶囊操作按钮（审批品牌紫 + 撤销玫瑰红，hover 上浮+投影，active 回缩）；工具栏图标化；空态双行提示；`prefers-reduced-motion` 覆盖 | `index.php`、`main.js`、`style.css` | 64fd3e1 |
+| feat | **转校课包子订单号继承原始订单号**：`get_student_courses` 读取 `transfer_records.order_no`；`submit_transfer` 沿 `source_transfer_id` 链回溯至最原始订单号，带防循环保护 | `index.php` | 4978cac |
+| feat | **已转校订单禁止作废**：`voidOrder` SELECT 增加 `transferred_lessons` 字段，>0 则拒绝；前端两处订单列表「作废」按钮渲染条件增加 `transferred_lessons` 判断，已转校直接显示 `-` | `api/orders.php`、`main.js` | a6a9bcb |
+| fix | **审批中转校订单禁止作废**：`voidOrder` 新增查询 `transfer_records` 待审批记录（`status='待审批'`），存在则拒绝并提示"该订单存在待审批的转校申请，无法作废"；同步驳回脏数据转校申请 | `api/orders.php` | 70873c7 |
+| style | **作废确认弹窗自定义 UI**：替换浏览器原生 `confirm()` 为 `showVoidDialog`（Promise 模式）；弹窗展示订单号/学员/课程/校区/课时/金额 2×3 信息网格；红色圆形图标+标题；Soft Industrial 风格；取消/确定按钮；支持 Escape/点击遮罩关闭；`role="alertdialog"` + `aria-modal` + 焦点管理；overlay 淡入 180ms + dialog scale-up 280ms 动效，`prefers-reduced-motion` 覆盖 | `main.js`、`style.css` | 70fd458 |
+| fix | **修复"工作记录"标题靠右问题**：CSS 冲突——全局 `.panel-header` `justify-content: space-between` 使标题靠右，修复为 `#panel-work-records > .panel-header` 加入 `justify-content: flex-start` 覆盖 | `style.css` | — |
 
 ### 2026-07-11
 
