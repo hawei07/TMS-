@@ -153,6 +153,51 @@ function bindOrderStringParams(PDOStatement $stmt, array $params): void
     }
 }
 
+function detectIsExpansion(PDO $db, array $row): bool
+{
+    $studentId = $row['student_id'];
+    $currentL1 = $row['subject_level1'] ?? '';
+    $currentCreatedAt = $row['created_at'];
+
+    if ($currentL1 === '') {
+        return false;
+    }
+
+    $sql = "SELECT subject_level1, lesson_count, consumed_lessons
+            FROM orders
+            WHERE student_id = :sid
+              AND created_at < :cur
+              AND order_type = '新报'
+              AND is_voided = '否'";
+    $stmt = $db->prepare($sql);
+    $stmt->execute([':sid' => $studentId, ':cur' => $currentCreatedAt]);
+    $historyOrders = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (empty($historyOrders)) {
+        return false;
+    }
+
+    $remainingByL1 = [];
+    foreach ($historyOrders as $o) {
+        $l1 = $o['subject_level1'] ?? '';
+        $rem = max(0, (int)$o['lesson_count'] - (int)$o['consumed_lessons']);
+        if ($rem > 0) {
+            $remainingByL1[$l1] = ($remainingByL1[$l1] ?? 0) + $rem;
+        }
+    }
+
+    $hasSameL1 = isset($remainingByL1[$currentL1]) && $remainingByL1[$currentL1] > 0;
+    $hasOtherL1 = false;
+    foreach ($remainingByL1 as $l1 => $rem) {
+        if ($l1 !== $currentL1 && $rem > 0) {
+            $hasOtherL1 = true;
+            break;
+        }
+    }
+
+    return $hasOtherL1 && !$hasSameL1;
+}
+
 function listOrders(PDO $db, string $method, array $query, array $input): void
 {
     $page = max(1, (int)($query['page'] ?? 1));
@@ -179,6 +224,7 @@ function listOrders(PDO $db, string $method, array $query, array $input): void
                 o.item_name,
                 o.lesson_count,
                 o.actual_price,
+                (o.actual_price - COALESCE(o.account_amount, 0)) AS cash_flow,
                 o.teaching_aid_price,
                 o.product_coupon_amount,
                 o.discount_plan_amount,
@@ -191,6 +237,10 @@ function listOrders(PDO $db, string $method, array $query, array $input): void
                 o.cash_amount,
                 o.meituan_amount,
                 o.account_amount,
+                o.online_pay_amount,
+                o.tonglian_amount,
+                o.zhishouyin_amount,
+                o.douyin_amount,
                 o.paid_amount,
                 o.order_type,
                 o.campus,
@@ -256,10 +306,35 @@ function listOrders(PDO $db, string $method, array $query, array $input): void
     }
     unset($row);
 
+    // 计算是否扩科（按父订单缓存，同父订单下所有子订单共享）
+    $expansionCache = [];
+    foreach ($rows as &$row) {
+        $orderType = $row['order_type'] ?? '';
+        if ($orderType !== '新报') {
+            $row['is_expansion'] = '否';
+            continue;
+        }
+        $parentNo = $row['parent_order_no'] ?? '';
+        if ($parentNo === '') {
+            $row['is_expansion'] = '否';
+            continue;
+        }
+        if (!isset($expansionCache[$parentNo])) {
+            $expansionCache[$parentNo] = detectIsExpansion($db, $row);
+        }
+        $row['is_expansion'] = $expansionCache[$parentNo] ? '是' : '否';
+    }
+    unset($row);
+
     $summaryStmt = $db->prepare(
-        "SELECT SUM(COALESCE(o.cash_amount, 0)) AS cash_total,
+        "SELECT SUM(COALESCE(o.actual_price, 0) - COALESCE(o.account_amount, 0)) AS cash_flow_total,
+                SUM(COALESCE(o.cash_amount, 0)) AS cash_total,
                 SUM(COALESCE(o.meituan_amount, 0)) AS meituan_total,
-                SUM(COALESCE(o.account_amount, 0)) AS account_total
+                SUM(COALESCE(o.account_amount, 0)) AS account_total,
+                SUM(COALESCE(o.online_pay_amount, 0)) AS online_pay_total,
+                SUM(COALESCE(o.tonglian_amount, 0)) AS tonglian_total,
+                SUM(COALESCE(o.zhishouyin_amount, 0)) AS zhishouyin_total,
+                SUM(COALESCE(o.douyin_amount, 0)) AS douyin_total
          FROM orders o
          LEFT JOIN students s ON o.student_id = s.id
          LEFT JOIN courses c ON o.course_id = c.id
@@ -268,9 +343,14 @@ function listOrders(PDO $db, string $method, array $query, array $input): void
     bindOrderStringParams($summaryStmt, $params);
     $summaryStmt->execute();
     $paymentSummary = $summaryStmt->fetch(PDO::FETCH_ASSOC) ?: [
+        'cash_flow_total' => 0,
         'cash_total' => 0,
         'meituan_total' => 0,
         'account_total' => 0,
+        'online_pay_total' => 0,
+        'tonglian_total' => 0,
+        'zhishouyin_total' => 0,
+        'douyin_total' => 0,
     ];
 
     json([

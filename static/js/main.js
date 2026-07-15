@@ -6579,12 +6579,16 @@ async function loadStudentOrders(sid) {
         }
         container.innerHTML = `<span style="font-size:14px;color:#888;">共 ${rows.length} 笔订单</span>
         <div class="table-wrap" style="margin-top:8px;"><table><thead><tr>
-            <th>订单号</th><th>父订单号</th><th>学号</th><th>编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>课程金额</th><th>商品金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
+            <th>订单号</th><th>父订单号</th><th>学号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>是否扩科</th><th>订单现金流</th><th>课程金额</th><th>商品金额</th><th>现金</th><th>美团</th><th>账户</th><th>线上支付</th><th>通联二维码</th><th>智收银</th><th>抖音</th><th>订单创建时间</th><th>订单支付时间</th><th>订单类型</th><th>支付状态</th><th>是否作废</th><th>操作</th>
         </tr></thead><tbody>
         ${rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
             const mt = Number(r.meituan_amount) || 0;
             const acct = Number(r.account_amount) || 0;
+            const online = Number(r.online_pay_amount) || 0;
+            const tonglian = Number(r.tonglian_amount) || 0;
+            const zhishouyin = Number(r.zhishouyin_amount) || 0;
+            const douyin = Number(r.douyin_amount) || 0;
             const taPrice = Number(r.teaching_aid_price) || 0;
             const pcAmt = Number(r.product_coupon_amount) || 0;
             const courseAmt = (Number(r.actual_price) || 0) - taPrice + pcAmt;
@@ -6600,7 +6604,6 @@ async function loadStudentOrders(sid) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
             <td style="font-family:monospace;font-size:12px;">${esc(r.parent_order_no || '')}</td>
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
-            <td>${r.id}</td>
             <td>${esc(r.student_name)}</td>
             <td>${esc(r.campus || '-')}</td>
             <td>${esc(r.subject_level1 || '-')}</td>
@@ -6610,14 +6613,20 @@ async function loadStudentOrders(sid) {
             <td>${esc(r.item_name)}</td>
             <td>${r.lesson_count || ''}</td>
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
+            <td class="col-num">¥${Number(r.cash_flow || 0).toFixed(2)}</td>
             <td class="col-num">${courseAmt > 0 ? '¥' + courseAmt.toFixed(2) : '¥0.00'}</td>
             <td class="col-num">${productAmt > 0 ? '¥' + productAmt.toFixed(2) : '¥0.00'}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
                         <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
                         <td>${acct > 0 ? '¥' + acct.toFixed(2) : '-'}</td>
+                        <td>${online > 0 ? '¥' + online.toFixed(2) : '-'}</td>
+                        <td>${tonglian > 0 ? '¥' + tonglian.toFixed(2) : '-'}</td>
+                        <td>${zhishouyin > 0 ? '¥' + zhishouyin.toFixed(2) : '-'}</td>
+                        <td>${douyin > 0 ? '¥' + douyin.toFixed(2) : '-'}</td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td>${orderTypeHtml}</td>
+            <td>${r.is_expansion || '否'}</td>
             <td>${renderPayStatus(r.pay_status)}</td>
             <td>${renderVoidedStatus(r.is_voided)}</td>
             <td>${r.is_voided === '否' && !(parseInt(r.transferred_lessons) > 0) ? `<button class="btn btn-danger btn-sm" onclick="voidOrder(${r.id}, '${esc(r.order_no)}', '${esc(r.student_name)}', '${esc(r.course_name)}', '${esc(r.campus)}', ${r.lesson_count || 0}, ${r.actual_price || 0})" style="font-size:11px;padding:1px 6px;">作废</button>` : '-'}</td>
@@ -7216,35 +7225,50 @@ function onPaymentInput() {
     const cashEl = document.getElementById('enroll-payment-cash');
     const meituanEl = document.getElementById('enroll-payment-meituan');
     const balanceEl = document.getElementById('enroll-payment-balance');
+    const onlineEl = document.getElementById('enroll-payment-online');
+    const tonglianEl = document.getElementById('enroll-payment-tonglian');
+    const zhishouyinEl = document.getElementById('enroll-payment-zhishouyin');
+    const douyinEl = document.getElementById('enroll-payment-douyin');
     const cash = parseFloat(cashEl.value) || 0;
     const meituan = parseFloat(meituanEl.value) || 0;
     const bal = parseFloat(balanceEl.value) || 0;
+    const online = parseFloat(onlineEl.value) || 0;
+    const tonglian = parseFloat(tonglianEl.value) || 0;
+    const zhishouyin = parseFloat(zhishouyinEl.value) || 0;
+    const douyin = parseFloat(douyinEl.value) || 0;
     const activeEl = document.activeElement;
 
+    const others = meituan + bal + online + tonglian + zhishouyin + douyin;
     if (activeEl === cashEl) {
-        // 用户编辑现金 → 美团自动补足（余额不变）
-        const remaining = Math.max(0, total - cash - bal);
+        const remaining = Math.max(0, total - cash - bal - online - tonglian - zhishouyin - douyin);
         meituanEl.value = remaining.toFixed(2);
-        if (cash + bal > total) {
-            cashEl.value = Math.max(0, total - bal).toFixed(2);
+        if (cash + bal + online + tonglian + zhishouyin + douyin > total) {
+            cashEl.value = Math.max(0, total - bal - online - tonglian - zhishouyin - douyin).toFixed(2);
             meituanEl.value = '0.00';
         }
     } else if (activeEl === meituanEl) {
-        // 用户编辑美团 → 现金自动补足（余额不变）
-        const remaining = Math.max(0, total - meituan - bal);
+        const othersExMeituan = cash + bal + online + tonglian + zhishouyin + douyin;
+        const remaining = Math.max(0, total - meituan - bal - online - tonglian - zhishouyin - douyin);
         cashEl.value = remaining.toFixed(2);
-        if (meituan + bal > total) {
-            meituanEl.value = Math.max(0, total - bal).toFixed(2);
+        if (othersExMeituan > total) {
+            meituanEl.value = Math.max(0, total - bal - online - tonglian - zhishouyin - douyin).toFixed(2);
             cashEl.value = '0.00';
         }
     } else if (activeEl === balanceEl) {
-        // 用户编辑余额 → 现金自动补足
-        const remaining = Math.max(0, total - bal);
+        const remaining = Math.max(0, total - bal - meituan - online - tonglian - zhishouyin - douyin);
         cashEl.value = remaining.toFixed(2);
         meituanEl.value = '0.00';
         if (bal > total) {
             balanceEl.value = total.toFixed(2);
             cashEl.value = '0.00';
+        }
+    } else {
+        // online/tonglian/zhishouyin/douyin: 现金自动补足
+        const remaining = Math.max(0, total - others);
+        cashEl.value = remaining.toFixed(2);
+        if (others > total) {
+            cashEl.value = '0.00';
+            meituanEl.value = (Math.max(0, total - bal - online - tonglian - zhishouyin - douyin)).toFixed(2);
         }
     }
 
@@ -7255,10 +7279,14 @@ function updatePaymentHint() {
     const cash = parseFloat(document.getElementById('enroll-payment-cash').value) || 0;
     const meituan = parseFloat(document.getElementById('enroll-payment-meituan').value) || 0;
     const bal = parseFloat(document.getElementById('enroll-payment-balance').value) || 0;
+    const online = parseFloat(document.getElementById('enroll-payment-online').value) || 0;
+    const tonglian = parseFloat(document.getElementById('enroll-payment-tonglian').value) || 0;
+    const zhishouyin = parseFloat(document.getElementById('enroll-payment-zhishouyin').value) || 0;
+    const douyin = parseFloat(document.getElementById('enroll-payment-douyin').value) || 0;
     const totalText = document.getElementById('enroll-total-price').textContent.replace('¥', '');
     const total = parseFloat(totalText) || 0;
     const hint = document.getElementById('enroll-payment-hint');
-    const diff = cash + meituan + bal - total;
+    const diff = cash + meituan + bal + online + tonglian + zhishouyin + douyin - total;
     if (Math.abs(diff) < 0.01) {
         hint.style.display = 'block';
         hint.className = 'enroll-payment-hint ok';
@@ -7266,6 +7294,10 @@ function updatePaymentHint() {
         if (bal > 0) parts.push('余额 ¥' + bal.toFixed(2));
         if (cash > 0) parts.push('现金 ¥' + cash.toFixed(2));
         if (meituan > 0) parts.push('美团 ¥' + meituan.toFixed(2));
+        if (online > 0) parts.push('线上 ¥' + online.toFixed(2));
+        if (tonglian > 0) parts.push('通联 ¥' + tonglian.toFixed(2));
+        if (zhishouyin > 0) parts.push('智收银 ¥' + zhishouyin.toFixed(2));
+        if (douyin > 0) parts.push('抖音 ¥' + douyin.toFixed(2));
         hint.textContent = '金额匹配' + (parts.length ? '（' + parts.join(' + ') + '）' : '');
     } else if (diff > 0) {
         hint.style.display = 'block';
@@ -7289,10 +7321,14 @@ async function confirmPayEnroll() {
     const paymentCash = parseFloat(document.getElementById('enroll-payment-cash').value) || 0;
     const paymentMeituan = parseFloat(document.getElementById('enroll-payment-meituan').value) || 0;
     const paymentBalance = parseFloat(document.getElementById('enroll-payment-balance').value) || 0;
+    const paymentOnline = parseFloat(document.getElementById('enroll-payment-online').value) || 0;
+    const paymentTonglian = parseFloat(document.getElementById('enroll-payment-tonglian').value) || 0;
+    const paymentZhishouyin = parseFloat(document.getElementById('enroll-payment-zhishouyin').value) || 0;
+    const paymentDouyin = parseFloat(document.getElementById('enroll-payment-douyin').value) || 0;
     const totalText = document.getElementById('enroll-total-price').textContent.replace('¥', '');
     const totalPrice = parseFloat(totalText) || 0;
-    if (Math.abs(paymentCash + paymentMeituan + paymentBalance - totalPrice) > 0.01) {
-        return showToast('支付金额合计（¥' + (paymentCash + paymentMeituan + paymentBalance).toFixed(2) + '）与订单总额（¥' + totalPrice.toFixed(2) + '）不一致，请调整', 'error');
+    if (Math.abs(paymentCash + paymentMeituan + paymentBalance + paymentOnline + paymentTonglian + paymentZhishouyin + paymentDouyin - totalPrice) > 0.01) {
+        return showToast('支付金额合计（¥' + (paymentCash + paymentMeituan + paymentBalance + paymentOnline + paymentTonglian + paymentZhishouyin + paymentDouyin).toFixed(2) + '）与订单总额（¥' + totalPrice.toFixed(2) + '）不一致，请调整', 'error');
     }
 
     if (currentEnrollMode === 'resource') {
@@ -7317,6 +7353,10 @@ async function confirmPayEnroll() {
                 campus_id: currentEnrollCampusId || 0,
                 use_balance: paymentBalance > 0 ? 1 : 0,
                 balance_amount: paymentBalance,
+                payment_online: paymentOnline,
+                payment_tonglian: paymentTonglian,
+                payment_zhishouyin: paymentZhishouyin,
+                payment_douyin: paymentDouyin,
                 internal_remark: document.getElementById('enroll-internal-remark').value.trim(),
                 external_remark: document.getElementById('enroll-external-remark').value.trim(),
                 ...getEnrollReferralData()
@@ -7345,6 +7385,10 @@ async function confirmPayEnroll() {
             campus_id: currentEnrollCampusId || 0,
             use_balance: paymentBalance > 0 ? 1 : 0,
             balance_amount: paymentBalance,
+            payment_online: paymentOnline,
+            payment_tonglian: paymentTonglian,
+            payment_zhishouyin: paymentZhishouyin,
+            payment_douyin: paymentDouyin,
             internal_remark: document.getElementById('enroll-internal-remark').value.trim(),
             external_remark: document.getElementById('enroll-external-remark').value.trim(),
             ...getEnrollReferralData()
@@ -7971,11 +8015,11 @@ function renderOrderTable(rows) {
     const tbody = document.querySelector('#table-orders tbody');
     const tfoot = document.getElementById('table-orders-foot');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="30" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="37" style="text-align:center;color:#999;padding:30px;">暂无订单数据</td></tr>';
         tfoot.style.display = 'none';
         return;
     }
-    let totalCash = 0, totalMeituan = 0, totalAccount = 0, totalCourse = 0, totalProduct = 0;
+    let totalCash = 0, totalMeituan = 0, totalAccount = 0, totalOnline = 0, totalTonglian = 0, totalZhishouyin = 0, totalDouyin = 0, totalCourse = 0, totalProduct = 0, totalCashFlow = 0;
         tbody.innerHTML = rows.map(r => {
             const cash = Number(r.cash_amount) || 0;
             const mt = Number(r.meituan_amount) || 0;
@@ -7983,6 +8027,15 @@ function renderOrderTable(rows) {
             totalCash += cash;
             totalMeituan += mt;
             totalAccount += acct;
+            totalCashFlow += Number(r.cash_flow || 0);
+            const online = Number(r.online_pay_amount) || 0;
+            const tonglian = Number(r.tonglian_amount) || 0;
+            const zhishouyin = Number(r.zhishouyin_amount) || 0;
+            const douyin = Number(r.douyin_amount) || 0;
+            totalOnline += online;
+            totalTonglian += tonglian;
+            totalZhishouyin += zhishouyin;
+            totalDouyin += douyin;
             const taPrice = Number(r.teaching_aid_price) || 0;
             const pcAmt = Number(r.product_coupon_amount) || 0;
             const courseAmt = (Number(r.actual_price) || 0) - taPrice + pcAmt;
@@ -8001,7 +8054,6 @@ function renderOrderTable(rows) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.order_no || '')}</td>
             <td style="font-family:monospace;font-size:12px;">${esc(r.parent_order_no || '')}</td>
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
-            <td>${r.id}</td>
             <td>${esc(r.student_name)}</td>
             <td>${esc(r.campus || '-')}</td>
             <td>${esc(r.subject_level1 || '-')}</td>
@@ -8011,11 +8063,16 @@ function renderOrderTable(rows) {
             <td>${esc(r.item_name)}</td>
             <td>${r.lesson_count || ''}</td>
             <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
+            <td class="col-num">¥${Number(r.cash_flow || 0).toFixed(2)}</td>
             <td class="col-num">${courseAmt > 0 ? '¥' + courseAmt.toFixed(2) : '¥0.00'}</td>
             <td class="col-num">${productAmt > 0 ? '¥' + productAmt.toFixed(2) : '¥0.00'}</td>
             <td>${cash > 0 ? '¥' + cash.toFixed(2) : '-'}</td>
                         <td>${mt > 0 ? '¥' + mt.toFixed(2) : '-'}</td>
                         <td>${acct > 0 ? '¥' + acct.toFixed(2) : '-'}</td>
+                        <td>${online > 0 ? '¥' + online.toFixed(2) : '-'}</td>
+                        <td>${tonglian > 0 ? '¥' + tonglian.toFixed(2) : '-'}</td>
+                        <td>${zhishouyin > 0 ? '¥' + zhishouyin.toFixed(2) : '-'}</td>
+                        <td>${douyin > 0 ? '¥' + douyin.toFixed(2) : '-'}</td>
             <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
             <td>${r.paid_at ? r.paid_at.slice(0, 16) : ''}</td>
             <td class="ref-col">${esc(r.advisor_name || '-')}</td>
@@ -8027,6 +8084,7 @@ function renderOrderTable(rows) {
             <td class="ref-col" title="${esc(r.internal_remark || '-')}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.internal_remark || '-')}</td>
             <td class="ref-col" title="${esc(r.external_remark || '-')}" style="max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${esc(r.external_remark || '-')}</td>
             <td>${orderTypeHtml}</td>
+            <td>${r.is_expansion || '否'}</td>
             <td>${renderPayStatus(r.pay_status)}</td>
             <td>${renderVoidedStatus(r.is_voided)}</td>
             <td>
@@ -8036,12 +8094,17 @@ function renderOrderTable(rows) {
         </tr>`;
     }).join('');
     tfoot.innerHTML = `<tr>
-            <td colspan="21" style="text-align:right;font-weight:bold;">合计</td>
+            <td colspan="26" style="text-align:right;font-weight:bold;">合计</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalCashFlow.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalCourse.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalProduct.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalCash.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalMeituan.toFixed(2)}</td>
             <td style="font-weight:bold;color:#7c3aed;">¥${totalAccount.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalOnline.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalTonglian.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalZhishouyin.toFixed(2)}</td>
+            <td style="font-weight:bold;color:#7c3aed;">¥${totalDouyin.toFixed(2)}</td>
             <td colspan="8"></td>
         </tr>`;
     tfoot.style.display = '';
@@ -8362,7 +8425,11 @@ function renderPaymentSummary(summary) {
     const cash = Number(summary.cash_total) || 0;
     const mt = Number(summary.meituan_total) || 0;
     const acct = Number(summary.account_total) || 0;
-    const total = cash + mt + acct;
+    const online = Number(summary.online_pay_total) || 0;
+    const tonglian = Number(summary.tonglian_total) || 0;
+    const zhishouyin = Number(summary.zhishouyin_total) || 0;
+    const douyin = Number(summary.douyin_total) || 0;
+    const total = cash + mt + acct + online + tonglian + zhishouyin + douyin;
     el.innerHTML = `<div class="payment-summary-inner">
         <span class="payment-summary-title">支付方式汇总</span>
         <div class="payment-summary-card">
@@ -8376,6 +8443,22 @@ function renderPaymentSummary(summary) {
         <div class="payment-summary-card">
             <span class="payment-summary-label">账户</span>
             <span class="payment-summary-amount">¥${acct.toFixed(2)}</span>
+        </div>
+        <div class="payment-summary-card">
+            <span class="payment-summary-label">线上支付</span>
+            <span class="payment-summary-amount">¥${online.toFixed(2)}</span>
+        </div>
+        <div class="payment-summary-card">
+            <span class="payment-summary-label">通联二维码</span>
+            <span class="payment-summary-amount">¥${tonglian.toFixed(2)}</span>
+        </div>
+        <div class="payment-summary-card">
+            <span class="payment-summary-label">智收银</span>
+            <span class="payment-summary-amount">¥${zhishouyin.toFixed(2)}</span>
+        </div>
+        <div class="payment-summary-card">
+            <span class="payment-summary-label">抖音</span>
+            <span class="payment-summary-amount">¥${douyin.toFixed(2)}</span>
         </div>
         <div class="payment-summary-card payment-summary-total">
             <span class="payment-summary-label">总计</span>
@@ -12081,10 +12164,11 @@ function showRechargeModal() {
                         '<label class="recharge-label">支付方式</label>' +
                         '<select id="recharge-payment-method" class="recharge-select">' +
                             '<option value="现金">现金</option>' +
-                            '<option value="微信">微信</option>' +
-                            '<option value="支付宝">支付宝</option>' +
-                            '<option value="银行卡">银行卡</option>' +
-                            '<option value="转账">转账</option>' +
+                            '<option value="线上支付">线上支付</option>' +
+                            '<option value="通联二维码">通联二维码</option>' +
+                            '<option value="智收银">智收银</option>' +
+                            '<option value="抖音">抖音</option>' +
+                            '<option value="美团">美团</option>' +
                         '</select>' +
                     '</div>' +
                 '</div>' +
@@ -14010,7 +14094,7 @@ function renderActivityPaymentSummary() {
     const a = activityEnrollState.activity;
     const total = calcActivityTotal();
     const paySection = document.getElementById('enroll-activity-step-pay');
-    paySection.innerHTML = '<div class="enroll-section-title"><span class="enroll-step-num">3</span> 确认支付</div><div class="activity-pay-summary"><div class="activity-pay-item"><span>活动：</span><strong>' + esc(a.name) + '</strong></div><div class="activity-pay-item"><span>校区：</span>' + esc(activityEnrollState.campus || '') + '</div>' + (activityEnrollState.adultCount > 0 ? '<div class="activity-pay-item"><span>成人：</span>' + activityEnrollState.adultCount + '人 × ¥' + a.feeAdult.toFixed(0) + ' = ¥' + (activityEnrollState.adultCount * a.feeAdult).toFixed(2) + '</div>' : '') + (activityEnrollState.studentCount > 0 ? '<div class="activity-pay-item"><span>学员：</span>' + activityEnrollState.studentCount + '人 × ¥' + a.feeStudent.toFixed(0) + ' = ¥' + (activityEnrollState.studentCount * a.feeStudent).toFixed(2) + '</div>' : '') + '<div class="activity-pay-total"><span>合计：</span><strong>¥' + total.toFixed(2) + '</strong></div></div><div class="enroll-section" style="margin-top:16px;"><div class="enroll-section-title">支付方式</div><div class="enroll-payment-row"><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg></span><span class="enroll-payment-label">现金</span></div><input type="number" id="activity-pay-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-meituan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></span><span class="enroll-payment-label">美团</span></div><input type="number" id="activity-pay-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-account"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="enroll-payment-label">账户余额</span></div><input type="number" id="activity-pay-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div></div><div id="activity-pay-hint" style="display:none;margin-top:8px;font-size:13px;color:#e74c3c;"></div></div>';
+    paySection.innerHTML = '<div class="enroll-section-title"><span class="enroll-step-num">3</span> 确认支付</div><div class="activity-pay-summary"><div class="activity-pay-item"><span>活动：</span><strong>' + esc(a.name) + '</strong></div><div class="activity-pay-item"><span>校区：</span>' + esc(activityEnrollState.campus || '') + '</div>' + (activityEnrollState.adultCount > 0 ? '<div class="activity-pay-item"><span>成人：</span>' + activityEnrollState.adultCount + '人 × ¥' + a.feeAdult.toFixed(0) + ' = ¥' + (activityEnrollState.adultCount * a.feeAdult).toFixed(2) + '</div>' : '') + (activityEnrollState.studentCount > 0 ? '<div class="activity-pay-item"><span>学员：</span>' + activityEnrollState.studentCount + '人 × ¥' + a.feeStudent.toFixed(0) + ' = ¥' + (activityEnrollState.studentCount * a.feeStudent).toFixed(2) + '</div>' : '') + '<div class="activity-pay-total"><span>合计：</span><strong>¥' + total.toFixed(2) + '</strong></div></div><div class="enroll-section" style="margin-top:16px;"><div class="enroll-section-title">支付方式</div><div class="enroll-payment-row"><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg></span><span class="enroll-payment-label">现金</span></div><input type="number" id="activity-pay-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-meituan"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg></span><span class="enroll-payment-label">美团</span></div><input type="number" id="activity-pay-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-account"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg></span><span class="enroll-payment-label">账户余额</span></div><input type="number" id="activity-pay-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-online"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg></span><span class="enroll-payment-label">线上支付</span></div><input type="number" id="activity-pay-online" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-tonglian"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg></span><span class="enroll-payment-label">通联二维码</span></div><input type="number" id="activity-pay-tonglian" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-zhishouyin"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><line x1="8" y1="12" x2="16" y2="12"/></svg></span><span class="enroll-payment-label">智收银</span></div><input type="number" id="activity-pay-zhishouyin" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div><div class="enroll-payment-card"><div class="enroll-payment-header"><span class="enroll-payment-icon enroll-payment-icon-douyin"><svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg></span><span class="enroll-payment-label">抖音</span></div><input type="number" id="activity-pay-douyin" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="checkActivityPayMatch()" placeholder="0.00"></div></div><div id="activity-pay-hint" style="display:none;margin-top:8px;font-size:13px;color:#e74c3c;"></div></div>';
     document.getElementById('activity-pay-cash').value = total.toFixed(2);
     checkActivityPayMatch();
 }
@@ -14020,7 +14104,11 @@ function checkActivityPayMatch() {
     const cash = parseFloat(document.getElementById('activity-pay-cash')?.value) || 0;
     const meituan = parseFloat(document.getElementById('activity-pay-meituan')?.value) || 0;
     const balance = parseFloat(document.getElementById('activity-pay-balance')?.value) || 0;
-    const sum = cash + meituan + balance;
+    const online = parseFloat(document.getElementById('activity-pay-online')?.value) || 0;
+    const tonglian = parseFloat(document.getElementById('activity-pay-tonglian')?.value) || 0;
+    const zhishouyin = parseFloat(document.getElementById('activity-pay-zhishouyin')?.value) || 0;
+    const douyin = parseFloat(document.getElementById('activity-pay-douyin')?.value) || 0;
+    const sum = cash + meituan + balance + online + tonglian + zhishouyin + douyin;
     const hint = document.getElementById('activity-pay-hint');
     if (Math.abs(sum - total) < 0.01) { hint.style.display = 'none'; }
     else { hint.style.display = ''; hint.textContent = '支付金额合计 ¥' + sum.toFixed(2) + '，报名费用 ¥' + total.toFixed(2) + '，差额 ¥' + Math.abs(sum - total).toFixed(2); }
@@ -14053,14 +14141,18 @@ async function confirmActivityEnroll() {
     const cash = parseFloat(document.getElementById('activity-pay-cash')?.value) || 0;
     const meituan = parseFloat(document.getElementById('activity-pay-meituan')?.value) || 0;
     const balance = parseFloat(document.getElementById('activity-pay-balance')?.value) || 0;
-    const sum = cash + meituan + balance;
+    const online = parseFloat(document.getElementById('activity-pay-online')?.value) || 0;
+    const tonglian = parseFloat(document.getElementById('activity-pay-tonglian')?.value) || 0;
+    const zhishouyin = parseFloat(document.getElementById('activity-pay-zhishouyin')?.value) || 0;
+    const douyin = parseFloat(document.getElementById('activity-pay-douyin')?.value) || 0;
+    const sum = cash + meituan + balance + online + tonglian + zhishouyin + douyin;
     if (Math.abs(sum - total) > 0.01) { showToast('支付金额与报名费用不匹配', 'error'); return; }
     if (!currentEnrollStudentId) { showToast('请先选择学员', 'error'); return; }
     const confirmBtn = document.getElementById('btn-activity-confirm');
     confirmBtn.disabled = true;
     confirmBtn.textContent = '提交中...';
     try {
-        const payload = { student_id: currentEnrollStudentId, activity_id: activityEnrollState.activity.id, campus_name: activityEnrollState.campus, adult_count: activityEnrollState.adultCount, student_count: activityEnrollState.studentCount, payment_cash: cash, payment_meituan: meituan, use_balance: balance > 0 ? 1 : 0, balance_amount: balance };
+        const payload = { student_id: currentEnrollStudentId, activity_id: activityEnrollState.activity.id, campus_name: activityEnrollState.campus, adult_count: activityEnrollState.adultCount, student_count: activityEnrollState.studentCount, payment_cash: cash, payment_meituan: meituan, use_balance: balance > 0 ? 1 : 0, balance_amount: balance, payment_online: online, payment_tonglian: tonglian, payment_zhishouyin: zhishouyin, payment_douyin: douyin };
         const res = await api('pay_activity_enroll', payload, 'POST');
         if (res.error) { showToast(res.error, 'error'); confirmBtn.disabled = false; confirmBtn.textContent = '确认支付'; return; }
         showToast('活动报名成功！订单号：' + (res.order_no || ''));

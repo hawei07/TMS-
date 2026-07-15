@@ -1682,6 +1682,10 @@ $stmt->execute();
             $paymentMeituan = floatval($input['payment_meituan'] ?? 0);
             $useBalance = intval($input['use_balance'] ?? 0);
             $balanceAmount = floatval($input['balance_amount'] ?? 0);
+            $paymentOnline = floatval($input['payment_online'] ?? 0);
+            $paymentTonglian = floatval($input['payment_tonglian'] ?? 0);
+            $paymentZhishouyin = floatval($input['payment_zhishouyin'] ?? 0);
+            $paymentDouyin = floatval($input['payment_douyin'] ?? 0);
             $campusId = intval($input['campus_id'] ?? 0);
             $campusName = '';
             if ($campusId > 0) {
@@ -1700,8 +1704,8 @@ $stmt->execute();
             $externalRemark = trim($input['external_remark'] ?? '');
             $itemPrices = array_map(function($it) { return floatval($it['actual_price']); }, $items);
             $totalPrice = array_sum($itemPrices);
-            if (abs($paymentCash + $paymentMeituan + $balanceAmount - $totalPrice) > 0.01) {
-                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan + $balanceAmount) . '）与订单总额（' . $totalPrice . '）不一致，请调整']);
+            if (abs($paymentCash + $paymentMeituan + $balanceAmount + $paymentOnline + $paymentTonglian + $paymentZhishouyin + $paymentDouyin - $totalPrice) > 0.01) {
+                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan + $balanceAmount + $paymentOnline + $paymentTonglian + $paymentZhishouyin + $paymentDouyin) . '）与订单总额（' . $totalPrice . '）不一致，请调整']);
             }
             // 余额支付：扣减账户余额
             $newBalAfter = null;
@@ -1738,20 +1742,32 @@ $stmt->execute();
             $itemDiscounts = [];
             $itemRes2 = $db->query("SELECT pi.id, d.name AS dp_name, COALESCE(d.discount_amount,0) AS dp_amount, c.name AS cp_name, COALESCE(c.discount_amount,0) AS cp_amount, ta.name AS ta_name, COALESCE(ta.price,0) AS ta_price, pc.name AS pc_name, COALESCE(pc.discount_amount,0) AS pc_amount FROM price_items pi LEFT JOIN discount_plans d ON pi.discount_plan_id=d.id LEFT JOIN coupons c ON pi.coupon_id=c.id LEFT JOIN teaching_aids ta ON pi.teaching_aid_id=ta.id LEFT JOIN coupons pc ON pi.product_coupon_id=pc.id WHERE pi.plan_id=$planId");
             while ($row = $itemRes2->fetch(PDO::FETCH_ASSOC)) $itemDiscounts[$row['id']] = $row;
-            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, discount_plan_name, discount_plan_amount, coupon_name, coupon_amount, teaching_aid_name, teaching_aid_price, product_coupon_name, product_coupon_amount, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, gifted_lessons, subject_level1, subject_level2, advisor_id, trial_teacher_id, expansion_teacher_id, renewal_teacher_id, referral_teacher_id, referral_student_id, internal_remark, external_remark) VALUES (:sid, :cid, :pn, :dpn, :dpa, :cn, :coa, :tan, :tap, :pcn, :pca, :inm, :lc, :ap, :ca, :ma, :aa, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv, :gl, :sl1, :sl2, :aid, :ttid, :etid, :rtid, :rftid, :rfsid, :irm, :erm)");
+            $stmt = $db->prepare("INSERT INTO orders (student_id, course_id, plan_name, discount_plan_name, discount_plan_amount, coupon_name, coupon_amount, teaching_aid_name, teaching_aid_price, product_coupon_name, product_coupon_amount, item_name, lesson_count, actual_price, cash_amount, meituan_amount, account_amount, online_pay_amount, tonglian_amount, zhishouyin_amount, douyin_amount, paid_amount, order_no, parent_order_no, created_at, paid_at, order_type, campus, pay_status, is_voided, gifted_lessons, subject_level1, subject_level2, advisor_id, trial_teacher_id, expansion_teacher_id, renewal_teacher_id, referral_teacher_id, referral_student_id, internal_remark, external_remark) VALUES (:sid, :cid, :pn, :dpn, :dpa, :cn, :coa, :tan, :tap, :pcn, :pca, :inm, :lc, :ap, :ca, :ma, :aa, :opa, :tla, :zsa, :dya, :pa, :ono, :pono, :ct, :pat, :ot, :campus, :ps, :iv, :gl, :sl1, :sl2, :aid, :ttid, :etid, :rtid, :rftid, :rfsid, :irm, :erm)");
             $parentOrderNo = generateOrderNo($db);
             $remainingCash = $paymentCash;
             $remainingMeituan = $paymentMeituan;
             $remainingAccount = $balanceAmount;
+            $remainingOnline = $paymentOnline;
+            $remainingTonglian = $paymentTonglian;
+            $remainingZhishouyin = $paymentZhishouyin;
+            $remainingDouyin = $paymentDouyin;
             foreach ($items as $i => $item) {
                 $itemPrice = floatval($item['actual_price']);
-                // 先用余额，再用现金，最后美团
+                // 先用余额，再按顺序：现金 → 美团 → 线上支付 → 通联二维码 → 智收银 → 抖音
                 $acctForThis = min($remainingAccount, $itemPrice);
                 $remainingAccount -= $acctForThis;
                 $cashForThis = min($remainingCash, $itemPrice - $acctForThis);
                 $remainingCash -= $cashForThis;
                 $mtForThis = min($remainingMeituan, $itemPrice - $acctForThis - $cashForThis);
                 $remainingMeituan -= $mtForThis;
+                $onlineForThis = min($remainingOnline, $itemPrice - $acctForThis - $cashForThis - $mtForThis);
+                $remainingOnline -= $onlineForThis;
+                $tonglianForThis = min($remainingTonglian, $itemPrice - $acctForThis - $cashForThis - $mtForThis - $onlineForThis);
+                $remainingTonglian -= $tonglianForThis;
+                $zsForThis = min($remainingZhishouyin, $itemPrice - $acctForThis - $cashForThis - $mtForThis - $onlineForThis - $tonglianForThis);
+                $remainingZhishouyin -= $zsForThis;
+                $dyForThis = min($remainingDouyin, $itemPrice - $acctForThis - $cashForThis - $mtForThis - $onlineForThis - $tonglianForThis - $zsForThis);
+                $remainingDouyin -= $dyForThis;
                 $orderNo = generateOrderNo($db);
                 $stmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
                 $stmt->bindValue(':cid', $courseId, PDO::PARAM_INT);
@@ -1762,7 +1778,11 @@ $stmt->execute();
                 $stmt->bindValue(':ca', $cashForThis, PDO::PARAM_STR);
                 $stmt->bindValue(':ma', $mtForThis, PDO::PARAM_STR);
                 $stmt->bindValue(':aa', $acctForThis, PDO::PARAM_STR);
-                $stmt->bindValue(':pa', $acctForThis + $cashForThis + $mtForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':opa', $onlineForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':tla', $tonglianForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':zsa', $zsForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':dya', $dyForThis, PDO::PARAM_STR);
+                $stmt->bindValue(':pa', $acctForThis + $cashForThis + $mtForThis + $onlineForThis + $tonglianForThis + $zsForThis + $dyForThis, PDO::PARAM_STR);
                 $stmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
                 $stmt->bindValue(':pono', $parentOrderNo, PDO::PARAM_STR);
                 $stmt->bindValue(':ct', $n, PDO::PARAM_STR);
@@ -5456,9 +5476,13 @@ json([
             $paymentMeituan = round(floatval($input['payment_meituan'] ?? 0), 2);
             $useBalance = intval($input['use_balance'] ?? 0);
             $balanceAmount = round(floatval($input['balance_amount'] ?? 0), 2);
+            $paymentOnline = round(floatval($input['payment_online'] ?? 0), 2);
+            $paymentTonglian = round(floatval($input['payment_tonglian'] ?? 0), 2);
+            $paymentZhishouyin = round(floatval($input['payment_zhishouyin'] ?? 0), 2);
+            $paymentDouyin = round(floatval($input['payment_douyin'] ?? 0), 2);
 
-            if (abs($paymentCash + $paymentMeituan + $balanceAmount - $totalPrice) > 0.01) {
-                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan + $balanceAmount) . '）与订单总额（' . $totalPrice . '）不一致']);
+            if (abs($paymentCash + $paymentMeituan + $balanceAmount + $paymentOnline + $paymentTonglian + $paymentZhishouyin + $paymentDouyin - $totalPrice) > 0.01) {
+                json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan + $balanceAmount + $paymentOnline + $paymentTonglian + $paymentZhishouyin + $paymentDouyin) . '）与订单总额（' . $totalPrice . '）不一致']);
             }
 
             // 余额支付扣款
@@ -5500,6 +5524,7 @@ json([
             $insStmt = $db->prepare("INSERT INTO orders (
                 student_id, course_id, plan_name, item_name, lesson_count,
                 actual_price, cash_amount, meituan_amount, account_amount,
+                online_pay_amount, tonglian_amount, zhishouyin_amount, douyin_amount,
                 paid_amount, order_no, parent_order_no, order_type, campus,
                 pay_status, is_voided, subject_level1, subject_level2,
                 activity_id, activity_name, activity_campus,
@@ -5514,6 +5539,7 @@ json([
             ) VALUES (
                 :sid, 0, '', '', 0,
                 :ap, :ca, :ma, :aa,
+                :opa, :tla, :zsa, :dya,
                 :pa, :ono, :pono, '活动', :campus,
                 '已支付', '否', :sl1, '',
                 :aid, :aname, :acampus,
@@ -5531,6 +5557,10 @@ json([
             $insStmt->bindValue(':ca', $paymentCash);
             $insStmt->bindValue(':ma', $paymentMeituan);
             $insStmt->bindValue(':aa', $balanceAmount);
+            $insStmt->bindValue(':opa', $paymentOnline);
+            $insStmt->bindValue(':tla', $paymentTonglian);
+            $insStmt->bindValue(':zsa', $paymentZhishouyin);
+            $insStmt->bindValue(':dya', $paymentDouyin);
             $insStmt->bindValue(':pa', $totalPrice);
             $insStmt->bindValue(':ono', $orderNo, PDO::PARAM_STR);
             $insStmt->bindValue(':pono', $orderNo, PDO::PARAM_STR);
@@ -7546,6 +7576,42 @@ if (intval($countBt) === 0) {
                                     </div>
                                     <input type="number" id="enroll-payment-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon enroll-payment-icon-online">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">线上支付</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-online" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                </div>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon enroll-payment-icon-tonglian">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">通联二维码</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-tonglian" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                </div>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon enroll-payment-icon-zhishouyin">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">智收银</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-zhishouyin" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                </div>
+                                <div class="enroll-payment-card">
+                                    <div class="enroll-payment-header">
+                                        <span class="enroll-payment-icon enroll-payment-icon-douyin">
+                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
+                                        </span>
+                                        <span class="enroll-payment-label">抖音</span>
+                                    </div>
+                                    <input type="number" id="enroll-payment-douyin" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                </div>
                             </div>
                             <div id="enroll-payment-hint" class="enroll-payment-hint" style="display:none;"></div>
                         </div>
@@ -7709,7 +7775,7 @@ if (intval($countBt) === 0) {
                     <div class="table-scroll-body">
                         <table id="table-orders">
                             <thead><tr>
-                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th width="60">编号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>课程金额</th><th>商品金额</th><th>现金</th><th>美团</th><th>账户</th><th>订单创建时间</th><th>订单支付时间</th><th class="ref-col">课程顾问</th><th class="ref-col">试听老师</th><th class="ref-col">扩科老师</th><th class="ref-col">续费老师</th><th class="ref-col">转介绍老师</th><th class="ref-col">转介绍学员</th><th class="ref-col">对内备注</th><th class="ref-col">对外备注</th><th>订单类型</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
+                                <th width="80">订单号</th><th width="80">父订单号</th><th width="50">学号</th><th>学员姓名</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>课程名称</th><th>价格方案</th><th>报价单名称</th><th>课时数量</th><th>订单金额</th><th>订单现金流</th><th>课程金额</th><th>商品金额</th><th>现金</th><th>美团</th><th>账户</th><th>线上支付</th><th>通联二维码</th><th>智收银</th><th>抖音</th><th>订单创建时间</th><th>订单支付时间</th><th class="ref-col">课程顾问</th><th class="ref-col">试听老师</th><th class="ref-col">扩科老师</th><th class="ref-col">续费老师</th><th class="ref-col">转介绍老师</th><th class="ref-col">转介绍学员</th><th class="ref-col">对内备注</th><th class="ref-col">对外备注</th><th>订单类型</th><th>是否扩科</th><th width="70">支付状态</th><th width="60">是否作废</th><th width="80">操作</th>
                             </tr></thead>
                             <tbody></tbody>
                             <tfoot id="table-orders-foot" style="display:none;"></tfoot>
