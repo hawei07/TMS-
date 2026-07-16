@@ -6564,34 +6564,32 @@ if (intval($countBt) === 0) {
 
             <!-- 面板：员工名册 -->
             <section class="content-panel" id="panel-employees">
-                <div class="panel-header">
+                <div class="panel-header" style="padding-bottom:0;">
                     <h3>员工名册</h3>
-                    <div class="header-stats-inline">
-                        <span class="stat-badge">员工总数：<strong id="stat-emp-inline">0</strong></span>
+                    <span class="stat-badge" style="margin-left:12px;">员工总数：<strong id="stat-emp-inline">0</strong></span>
+                    <div class="panel-actions" style="margin-left:auto;">
+                        <button class="action-btn" onclick="showEmpModal()" title="新增员工">
+                            <span class="action-btn-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
+                            </span>
+                            <span class="action-btn-label">新增员工</span>
+                        </button>
+                        <button class="action-btn" onclick="showBatchImportEmpModal()" title="批量导入">
+                            <span class="action-btn-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
+                            </span>
+                            <span class="action-btn-label">批量导入</span>
+                        </button>
+                        <button class="action-btn" onclick="exportEmployees()" title="导出 CSV">
+                            <span class="action-btn-icon">
+                                <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
+                            </span>
+                            <span class="action-btn-label">导出</span>
+                        </button>
                     </div>
                 </div>
-                <div class="action-button-group">
-                    <button class="action-btn" onclick="showEmpModal()" title="新增员工">
-                        <span class="action-btn-icon">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 13h-6v6h-2v-6H5v-2h6V5h2v6h6v2z"/></svg>
-                        </span>
-                        <span class="action-btn-label">新增员工</span>
-                    </button>
-                    <button class="action-btn" onclick="showBatchImportEmpModal()" title="批量导入">
-                        <span class="action-btn-icon">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M9 16h6v-6h4l-7-7-7 7h4zm-4 2h14v2H5z"/></svg>
-                        </span>
-                        <span class="action-btn-label">批量导入</span>
-                    </button>
-                    <button class="action-btn" onclick="exportEmployees()" title="导出 CSV">
-                        <span class="action-btn-icon">
-                            <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><path d="M19 9h-4V3H9v6H5l7 7 7-7zM5 18v2h14v-2H5z"/></svg>
-                        </span>
-                        <span class="action-btn-label">导出</span>
-                    </button>
-                </div>
-                <div class="toolbar">
-                    <div class="toolbar-left">
+                <div class="filter-strip">
+                    <div class="filter-group">
                         <input type="text" id="filter-emp-name" class="filter-input-sm" placeholder="姓名">
                         <select id="filter-emp-dept">
                             <option value="">全部部门</option>
@@ -6602,7 +6600,7 @@ if (intval($countBt) === 0) {
                             <option value="离职">离职</option>
                         </select>
                     </div>
-                    <div class="toolbar-right" style="margin-left:auto;">
+                    <div class="filter-search">
                         <input type="text" id="search-emp" placeholder="搜索姓名/电话..." onkeyup="debounceSearch('emp')">
                         <button class="btn btn-primary btn-sm" onclick="loadEmployees()">搜索</button>
                     </div>
@@ -6610,8 +6608,15 @@ if (intval($countBt) === 0) {
                 <div class="table-wrap">
                     <table id="table-employees">
                         <thead><tr>
-                            <th width="40"><input type="checkbox" id="select-all-emp" onchange="toggleSelectAll('emp')"></th>
-                            <th>姓名</th><th>电话</th><th>部门</th><th>岗位</th><th>入职日期</th><th>状态</th><th>是否教师</th><th>创建时间</th><th width="180">操作</th>
+                            <th class="col-check"><input type="checkbox" id="select-all-emp" onchange="toggleSelectAll('emp')"></th>
+                            <th class="col-name">姓名</th>
+                            <th class="col-phone">电话</th>
+                            <th class="col-dept">部门</th>
+                            <th class="col-position">岗位</th>
+                            <th class="col-date">入职日期</th>
+                            <th class="col-status">状态</th>
+                            <th class="col-teacher">是否教师</th>
+                            <th class="col-actions">操作</th>
                         </tr></thead>
                         <tbody></tbody>
                     </table>

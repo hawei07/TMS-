@@ -12077,3 +12077,213 @@ tbody td {
     .searchable-menu-item { transition: none; }
     .searchable-input { transition: none; }
 }
+
+
+/* ===== 员工名册 redesign (Soft Industrial) ===== */
+.panel-actions {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.panel-actions .action-btn {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 6px 14px;
+    background: oklch(0.97 0.01 280);
+    border: 1px solid oklch(0.88 0.02 280);
+    border-radius: 6px;
+    color: oklch(0.35 0.04 280);
+    font-size: 13px;
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.panel-actions .action-btn:hover {
+    background: oklch(0.92 0.03 280);
+    border-color: oklch(0.78 0.05 280);
+}
+
+.panel-actions .action-btn-icon {
+    display: flex;
+    align-items: center;
+}
+
+.panel-actions .action-btn-label {
+    font-weight: 500;
+}
+
+/* filter strip */
+.filter-strip {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px 0 8px;
+    flex-wrap: wrap;
+}
+
+.filter-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex: 1;
+}
+
+.filter-group .filter-input-sm {
+    width: 100px;
+    padding: 5px 10px;
+    border: 1px solid oklch(0.85 0.02 280);
+    border-radius: 5px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.filter-group .filter-input-sm:focus {
+    border-color: oklch(0.55 0.15 280);
+}
+
+.filter-group select {
+    padding: 5px 10px;
+    border: 1px solid oklch(0.85 0.02 280);
+    border-radius: 5px;
+    font-size: 13px;
+    outline: none;
+    background: #fff;
+    cursor: pointer;
+}
+
+.filter-search {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    margin-left: auto;
+}
+
+.filter-search input {
+    width: 180px;
+    padding: 5px 10px;
+    border: 1px solid oklch(0.85 0.02 280);
+    border-radius: 5px;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+}
+
+.filter-search input:focus {
+    border-color: oklch(0.55 0.15 280);
+}
+
+/* table columns */
+#table-employees .col-check { width: 40px; }
+#table-employees .col-name { width: 80px; }
+#table-employees .col-phone { width: 120px; }
+#table-employees .col-dept { width: 100px; }
+#table-employees .col-position { width: 100px; }
+#table-employees .col-date { width: 100px; }
+#table-employees .col-status { width: 80px; }
+#table-employees .col-teacher { width: 90px; }
+#table-employees .col-actions { width: 140px; }
+
+#table-employees td {
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+/* status badge */
+.status-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    white-space: nowrap;
+}
+
+.status-badge::before {
+    content: '';
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    flex-shrink: 0;
+}
+
+.status-active {
+    background: oklch(0.94 0.04 140);
+    color: oklch(0.35 0.08 140);
+}
+
+.status-active::before {
+    background: oklch(0.50 0.15 140);
+}
+
+.status-inactive {
+    background: oklch(0.94 0.01 280);
+    color: oklch(0.40 0.02 280);
+}
+
+.status-inactive::before {
+    background: oklch(0.50 0.03 280);
+}
+
+/* teacher badge */
+.badge-teacher {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    background: oklch(0.92 0.06 50);
+    color: oklch(0.40 0.10 50);
+    white-space: nowrap;
+}
+
+.badge-not-teacher {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    padding: 3px 10px;
+    border-radius: 12px;
+    font-size: 12px;
+    font-weight: 500;
+    background: oklch(0.95 0.01 280);
+    color: oklch(0.45 0.02 280);
+    white-space: nowrap;
+}
+
+/* compact button row in table */
+.btn-row {
+    display: flex;
+    gap: 6px;
+}
+
+.btn-row .btn-xs {
+    padding: 3px 8px;
+    font-size: 12px;
+    border-radius: 4px;
+    border: 1px solid oklch(0.85 0.02 280);
+    background: #fff;
+    color: oklch(0.45 0.04 280);
+    cursor: pointer;
+    transition: all 0.15s;
+}
+
+.btn-row .btn-xs:hover {
+    background: oklch(0.96 0.02 280);
+    border-color: oklch(0.70 0.05 280);
+}
+
+.btn-row .btn-xs.btn-danger {
+    color: #e74c3c;
+    border-color: #f5c6cb;
+}
+
+.btn-row .btn-xs.btn-danger:hover {
+    background: #fef0f0;
+}

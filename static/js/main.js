@@ -2448,28 +2448,32 @@ function populateEmpDeptFilter(rows) {
 function renderEmpTable(rows) {
     const tbody = document.querySelector('#table-employees tbody');
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="10" style="text-align:center;color:#999;padding:30px;">暂无员工数据，请点击"新增员工"添加</td></tr>';
+        tbody.innerHTML = '<tr><td colspan="9" style="text-align:center;color:#999;padding:30px;">暂无员工数据，请点击"新增员工"添加</td></tr>';
         return;
     }
-    tbody.innerHTML = rows.map(r => `
+    tbody.innerHTML = rows.map(r => {
+        const statusClass = r.status === '在职' ? 'status-active' : 'status-inactive';
+        const teacherHtml = r.is_teacher === '是'
+            ? '<span class="badge-teacher">是</span>'
+            : '<span class="badge-not-teacher">否</span>';
+        return `
         <tr>
-            <td><input type="checkbox" class="cb-emp" value="${r.id}"></td>
-            <td>${esc(r.name)}</td>
-            <td>${esc(r.phone)}</td>
-            <td>${esc(r.department)}</td>
-            <td>${esc(r.position)}</td>
-            <td>${esc(r.entry_date)}</td>
-            <td><span class="status-tag ${r.status === '在职' ? 'status-已预约' : 'status-已取消'}">${esc(r.status)}</span></td>
-            <td>${esc(r.is_teacher || '否')}</td>
-            <td>${r.created_at ? r.created_at.slice(0, 16) : ''}</td>
-            <td>
-                <div class="action-btns">
-                    <button class="btn-link" onclick="editEmployee(${r.id})">编辑</button>
-                    <button class="btn-link-danger" onclick="deleteEmployee(${r.id}, '${esc(r.name)}')">删除</button>
+            <td class="col-check"><input type="checkbox" class="cb-emp" value="${r.id}"></td>
+            <td class="col-name">${esc(r.name)}</td>
+            <td class="col-phone">${esc(r.phone)}</td>
+            <td class="col-dept">${esc(r.department)}</td>
+            <td class="col-position">${esc(r.position)}</td>
+            <td class="col-date">${esc(r.entry_date)}</td>
+            <td class="col-status"><span class="status-badge ${statusClass}">${esc(r.status)}</span></td>
+            <td class="col-teacher">${teacherHtml}</td>
+            <td class="col-actions">
+                <div class="btn-row">
+                    <button class="btn-xs" onclick="editEmployee(${r.id})">编辑</button>
+                    <button class="btn-xs" onclick="deleteEmployee(${r.id}, '${esc(r.name)}')">删除</button>
                 </div>
             </td>
         </tr>
-    `).join('');
+    `}).join('');
     document.getElementById('select-all-emp').checked = false;
 }
 
