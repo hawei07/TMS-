@@ -5408,6 +5408,32 @@ json([
 
         // ==================== 活动报名全流程 API ====================
 
+        // 查询学员在某校区的各一级学科剩余课时
+        case 'get_student_subject_hours':
+            $sid = intval($_GET['student_id'] ?? 0);
+            $campus = trim($_GET['campus_name'] ?? '');
+            if ($sid <= 0) json(['error' => '学员ID无效']);
+            if ($campus === '') json(['error' => '请指定校区']);
+            $rows = $db->prepare("
+                SELECT o.subject_level1 AS subject,
+                       SUM(o.lesson_count - o.consumed_lessons - COALESCE(o.transferred_lessons, 0)) AS remaining
+                FROM orders o
+                WHERE o.student_id = :sid
+                  AND o.is_voided = '否'
+                  AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '')
+                  AND o.campus = :campus
+                  AND o.lesson_count > 0
+                GROUP BY o.subject_level1
+                HAVING remaining > 0
+                ORDER BY remaining DESC
+            ");
+            $rows->bindValue(':sid', $sid, PDO::PARAM_INT);
+            $rows->bindValue(':campus', $campus, PDO::PARAM_STR);
+            $rows->execute();
+            $result = $rows->fetchAll(PDO::FETCH_ASSOC);
+            json(['data' => $result]);
+            break;
+
         // 活动报名支付
         case 'pay_activity_enroll':
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
@@ -5480,6 +5506,7 @@ json([
             $paymentTonglian = round(floatval($input['payment_tonglian'] ?? 0), 2);
             $paymentZhishouyin = round(floatval($input['payment_zhishouyin'] ?? 0), 2);
             $paymentDouyin = round(floatval($input['payment_douyin'] ?? 0), 2);
+            $attendanceSubject = trim($input['attendance_subject'] ?? '');
 
             if (abs($paymentCash + $paymentMeituan + $balanceAmount + $paymentOnline + $paymentTonglian + $paymentZhishouyin + $paymentDouyin - $totalPrice) > 0.01) {
                 json(['error' => '支付金额合计（' . ($paymentCash + $paymentMeituan + $balanceAmount + $paymentOnline + $paymentTonglian + $paymentZhishouyin + $paymentDouyin) . '）与订单总额（' . $totalPrice . '）不一致']);
@@ -5535,7 +5562,8 @@ json([
                 coupon_name, coupon_amount,
                 teaching_aid_name, teaching_aid_price,
                 product_coupon_name, product_coupon_amount,
-                gifted_lessons, consumed_lessons, refund_status
+                gifted_lessons, consumed_lessons, refund_status,
+                activity_attendance_subject
             ) VALUES (
                 :sid, 0, '', '', 0,
                 :ap, :ca, :ma, :aa,
@@ -5550,7 +5578,8 @@ json([
                 '', 0,
                 '', 0,
                 '', 0,
-                0, 0, '正常'
+                0, 0, '正常',
+                :attsub
             )");
             $insStmt->bindValue(':sid', $studentId, PDO::PARAM_INT);
             $insStmt->bindValue(':ap', $totalPrice);
@@ -5576,6 +5605,7 @@ json([
             $insStmt->bindValue(':aft', $feeType, PDO::PARAM_STR);
             $insStmt->bindValue(':ct', $n, PDO::PARAM_STR);
             $insStmt->bindValue(':pat', $n, PDO::PARAM_STR);
+            $insStmt->bindValue(':attsub', $attendanceSubject, PDO::PARAM_STR);
             $insStmt->execute();
             $newOrderId = $db->lastInsertId();
 
@@ -7705,6 +7735,23 @@ if (intval($countBt) === 0) {
                                 <span class="activity-total-amount" id="activity-total-amount">¥0.00</span>
                             </div>
                             <div class="activity-capacity-hint" id="activity-capacity-hint" style="display:none;"></div>
+                        </div>
+
+                        <!-- Step 2.5: 剩余课时 & 考勤学科提示 -->
+                        <div class="enroll-section enroll-step" id="enroll-activity-step-subject" style="display:none;">
+                            <div class="enroll-section-title">
+                                <span class="enroll-step-num">2.5</span> 剩余课时 & 考勤学科提示
+                            </div>
+                            <div id="activity-subject-hours" style="margin-bottom:12px;">
+                                <div style="text-align:center;color:#999;padding:8px;">加载中...</div>
+                            </div>
+                            <div id="activity-attendance-subject-row" style="display:flex;align-items:center;gap:12px;">
+                                <label style="white-space:nowrap;color:#666;font-size:14px;">考勤学科提示：</label>
+                                <select id="activity-attendance-subject" class="ta-filter-input" style="flex:1;">
+                                    <option value="">不指定（考勤时手动选择）</option>
+                                </select>
+                                <span style="font-size:12px;color:#999;">仅作提示，不强制使用该学科课时考勤</span>
+                            </div>
                         </div>
 
                         <!-- Step 3: 确认支付（复用现有支付 UI） -->

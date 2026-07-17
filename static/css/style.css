@@ -8955,22 +8955,22 @@ tbody td {
     min-height: 56px;
 }
 .activity-campus-card:hover {
-    border-color: #74B9FF;
-    color: #74B9FF;
+    border-color: var(--color-primary-light);
+    color: var(--color-primary-light);
     transform: translateY(-1px);
 }
 .activity-campus-card.selected {
-    border-color: #74B9FF;
-    background: #F0F7FF;
-    color: #74B9FF;
-    box-shadow: 0 2px 12px rgba(116,185,255,0.18);
+    border-color: var(--color-primary-light);
+    background: var(--color-primary-bg);
+    color: var(--color-primary-light);
+    box-shadow: 0 2px 12px rgba(124,58,237,0.18);
 }
 .activity-campus-card .campus-icon {
     color: #bbb;
     transition: color 0.2s;
 }
 .activity-campus-card.selected .campus-icon {
-    color: #74B9FF;
+    color: var(--color-primary-light);
 }
 .activity-campus-empty {
     text-align: center;
@@ -9004,7 +9004,7 @@ tbody td {
     background: #fff;
 }
 .ta-filter-input:focus {
-    border-color: #FFE066;
+    border-color: var(--color-primary-light);
 }
 
 /* ==================== 活动 — 活动卡片列表 ==================== */
@@ -9034,21 +9034,21 @@ tbody td {
     bottom: 0;
     width: 4px;
     border-radius: 14px 0 0 14px;
-    background: #e5e7eb;
+    background: var(--color-border);
     transition: all 0.25s;
 }
-.activity-card:nth-child(4n+1)::before { background: #FFE066; }
-.activity-card:nth-child(4n+2)::before { background: #FF7675; }
-.activity-card:nth-child(4n+3)::before { background: #74B9FF; }
-.activity-card:nth-child(4n+4)::before { background: #55EFC4; }
+.activity-card:nth-child(4n+1)::before { background: var(--color-primary); }
+.activity-card:nth-child(4n+2)::before { background: var(--color-primary-dark); }
+.activity-card:nth-child(4n+3)::before { background: var(--color-primary-light); }
+.activity-card:nth-child(4n+4)::before { background: #C4B5FD; }
 .activity-card:hover {
-    border-color: #FFE066;
-    box-shadow: 0 4px 16px rgba(255,224,102,0.12);
+    border-color: var(--color-primary-light);
+    box-shadow: 0 4px 16px rgba(124,58,237,0.12);
     transform: translateX(2px);
 }
 .activity-card.selected {
-    border-color: #FF7675;
-    background: #FFF0F0;
+    border-color: var(--color-primary);
+    background: var(--color-primary-bg);
 }
 .activity-card-main {
     flex: 1;
@@ -9090,22 +9090,22 @@ tbody td {
 .activity-card-fee-price {
     font-size: 16px;
     font-weight: 700;
-    color: #FF7675;
+    color: var(--color-primary-dark);
     font-variant-numeric: tabular-nums;
 }
 .activity-card-fee-mode {
     font-size: 10px;
     padding: 1px 6px;
     border-radius: 4px;
-    background: #FFF9E0;
-    color: #b8860b;
+    background: var(--color-primary-bg);
+    color: var(--color-primary-dark);
 }
 .activity-card-arrow {
-    color: #ccc;
+    color: var(--color-text-muted);
     flex-shrink: 0;
 }
 .activity-card.selected .activity-card-arrow {
-    color: #FF7675;
+    color: var(--color-primary);
 }
 .activity-card-empty {
     text-align: center;
@@ -9124,14 +9124,14 @@ tbody td {
     display: flex;
     align-items: center;
     gap: 12px;
-    padding: 14px 18px;
+    padding: 10px 16px;
     background: #fafbfc;
-    border: 2px solid #e8ecf1;
+    border: 2px solid var(--color-border);
     border-radius: 12px;
     transition: border-color 0.2s;
 }
 .activity-count-row:focus-within {
-    border-color: #FFE066;
+    border-color: var(--color-primary-light);
 }
 .activity-count-label {
     display: flex;
@@ -9159,7 +9159,7 @@ tbody td {
     white-space: nowrap;
 }
 .activity-count-input {
-    width: 64px;
+    width: 56px;
     padding: 6px 10px;
     border: 2px solid #e8ecf1;
     border-radius: 10px;
@@ -9171,7 +9171,7 @@ tbody td {
     transition: border-color 0.2s;
 }
 .activity-count-input:focus {
-    border-color: #FFE066;
+    border-color: var(--color-primary-light);
 }
 .activity-count-unit {
     font-size: 13px;
@@ -9180,7 +9180,7 @@ tbody td {
 .activity-count-subtotal {
     font-size: 16px;
     font-weight: 700;
-    color: #FF7675;
+    color: var(--color-primary);
     font-variant-numeric: tabular-nums;
     margin-left: auto;
 }
@@ -9191,11 +9191,11 @@ tbody td {
     gap: 8px;
     padding: 10px 16px;
     margin-top: 10px;
-    background: #FFF9E0;
-    border: 2px solid #FFE066;
+    background: var(--color-primary-bg);
+    border: 2px solid var(--color-primary-light);
     border-radius: 10px;
     font-size: 13px;
-    color: #b8860b;
+    color: var(--color-primary-dark);
 }
 /* 合计栏 */
 .activity-total-bar {
@@ -9204,8 +9204,8 @@ tbody td {
     align-items: center;
     padding: 16px 20px;
     margin-top: 16px;
-    background: #FFF0F0;
-    border: 2px solid #FF7675;
+    background: var(--color-primary-bg);
+    border: 2px solid var(--color-primary);
     border-radius: 12px;
 }
 .activity-total-label {
@@ -9216,7 +9216,7 @@ tbody td {
 .activity-total-amount {
     font-size: 24px;
     font-weight: 800;
-    color: #FF7675;
+    color: var(--color-primary);
     font-variant-numeric: tabular-nums;
 }
 /* 容量提示 */
@@ -9244,8 +9244,8 @@ tbody td {
     width: 26px;
     height: 26px;
     border-radius: 50%;
-    background: #FFE066;
-    color: #555;
+    background: var(--color-primary-bg);
+    color: var(--color-primary);
     font-size: 13px;
     font-weight: 700;
     margin-right: 8px;
@@ -9254,7 +9254,7 @@ tbody td {
 
 /* 活动流程专属按钮 */
 .btn-activity-next {
-    background: #FF7675;
+    background: var(--color-primary);
     color: #fff;
     border: none;
     padding: 10px 24px;
@@ -9264,21 +9264,21 @@ tbody td {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    box-shadow: 0 2px 10px rgba(255,118,117,0.3);
+    box-shadow: 0 2px 10px rgba(124,58,237,0.3);
     transition: all 0.2s;
     cursor: pointer;
 }
 .btn-activity-next:hover {
-    background: #ff5e5d;
-    box-shadow: 0 4px 16px rgba(255,118,117,0.4);
+    background: var(--color-primary-dark);
+    box-shadow: 0 4px 16px rgba(124,58,237,0.4);
     transform: translateY(-1px);
 }
 .btn-activity-next:active {
     transform: scale(0.97);
 }
 .btn-activity-confirm {
-    background: #55EFC4;
-    color: #333;
+    background: var(--color-primary-dark);
+    color: #fff;
     border: none;
     padding: 10px 24px;
     font-size: 14px;
@@ -9287,12 +9287,12 @@ tbody td {
     display: inline-flex;
     align-items: center;
     gap: 8px;
-    box-shadow: 0 2px 10px rgba(85,239,196,0.3);
+    box-shadow: 0 2px 10px rgba(109,40,217,0.3);
     transition: all 0.2s;
     cursor: pointer;
 }
 .btn-activity-confirm:hover {
-    box-shadow: 0 4px 16px rgba(85,239,196,0.4);
+    box-shadow: 0 4px 16px rgba(109,40,217,0.4);
     transform: translateY(-1px);
 }
 
@@ -12286,4 +12286,37 @@ tbody td {
 
 .btn-row .btn-xs.btn-danger:hover {
     background: #fef0f0;
+}
+
+
+/* ==================== 活动报名 — 紧凑布局优化 ==================== */
+
+/* 校区选择框 */
+#enroll-common-campus select,
+#enroll-common-campus .form-group select,
+#enroll-campus-select {
+    max-width: 280px;
+    width: auto;
+}
+
+/* 活动搜索栏 — 学科下拉 */
+.activity-search-bar .ta-filter-input {
+    max-width: 220px;
+    width: auto;
+    border: 2px solid var(--color-border);
+}
+#activity-search-input {
+    max-width: 260px;
+}
+
+/* Step 2.5 剩余课时区域 */
+#enroll-activity-step-subject {
+    padding: 16px 28px;
+}
+#activity-attendance-subject-row {
+    flex-wrap: wrap;
+}
+#activity-attendance-subject-row select {
+    max-width: 220px;
+    width: auto;
 }
