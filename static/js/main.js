@@ -201,7 +201,7 @@ function refreshPanel(panelId) {
         case 'panel-students': initStudentCampusFilter(); loadStudents(); break;
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-schedule-view'); break;
-        case 'panel-work-records': initRefundCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
+        case 'panel-work-records': initRefundCampusFilter(); initCourseTransferCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
         case 'panel-discounts': initCouponTabs(); loadDiscountPlans(); break;
         case 'panel-cashflow': initCashflowDateRange(); loadCashflow(); break;
         case 'panel-revenue': initRevenueDateRange(); loadRevenue(); break;
@@ -6349,7 +6349,7 @@ function renderStudentCoursesTable(rows) {
         <div class="table-scroll-top"><div class="table-scroll-top-inner"></div></div>
         <div class="table-scroll-body">
             <table id="table-student-courses"><thead><tr>
-        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>报读课时</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>剩余课时</th><th>剩余金额</th><th>教材包</th><th>教材包金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
+        <th>课程名称</th><th>校区</th><th>一级学科</th><th>二级学科</th><th>价格方案</th><th>报价单</th><th>报读课时</th><th>实际价格</th><th>已消耗课时</th><th>已消耗金额</th><th>已退课时</th><th>转出课时</th><th>剩余课时</th><th>剩余金额</th><th>教材包</th><th>教材包金额</th><th>报名时间</th><th>子订单号</th><th>状态</th><th>操作</th>
     </tr></thead><tbody>
     ${rows.map(r => {
         const refundStatus = (r.refund_status || '正常');
@@ -6372,9 +6372,29 @@ function renderStudentCoursesTable(rows) {
         const remainingGt0 = (parseInt(r.remaining_lessons) || 0) > 0;
         const hasOrderId = (parseInt(r.order_id) || 0) > 0;
         const isTransferCourse = !!(r.transfer_id);
+        const isCourseTransfer = !!(r.is_transfer_course);
+        // 操作按钮 - 转课按钮（始终显示，条件：剩余课时>0 且正常状态）
+        let transferBtnHtml = '';
+        if (remainingGt0 && !isGifted && refundStatus === '正常' && hasOrderId && !isTransferCourse) {
+            transferBtnHtml = `<button class="btn-transfer" onclick="showCourseTransferModal(${r.order_id})" style="margin-right:4px;">转课</button>`;
+        } else if (remainingGt0 && !isGifted && isCourseTransfer) {
+            transferBtnHtml = `<button class="btn-transfer" onclick="showCourseTransferModal(0, ${r.transfer_record_id})" style="margin-right:4px;">转课</button>`;
+        }
         // 操作按钮
         let optHtml = '';
-        if (isTransferCourse) {
+        if (isCourseTransfer) {
+            const consumed = parseInt(r.consumed_lessons) || 0;
+            if (consumed === 0 && refundStatus === '正常') {
+                optHtml = transferBtnHtml + `<button class="btn btn-sm" style="color:#e74c3c;border:1px solid #e74c3c;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:4px;" onclick="revokeCourseTransfer(${r.transfer_record_id})">撤销转课</button>`;
+                if (remainingGt0) {
+                    optHtml += `<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(0, 0, ${r.transfer_record_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+                }
+            } else if (remainingGt0) {
+                optHtml = `${transferBtnHtml}<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(0, 0, ${r.transfer_record_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+            } else {
+                optHtml = '<span style="color:#0D9488;font-size:12px;">转课课程</span>';
+            }
+        } else if (isTransferCourse) {
             if (refundStatus === '退费申请中') {
                 optHtml = '<span style="color:#999;font-size:12px;">审批中（转校课包）</span>';
             } else if (refundStatus === '已退费') {
@@ -6387,15 +6407,15 @@ function renderStudentCoursesTable(rows) {
             }
         } else if (transferred > 0) {
             if (remainingGt0 && !isGifted && refundStatus === '正常') {
-                optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">转校</button>`;
+                optHtml = `${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">转校</button>`;
             } else {
                 optHtml = '<span style="color:#999;font-size:12px;">已转校</span>';
             }
         } else if (remainingGt0 && !isGifted && refundStatus === '正常' && hasOrderId) {
-            optHtml = `<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
+            optHtml = `${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
 <button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
         } else if (hasRemaining && !isTransferCourse) {
-            optHtml = `<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+            optHtml = `${transferBtnHtml}<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
         } else if (refundStatus === '退费申请中') {
             optHtml = '<span style="color:#999;font-size:12px;">审批中</span>';
         } else if (refundStatus === '已退费') {
@@ -6410,7 +6430,14 @@ function renderStudentCoursesTable(rows) {
             const paidRow = allRows.find(rr => rr.order_id === r.order_id && !(rr.actual_price === 0 && rr.lesson_count > 0 && (rr.item_name || '').includes('（赠送）')));
             paidLessonCount = paidRow ? (parseInt(paidRow.lesson_count) || 0) : 0;
         }
-        return `<tr>
+        // 剩余课时 = 0 时添加 row-depleted
+        const remaining = parseInt(r.remaining_lessons) || 0;
+        const lcForDepleted = parseInt(r.lesson_count) || 0;
+        const rowClass = (remaining === 0 && lcForDepleted > 0 && refundStatus === '正常') ? ' class="row-depleted"' : '';
+        // 转出课时显示
+        const transferredOut = parseInt(r.transferred_lessons) || 0;
+        const transferredHtml = transferredOut > 0 ? `<span class="col-transferred">${transferredOut}</span>` : '<span style="color:#ccc;">-</span>';
+        return `<tr${rowClass}>
         <td>${esc(r.name)}</td>
         <td>${esc(r.campus || '-')}</td>
         <td>${esc(r.subject_level1) || '-'}</td><td>${esc(r.subject_level2) || '-'}</td>
@@ -6421,6 +6448,7 @@ function renderStudentCoursesTable(rows) {
         <td>${r.consumed_lessons != null ? `<a href="javascript:void(0)" onclick="showConsumptionDetail(${r.order_id}, ${r.id}, '${esc(r.name).replace(/'/g, "\\'")}', ${isGifted}, ${paidLessonCount})" style="color:#1677ff;text-decoration:underline;cursor:pointer;">${r.consumed_lessons}</a>` : 0}</td>
         <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.refunded_lessons || 0}</td>
+        <td>${transferredHtml}</td>
         <td>${r.remaining_lessons != null ? r.remaining_lessons : (r.lesson_count || 0)}</td>
         <td>${r.remaining_amount != null ? '¥' + Number(r.remaining_amount).toFixed(2) : '¥0.00'}</td>
         <td>${esc(r.teaching_aid_name || '-')}</td>
@@ -9146,7 +9174,7 @@ async function showClassEnrollModal(studentId) {
             }
             return `<tr>
                 <td>${esc(c.name)}</td>
-                <td>${esc(c.name || '')}</td>
+                <td>${esc(c.course_name || '-')}</td>
                 <td>${esc(c.class_type || '')}</td>
                 <td>${esc(c.campus || '')}</td>
                 <td>${c.enrollable ? '<span style="color:#27ae60;">可分入</span>（剩余课时：' + c.remaining + '）' : '<span style="color:#e74c3c;">不可分入</span>'}</td>
@@ -9824,12 +9852,366 @@ function initWorkRecordTabs() {
             if (targetId === 'tab-refund-records') {
                 refundPage = 1;
                 loadRefundRecords();
+            } else if (targetId === 'tab-course-transfer-records') {
+                courseTransferPage = 1;
+                loadCourseTransferRecords();
             } else if (targetId === 'tab-transfer-records') {
                 transferPage = 1;
                 loadTransferRecords();
             }
         });
     });
+}
+
+// ==================== 转课记录（工作记录面板） ====================
+let courseTransferPage = 1;
+let courseTransferPageSize = 20;
+
+/**
+ * 加载转课记录列表
+ */
+async function loadCourseTransferRecords(page) {
+    if (page) courseTransferPage = page;
+    const campus = (document.getElementById('filter-ctr-campus')?.value || '').trim();
+    const student = (document.getElementById('filter-ctr-student')?.value || '').trim();
+    const dateFrom = document.getElementById('filter-ctr-date-from')?.value || '';
+    const dateTo = document.getElementById('filter-ctr-date-to')?.value || '';
+    const status = document.getElementById('filter-ctr-status')?.value || '';
+    const params = {
+        campus: campus,
+        keyword: student,
+        date_from: dateFrom,
+        date_to: dateTo,
+        status: status,
+        page: courseTransferPage,
+        page_size: courseTransferPageSize
+    };
+    try {
+        const data = await api('list_course_transfer_records', params, 'GET');
+        renderCourseTransferRecordsTable(data);
+    } catch (e) {
+        showToast('加载转课记录失败', 'error');
+    }
+}
+
+/**
+ * 渲染转课记录表格
+ */
+function renderCourseTransferRecordsTable(data) {
+    const tbody = document.querySelector('#table-course-transfer-records tbody');
+    if (!tbody) return;
+    const rows = data.data || [];
+    if (rows.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="14" style="text-align:center;color:#999;padding:30px;">暂无转课记录</td></tr>';
+    } else {
+        tbody.innerHTML = rows.map(r => {
+            const cross = (parseInt(r.is_cross_subject) || 0) ? '<span style="color:#e67e22;font-weight:600;">是</span>' : '否';
+            const stat = r.status === '正常'
+                ? '<span style="color:#27ae60;">正常</span>'
+                : '<span style="color:#999;">已撤销</span>';
+            const action = r.status === '正常'
+                ? `<button class="btn btn-sm" style="color:#e74c3c;border:1px solid #e74c3c;padding:2px 8px;border-radius:4px;cursor:pointer;" onclick="revokeCourseTransfer(${r.id})">撤销</button>`
+                : '<span style="color:#999;">已撤销</span>';
+            const createdAt = r.created_at ? r.created_at.slice(0, 16) : '';
+            return `<tr>
+                <td>${esc(r.student_name || '-')}</td>
+                <td>${esc(r.student_phone || '-')}</td>
+                <td>${esc(r.student_no || '-')}</td>
+                <td>${esc(r.campus || '-')}</td>
+                <td>${esc(r.source_course_name || '-')}</td>
+                <td>${r.transfer_lessons || 0}</td>
+                <td>¥${Number(r.transfer_value || 0).toFixed(2)}</td>
+                <td>${esc(r.target_course_name || '-')}</td>
+                <td>${r.target_lessons || 0}</td>
+                <td>¥${Number(r.target_value || 0).toFixed(2)}</td>
+                <td>${cross}</td>
+                <td>${createdAt}</td>
+                <td>${stat}</td>
+                <td style="white-space:nowrap;">${action}</td>
+            </tr>`;
+        }).join('');
+    }
+    // 分页
+    const pag = document.getElementById('pagination-course-transfer-records');
+    if (pag) {
+        const total = data.total || 0;
+        const page = data.page || 1;
+        const pageSize = data.page_size || 20;
+        const totalPages = Math.ceil(total / pageSize);
+        if (totalPages <= 1) {
+            pag.innerHTML = '';
+        } else {
+            let html = '';
+            for (let i = 1; i <= totalPages; i++) {
+                html += `<button${i === page ? ' class="active"' : ''} onclick="loadCourseTransferRecords(${i})">${i}</button>`;
+            }
+            pag.innerHTML = html;
+        }
+    }
+}
+
+/**
+ * 撤销转课记录
+ */
+function revokeCourseTransfer(recordId) {
+    showCustomConfirm('确认撤销该转课记录？撤销后将恢复源课程课时。', async function() {
+        try {
+            const res = await fetch(API_BASE + 'revoke_course_transfer', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ record_id: recordId })
+            });
+            const data = await res.json();
+            if (data.success) {
+                showToast('转课记录已撤销');
+                loadCourseTransferRecords();
+                // 如果有当前查看的学员，刷新课程列表
+                if (typeof currentViewStudentId !== 'undefined' && currentViewStudentId) {
+                    loadStudentCourses(currentViewStudentId);
+                }
+            } else {
+                showToast(data.message || '撤销失败', 'error');
+            }
+        } catch (e) {
+            showToast('网络错误', 'error');
+        }
+    });
+}
+
+/**
+ * 填充转课记录校区筛选下拉
+ */
+async function initCourseTransferCampusFilter() {
+    const sel = document.getElementById('filter-ctr-campus');
+    if (!sel) return;
+    try {
+        const data = await api('list_campuses', null, 'GET');
+        const campuses = data.data || [];
+        sel.innerHTML = '<option value="">全部校区</option>' +
+            campuses.map(c => `<option value="${esc(c.name || c)}">${esc(c.name || c)}</option>`).join('');
+    } catch (e) { /* ignore */ }
+}
+
+// ==================== 转课弹窗 ====================
+let courseTransferSourceOrder = null;
+let courseTransferTargetCourseId = null;
+let courseTransferIsCrossSubject = false;
+
+/**
+ * 显示转课弹窗
+ */
+async function showCourseTransferModal(orderId, transferRecordId) {
+    let sourceRow;
+    if (transferRecordId) {
+        // 转课虚拟行：从 course_transfer_records 获取源数据
+        sourceRow = studentCoursesAllRows.find(r => r.is_transfer_course && r.transfer_record_id == transferRecordId);
+    } else {
+        sourceRow = studentCoursesAllRows.find(r => r.order_id == orderId && !((r.item_name || '').includes('（赠送）')));
+    }
+    if (!sourceRow) {
+        showToast('未找到源课程数据', 'error');
+        return;
+    }
+    courseTransferSourceOrder = sourceRow;
+
+    const campus = sourceRow.campus || '';
+    const sourceCourseId = sourceRow.id;
+    const remaining = parseInt(sourceRow.remaining_lessons) || 0;
+    const ap = parseFloat(sourceRow.actual_price) || 0;
+    const lc = parseInt(sourceRow.lesson_count) || 1;
+    const unitValue = lc > 0 ? (ap / lc) : 0;
+
+    // 收集已报读的课程ID（用于排除）
+    const enrolledCourseIds = new Set();
+    studentCoursesAllRows.forEach(r => {
+        if (r.id > 0) enrolledCourseIds.add(r.id);
+    });
+    enrolledCourseIds.add(sourceCourseId); // 也排除源课程
+
+    // 调用新 API 获取该校区所有可用课程
+    let targetCourses = [];
+    try {
+        const resp = await fetch(API_BASE + 'get_campus_courses&campus=' + encodeURIComponent(campus) + '&exclude_ids=' + Array.from(enrolledCourseIds).join(','));
+        const d = await resp.json();
+        targetCourses = d.data || [];
+    } catch(e) {
+        showToast('加载目标课程失败', 'error');
+        return;
+    }
+
+    const targetOptions = targetCourses.map(r => {
+        const crossSubject = (r.subject_level1 || '') !== (sourceRow.subject_level1 || '');
+        return `<option value="${r.id}" data-cross="${crossSubject ? '1' : '0'}">${esc(r.name)} - ${esc(r.subject_level1 || '-')}${crossSubject ? ' (跨学科)' : ' (新报)'}</option>`;
+    }).join('');
+
+    if (targetCourses.length === 0) {
+        showToast('该校区暂无其他可用课程', 'warn');
+        return;
+    }
+
+    const existing = document.querySelector('#modal-course-transfer-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'modal-overlay';
+    overlay.id = 'modal-course-transfer-overlay';
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+        <div class="modal-content modal-course-transfer">
+            <h3>转课 - <span id="ct-source-course-name">${esc(sourceRow.name)}</span></h3>
+            <div id="ct-source-info" style="margin-bottom:12px;padding:8px 12px;background:#f7f8fa;border-radius:6px;font-size:13px;">
+                校区：<span id="ct-campus">${esc(campus)}</span> | 剩余课时：<span id="ct-remaining">${remaining}</span> | 单课时价值：<strong id="ct-unit-value">¥${unitValue.toFixed(2)}</strong>
+            </div>
+
+            <label>转出课时数：</label>
+            <input type="number" id="ct-transfer-lessons" min="2" max="${remaining}" value="2" step="2" oninput="updateTransferPreview()" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;margin-top:4px;">
+            <div style="margin-top:4px;font-size:13px;">转出价值：<strong id="ct-transfer-value">¥${unitValue.toFixed(2)}</strong></div>
+
+            <label>目标课程：</label>
+            <select id="ct-target-course" onchange="onTargetCourseChange()" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;margin-top:4px;">
+                <option value="">请选择目标课程</option>
+                ${targetOptions}
+            </select>
+
+            <div id="ct-cross-section" style="display:none;margin-top:8px;">
+                <label>转入课时数（跨学科可编辑）：</label>
+                <input type="number" id="ct-target-lessons" min="2" step="2" value="2" oninput="updateTransferPreview()" style="width:100%;padding:8px;border:1px solid #d9d9d9;border-radius:6px;margin-top:4px;">
+                <div style="margin-top:4px;font-size:13px;">转入价值：<strong id="ct-target-value">¥${unitValue.toFixed(2)}</strong></div>
+            </div>
+
+            <div class="modal-actions" style="margin-top:20px;display:flex;gap:12px;justify-content:flex-end;">
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-course-transfer-overlay').remove()">取消</button>
+                <button class="btn btn-primary" id="btn-submit-transfer" onclick="submitCourseTransfer()">确认转课</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // 默认更新预览
+    updateTransferPreview();
+}
+
+/**
+ * 更新转课预览计算
+ */
+function updateTransferPreview() {
+    const source = courseTransferSourceOrder;
+    if (!source) return;
+    const ap = parseFloat(source.actual_price) || 0;
+    const lc = parseInt(source.lesson_count) || 1;
+    const unitValue = lc > 0 ? (ap / lc) : 0;
+    const transferLessons = parseInt(document.getElementById('ct-transfer-lessons')?.value) || 0;
+    const transferValue = unitValue * transferLessons;
+
+    const transferValueEl = document.getElementById('ct-transfer-value');
+    if (transferValueEl) transferValueEl.textContent = '¥' + transferValue.toFixed(2);
+
+    if (courseTransferIsCrossSubject) {
+        const targetLessons = parseInt(document.getElementById('ct-target-lessons')?.value) || transferLessons;
+        const targetValueEl = document.getElementById('ct-target-value');
+        if (targetValueEl) targetValueEl.textContent = '¥' + transferValue.toFixed(2);
+        // 同步 target_lessons 到 value（确保跨学科时有有效值）
+        if (!document.getElementById('ct-target-lessons')?.value) {
+            const el = document.getElementById('ct-target-lessons');
+            if (el) el.value = transferLessons;
+        }
+    }
+
+    // 限制最大转出课时
+    const remaining = parseInt(source.remaining_lessons) || 0;
+    const input = document.getElementById('ct-transfer-lessons');
+    if (input && transferLessons > remaining) {
+        input.value = remaining;
+        updateTransferPreview();
+    }
+}
+
+/**
+ * 目标课程变更处理
+ */
+function onTargetCourseChange() {
+    const sel = document.getElementById('ct-target-course');
+    if (!sel) return;
+    const selectedOption = sel.options[sel.selectedIndex];
+    const isCross = selectedOption && selectedOption.dataset.cross === '1';
+    courseTransferIsCrossSubject = !!isCross;
+    courseTransferTargetCourseId = sel.value ? parseInt(sel.value) : null;
+
+    const crossSection = document.getElementById('ct-cross-section');
+    if (crossSection) {
+        crossSection.style.display = isCross ? 'block' : 'none';
+    }
+
+    // 跨学科时：target_lessons 默认 = transfer_lessons
+    if (isCross) {
+        const transferLessons = parseInt(document.getElementById('ct-transfer-lessons')?.value) || 2;
+        const targetLessonsEl = document.getElementById('ct-target-lessons');
+        if (targetLessonsEl && !targetLessonsEl.value) {
+            targetLessonsEl.value = transferLessons;
+        }
+    }
+
+    updateTransferPreview();
+}
+
+/**
+ * 提交转课
+ */
+async function submitCourseTransfer() {
+    const source = courseTransferSourceOrder;
+    if (!source) {
+        showToast('请先选择源课程', 'error');
+        return;
+    }
+    if (!courseTransferTargetCourseId) {
+        showToast('请选择目标课程', 'error');
+        return;
+    }
+    const transferLessons = parseInt(document.getElementById('ct-transfer-lessons')?.value) || 0;
+    if (transferLessons <= 0) {
+        showToast('转出课时数必须大于0', 'error');
+        return;
+    }
+    const remaining = parseInt(source.remaining_lessons) || 0;
+    if (transferLessons > remaining) {
+        showToast('转出课时数不能超过剩余课时(' + remaining + ')', 'error');
+        return;
+    }
+
+    const body = {
+        source_order_id: parseInt(source.is_transfer_course ? (source.source_order_id || 0) : source.order_id),
+        target_course_id: courseTransferTargetCourseId,
+        transfer_lessons: transferLessons
+    };
+    if (source.is_transfer_course) {
+        body.transfer_record_id = source.transfer_record_id;
+    }
+    if (courseTransferIsCrossSubject) {
+        body.target_lessons = parseInt(document.getElementById('ct-target-lessons')?.value) || transferLessons;
+    }
+
+    try {
+        const res = await fetch(API_BASE + 'create_course_transfer', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('转课成功');
+            // 关闭弹窗
+            const overlay = document.getElementById('modal-course-transfer-overlay');
+            if (overlay) overlay.remove();
+            // 刷新学员课程列表
+            if (typeof currentViewStudentId !== 'undefined' && currentViewStudentId) {
+                loadStudentCourses(currentViewStudentId);
+            }
+        } else {
+            showToast(data.message || '转课失败', 'error');
+        }
+    } catch (e) {
+        showToast('网络错误，请重试', 'error');
+    }
 }
 
 // ==================== 转校记录（工作记录面板） ====================
@@ -10078,10 +10460,12 @@ async function submitTransfer() {
 let refundApplyRemainingAmount = 0;
 let refundApplyTaPaid = 0;
 
-async function showRefundApplyModal(orderId, transferId = 0) {
+async function showRefundApplyModal(orderId, transferId = 0, courseTransferRecordId = 0) {
     // 从当前学员课程数据中找到目标订单
     let orderRow;
-    if (transferId > 0) {
+    if (courseTransferRecordId > 0) {
+        orderRow = studentCoursesAllRows.find(r => r.is_transfer_course && r.transfer_record_id == courseTransferRecordId);
+    } else if (transferId > 0) {
         orderRow = studentCoursesAllRows.find(r => r.transfer_id == transferId);
     } else {
         orderRow = studentCoursesAllRows.find(r => r.order_id == orderId);
@@ -10119,6 +10503,7 @@ async function showRefundApplyModal(orderId, transferId = 0) {
 
     document.getElementById('refund-apply-order-id').value = orderId;
     document.getElementById('refund-apply-transfer-id').value = transferId;
+    document.getElementById('refund-apply-ctr-id').value = courseTransferRecordId;
     document.getElementById('refund-auto-campus').textContent = orderRow.campus || '-';
     document.getElementById('refund-auto-course').textContent = orderRow.name || '-';
     document.getElementById('refund-auto-total-lessons').textContent = lc;
@@ -10169,6 +10554,7 @@ function onRefundMethodChange() {
 async function submitRefundApply() {
     const orderId = parseInt(document.getElementById('refund-apply-order-id').value) || 0;
     const transferId = parseInt(document.getElementById('refund-apply-transfer-id').value) || 0;
+    const courseTransferRecordId = parseInt(document.getElementById('refund-apply-ctr-id')?.value) || 0;
     if (!orderId && !transferId) { showToast('订单信息错误', 'error'); return; }
     const customDeduction = parseFloat(document.getElementById('refund-custom-deduction').value) || 0;
     const bankName = document.getElementById('refund-bank-name').value.trim();
@@ -10205,6 +10591,9 @@ async function submitRefundApply() {
         };
         if (transferId > 0) {
             body.transfer_id = transferId;
+        } else if (courseTransferRecordId > 0) {
+            body.course_transfer_record_id = courseTransferRecordId;
+            body.order_id = orderId;  // 底层订单ID（用于查找源订单）
         } else {
             body.order_id = orderId;
         }

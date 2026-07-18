@@ -732,7 +732,8 @@ function voidOrder(PDO $db, string $method, array $query, array $input): void
         }
         if ($transferredLessons > 0) {
             $db->rollBack();
-            json(['success' => false, 'message' => '该订单已发生转校，无法作废']);
+            json(['success' => false, 'message' => '该订单已有课时转出（转校/转课），无法作废']);
+            return;
         }
 
         // 检查是否有待审批的转校申请（此时 transferred_lessons 尚未更新）
@@ -743,6 +744,17 @@ function voidOrder(PDO $db, string $method, array $query, array $input): void
         if ((int)$pendingTransfer->fetchColumn() > 0) {
             $db->rollBack();
             json(['success' => false, 'message' => '该订单存在待审批的转校申请，无法作废']);
+        }
+
+        // 检查是否已发生转课（作为源订单）
+        $transferCheck = $db->prepare(
+            "SELECT COUNT(*) FROM course_transfer_records WHERE source_order_id = :oid AND status = '正常'"
+        );
+        $transferCheck->execute([':oid' => $orderId]);
+        if ((int)$transferCheck->fetchColumn() > 0) {
+            $db->rollBack();
+            json(['success' => false, 'message' => '该订单已发生转课，无法作废。请先撤销转课记录', 'error_type' => 'transfer_exists']);
+            return;
         }
 
         $voidStmt = $db->prepare("UPDATE orders SET is_voided = '是' WHERE id = :id");

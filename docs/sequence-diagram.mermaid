@@ -1,0 +1,90 @@
+sequenceDiagram
+    actor User as 用户
+    participant JS as main.js
+    participant API as handleApi()
+    participant H as course_transfers.php
+    participant DB as MySQL
+
+    User->>JS: 点击"转课"按钮，填写弹窗，提交
+    JS->>API: POST ?action=create_course_transfer
+    Note over JS,API: body: {source_order_id, target_course_id, transfer_lessons, [target_lessons]}
+
+    API->>H: dispatchExtractedApi() → createCourseTransfer()
+    H->>DB: SELECT orders WHERE id=source_order_id FOR UPDATE
+    DB-->>H: source order row
+    H->>H: validate: !is_voided, order_type!='活动', refund_status!='已退费'
+    H->>H: remaining = lesson_count - consumed_lessons - transferred_lessons
+    H->>H: validate: 0 < transfer_lessons ≤ remaining
+
+    H->>DB: SELECT courses WHERE id=target_course_id
+    DB-->>H: target course row
+    H->>H: validate: same campus (FIND_IN_SET)
+    H->>H: validate: target_course_id ≠ source_course_id
+
+    H->>DB: SELECT subjects WHERE id IN (source.subject, target.subject)
+    DB-->>H: source/target subject rows
+    H->>H: is_cross = (source.parent_id ≠ target.parent_id)
+
+    H->>H: unit_value = (actual_price - teaching_aid_price + product_coupon_amount) / lesson_count
+    H->>H: transfer_value = unit_value × transfer_lessons
+    alt 同科
+        H->>H: target_lessons = transfer_lessons, target_value = transfer_value
+    else 跨科
+        H->>H: target_lessons = input, target_value = transfer_value
+    end
+
+    H->>DB: BEGIN TRANSACTION
+    H->>DB: UPDATE orders SET transferred_lessons += transfer_lessons WHERE id=source_order_id
+    H->>DB: INSERT INTO orders (student_id, course_id, lesson_count, actual_price, order_type='转课', ...)
+    DB-->>H: new_order_id
+    H->>DB: INSERT INTO course_transfer_records (...)
+    H->>DB: COMMIT
+    H-->>API: json({success:true, record:{...}})
+    JS-->>User: 刷新课程列表
+
+---
+
+sequenceDiagram
+    actor User as 用户
+    participant JS as main.js
+    participant API as handleApi()
+    participant H as course_transfers.php
+    participant DB as MySQL
+
+    User->>JS: 切换到"转课记录"标签页
+    JS->>API: GET ?action=list_course_transfer_records&campus=...&student_id=...&status=...&page=1
+    API->>H: dispatchExtractedApi() → listCourseTransferRecords()
+    H->>DB: SELECT COUNT(*) FROM course_transfer_records WHERE ...
+    H->>DB: SELECT * FROM course_transfer_records WHERE ... ORDER BY id DESC LIMIT ... OFFSET ...
+    DB-->>H: rows
+    H-->>API: json({data:[...], total:N, page:P, page_size:PS})
+    JS-->>User: 渲染表格
+
+---
+
+sequenceDiagram
+    actor User as 用户
+    participant JS as main.js
+    participant API as handleApi()
+    participant H as course_transfers.php
+    participant DB as MySQL
+
+    User->>JS: 点击"撤销"按钮
+    JS->>API: POST ?action=revoke_course_transfer {record_id}
+    API->>H: dispatchExtractedApi() → revokeCourseTransfer()
+
+    H->>DB: SELECT * FROM course_transfer_records WHERE id=record_id FOR UPDATE
+    DB-->>H: record row (status='正常')
+    H->>H: validate: record exists & status='正常'
+
+    H->>DB: SELECT consumed_lessons FROM orders WHERE id=target_order_id FOR UPDATE
+    DB-->>H: target order
+    H->>H: validate: consumed_lessons == 0 (无消耗才可撤销)
+
+    H->>DB: BEGIN TRANSACTION
+    H->>DB: UPDATE orders SET transferred_lessons = transferred_lessons - transfer_lessons WHERE id=source_order_id
+    H->>DB: UPDATE orders SET is_voided='是' WHERE id=target_order_id
+    H->>DB: UPDATE course_transfer_records SET status='已撤销', revoked_at=NOW() WHERE id=record_id
+    H->>DB: COMMIT
+    H-->>API: json({success:true})
+    JS-->>User: 刷新转课记录列表 + 课程列表

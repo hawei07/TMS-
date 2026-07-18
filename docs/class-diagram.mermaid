@@ -1,0 +1,76 @@
+classDiagram
+    class CourseTransferHandler {
+        +createCourseTransfer(PDO $db, string $method, array $query, array $input) void
+        +listCourseTransferRecords(PDO $db, string $method, array $query, array $input) void
+        +revokeCourseTransfer(PDO $db, string $method, array $query, array $input) void
+    }
+
+    class CourseTransferService {
+        +calculateUnitValue(float $actualPrice, float $teachingAidPrice, float $productCouponAmount, int $lessonCount) float
+        +isCrossSubject(PDO $db, int $sourceCourseId, int $targetCourseId) bool
+        +getTargetCourses(PDO $db, int $studentId, int $excludeCourseId, string $campus) array
+        +validateSourceOrder(PDO $db, int $orderId) array
+        +createTargetOrder(PDO $db, array $sourceOrder, array $targetCourse, int $targetLessons, float $targetValue) int
+    }
+
+    class CourseTransferRecord {
+        +int id
+        +int source_order_id
+        +int source_course_id
+        +string source_course_name
+        +int target_order_id
+        +int target_course_id
+        +string target_course_name
+        +int student_id
+        +string campus
+        +int transfer_lessons
+        +float transfer_value
+        +int target_lessons
+        +float target_value
+        +bool is_cross_subject
+        +string order_no
+        +string status
+        +DateTime? revoked_at
+        +DateTime created_at
+    }
+
+    class Order {
+        +int id
+        +int student_id
+        +int course_id
+        +int lesson_count
+        +float actual_price
+        +int consumed_lessons
+        +int transferred_lessons
+        +string campus
+        +string order_type
+        +string is_voided
+        +string refund_status
+        +float teaching_aid_price
+        +float product_coupon_amount
+        +string pay_status
+        +string order_no
+    }
+
+    class Course {
+        +int id
+        +string name
+        +string subject
+        +string campus_permission
+    }
+
+    class Subject {
+        +int id
+        +string name
+        +int parent_id
+    }
+
+    CourseTransferHandler ..> CourseTransferService : uses
+    CourseTransferHandler ..> CourseTransferRecord : reads/writes
+    CourseTransferService ..> Order : reads/updates
+    CourseTransferService ..> Course : reads
+    CourseTransferService ..> Subject : reads
+    CourseTransferRecord --> Order : source_order_id
+    CourseTransferRecord --> Order : target_order_id
+    Order --> Course : course_id
+    Course --> Subject : subject

@@ -12952,3 +12952,88 @@ tbody td {
 .eab-toggler .enroll-type-btn { border: 0 !important; background: transparent !important; padding: 8px 14px !important; border-radius: 6px !important; font-size: 13px !important; height: auto !important; }
 .eab-toggler .enroll-type-btn.active { background: var(--color-surface) !important; color: var(--color-primary) !important; box-shadow: 0 1px 3px rgba(30,27,46,.08); }
 @media (max-width: 640px) { .enroll-student-banner { grid-template-columns: 1fr; gap: 10px; } .esb-chips { width: 100%; } .enroll-action-bar { flex-direction: column; align-items: stretch; } .eab-campus { flex: none; } }
+
+/* ========== 转课功能样式 ========== */
+.row-depleted { background: #f5f5f5; color: #999; }
+.col-transferred { color: #e67e22; font-weight: 600; }
+.btn-transfer {
+    background: #fff;
+    border: 1px solid #d9d9d9;
+    color: #666;
+    padding: 4px 12px;
+    border-radius: 4px;
+    cursor: pointer;
+    font-size: 12px;
+    transition: all 0.2s;
+}
+.btn-transfer:hover {
+    border-color: #7f77dd;
+    color: #7f77dd;
+}
+.modal-course-transfer {
+    width: 520px;
+    max-width: 90vw;
+    padding: 24px;
+    background: #fff;
+    border-radius: 12px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.18);
+}
+.modal-course-transfer h3 {
+    font-size: 17px;
+    font-weight: 700;
+    margin-bottom: 16px;
+    color: #1e1b2e;
+}
+.modal-course-transfer label {
+    display: block;
+    margin-top: 12px;
+    font-weight: 500;
+    font-size: 13px;
+    color: #333;
+}
+
+/* 转课记录筛选栏 */
+.panel-toolbar .filter-bar {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    padding: 10px 0;
+}
+.panel-toolbar .filter-bar select,
+.panel-toolbar .filter-bar input {
+    padding: 6px 10px;
+    border: 1px solid var(--color-border, #d9d9d9);
+    border-radius: 6px;
+    font-size: 13px;
+    background: #fff;
+}
+.panel-toolbar .filter-bar input[type="date"] {
+    width: 140px;
+}
+
+/* 转课记录表格 */
+#tab-course-transfer-records .table-wrap {
+    overflow-x: auto;
+}
+#tab-course-transfer-records table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 13px;
+}
+#tab-course-transfer-records th {
+    background: #f7f8fa;
+    padding: 8px 10px;
+    text-align: left;
+    font-weight: 600;
+    white-space: nowrap;
+    border-bottom: 2px solid #e5e7eb;
+}
+#tab-course-transfer-records td {
+    padding: 8px 10px;
+    border-bottom: 1px solid #f0f0f0;
+    white-space: nowrap;
+}
+#tab-course-transfer-records tbody tr:hover {
+    background: #fafafa;
+}
