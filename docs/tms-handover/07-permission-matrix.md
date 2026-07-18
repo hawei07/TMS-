@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_13538fd980ff11f1a60e525400e6dd8f
+    ReservedCode1: zoJJ4rQnpGfTLfqBZR1+7zRK7oG33EV4iTkdlWQpKDM36YUo4ivrnhxPFHuODVTFb3KTtkuhzf+7fqTXxGFKfSl6ga8XM3HQZq5uuyLrQ7G1XLlwSRv0dKOuttm00czIj9i8rgcA7Ouf4wjvPF4zcM+6KbK+4K65g8VrhERXgGEKdfyzuVF8s2MjAG0=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_13538fd980ff11f1a60e525400e6dd8f
+    ReservedCode2: zoJJ4rQnpGfTLfqBZR1+7zRK7oG33EV4iTkdlWQpKDM36YUo4ivrnhxPFHuODVTFb3KTtkuhzf+7fqTXxGFKfSl6ga8XM3HQZq5uuyLrQ7G1XLlwSRv0dKOuttm00czIj9i8rgcA7Ouf4wjvPF4zcM+6KbK+4K65g8VrhERXgGEKdfyzuVF8s2MjAG0=
+---
+
 # 07-permission-matrix.md — 权限矩阵
 
 > 版本：v1.0
@@ -266,3 +277,4 @@
 2. **历史权限记录**：旧系统无权限日志，新系统必须记录所有敏感操作的审计日志（操作人/时间/IP/操作内容）。
 3. **过渡期方案**：可设置"管理员"角色覆盖所有权限，待业务稳定后再精细化分配。
 4. **校区归属**：员工必须有明确的默认校区（从 organizations 表推断或要求录入）。
+*（内容由AI生成，仅供参考）*

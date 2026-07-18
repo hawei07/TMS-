@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_17deb82e80ff11f182875254006c9bbf
+    ReservedCode1: kPEpUTLKGh4AQdRKnbfX6+v0bmgqidjquiAAhTVkKyXgmATT3g7xbIkmLq7wNdyg6hCsB2XDiyxNJXHsp9Zmpduo8V2iFUFHpMXqBNE9z2cLxvfnI6SqEjxwocz3tCwh6jc2H0gc2UOOn48WbncrGYNrrM2OKDkkRHeCwtz2G7z5ykaYwVjQyiZDjGo=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_17deb82e80ff11f182875254006c9bbf
+    ReservedCode2: kPEpUTLKGh4AQdRKnbfX6+v0bmgqidjquiAAhTVkKyXgmATT3g7xbIkmLq7wNdyg6hCsB2XDiyxNJXHsp9Zmpduo8V2iFUFHpMXqBNE9z2cLxvfnI6SqEjxwocz3tCwh6jc2H0gc2UOOn48WbncrGYNrrM2OKDkkRHeCwtz2G7z5ykaYwVjQyiZDjGo=
+---
+
 # 01-domain-map.md — 领域映射
 
 > 版本：v1.0  
@@ -238,3 +249,4 @@ D1(identity-access) ─── D2(organization-campus)
 | class_attendance 混合班级+活动 | 活动考勤不属于教务 | 拆到 D8 |
 | 审批流散落 | 退费/转校审批直接内联 | 独立 D10 |
 | 退款共享 refund_records | 课程/账户/画具退款同表 | 按 project 区分或拆表 |
+*（内容由AI生成，仅供参考）*

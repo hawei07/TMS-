@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_1055fbd780ff11f182875254006c9bbf
+    ReservedCode1: gCX6ffzkpWJhoNOVwDtakScCMt4S9BAFKxmpfHbZn4PPVn3AffsGJ13j3AzsXH0fjt1TyHifauFqCXGPVwtnali7VDz+BjOEo2CRGoAW7umEnPeagtlfbuGQ15L4fco/nzbyhsNcqYGIGxHAdSGnpN89L7gqu+dLWn+HRrEpjVcY1lvMY94BooC7p2g=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_1055fbd780ff11f182875254006c9bbf
+    ReservedCode2: gCX6ffzkpWJhoNOVwDtakScCMt4S9BAFKxmpfHbZn4PPVn3AffsGJ13j3AzsXH0fjt1TyHifauFqCXGPVwtnali7VDz+BjOEo2CRGoAW7umEnPeagtlfbuGQ15L4fco/nzbyhsNcqYGIGxHAdSGnpN89L7gqu+dLWn+HRrEpjVcY1lvMY94BooC7p2g=
+---
+
 # 10-acceptance-cases.md — 验收案例
 
 > 版本：v1.0
@@ -482,3 +493,4 @@
 | AC-018 | 活动考勤删除归还 | TMS-RULE-018 | 活动考勤相关 |
 | AC-019 | 订单作废余额返还 | TMS-RULE-021 | void_order |
 | AC-020 | 跨课程扣课隔离 | TMS-RULE-012 | save_class_attendance |
+*（内容由AI生成，仅供参考）*

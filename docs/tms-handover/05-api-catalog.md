@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_1500489180ff11f18ea8525400bff409
+    ReservedCode1: FaLnzTjuR2C0xHMR/s97cF0w3YaSaZMIRJldF7fvKfPRCiMLb2IWNsiNz7PRe/WS7anBZ7+IVom9HkFnFq5uvvg6irZ3XVFTOrpXN8zVjPDETDz58VJWm7pq6FnZqTjZb173tX+I1J4LBEcox+7DlJrfsSWnKskxdgX+SaNjyAhTaYo7Qt6ZAYrZFlE=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_1500489180ff11f18ea8525400bff409
+    ReservedCode2: FaLnzTjuR2C0xHMR/s97cF0w3YaSaZMIRJldF7fvKfPRCiMLb2IWNsiNz7PRe/WS7anBZ7+IVom9HkFnFq5uvvg6irZ3XVFTOrpXN8zVjPDETDz58VJWm7pq6FnZqTjZb173tX+I1J4LBEcox+7DlJrfsSWnKskxdgX+SaNjyAhTaYo7Qt6ZAYrZFlE=
+---
+
 # 05-api-catalog.md — API 目录
 
 > 版本：v1.0  
@@ -392,3 +403,4 @@ get_resources, get_appointments, get_communications, list_students, get_student_
 | save_class_attendance | POST /api/v1/classes/{id}/attendance | POST |
 | submit_refund | POST /api/v1/refunds | POST |
 | approve_refund | PUT /api/v1/refunds/{id}/approve | PUT |
+*（内容由AI生成，仅供参考）*

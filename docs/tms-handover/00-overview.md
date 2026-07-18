@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_18a2e9db80ff11f182875254006c9bbf
+    ReservedCode1: /xStley5sUlHwy+JHDmf3n4yCSvcFTTltPonZ20WREx6E8jnu0sFsAxSSkXs5fk/mmpYeUlNUOjyKWQYILe2QF7eHO3IJRqg1zM2E6CdYhKw93fQHTHWk+xtvQ2RVQmXlrm/Y1ehP8RLDdGW9X+99ypcmvvVk75CRFrvRoU/xH63q/pfNsCCkntHGjw=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_18a2e9db80ff11f182875254006c9bbf
+    ReservedCode2: /xStley5sUlHwy+JHDmf3n4yCSvcFTTltPonZ20WREx6E8jnu0sFsAxSSkXs5fk/mmpYeUlNUOjyKWQYILe2QF7eHO3IJRqg1zM2E6CdYhKw93fQHTHWk+xtvQ2RVQmXlrm/Y1ehP8RLDdGW9X+99ypcmvvVk75CRFrvRoU/xH63q/pfNsCCkntHGjw=
+---
+
 # TMS 系统业务逻辑交接文档 — 总览
 
 > 本文档基于 D:\market-system-php 真实代码、数据库迁移脚本（migrations/）与已有 PRD 生成，供目标团队使用 DDD + Spring Boot + PostgreSQL 重构系统参考。
@@ -218,3 +229,4 @@ TMS（Training Management System）是面向**教育培训行业**的市场-教�
 ---
 
 *生成日期：2026-07-16 | 基于代码版本：2026-07-15 最新提交*
+*（内容由AI生成，仅供参考）*

@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_14125c1380ff11f1a60e525400e6dd8f
+    ReservedCode1: C+nwUk0U8COX3Dk/5qElg+CNvELh9c7PtH265HFO/IgorMNqVsFzv1WRViEutn1AqyPh70YoM5fC5AMo3+/Jc6fL3bV0g9iVmAVZdF0sRHA2clDlZD/zY+4hyxquEVsTFeacH39lpXgdYsYJ0jU85+a2Z04UO/Hbhr4ZGRI0Gw/J7s7vSu5Z96JxCRw=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_14125c1380ff11f1a60e525400e6dd8f
+    ReservedCode2: C+nwUk0U8COX3Dk/5qElg+CNvELh9c7PtH265HFO/IgorMNqVsFzv1WRViEutn1AqyPh70YoM5fC5AMo3+/Jc6fL3bV0g9iVmAVZdF0sRHA2clDlZD/zY+4hyxquEVsTFeacH39lpXgdYsYJ0jU85+a2Z04UO/Hbhr4ZGRI0Gw/J7s7vSu5Z96JxCRw=
+---
+
 # 06-data-dictionary.md — 数据字典
 
 > 版本：v1.0  
@@ -792,3 +803,4 @@
 6. 使用 JSONB 替代 TEXT 存 JSON（deduction_json / time_slots）
 7. 使用 ARRAY 替代 VARCHAR 存列表（weekdays / child_order_nos）
 8. 主键使用 SERIAL / BIGSERIAL，考虑 UUID 用于 orders / students
+*（内容由AI生成，仅供参考）*

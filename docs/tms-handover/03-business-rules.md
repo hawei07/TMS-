@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_1665649a80ff11f1a60e525400e6dd8f
+    ReservedCode1: 0MBrLKeaiXyVw/DRxYEc2F1boJMchwTX8MV5t9jDzX0O/w2muLujGMlB6M7V6BWtYb0Z3EHzbmtvuDxwsOUgGiD43gnFfSCMU2eJkR9X56b3zasKKVixecx2kRlDbSCm5GcUgRmvRDnmnFuuCwXpQ1wqcgkUXjhQfqbbZdeHaVFEI80WuyMJ6j84aMU=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_1665649a80ff11f1a60e525400e6dd8f
+    ReservedCode2: 0MBrLKeaiXyVw/DRxYEc2F1boJMchwTX8MV5t9jDzX0O/w2muLujGMlB6M7V6BWtYb0Z3EHzbmtvuDxwsOUgGiD43gnFfSCMU2eJkR9X56b3zasKKVixecx2kRlDbSCm5GcUgRmvRDnmnFuuCwXpQ1wqcgkUXjhQfqbbZdeHaVFEI80WuyMJ6j84aMU=
+---
+
 # 03-business-rules.md — 业务规则
 
 > 版本：v1.0  
@@ -384,3 +395,4 @@
 | TMS-RULE-021 | 订单作废课时归还 | order-entitlement |
 | TMS-RULE-022 | 活动报名容量限制 | study-activity |
 | TMS-RULE-023 | 优惠券有效期校验 | marketing-growth |
+*（内容由AI生成，仅供参考）*

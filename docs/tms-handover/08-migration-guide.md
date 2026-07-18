@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_1291f36a80ff11f1a60e525400e6dd8f
+    ReservedCode1: Xe+4zbHiIUg1VS/zjcBbLeRMCxV30xTeHR7dsujZKASVHkNqFjXdP84wQ1rb/votVhXCtB36CimbqYrObeC1dRpqKnDL+1ZlFONHRr+DLmUXJ+woZS18PK3D0egOk2W3a/p2uC0XixcYrQ/8VEXGOwvE65YpRrJjodv0RFpl5FPqXdJq31i+9df6SRQ=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_1291f36a80ff11f1a60e525400e6dd8f
+    ReservedCode2: Xe+4zbHiIUg1VS/zjcBbLeRMCxV30xTeHR7dsujZKASVHkNqFjXdP84wQ1rb/votVhXCtB36CimbqYrObeC1dRpqKnDL+1ZlFONHRr+DLmUXJ+woZS18PK3D0egOk2W3a/p2uC0XixcYrQ/8VEXGOwvE65YpRrJjodv0RFpl5FPqXdJq31i+9df6SRQ=
+---
+
 # 08-migration-guide.md — 迁移指南
 
 > 版本：v1.0
@@ -682,3 +693,4 @@ def verify_migration():
 | 9 | 员工权限和操作历史 | 无用户系统、无审计日志 | 无法迁移任何权限和操作审计数据 |
 | 10 | 前后端交互中未持久化的校验规则 | 仅存在于 PHP 代码中 | 需对照 03-business-rules.md 在新系统重新实现 |
 | 11 | 并发的 FOR UPDATE 行锁语义 | MySQL→PG 锁机制差异 | 需重新设计并发控制策略（乐观锁或 advisory lock） |
+*（内容由AI生成，仅供参考）*

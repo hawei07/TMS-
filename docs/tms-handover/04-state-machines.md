@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_15b154f180ff11f182875254006c9bbf
+    ReservedCode1: 7V+qBoPJDhPQ6pIewTeYedy6cYILXQFY9qgcsX2KoCgdcosu+xr4WMmbMcdjomIZyPoD5dHjEVKRm+MB66HvQwIhrMOkaUiUyRQoy/O3f1NXDgjCgEeV+7sHp5NQUBKeSKrWtFNFuTXrb7xngCwgLRqKcxg32/0QqD++fqshKkO3cOglh6HR2MJjmd8=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_15b154f180ff11f182875254006c9bbf
+    ReservedCode2: 7V+qBoPJDhPQ6pIewTeYedy6cYILXQFY9qgcsX2KoCgdcosu+xr4WMmbMcdjomIZyPoD5dHjEVKRm+MB66HvQwIhrMOkaUiUyRQoy/O3f1NXDgjCgEeV+7sHp5NQUBKeSKrWtFNFuTXrb7xngCwgLRqKcxg32/0QqD++fqshKkO3cOglh6HR2MJjmd8=
+---
+
 # 04-state-machines.md — 状态机
 
 > 版本：v1.0  
@@ -395,3 +406,4 @@ stateDiagram-v2
 | 状态恢复无完整事务 | 订单/退费 | 多表状态联动更新可能部分失败 |
 | 无操作人记录 | 全部 | 状态变更无 created_by/updated_by 审计 |
 | 状态与数据可能不一致 | 考勤/订单 | deduction_json vs consumed_lessons 无强一致性校验 |
+*（内容由AI生成，仅供参考）*

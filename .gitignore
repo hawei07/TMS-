@@ -20,3 +20,4 @@ debug_save.log
 
 # Local environment configuration
 /config/database.local.php
+nul

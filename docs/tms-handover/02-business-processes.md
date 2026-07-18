@@ -1,3 +1,14 @@
+---
+AIGC:
+    Label: "1"
+    ContentProducer: 001191440300708461136T1XGW3
+    ProduceID: 3f11eb7fa23d664c4b1c1527387f20fd_1728c19a80ff11f18ea8525400bff409
+    ReservedCode1: ThvLPCKYLxlXPiJcPh331COsj0UJDoNf9uhmTm40hX+YKYaikUcLbWI2Pjjck+ZQtH+DRuS309Yz5kuvgarmKKvDJFSwQnb/g+HBwKcqEJ3evvPnckeyLvj6LwPW7U/kmuOpgZP5EkkBmJD380NSJnotsGrKAZ7xlXxqcanExXevzccPpxP1UrT+JRY=
+    ContentPropagator: 001191440300708461136T1XGW3
+    PropagateID: 3f11eb7fa23d664c4b1c1527387f20fd_1728c19a80ff11f18ea8525400bff409
+    ReservedCode2: ThvLPCKYLxlXPiJcPh331COsj0UJDoNf9uhmTm40hX+YKYaikUcLbWI2Pjjck+ZQtH+DRuS309Yz5kuvgarmKKvDJFSwQnb/g+HBwKcqEJ3evvPnckeyLvj6LwPW7U/kmuOpgZP5EkkBmJD380NSJnotsGrKAZ7xlXxqcanExXevzccPpxP1UrT+JRY=
+---
+
 # 02-business-processes.md — 业务流程
 
 > 版本：v1.0  
@@ -620,3 +631,4 @@ flowchart TD
 - 过期
 - 不适用当前校区/学科
 - 优惠金额超过订单金额
+*（内容由AI生成，仅供参考）*
