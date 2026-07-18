@@ -6998,6 +6998,65 @@ function enrollTransitionHide(el) {
     }, 350);
 }
 
+function preselectEnrollCampusFromStudentData(studentData) {
+    const campusSel = document.getElementById('enroll-campus-select');
+    if (!campusSel || !studentData) return null;
+
+    const sstRecords = studentData.sst_records || [];
+    let primaryCampus = '';
+    if (sstRecords.length > 0) primaryCampus = sstRecords[0].campus_name || '';
+    if (!primaryCampus && studentData.primary_campus) primaryCampus = studentData.primary_campus;
+
+    let campusMatched = false;
+    if (primaryCampus) {
+        const candidates = primaryCampus.split(/[,，、]\s*/).filter(Boolean);
+        for (let ci = 0; ci < candidates.length && !campusMatched; ci++) {
+            for (let oi = 1; oi < campusSel.options.length; oi++) {
+                const optText = campusSel.options[oi].text.replace(/\s+/g, '');
+                const candText = candidates[ci].replace(/\s+/g, '');
+                if (optText === candText) {
+                    campusSel.selectedIndex = oi;
+                    campusMatched = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!campusMatched && sstRecords.length > 0 && sstRecords[0].campus_id) {
+        const sstCampusId = String(sstRecords[0].campus_id);
+        for (let oi = 1; oi < campusSel.options.length; oi++) {
+            if (campusSel.options[oi].value === sstCampusId) {
+                campusSel.selectedIndex = oi;
+                campusMatched = true;
+                break;
+            }
+        }
+    }
+
+    if (!campusMatched && studentData.primary_campus_ids) {
+        const pcIds = studentData.primary_campus_ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+        for (let ci = 0; ci < pcIds.length && !campusMatched; ci++) {
+            for (let oi = 1; oi < campusSel.options.length; oi++) {
+                if (campusSel.options[oi].value === pcIds[ci]) {
+                    campusSel.selectedIndex = oi;
+                    campusMatched = true;
+                    break;
+                }
+            }
+        }
+    }
+
+    if (!campusMatched) return null;
+    currentEnrollCampusId = parseInt(campusSel.value) || null;
+    currentEnrollCampusName = campusSel.options[campusSel.selectedIndex]?.text || '';
+    return {
+        id: currentEnrollCampusId,
+        name: currentEnrollCampusName,
+        displayName: primaryCampus || currentEnrollCampusName
+    };
+}
+
 async function goEnroll(studentId) {
     currentEnrollStudentId = studentId;
     currentEnrollCourseId = null;
@@ -7022,10 +7081,12 @@ async function goEnroll(studentId) {
         document.getElementById('enroll-info-phone').textContent = st.phone || '-';
         document.getElementById('enroll-info-no').textContent = st.student_no || '-';
         document.getElementById('enroll-banner-avatar').textContent = (st.name || '?').charAt(0);
-        // determine primary campus from SST records
+        // determine primary campus from SST records, fallback to orders
         var sstRecords = data.sst_records || [];
         var primaryCampus = '';
         if (sstRecords.length > 0) { primaryCampus = sstRecords[0].campus_name || ''; }
+        if (!primaryCampus && data.primary_campus) { primaryCampus = data.primary_campus; }
+        var primaryCampusIds = data.primary_campus_ids || '';
         document.getElementById('enroll-info-campus').textContent = primaryCampus || '未设置';
         // compute remaining hours
         var summary = data.summary || {};
@@ -7059,20 +7120,71 @@ async function goEnroll(studentId) {
 
     // Load campus list + pre-select student's campus
     await loadCampusOptions('enroll-campus-select');
+    let preSelectedCampusId = null;
     if (primaryCampus) {
-        var sel = document.getElementById('enroll-campus-select');
-        for (var i = 0; i < sel.options.length; i++) {
-            if (sel.options[i].text === primaryCampus) { sel.selectedIndex = i; break; }
+        const campusSel = document.getElementById('enroll-campus-select');
+        let campusMatched = false;
+
+        // 策略1：文本精确匹配（兼容旧逻辑，normalize去除所有空白）
+        const candidates = primaryCampus.split(/[,，、]\s*/).filter(Boolean);
+        for (let ci = 0; ci < candidates.length && !campusMatched; ci++) {
+            for (let oi = 1; oi < campusSel.options.length; oi++) {
+                const optText = campusSel.options[oi].text.replace(/\s+/g, '');
+                const candText = candidates[ci].replace(/\s+/g, '');
+                if (optText === candText) {
+                    campusSel.selectedIndex = oi;
+                    campusMatched = true;
+                    break;
+                }
+            }
         }
-        // auto-trigger campus change if campus was pre-selected
-        if (sel.selectedIndex > 0) { currentEnrollCampusName = sel.value ? sel.options[sel.selectedIndex].text : ''; }
-        else { currentEnrollCampusName = ''; }
+
+        // 策略2：ID精确匹配（从 sst_records 获取 campus_id）
+        if (!campusMatched && sstRecords.length > 0 && sstRecords[0].campus_id) {
+            const sstCampusId = String(sstRecords[0].campus_id);
+            for (let oi = 1; oi < campusSel.options.length; oi++) {
+                if (campusSel.options[oi].value === sstCampusId) {
+                    campusSel.selectedIndex = oi;
+                    campusMatched = true;
+                    break;
+                }
+            }
+        }
+
+        // 策略3：ID精确匹配（从 primary_campus_ids 兜底）
+        if (!campusMatched && primaryCampusIds) {
+            const pcIds = primaryCampusIds.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+            for (let ci = 0; ci < pcIds.length && !campusMatched; ci++) {
+                for (let oi = 1; oi < campusSel.options.length; oi++) {
+                    if (campusSel.options[oi].value === pcIds[ci]) {
+                        campusSel.selectedIndex = oi;
+                        campusMatched = true;
+                        break;
+                    }
+                }
+            }
+        }
+
+        if (campusMatched) {
+            currentEnrollCampusId = parseInt(campusSel.value);
+            currentEnrollCampusName = campusSel.options[campusSel.selectedIndex].text;
+            preSelectedCampusId = currentEnrollCampusId;
+        } else {
+            currentEnrollCampusName = '';
+        }
     }
 
-    // Hide type cards and both flows
-    document.getElementById('enroll-type-select').style.display = 'none';
-    document.getElementById('enroll-course-flow').style.display = 'none';
+    // 校区预选成功 → 自动显示类型选择 + 加载课程 + 进入课程报名流程
+    if (preSelectedCampusId) {
+        document.getElementById('enroll-type-select').style.display = '';
+        await loadEnrollCoursePicker(preSelectedCampusId);
+        selectEnrollType('course');
+        initEnrollReferralDropdowns();
+    } else {
+        document.getElementById('enroll-type-select').style.display = 'none';
+    }
     document.getElementById('enroll-activity-flow').style.display = 'none';
+    document.getElementById('ecf-sticky-bar').style.display = 'none';
 
     // Hide plan/items sections with transition
     enrollTransitionHide(document.getElementById('enroll-plans-section'));
@@ -7100,11 +7212,12 @@ async function goEnrollFromResource(resourceId) {
     currentEnrollCampusName = '';
 
     // Load resource info and display
+    let resource = null;
     try {
         const res = await fetch(API_BASE + 'get_resources&page=1&page_size=1&resource_id=' + resourceId);
         const data = await res.json();
         if (!data.data || data.data.length === 0) { showToast('未找到该资源', 'error'); return; }
-        const resource = data.data[0];
+        resource = data.data[0];
         document.getElementById('enroll-info-name').textContent = resource.name || '-';
         document.getElementById('enroll-info-phone').textContent = resource.phone || '-';
     } catch (e) { showToast('加载资源信息失败', 'error'); return; }
@@ -7115,10 +7228,128 @@ async function goEnrollFromResource(resourceId) {
     // Load campus list
     await loadCampusOptions('enroll-campus-select');
 
-    // Hide type cards and both flows
-    document.getElementById('enroll-type-select').style.display = 'none';
-    document.getElementById('enroll-course-flow').style.display = 'none';
-    document.getElementById('enroll-activity-flow').style.display = 'none';
+    // 如果资源已有对应学员，自动加载学员完整信息并预选校区
+    let linkedStudentId = null;
+    if (resource) {
+        try {
+            let matched = null;
+            const linkedRes = await fetch(API_BASE + 'list_students&page=1&page_size=1&resource_id=' + encodeURIComponent(resourceId));
+            const linkedData = await linkedRes.json();
+            matched = (linkedData.data || [])[0] || null;
+            if (!matched && resource.phone) {
+                const sRes = await fetch(API_BASE + 'list_students&page=1&page_size=5&keyword=' + encodeURIComponent(resource.phone));
+                const sData = await sRes.json();
+                matched = (sData.data || []).find(s => s.phone === resource.phone) || null;
+            }
+            if (matched) {
+                linkedStudentId = matched.id;
+                currentEnrollStudentId = matched.id;
+                // 加载学员详情（学号、校区、余额、剩余课时）
+                const dRes = await fetch(API_BASE + 'get_student&id=' + matched.id);
+                const dData = await dRes.json();
+                if (dData && dData.student) {
+                    document.getElementById('enroll-info-no').textContent = dData.student.student_no || '-';
+                    document.getElementById('enroll-banner-avatar').textContent = (dData.student.name || '?').charAt(0);
+                    const sstRecords = dData.sst_records || [];
+                    let primaryCampus = '';
+                    if (sstRecords.length > 0) { primaryCampus = sstRecords[0].campus_name || ''; }
+                    if (!primaryCampus && dData.primary_campus) { primaryCampus = dData.primary_campus; }
+                    document.getElementById('enroll-info-campus').textContent = primaryCampus || '未设置';
+                    const campusMatch = preselectEnrollCampusFromStudentData(dData);
+                    if (campusMatch && campusMatch.id) {
+                        document.getElementById('enroll-type-select').style.display = '';
+                        await loadEnrollCoursePicker(campusMatch.id);
+                        selectEnrollType('course');
+                        initEnrollReferralDropdowns();
+                    }
+                    // 预选校区下拉
+                    if (!currentEnrollCampusId && primaryCampus) {
+                        const campusSel = document.getElementById('enroll-campus-select');
+                        let campusMatched = false;
+
+                        // 策略1：文本精确匹配（兼容旧逻辑）
+                        const candidates = primaryCampus.split(/[,，、]\s*/).filter(Boolean);
+                        for (let ci = 0; ci < candidates.length && !campusMatched; ci++) {
+                            for (let oi = 1; oi < campusSel.options.length; oi++) {
+                                // normalize: 去除所有空白字符后再比较，兼容全角/半角空格差异
+                                const optText = campusSel.options[oi].text.replace(/\s+/g, '');
+                                const candText = candidates[ci].replace(/\s+/g, '');
+                                if (optText === candText) {
+                                    campusSel.selectedIndex = oi;
+                                    campusMatched = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 策略2：ID精确匹配（从 sst_records 获取 campus_id）
+                        if (!campusMatched && sstRecords.length > 0 && sstRecords[0].campus_id) {
+                            const sstCampusId = String(sstRecords[0].campus_id);
+                            for (let oi = 1; oi < campusSel.options.length; oi++) {
+                                if (campusSel.options[oi].value === sstCampusId) {
+                                    campusSel.selectedIndex = oi;
+                                    campusMatched = true;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // 策略3：ID精确匹配（从 primary_campus_ids 兜底）
+                        if (!campusMatched && dData.primary_campus_ids) {
+                            const pcIds = dData.primary_campus_ids.split(',').map(function(s) { return s.trim(); }).filter(Boolean);
+                            for (let ci = 0; ci < pcIds.length && !campusMatched; ci++) {
+                                for (let oi = 1; oi < campusSel.options.length; oi++) {
+                                    if (campusSel.options[oi].value === pcIds[ci]) {
+                                        campusSel.selectedIndex = oi;
+                                        campusMatched = true;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
+
+                        if (campusMatched) {
+                            currentEnrollCampusId = parseInt(campusSel.value);
+                            currentEnrollCampusName = campusSel.options[campusSel.selectedIndex].text;
+                            // 加载该校区下的课程并显示课程流
+                            document.getElementById('enroll-type-select').style.display = '';
+                            await loadEnrollCoursePicker(currentEnrollCampusId);
+                            selectEnrollType('course');
+                            initEnrollReferralDropdowns();
+                        }
+                    }
+                    // 账户余额 + 剩余课时
+                    try {
+                        const acctRes = await fetch(API_BASE + 'get_student_account&student_id=' + matched.id);
+                        const acctData = await acctRes.json();
+                        const bal = parseFloat(acctData.balance) || 0;
+                        document.getElementById('enroll-balance-avail').textContent = '(¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + ')';
+                        document.getElementById('enroll-payment-balance').max = bal;
+                        const balVal = document.getElementById('esb-balance').querySelector('.esb-chip-val');
+                        if (balVal) balVal.textContent = '¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2});
+                        if (bal <= 0) document.getElementById('esb-balance').classList.add('zero');
+                        else document.getElementById('esb-balance').classList.remove('zero');
+                    } catch (e) { /* ignore */ }
+                    const summary = dData.summary || {};
+                    const remaining = Math.max(0, (parseInt(summary.total_lessons) || 0) - (parseInt(summary.consumed_lessons) || 0));
+                    const hoursEl = document.getElementById('esb-hours').querySelector('.esb-chip-val');
+                    if (hoursEl) hoursEl.textContent = remaining;
+                }
+            }
+        } catch (e) { /* ignore */ }
+    }
+
+    if (currentEnrollCampusId) {
+        document.getElementById('enroll-type-select').style.display = '';
+        if (!currentEnrollType) {
+            await loadEnrollCoursePicker(currentEnrollCampusId);
+            selectEnrollType('course');
+        }
+    } else {
+        document.getElementById('enroll-type-select').style.display = 'none';
+        document.getElementById('enroll-course-flow').style.display = 'none';
+        document.getElementById('enroll-activity-flow').style.display = 'none';
+    }
 
     // Update back button text
     document.getElementById('btn-enroll-back').textContent = '返回我的资源';
@@ -7126,9 +7357,9 @@ async function goEnrollFromResource(resourceId) {
     // Hide plan/items sections with transition
     enrollTransitionHide(document.getElementById('enroll-plans-section'));
     enrollTransitionHide(document.getElementById('enroll-items-section'));
+    document.getElementById('ecf-sticky-bar').style.display = 'none';
 
-    // Reset type
-    currentEnrollType = null;
+    if (!currentEnrollCampusId) currentEnrollType = null;
 
     activatePanel('panel-enroll');
     highlightLeafByPanel('panel-enroll');
@@ -7153,6 +7384,7 @@ document.addEventListener('DOMContentLoaded', function() {
             const plansSection = document.getElementById('enroll-plans-section');
             if (plansSection) plansSection.style.display = 'none';
             document.getElementById('enroll-plans-list').innerHTML = '';
+            document.getElementById('ecf-sticky-bar').style.display = 'none';
             // 隐藏两个报名流程
             document.getElementById('enroll-course-flow').style.display = 'none';
             document.getElementById('enroll-activity-flow').style.display = 'none';
@@ -7182,31 +7414,38 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function renderEnrollPlansList(plans) {
-    const listDiv = document.getElementById('enroll-plans-list');
+    const tbody = document.getElementById('enroll-plans-list');
     if (!plans || plans.length === 0) {
-        listDiv.innerHTML = '<div style="color:#999;padding:12px;">该课程下暂无价格方案</div>';
+        tbody.innerHTML = '';
+        document.getElementById('ecf-plan-empty').style.display = 'block';
+        document.getElementById('ecf-plan-table').style.display = 'none';
         return;
     }
-    listDiv.innerHTML = plans.map(p => {
-        let typeTag = '';
-        const pt = p.plan_type || '';
-        if (pt === '新报') typeTag = '<span class="tag tag-new-enroll">新报</span>';
-        else if (pt === '续费') typeTag = '<span class="tag tag-renewal">续费</span>';
-        else if (pt === '小课包') typeTag = '<span class="tag tag-small-pack">小课包</span>';
-        const total = (p.items || []).reduce((s, i) => s + (parseFloat(i.actual_price) || 0), 0);
-        const totalLessons = (p.items || []).reduce((s, i) => s + (parseInt(i.lesson_count) || 0), 0);
-        const itemCount = (p.items || []).length;
-        return `<div class="enroll-plan-card" data-plan-id="${p.id}" onclick="selectEnrollPlan(${p.id})">
-            <div class="enroll-plan-top">
-                <span class="enroll-plan-name">${esc(p.name)}${typeTag}</span>
-                <span class="enroll-plan-price">¥${total.toFixed(2)}</span>
-            </div>
-            <div class="enroll-plan-meta">
-                <span class="meta-chip">📋 ${itemCount} 项</span>
-                <span class="meta-chip">📚 ${totalLessons} 课时</span>
-            </div>
-        </div>`;
-    }).join('');
+    document.getElementById('ecf-plan-empty').style.display = 'none';
+    document.getElementById('ecf-plan-table').style.display = '';
+    let html = '';
+    for (var i = 0; i < plans.length; i++) {
+        var p = plans[i];
+        var typeTag = '';
+        var tc = '';
+        var pt2 = p.plan_type || '';
+        if (pt2 === '新报') { typeTag = '新报'; tc = 'ecf-tag ecf-tag-new'; }
+        else if (pt2 === '续费') { typeTag = '续费'; tc = 'ecf-tag ecf-tag-renew'; }
+        else if (pt2 === '小课包') { typeTag = '小课包'; tc = 'ecf-tag ecf-tag-pack'; }
+        var total = (p.items || []).reduce(function(s, it) { return s + (parseFloat(it.actual_price) || 0); }, 0);
+        var totalLessons = (p.items || []).reduce(function(s, it) { return s + (parseInt(it.lesson_count) || 0); }, 0);
+        var itemCount = (p.items || []).length;
+        var sel = currentEnrollPlanId === p.id;
+        html += '<tr class="' + (sel ? 'sel' : '') + '" data-plan-id="' + p.id + '" onclick="selectEnrollPlan(' + p.id + ')">' +
+            '<td class="col-radio">' + (sel ? '●' : '○') + '</td>' +
+            '<td class="col-name" style="font-weight:600">' + esc(p.name) + '</td>' +
+            '<td class="col-type">' + (typeTag ? '<span class="' + tc + '">' + typeTag + '</span>' : '') + '</td>' +
+            '<td class="col-r" style="color:#6b6580">' + itemCount + ' 项</td>' +
+            '<td class="col-r" style="color:#6b6580">' + totalLessons + '</td>' +
+            '<td class="col-r" style="font-weight:700;color:#7C3AED">¥' + total.toFixed(2) + '</td>' +
+        '</tr>';
+    }
+    tbody.innerHTML = html;
 }
 
 function selectEnrollPlan(planId) {
@@ -7217,42 +7456,45 @@ function selectEnrollPlan(planId) {
     const plan = currentEnrollPlans.find(p => p.id == planId);
     currentEnrollPlanType = (plan && plan.plan_type) ? plan.plan_type : '';
 
-    // 高亮选中卡片
-    document.querySelectorAll('.enroll-plan-card').forEach(c => c.classList.remove('active'));
-    const card = document.querySelector(`.enroll-plan-card[data-plan-id="${planId}"]`);
-    if (card) card.classList.add('active');
+    // 高亮选中行
+    document.querySelectorAll('#enroll-plans-list tr').forEach(function(tr) { tr.classList.remove('sel'); });
+    var planRow = document.querySelector('#enroll-plans-list tr[data-plan-id="' + planId + '"]');
+    if (planRow) planRow.classList.add('sel');
 
     if (!plan || !plan.items || plan.items.length === 0) {
         enrollTransitionHide(document.getElementById('enroll-items-section'));
+        document.getElementById('ecf-sticky-bar').style.display = 'none';
         return;
     }
 
-    // 渲染下方报价明细表（支付相关使用）
+    // 渲染下方报价明细表
     const tbody = document.getElementById('enroll-items-tbody');
     let total = 0;
-    tbody.innerHTML = plan.items.map(item => {
-        const dpAmount = parseFloat(item.discount_plan_amount) || 0;
-        const cAmount = parseFloat(item.coupon_amount) || 0;
-        const unitPrice = item.lesson_count > 0 ? (item.unit_price - dpAmount - cAmount) / item.lesson_count : 0;
+    tbody.innerHTML = plan.items.map(function(item) {
+        var dpHtml = item.discount_plan_name ? ('<span class="ecf-tag ecf-tag-dc">' + esc(item.discount_plan_name) + (item.discount_plan_amount ? ' ¥' + Number(item.discount_plan_amount).toFixed(2) : '') + '</span>') : '-';
+        var cpHtml = item.coupon_name ? ('<span class="ecf-tag ecf-tag-cp">' + esc(item.coupon_name) + (item.coupon_amount ? ' ¥' + Number(item.coupon_amount).toFixed(2) : '') + '</span>') : '-';
+        var aidHtml = item.teaching_aid_name ? esc(item.teaching_aid_name) : '-';
+        var aidPriceHtml = item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-';
+        var pcHtml = item.product_coupon_name ? ('<span class="ecf-tag ecf-tag-aid">' + esc(item.product_coupon_name) + (item.product_coupon_amount ? ' ¥' + Number(item.product_coupon_amount).toFixed(2) : '') + '</span>') : '-';
         total += parseFloat(item.actual_price) || 0;
-        return `<tr>
-            <td>${esc(item.name)}</td>
-            <td class="col-num">${item.lesson_count || 0}</td>
-            <td class="col-num">¥${Number(item.unit_price).toFixed(2)}</td>
-            <td>${item.discount_plan_name ? esc(item.discount_plan_name) + (item.discount_plan_amount ? '（¥' + Number(item.discount_plan_amount).toFixed(2) + '）' : '') : '-'}</td>
-            <td>${item.coupon_name ? esc(item.coupon_name) + (item.coupon_amount ? '（¥' + Number(item.coupon_amount).toFixed(2) + '）' : '') : '-'}</td>
-            <td>${esc(item.teaching_aid_name || '-')}</td>
-            <td class="col-num">${item.teaching_aid_price ? '¥' + Number(item.teaching_aid_price).toFixed(2) : '-'}</td>
-            <td>${item.product_coupon_name ? esc(item.product_coupon_name) + (item.product_coupon_amount ? '（¥' + Number(item.product_coupon_amount).toFixed(2) + '）' : '') : '-'}</td>
-            <td class="col-num">${item.gifted_lessons || 0}</td>
-            <td class="col-num">¥${Number(item.actual_price).toFixed(2)}</td>
-        </tr>`;
+        return '<tr style="cursor:default">' +
+            '<td style="font-weight:600">' + esc(item.name) + '</td>' +
+            '<td class="col-r">' + (item.lesson_count || 0) + '</td>' +
+            '<td class="col-r" style="color:#9895A8">¥' + Number(item.unit_price).toFixed(2) + '</td>' +
+            '<td>' + dpHtml + '</td>' +
+            '<td>' + cpHtml + '</td>' +
+            '<td>' + aidHtml + '</td>' +
+            '<td class="col-r" style="color:#9895A8">' + aidPriceHtml + '</td>' +
+            '<td>' + pcHtml + '</td>' +
+            '<td class="col-r">' + (item.gifted_lessons || 0) + '</td>' +
+            '<td class="col-r" style="font-weight:700">¥' + Number(item.actual_price).toFixed(2) + '</td>' +
+        '</tr>';
     }).join('');
     document.getElementById('enroll-total-price').textContent = '¥' + total.toFixed(2);
 
-    // 平滑过渡显示报价明细区域 + 滚动
+    // 平滑过渡显示报价明细区域
     enrollTransitionShow(document.getElementById('enroll-items-section'));
-    setTimeout(() => {
+    setTimeout(function() {
         document.getElementById('enroll-items-section').scrollIntoView({ behavior: 'smooth', block: 'start' });
     }, 100);
 
@@ -7261,6 +7503,16 @@ function selectEnrollPlan(planId) {
     document.getElementById('enroll-payment-meituan').value = '0.00';
     setEnrollProgress(4);
     updatePaymentHint();
+    updateEcfPayRows();
+
+    // 更新底部固定栏
+    var courseName = currentEnrollCourses.find(function(c) { return c.id == currentEnrollCourseId; });
+    document.getElementById('ecf-sticky-summary').innerHTML =
+        '<span class="ss-course">' + (courseName ? esc(courseName.name) : '') + '</span>' +
+        '<span class="ss-sep">·</span>' +
+        '<span class="ss-plan">' + esc(plan.name) + '（' + ((plan.items || []).reduce(function(s, i) { return s + (parseInt(i.lesson_count) || 0); }, 0)) + '课时）</span>';
+    document.getElementById('ecf-sticky-total-val').textContent = total.toFixed(2);
+    document.getElementById('ecf-sticky-bar').style.display = 'block';
 }
 
 // ==================== 支付方式交互（智能回填） ====================
@@ -7334,7 +7586,7 @@ function updatePaymentHint() {
     const diff = cash + meituan + bal + online + tonglian + zhishouyin + douyin - total;
     if (Math.abs(diff) < 0.01) {
         hint.style.display = 'block';
-        hint.className = 'enroll-payment-hint ok';
+        hint.className = 'ecf-pay-status ok';
         const parts = [];
         if (bal > 0) parts.push('余额 ¥' + bal.toFixed(2));
         if (cash > 0) parts.push('现金 ¥' + cash.toFixed(2));
@@ -7346,13 +7598,30 @@ function updatePaymentHint() {
         hint.textContent = '金额匹配' + (parts.length ? '（' + parts.join(' + ') + '）' : '');
     } else if (diff > 0) {
         hint.style.display = 'block';
-        hint.className = 'enroll-payment-hint warn';
+        hint.className = 'ecf-pay-status warn';
         hint.textContent = '超出合计 ¥' + diff.toFixed(2) + '，请减少支付金额';
     } else {
         hint.style.display = 'block';
-        hint.className = 'enroll-payment-hint warn';
+        hint.className = 'ecf-pay-status warn';
         hint.textContent = '还差 ¥' + Math.abs(diff).toFixed(2) + '，请补足支付金额';
     }
+    updateEcfPayRows();
+}
+
+function updateEcfPayRows() {
+    var ids = ['cash','meituan','balance','online','tonglian','zhishouyin','douyin'];
+    for (var i = 0; i < ids.length; i++) {
+        var row = document.getElementById('ecf-pay-' + ids[i] + '-row');
+        var v = parseFloat(document.getElementById('enroll-payment-' + ids[i]).value) || 0;
+        if (row) { if (v > 0) row.classList.add('has-val'); else row.classList.remove('has-val'); }
+    }
+}
+
+function toggleEcfRefMore() {
+    var toggle = document.getElementById('ecf-ref-toggle');
+    var more = document.getElementById('ecf-ref-more');
+    if (toggle) toggle.classList.toggle('open');
+    if (more) more.classList.toggle('open');
 }
 
 async function confirmPayEnroll() {
@@ -7582,14 +7851,13 @@ async function loadCourseOptionsByCampus(selectId, campusId) {
 // ==================== 课程搜索+筛选Picker ====================
 let enrollCoursePickerData = [];
 let enrollCoursePickerSelected = null;
-let pickerSearchEl, pickerChipsEl, pickerListEl, pickerHiddenEl, pickerBodyEl;
+let pickerSearchEl, pickerChipsEl, pickerListEl, pickerHiddenEl;
 
 function initEnrollCoursePickerRefs() {
     pickerSearchEl = document.getElementById('enroll-course-search');
     pickerChipsEl  = document.getElementById('enroll-course-chips');
     pickerListEl   = document.getElementById('enroll-course-list');
     pickerHiddenEl = document.getElementById('enroll-course-id');
-    pickerBodyEl   = document.querySelector('.course-picker-body');
     if (pickerSearchEl) {
         pickerSearchEl.addEventListener('input', function() {
             clearTimeout(this._debounce);
@@ -7606,18 +7874,19 @@ async function loadEnrollCoursePicker(campusId) {
     pickerHiddenEl.value = '';
     pickerSearchEl.value = '';
     pickerChipsEl.innerHTML = '';
-    pickerBodyEl.classList.remove('has-selection');
 
     if (!campusId) {
         pickerSearchEl.disabled = true;
         pickerSearchEl.placeholder = '请先选择校区';
-        pickerListEl.innerHTML = '<div class="course-picker-empty">请先选择校区</div>';
+        pickerListEl.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#9895A8;">请先选择校区</td></tr>';
+        document.getElementById('ecf-course-empty').style.display = 'none';
         return;
     }
 
     pickerSearchEl.disabled = true;
     pickerSearchEl.placeholder = '加载中...';
-    pickerListEl.innerHTML = '<div class="course-picker-empty">加载课程中...</div>';
+    pickerListEl.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#9895A8;">加载课程中...</td></tr>';
+    document.getElementById('ecf-course-empty').style.display = 'none';
 
     try {
         const res = await fetch(API_BASE + 'list_courses&page=1&page_size=200&campus_id=' + campusId);
@@ -7628,11 +7897,12 @@ async function loadEnrollCoursePicker(campusId) {
         pickerSearchEl.placeholder = '搜索课程名称...';
 
         renderCoursePickerChips(enrollCoursePickerData);
-        renderCoursePickerCards(enrollCoursePickerData);
+        renderCoursePickerRows(enrollCoursePickerData);
     } catch (e) {
         pickerSearchEl.disabled = true;
         pickerSearchEl.placeholder = '加载失败';
-        pickerListEl.innerHTML = '<div class="course-picker-empty" style="color:#E53E3E;">加载失败，请重试</div>';
+        pickerListEl.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#E53E3E;">加载失败，请重试</td></tr>';
+        document.getElementById('ecf-course-empty').style.display = 'none';
     }
 }
 
@@ -7644,16 +7914,16 @@ function renderCoursePickerChips(courses) {
     });
     const subjects = Object.keys(subjectMap).sort();
 
-    let html = '<span class="course-picker-chip active" data-subject="">全部（' + courses.length + '）</span>';
+    let html = '<span class="ecf-chip on" data-subject="">全部（' + courses.length + '）</span>';
     subjects.forEach(s => {
-        html += '<span class="course-picker-chip" data-subject="' + esc(s) + '">' + esc(s) + '<span class="chip-count">' + subjectMap[s] + '</span></span>';
+        html += '<span class="ecf-chip" data-subject="' + esc(s) + '">' + esc(s) + '<span class="cnt">' + subjectMap[s] + '</span></span>';
     });
     pickerChipsEl.innerHTML = html;
 
-    pickerChipsEl.querySelectorAll('.course-picker-chip').forEach(chip => {
+    pickerChipsEl.querySelectorAll('.ecf-chip').forEach(chip => {
         chip.addEventListener('click', () => {
-            pickerChipsEl.querySelectorAll('.course-picker-chip').forEach(c => c.classList.remove('active'));
-            chip.classList.add('active');
+            pickerChipsEl.querySelectorAll('.ecf-chip').forEach(c => c.classList.remove('on'));
+            chip.classList.add('on');
             applyCoursePickerFilters();
         });
     });
@@ -7661,7 +7931,7 @@ function renderCoursePickerChips(courses) {
 
 function applyCoursePickerFilters() {
     const keyword = (pickerSearchEl.value || '').trim().toLowerCase();
-    const activeChip = pickerChipsEl.querySelector('.course-picker-chip.active');
+    const activeChip = pickerChipsEl.querySelector('.ecf-chip.on');
     const subjectFilter = activeChip ? activeChip.dataset.subject : '';
 
     let filtered = enrollCoursePickerData;
@@ -7680,30 +7950,38 @@ function applyCoursePickerFilters() {
     currentEnrollCourseId = null;
     currentEnrollPlanId = null;
     pickerHiddenEl.value = '';
-    pickerBodyEl.classList.remove('has-selection');
     enrollTransitionHide(document.getElementById('enroll-items-section'));
     const plansSection = document.getElementById('enroll-plans-section');
     if (plansSection) plansSection.style.display = 'none';
     document.getElementById('enroll-plans-list').innerHTML = '';
+    document.getElementById('ecf-sticky-bar').style.display = 'none';
     setEnrollProgress(2);
-    renderCoursePickerCards(filtered);
+    renderCoursePickerRows(filtered);
 }
 
-function renderCoursePickerCards(courses) {
+function renderCoursePickerRows(courses) {
+    var emptyEl = document.getElementById('ecf-course-empty');
+    var tblEl = document.getElementById('ecf-course-table');
     if (courses.length === 0) {
-        pickerListEl.innerHTML = '<div class="course-picker-empty">未找到匹配的课程</div>';
+        pickerListEl.innerHTML = '';
+        if (emptyEl) emptyEl.style.display = 'block';
+        if (tblEl) tblEl.style.display = 'none';
         return;
     }
-    pickerListEl.innerHTML = courses.map(c => {
-        const selected = enrollCoursePickerSelected === c.id;
-        const subjectText = [c.subject_level1, c.subject_level2].filter(Boolean).join(' / ') || '未分类';
-        return '<div class="course-picker-card' + (selected ? ' selected' : '') + '" data-course-id="' + c.id + '" data-course-name="' + esc(c.name) + '" onclick="selectEnrollCourse(' + c.id + ', \'' + esc(c.name) + '\')">' +
-            '<div class="course-card-info">' +
-                '<div class="course-card-name">' + esc(c.name) + '</div>' +
-                '<div class="course-card-subject">' + esc(subjectText) + '</div>' +
-            '</div>' +
-            '<div class="course-card-check">\u2713</div>' +
-        '</div>';
+    if (emptyEl) emptyEl.style.display = 'none';
+    if (tblEl) tblEl.style.display = '';
+    pickerListEl.innerHTML = courses.map(function(c) {
+        var selected = enrollCoursePickerSelected === c.id;
+        var subjectText = [c.subject_level1, c.subject_level2].filter(Boolean).join(' / ') || '未分类';
+        var badges = '';
+        if (c.is_package) badges += '<span class="ecf-tag ecf-tag-pkg">小课包</span>';
+        if (c.is_toddler) badges += '<span class="ecf-tag ecf-tag-toddler">幼儿</span>';
+        return '<tr class="' + (selected ? 'sel' : '') + '" onclick="selectEnrollCourse(' + c.id + ', \'' + esc(c.name) + '\')">' +
+            '<td class="col-radio">' + (selected ? '●' : '○') + '</td>' +
+            '<td class="col-name" style="font-weight:600">' + esc(c.name) + badges + '</td>' +
+            '<td class="col-type" style="font-size:12px;color:#6b6580">' + esc(subjectText) + '</td>' +
+            '<td class="col-type" style="font-size:12px;color:#6b6580">' + (c.is_package ? '小课包' : '常规') + '</td>' +
+        '</tr>';
     }).join('');
 }
 
@@ -7712,18 +7990,26 @@ function selectEnrollCourse(courseId, courseName) {
     currentEnrollCourseId = courseId;
     currentEnrollPlanId = null;
     pickerHiddenEl.value = courseId;
-    pickerBodyEl.classList.add('has-selection');
 
-    pickerListEl.querySelectorAll('.course-picker-card').forEach(card => {
-        card.classList.toggle('selected', parseInt(card.dataset.courseId) === courseId);
-    });
+    // 高亮选中行
+    document.querySelectorAll('#enroll-course-list tr').forEach(function(tr) { tr.classList.remove('sel'); });
+    // 用 onclick 匹配找到对应行
+    var rows = document.querySelectorAll('#enroll-course-list tr');
+    for (var i = 0; i < rows.length; i++) {
+        if (rows[i].getAttribute('onclick') && rows[i].getAttribute('onclick').indexOf('selectEnrollCourse(' + courseId + ',') !== -1) {
+            rows[i].classList.add('sel');
+            break;
+        }
+    }
 
     setEnrollProgress(3);
     enrollTransitionHide(document.getElementById('enroll-items-section'));
-    const plansSection = document.getElementById('enroll-plans-section');
+    document.getElementById('ecf-sticky-bar').style.display = 'none';
+    var plansSection = document.getElementById('enroll-plans-section');
     plansSection.style.display = '';
-    const listDiv = document.getElementById('enroll-plans-list');
-    listDiv.innerHTML = '<div style="color:#999;padding:12px;">加载中...</div>';
+    document.getElementById('ecf-plan-course-name').textContent = courseName;
+    var listDiv = document.getElementById('enroll-plans-list');
+    listDiv.innerHTML = '<tr><td colspan="6" style="color:#999;padding:12px;text-align:center;">加载中...</td></tr>';
 
     fetch(API_BASE + 'get_course_plans&course_id=' + courseId)
         .then(res => res.json())
@@ -7733,7 +8019,7 @@ function selectEnrollCourse(courseId, courseName) {
             enrollTransitionShow(plansSection);
         })
         .catch(() => {
-            listDiv.innerHTML = '<div style="color:#e74c3c;padding:12px;">加载失败</div>';
+            listDiv.innerHTML = '<tr><td colspan="6" style="color:#e74c3c;padding:12px;text-align:center;">加载失败</td></tr>';
         });
 }
 

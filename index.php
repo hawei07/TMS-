@@ -2001,12 +2001,17 @@ $stmt->execute();
             $campus = trim($_GET['campus'] ?? '');
             $subjectLevel1 = trim($_GET['subject_level1'] ?? '');
             $studentFilter = trim($_GET['student_filter'] ?? '');
+            $resourceId = intval($_GET['resource_id'] ?? 0);
             $offset = ($page - 1) * $pageSize;
             $conditions = [];
             $params = [];
             if ($keyword) {
                 $conditions[] = "(s.name LIKE :kw OR s.phone LIKE :kw)";
                 $params[':kw'] = "%$keyword%";
+            }
+            if ($resourceId > 0) {
+                $conditions[] = "s.resource_id = :resource_id";
+                $params[':resource_id'] = $resourceId;
             }
             if ($campus) {
                 $conditions[] = "EXISTS (SELECT 1 FROM orders o WHERE o.student_id = s.id AND o.campus = :campus AND o.is_voided = '否' AND (o.refund_status IS NULL OR o.refund_status != '已退费'))";
@@ -2182,7 +2187,19 @@ $stmt->execute();
                 LEFT JOIN employees emp ON emp.id = sst.teacher_id
                 WHERE sst.student_id=$id ORDER BY org.name, p.name, sub.name");
             while ($r = $sstRes->fetch(PDO::FETCH_ASSOC)) $sstRecords[] = $r;
-            json(['student' => $student, 'orders' => $orders, 'summary' => $summary, 'sst_records' => $sstRecords]);
+            // 就读校区（兜底来源）：从订单里聚合，sst 表无记录时使用
+            $campusRow = $db->query("SELECT GROUP_CONCAT(DISTINCT o.campus ORDER BY o.campus SEPARATOR ', ') AS campus_list FROM orders o WHERE o.student_id=$id AND o.campus IS NOT NULL AND o.campus != ''")->fetch(PDO::FETCH_ASSOC);
+            $primaryCampus = $campusRow ? ($campusRow['campus_list'] ?? '') : '';
+            // 尝试将订单中的校区名称解析为组织ID，便于前端做ID匹配
+            $primaryCampusIds = '';
+            if ($primaryCampus) {
+                $escapedNames = array_map(function ($n) use ($db) { return $db->quote(trim($n)); }, explode(',', $primaryCampus));
+                if (!empty($escapedNames)) {
+                    $idsRow = $db->query("SELECT GROUP_CONCAT(id ORDER BY id SEPARATOR ',') AS ids FROM organizations WHERE name IN (" . implode(',', $escapedNames) . ") AND type='校区'")->fetch(PDO::FETCH_ASSOC);
+                    $primaryCampusIds = $idsRow ? ($idsRow['ids'] ?? '') : '';
+                }
+            }
+            json(['student' => $student, 'orders' => $orders, 'summary' => $summary, 'sst_records' => $sstRecords, 'primary_campus' => $primaryCampus, 'primary_campus_ids' => $primaryCampusIds]);
             break;
 
         case 'add_student':
@@ -7429,209 +7446,222 @@ if (intval($countBt) === 0) {
                 </div>
 
                     <!-- 课程报名流程容器（默认隐藏） -->
-                    <div class="enroll-course-flow" id="enroll-course-flow" style="display:none;">
-                    <!-- 课程 — 上下布局 -->
-                    <div class="enroll-form-row" style="flex-direction: column; gap: 16px;">
-                        <div class="enroll-course-picker" id="enroll-course-picker">
-                            <label>课程 <span class="required">*</span></label>
-                            <div class="course-picker-body">
-                                <div class="course-picker-search">
-                                    <svg class="search-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="#9895A8" stroke-width="2">
-                                        <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-                                    </svg>
-                                    <input type="text" id="enroll-course-search" placeholder="请先选择校区" disabled autocomplete="off">
-                                </div>
-                                <div class="course-picker-chips" id="enroll-course-chips"></div>
-                                <div class="course-picker-list" id="enroll-course-list">
-                                    <div class="course-picker-empty">请先选择校区</div>
-                                </div>
+                    <div class="ecf-wrap" id="enroll-course-flow" style="display:none;">
+
+                    <!-- 01 选择课程 -->
+                    <div class="ecf-section" id="ecf-sec-course">
+                        <div class="ecf-sec-head">
+                            <div class="ecf-sec-title"><span class="ecf-sec-num">01</span>选择课程</div>
+                            <span class="ecf-sec-sub">当前校区可报名课程</span>
+                        </div>
+                        <div class="ecf-filter-bar">
+                            <div class="ecf-search-box">
+                                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9895A8" stroke-width="2"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+                                <input type="text" id="enroll-course-search" placeholder="请先选择校区" disabled autocomplete="off">
                             </div>
-                            <input type="hidden" id="enroll-course-id" value="">
+                            <div class="ecf-chip-row" id="enroll-course-chips"></div>
                         </div>
+                        <table class="ecf-tbl" id="ecf-course-table">
+                            <thead><tr>
+                                <th style="width:28px"></th>
+                                <th>课程名称</th>
+                                <th style="width:160px">学科分类</th>
+                                <th style="width:80px">类型</th>
+                            </tr></thead>
+                            <tbody id="enroll-course-list"></tbody>
+                        </table>
+                        <div class="ecf-empty" id="ecf-course-empty" style="display:none;">未找到匹配的课程</div>
+                        <input type="hidden" id="enroll-course-id" value="">
                     </div>
 
-                    <!-- 价格方案 -->
-                    <div class="enroll-section" id="enroll-plans-section" style="display:none;">
-                        <div class="enroll-section-title">选择价格方案</div>
-                        <div id="enroll-plans-list"></div>
+                    <!-- 02 选择价格方案 -->
+                    <div class="ecf-section" id="enroll-plans-section" style="display:none;">
+                        <div class="ecf-sec-head">
+                            <div class="ecf-sec-title"><span class="ecf-sec-num">02</span>选择价格方案</div>
+                            <span class="ecf-sec-sub" id="ecf-plan-course-name"></span>
+                        </div>
+                        <table class="ecf-tbl" id="ecf-plan-table">
+                            <thead><tr>
+                                <th style="width:28px"></th>
+                                <th>方案名称</th>
+                                <th style="width:60px">类型</th>
+                                <th style="width:80px" class="col-r">报价项</th>
+                                <th style="width:72px" class="col-r">课时数</th>
+                                <th style="width:110px" class="col-r">合计金额</th>
+                            </tr></thead>
+                            <tbody id="enroll-plans-list"></tbody>
+                        </table>
+                        <div class="ecf-empty" id="ecf-plan-empty" style="display:none;">该课程暂无价格方案</div>
                     </div>
 
-                    <!-- 报价明细 -->
-                    <div class="enroll-section" id="enroll-items-section" style="display:none;">
-                        <div class="enroll-section-title">报价明细</div>
-                        <div class="enroll-table-wrap">
-                            <table class="enroll-items-table">
-                                <thead><tr>
-                                 <th>报价项名称</th>
-                                                                     <th class="col-num">课时数</th>
-                                                                     <th class="col-num">课时价格</th>
-                                                                     <th>优惠方案</th>
-                                                                                                         <th>课时优惠券</th>
-                                                                                                         <th>教材包</th>
-                                                                                                         <th class="col-num">教材包原价</th>
-                                                                                                         <th>商品券</th>
-                                                                                                         <th class="col-num">赠送课时</th>
-                                                                                                         <th class="col-num">实际价格</th>
-                                </tr></thead>
-                                <tbody id="enroll-items-tbody"></tbody>
-                            </table>
+                    <!-- 03 报价明细 -->
+                    <div class="ecf-section" id="enroll-items-section" style="display:none;">
+                        <div class="ecf-sec-head">
+                            <div class="ecf-sec-title"><span class="ecf-sec-num">03</span>报价明细</div>
+                            <span class="ecf-sec-sub">确认课时与优惠</span>
                         </div>
-                        <div class="enroll-total-bar">
-                            <span class="enroll-total-label">合计金额</span>
-                            <span class="enroll-total-amount" id="enroll-total-price">¥0.00</span>
+                        <div style="overflow-x:auto;-webkit-overflow-scrolling:touch">
+                        <table class="ecf-tbl" id="ecf-items-table" style="width:100%">
+                            <thead><tr>
+                                <th>报价项名称</th>
+                                <th style="width:70px" class="col-r">课时数</th>
+                                <th style="width:90px" class="col-r">课时价格</th>
+                                <th style="width:120px">优惠方案</th>
+                                <th style="width:120px">课时优惠券</th>
+                                <th style="width:100px">教材包</th>
+                                <th style="width:90px" class="col-r">教材包原价</th>
+                                <th style="width:100px">商品券</th>
+                                <th style="width:70px" class="col-r">赠送课时</th>
+                                <th style="width:100px" class="col-r">实际价格</th>
+                            </tr></thead>
+                            <tbody id="enroll-items-tbody"></tbody>
+                        </table>
+                        </div>
+                        <div class="ecf-total-row">
+                            <span class="ecf-total-label">合计金额</span>
+                            <span class="ecf-total-amount" id="enroll-total-price">¥0.00</span>
                         </div>
 
-                        <!-- 关联人员区域 -->
-                        <div class="enroll-section" id="enroll-referral-section">
-                            <div class="enroll-section-title">关联人员</div>
-                            <div class="enroll-referral-row">
-                                <div class="enroll-referral-item">
-                                    <label>课程顾问 <span class="required">*</span></label>
-                                    <div class="searchable-dropdown" id="dropdown-advisor">
+                        <!-- 04 关联人员 -->
+                        <div class="ecf-section ecf-section-inner" id="enroll-referral-section">
+                            <div class="ecf-sec-head">
+                                <div class="ecf-sec-title"><span class="ecf-sec-num">04</span>关联人员</div>
+                                <span class="ecf-sec-sub">课程顾问必填，其余选填</span>
+                            </div>
+                            <div class="ecf-ref-list">
+                                <div class="ecf-ref-row">
+                                    <div class="ecf-ref-lbl">课程顾问<span class="ecf-req">*</span></div>
+                                    <div class="searchable-dropdown" id="dropdown-advisor" style="flex:1">
                                         <input type="text" class="searchable-input" placeholder="请选择课程顾问" autocomplete="off" data-placeholder="请选择课程顾问">
                                         <input type="hidden" class="searchable-value" value="0">
                                         <div class="searchable-menu"></div>
                                     </div>
                                 </div>
-                                <div class="enroll-referral-item">
-                                    <label>试听老师</label>
-                                    <div class="searchable-dropdown" id="dropdown-trial-teacher">
-                                        <input type="text" class="searchable-input" placeholder="请选择试听老师" autocomplete="off" data-placeholder="请选择试听老师">
-                                        <input type="hidden" class="searchable-value" value="0">
-                                        <div class="searchable-menu"></div>
-                                    </div>
+                                <div class="ecf-ref-toggle" id="ecf-ref-toggle" onclick="toggleEcfRefMore()">
+                                    <span class="ecf-ref-arr">▶</span> 更多关联人员（选填）
                                 </div>
-                                <div class="enroll-referral-item">
-                                    <label>扩科老师</label>
-                                    <div class="searchable-dropdown" id="dropdown-expansion-teacher">
-                                        <input type="text" class="searchable-input" placeholder="请选择扩科老师" autocomplete="off" data-placeholder="请选择扩科老师">
-                                        <input type="hidden" class="searchable-value" value="0">
-                                        <div class="searchable-menu"></div>
+                                <div class="ecf-ref-more" id="ecf-ref-more">
+                                    <div class="ecf-ref-row">
+                                        <div class="ecf-ref-lbl">试听老师</div>
+                                        <div class="searchable-dropdown" id="dropdown-trial-teacher" style="flex:1">
+                                            <input type="text" class="searchable-input" placeholder="请选择试听老师" autocomplete="off" data-placeholder="请选择试听老师">
+                                            <input type="hidden" class="searchable-value" value="0">
+                                            <div class="searchable-menu"></div>
+                                        </div>
                                     </div>
-                                </div>
-                            </div>
-                            <div class="enroll-referral-row">
-                                <div class="enroll-referral-item">
-                                    <label>续费老师</label>
-                                    <div class="searchable-dropdown" id="dropdown-renewal-teacher">
-                                        <input type="text" class="searchable-input" placeholder="请选择续费老师" autocomplete="off" data-placeholder="请选择续费老师">
-                                        <input type="hidden" class="searchable-value" value="0">
-                                        <div class="searchable-menu"></div>
+                                    <div class="ecf-ref-row">
+                                        <div class="ecf-ref-lbl">扩科老师</div>
+                                        <div class="searchable-dropdown" id="dropdown-expansion-teacher" style="flex:1">
+                                            <input type="text" class="searchable-input" placeholder="请选择扩科老师" autocomplete="off" data-placeholder="请选择扩科老师">
+                                            <input type="hidden" class="searchable-value" value="0">
+                                            <div class="searchable-menu"></div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="enroll-referral-item">
-                                    <label>转介绍老师</label>
-                                    <div class="searchable-dropdown" id="dropdown-referral-teacher">
-                                        <input type="text" class="searchable-input" placeholder="请选择转介绍老师" autocomplete="off" data-placeholder="请选择转介绍老师">
-                                        <input type="hidden" class="searchable-value" value="0">
-                                        <div class="searchable-menu"></div>
+                                    <div class="ecf-ref-row">
+                                        <div class="ecf-ref-lbl">续费老师</div>
+                                        <div class="searchable-dropdown" id="dropdown-renewal-teacher" style="flex:1">
+                                            <input type="text" class="searchable-input" placeholder="请选择续费老师" autocomplete="off" data-placeholder="请选择续费老师">
+                                            <input type="hidden" class="searchable-value" value="0">
+                                            <div class="searchable-menu"></div>
+                                        </div>
                                     </div>
-                                </div>
-                                <div class="enroll-referral-item">
-                                    <label>转介绍学员</label>
-                                    <div class="searchable-dropdown" id="dropdown-referral-student">
-                                        <input type="text" class="searchable-input" placeholder="请选择转介绍学员" autocomplete="off" data-placeholder="请选择转介绍学员">
-                                        <input type="hidden" class="searchable-value" value="0">
-                                        <div class="searchable-menu"></div>
+                                    <div class="ecf-ref-row">
+                                        <div class="ecf-ref-lbl">转介绍老师</div>
+                                        <div class="searchable-dropdown" id="dropdown-referral-teacher" style="flex:1">
+                                            <input type="text" class="searchable-input" placeholder="请选择转介绍老师" autocomplete="off" data-placeholder="请选择转介绍老师">
+                                            <input type="hidden" class="searchable-value" value="0">
+                                            <div class="searchable-menu"></div>
+                                        </div>
+                                    </div>
+                                    <div class="ecf-ref-row">
+                                        <div class="ecf-ref-lbl">转介绍学员</div>
+                                        <div class="searchable-dropdown" id="dropdown-referral-student" style="flex:1">
+                                            <input type="text" class="searchable-input" placeholder="请选择转介绍学员" autocomplete="off" data-placeholder="请选择转介绍学员">
+                                            <input type="hidden" class="searchable-value" value="0">
+                                            <div class="searchable-menu"></div>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 备注信息 -->
-                        <div class="enroll-section" id="enroll-remark-section">
-                            <div class="enroll-section-title">备注信息</div>
-                            <div class="enroll-remark-row">
-                                <div class="form-group" style="flex:1;">
+                        <!-- 05 备注信息 -->
+                        <div class="ecf-section ecf-section-inner" id="enroll-remark-section">
+                            <div class="ecf-sec-head">
+                                <div class="ecf-sec-title"><span class="ecf-sec-num">05</span>备注信息</div>
+                                <span class="ecf-sec-sub">选填</span>
+                            </div>
+                            <div class="ecf-remark-row">
+                                <div class="ecf-remark-field">
                                     <label>对内备注</label>
-                                    <input type="text" id="enroll-internal-remark" class="form-input" maxlength="100" placeholder="对内备注（选填，最多100字）">
+                                    <input type="text" id="enroll-internal-remark" maxlength="100" placeholder="对内备注（选填，最多100字）">
                                 </div>
-                                <div class="form-group" style="flex:1;">
+                                <div class="ecf-remark-field">
                                     <label>对外备注</label>
-                                    <input type="text" id="enroll-external-remark" class="form-input" maxlength="100" placeholder="对外备注（选填，最多100字）">
+                                    <input type="text" id="enroll-external-remark" maxlength="100" placeholder="对外备注（选填，最多100字）">
                                 </div>
                             </div>
                         </div>
 
-                        <!-- 支付方式 -->
-                        <div class="enroll-section" id="enroll-payment-section">
-                            <div class="enroll-section-title">支付方式</div>
-                            <div class="enroll-payment-row">
-                                <div class="enroll-payment-card">
-                                    <div class="enroll-payment-header">
-                                        <span class="enroll-payment-icon">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><line x1="12" y1="10" x2="12" y2="14"/></svg>
-                                        </span>
-                                        <span class="enroll-payment-label">现金</span>
-                                    </div>
-                                    <input type="number" id="enroll-payment-cash" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                        <!-- 06 支付方式 -->
+                        <div class="ecf-section ecf-section-inner" id="enroll-payment-section">
+                            <div class="ecf-sec-head">
+                                <div class="ecf-sec-title"><span class="ecf-sec-num">06</span>支付方式</div>
+                                <span class="ecf-sec-sub">输入金额自动平衡</span>
+                            </div>
+                            <div class="ecf-pay-list">
+                                <div class="ecf-pay-row" id="ecf-pay-cash-row">
+                                    <div class="ecf-pay-label">现金</div>
+                                    <input type="number" id="enroll-payment-cash" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-card">
-                                    <div class="enroll-payment-header">
-                                        <span class="enroll-payment-icon enroll-payment-icon-meituan">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M8 14s1.5 2 4 2 4-2 4-2"/><line x1="9" y1="9" x2="9.01" y2="9"/><line x1="15" y1="9" x2="15.01" y2="9"/></svg>
-                                        </span>
-                                        <span class="enroll-payment-label">美团</span>
-                                    </div>
-                                    <input type="number" id="enroll-payment-meituan" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                <div class="ecf-pay-row" id="ecf-pay-meituan-row">
+                                    <div class="ecf-pay-label">美团</div>
+                                    <input type="number" id="enroll-payment-meituan" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-card enroll-payment-card-balance">
-                                    <div class="enroll-payment-header">
-                                        <span class="enroll-payment-icon enroll-payment-icon-balance">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/></svg>
-                                        </span>
-                                        <span class="enroll-payment-label">账户余额 <span id="enroll-balance-avail" style="font-weight:400;font-size:12px;color:#16a34a;">(¥0.00)</span></span>
-                                    </div>
-                                    <input type="number" id="enroll-payment-balance" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                <div class="ecf-pay-row" id="ecf-pay-balance-row">
+                                    <div class="ecf-pay-label">账户余额<span class="ecf-pay-bal" id="enroll-balance-avail"></span></div>
+                                    <input type="number" id="enroll-payment-balance" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-card">
-                                    <div class="enroll-payment-header">
-                                        <span class="enroll-payment-icon enroll-payment-icon-online">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
-                                        </span>
-                                        <span class="enroll-payment-label">线上支付</span>
-                                    </div>
-                                    <input type="number" id="enroll-payment-online" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                <div class="ecf-pay-row" id="ecf-pay-online-row">
+                                    <div class="ecf-pay-label">线上支付</div>
+                                    <input type="number" id="enroll-payment-online" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-card">
-                                    <div class="enroll-payment-header">
-                                        <span class="enroll-payment-icon enroll-payment-icon-tonglian">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/><path d="M9 21V9"/></svg>
-                                        </span>
-                                        <span class="enroll-payment-label">通联二维码</span>
-                                    </div>
-                                    <input type="number" id="enroll-payment-tonglian" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                <div class="ecf-pay-row" id="ecf-pay-tonglian-row">
+                                    <div class="ecf-pay-label">通联二维码</div>
+                                    <input type="number" id="enroll-payment-tonglian" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-card">
-                                    <div class="enroll-payment-header">
-                                        <span class="enroll-payment-icon enroll-payment-icon-zhishouyin">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="20" rx="5"/><line x1="8" y1="12" x2="16" y2="12"/></svg>
-                                        </span>
-                                        <span class="enroll-payment-label">智收银</span>
-                                    </div>
-                                    <input type="number" id="enroll-payment-zhishouyin" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                <div class="ecf-pay-row" id="ecf-pay-zhishouyin-row">
+                                    <div class="ecf-pay-label">智收银</div>
+                                    <input type="number" id="enroll-payment-zhishouyin" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
-                                <div class="enroll-payment-card">
-                                    <div class="enroll-payment-header">
-                                        <span class="enroll-payment-icon enroll-payment-icon-douyin">
-                                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="5 3 19 12 5 21 5 3"/></svg>
-                                        </span>
-                                        <span class="enroll-payment-label">抖音</span>
-                                    </div>
-                                    <input type="number" id="enroll-payment-douyin" class="enroll-payment-input" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
+                                <div class="ecf-pay-row" id="ecf-pay-douyin-row">
+                                    <div class="ecf-pay-label">抖音</div>
+                                    <input type="number" id="enroll-payment-douyin" step="0.01" min="0" value="0" oninput="onPaymentInput()" placeholder="0.00">
                                 </div>
                             </div>
-                            <div id="enroll-payment-hint" class="enroll-payment-hint" style="display:none;"></div>
+                            <div id="enroll-payment-hint" class="ecf-pay-status" style="display:none;"></div>
                         </div>
 
-                        <!-- 操作栏 -->
-                        <div class="enroll-action-bar">
+                        <!-- 操作按钮 -->
+                        <div class="ecf-confirm-bar">
                             <button class="btn btn-primary btn-lg" id="btn-confirm-pay" onclick="confirmPayEnroll()">
                                 <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="20 6 9 17 4 12"/></svg>
                                 确认支付
                             </button>
                         </div>
                     </div>
+
+                    <!-- 底部固定栏 -->
+                    <div class="ecf-sticky-bar" id="ecf-sticky-bar" style="display:none;">
+                        <div class="ecf-sticky-inner">
+                            <div class="ecf-sticky-summary" id="ecf-sticky-summary">
+                                <span class="ecf-sticky-placeholder">请先选择课程和价格方案</span>
+                            </div>
+                            <span class="ecf-sticky-total"><small>¥</small><span id="ecf-sticky-total-val">0.00</span></span>
+                            <button class="btn btn-primary btn-lg" id="btn-confirm-pay-sticky" onclick="confirmPayEnroll()">确认支付</button>
+                        </div>
+                    </div>
+
                     </div><!-- /enroll-course-flow -->
 
                     <!-- 活动报名流程容器（默认隐藏） — 单页重设计 -->

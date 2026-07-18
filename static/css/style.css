@@ -2401,6 +2401,288 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     position: relative; z-index: 2;
 }
 
+/* ==================== 课程报名流程（列表式布局） ==================== */
+.ecf-wrap {
+    display: flex; flex-direction: column; gap: 0;
+}
+/* --- 分段卡片 --- */
+.ecf-section {
+    padding: 14px 0;
+    border-bottom: 1px solid #f0ecf7;
+}
+.ecf-section:first-child { padding-top: 0; }
+.ecf-section-inner { border-bottom: 1px dashed #e4e0ed; }
+.ecf-sec-head {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 10px;
+}
+.ecf-sec-title {
+    font-size: 14px; font-weight: 700; color: var(--color-text);
+    display: flex; align-items: center; gap: 8px;
+}
+.ecf-sec-num {
+    display: inline-flex; align-items: center; justify-content: center;
+    width: 22px; height: 22px; border-radius: 6px;
+    background: #f5f3ff; color: #7C3AED;
+    font-size: 12px; font-weight: 700; flex-shrink: 0;
+}
+.ecf-sec-sub {
+    font-size: 12px; color: #9895A8; font-weight: 400;
+}
+
+/* --- 过滤栏 --- */
+.ecf-filter-bar {
+    display: flex; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; align-items: center;
+}
+.ecf-search-box {
+    flex: 1; min-width: 180px;
+    display: flex; align-items: center; gap: 8px;
+    background: #faf9fd; border: 1px solid #e4e0ed;
+    border-radius: 8px; padding: 0 12px; height: 34px;
+    transition: all 0.15s;
+}
+.ecf-search-box:focus-within {
+    border-color: #8b5cf6; box-shadow: 0 0 0 3px #f5f3ff; background: #fff;
+}
+.ecf-search-box svg { flex-shrink: 0; }
+.ecf-search-box input {
+    border: 0; outline: 0; background: transparent;
+    font-size: 13px; width: 100%; color: #3f3a52;
+}
+
+/* --- 学科 chip --- */
+.ecf-chip-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.ecf-chip {
+    padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600;
+    color: #6b6580; background: #faf9fd; border: 1px solid #e4e0ed;
+    cursor: pointer; transition: all 0.15s; white-space: nowrap;
+}
+.ecf-chip:hover { border-color: #8b5cf6; color: #7C3AED; }
+.ecf-chip.on { background: #7C3AED; color: #fff; border-color: #7C3AED; }
+.ecf-chip .cnt { font-size: 10px; opacity: 0.7; margin-left: 3px; }
+
+/* --- 空状态 --- */
+.ecf-empty {
+    display: none; text-align: center; padding: 16px; color: #9895A8; font-size: 13px;
+}
+
+/* --- 通用表格 --- */
+.ecf-tbl {
+    width: 100%; border-collapse: collapse; font-size: 13px;
+}
+.ecf-tbl thead th {
+    text-align: left; padding: 7px 10px; font-size: 11px;
+    color: #9895A8; font-weight: 600; background: #faf9fd;
+    border-bottom: 1px solid #e4e0ed; white-space: nowrap;
+}
+.ecf-tbl thead th.col-r { text-align: right; }
+.ecf-tbl tbody tr {
+    cursor: pointer; transition: background 0.15s; border-bottom: 1px solid #f0ecf7;
+}
+.ecf-tbl tbody tr:hover { background: #f5f3ff; }
+.ecf-tbl tbody tr.sel { background: #ede9fe; }
+.ecf-tbl tbody tr.sel td:first-child { box-shadow: inset 3px 0 0 #7C3AED; }
+.ecf-tbl td { padding: 9px 10px; vertical-align: middle; white-space: nowrap; }
+.ecf-tbl td.col-radio { width: 28px; text-align: center; color: #9895A8; }
+.ecf-tbl tr.sel .col-radio { color: #7C3AED; }
+.ecf-tbl td.col-r { text-align: right; font-variant-numeric: tabular-nums; }
+
+/* 报名课程：价格方案表格列对齐 */
+#ecf-plan-table {
+    table-layout: fixed !important;
+    min-width: 760px;
+}
+#ecf-plan-table thead { display: table-header-group !important; }
+#ecf-plan-table tbody { display: table-row-group !important; }
+#ecf-plan-table tr { display: table-row !important; }
+#ecf-plan-table th,
+#ecf-plan-table td {
+    display: table-cell !important;
+    box-sizing: border-box;
+    padding: 9px 10px !important;
+    vertical-align: middle;
+}
+#ecf-plan-table th:first-child,
+#ecf-plan-table td:first-child {
+    padding-left: 10px !important;
+    text-align: center;
+}
+#ecf-plan-table th:last-child,
+#ecf-plan-table td:last-child {
+    padding-right: 10px !important;
+}
+#ecf-plan-table th.col-r,
+#ecf-plan-table td.col-r {
+    text-align: right !important;
+}
+#ecf-plan-table .col-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* --- 内联标签 --- */
+.ecf-tag {
+    display: inline-block; padding: 1px 6px; border-radius: 3px;
+    font-size: 10px; font-weight: 600; margin-left: 4px; vertical-align: middle;
+    white-space: nowrap;
+}
+.ecf-tag-pkg { background: #fef3c7; color: #92400e; }
+.ecf-tag-toddler { background: #dbeafe; color: #1e40af; }
+.ecf-tag-new { background: #dbeafe; color: #1e40af; }
+.ecf-tag-renew { background: #dcfce7; color: #166534; }
+.ecf-tag-pack { background: #fef3c7; color: #92400e; }
+.ecf-tag-dc { background: #dcfce7; color: #166534; }
+.ecf-tag-cp { background: #fef3c7; color: #92400e; }
+.ecf-tag-aid { background: #ede9fe; color: #5b21b6; }
+.ecf-tag-gift { background: #fce7f3; color: #9d174d; }
+
+/* --- 合计行 --- */
+.ecf-total-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px; margin-top: 8px;
+    background: linear-gradient(90deg, #f5f3ff, #ede9fe);
+    border: 1px solid #e4d8f7; border-radius: 8px;
+}
+.ecf-total-label { font-size: 13px; font-weight: 600; color: #3f3a52; }
+.ecf-total-amount {
+    font-size: 20px; font-weight: 800; color: #7C3AED;
+    font-variant-numeric: tabular-nums;
+}
+.ecf-total-amount small { font-size: 12px; font-weight: 600; }
+
+/* --- 关联人员列表行 --- */
+.ecf-ref-list { display: flex; flex-direction: column; }
+.ecf-ref-row {
+    display: flex; align-items: center; gap: 10px; padding: 8px 0;
+    border-bottom: 1px solid #f0ecf7;
+}
+.ecf-ref-row:last-child { border-bottom: 0; }
+.ecf-ref-lbl {
+    font-size: 13px; font-weight: 600; color: #3f3a52; width: 80px; flex-shrink: 0;
+}
+.ecf-req { color: #ef4444; }
+.ecf-ref-toggle {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 12px; font-weight: 600; color: #7C3AED; cursor: pointer;
+    padding: 6px 0; margin-top: 2px; user-select: none;
+}
+.ecf-ref-arr { transition: transform 0.15s; font-size: 10px; }
+.ecf-ref-toggle.open .ecf-ref-arr { transform: rotate(90deg); }
+.ecf-ref-more { overflow: hidden; max-height: 0; transition: max-height 0.25s ease; opacity: 0; }
+.ecf-ref-more.open { max-height: 500px; opacity: 1; }
+
+/* --- 备注行 --- */
+.ecf-remark-row { display: flex; gap: 12px; }
+.ecf-remark-field {
+    flex: 1; display: flex; align-items: center; gap: 8px;
+    border-bottom: 1px solid #f0ecf7; padding: 8px 0;
+}
+.ecf-remark-field label {
+    font-size: 12px; font-weight: 600; color: #6b6580; width: 64px; flex-shrink: 0;
+}
+.ecf-remark-field input {
+    flex: 1; border: 0; outline: 0; background: transparent;
+    font-size: 13px; color: #1e1b2e; height: 32px;
+}
+.ecf-remark-field input::placeholder { color: #9895A8; }
+
+/* --- 支付方式列表行 --- */
+.ecf-pay-list {
+    display: flex; flex-direction: column;
+    border: 1px solid #e4e0ed; border-radius: 8px; overflow: hidden;
+}
+.ecf-pay-row {
+    display: flex; align-items: center; gap: 0; padding: 0;
+    border-bottom: 1px solid #f0ecf7; transition: background 0.15s;
+}
+.ecf-pay-row:last-child { border-bottom: 0; }
+.ecf-pay-row.has-val { background: #f5f3ff; }
+.ecf-pay-label {
+    font-size: 13px; font-weight: 600; color: #3f3a52; width: 110px; flex-shrink: 0;
+    padding: 0 14px; height: 42px; display: flex; align-items: center; gap: 4px;
+    border-right: 1px solid #f0ecf7;
+}
+.ecf-pay-bal { font-size: 10px; color: #10b981; font-weight: 400; }
+.ecf-pay-row input {
+    flex: 1; border: 0; outline: 0; background: transparent;
+    text-align: right; font-size: 14px; font-weight: 700;
+    color: #1e1b2e; height: 42px; padding: 0 14px;
+    font-variant-numeric: tabular-nums;
+}
+.ecf-pay-row input::placeholder { color: #9895A8; font-weight: 400; }
+.ecf-pay-status {
+    font-size: 12px; font-weight: 600; padding: 7px 12px; border-radius: 8px;
+    margin-top: 6px;
+}
+.ecf-pay-status.ok {
+    background: #ecfdf5; color: #10b981;
+}
+.ecf-pay-status.warn {
+    background: #fff8f0; color: #e65100; border: 1px solid #ffe0b2;
+}
+
+/* --- 确认按钮栏 --- */
+.ecf-confirm-bar {
+    margin-top: 20px; display: flex; justify-content: center;
+}
+.ecf-confirm-bar .btn {
+    padding: 12px 56px; font-size: 16px; font-weight: 700;
+    border-radius: 50px; letter-spacing: 0.3px;
+}
+
+/* --- 底部固定合计栏 --- */
+.ecf-sticky-bar {
+    position: fixed; bottom: 0; left: 210px; right: 0; z-index: 50;
+    background: #fff; border-top: 1px solid #e4e0ed;
+    box-shadow: 0 -4px 20px rgba(30,27,46,.06);
+    padding: 12px 24px;
+}
+.ecf-sticky-inner {
+    max-width: 960px; margin: 0 auto;
+    display: flex; align-items: center; gap: 16px;
+}
+.ecf-sticky-summary {
+    flex: 1; display: flex; align-items: center; gap: 10px;
+    font-size: 13px; color: #6b6580; overflow: hidden;
+}
+.ecf-sticky-placeholder { color: #9895A8; }
+.ecf-sticky-summary .ss-course {
+    font-weight: 600; color: #1e1b2e; white-space: nowrap;
+    overflow: hidden; text-overflow: ellipsis;
+}
+.ecf-sticky-summary .ss-plan { font-size: 12px; color: #6b6580; white-space: nowrap; }
+.ecf-sticky-summary .ss-sep { color: #9895A8; opacity: 0.4; }
+.ecf-sticky-total {
+    font-size: 20px; font-weight: 800; color: #7C3AED; white-space: nowrap;
+}
+.ecf-sticky-total small { font-size: 12px; font-weight: 600; }
+#btn-confirm-pay-sticky {
+    height: 42px; padding: 0 24px; border: 0;
+    border-radius: 8px; background: #7C3AED; color: #fff;
+    font-size: 14px; font-weight: 700; cursor: pointer;
+    transition: all 0.15s; display: flex; align-items: center; gap: 6px; white-space: nowrap;
+}
+#btn-confirm-pay-sticky:hover {
+    background: #8b5cf6; box-shadow: 0 4px 14px rgba(124,58,237,.3);
+}
+#btn-confirm-pay-sticky:disabled {
+    background: #9895A8; cursor: not-allowed; box-shadow: none;
+}
+
+/* --- 响应式 --- */
+@media (max-width: 640px) {
+    .ecf-filter-bar { flex-direction: column; align-items: stretch; }
+    .ecf-pay-label { width: 90px; font-size: 12px; }
+    .ecf-remark-row { flex-direction: column; }
+    .ecf-ref-lbl { width: 64px; font-size: 12px; }
+    .ecf-sticky-bar { left: 0; }
+    .ecf-sticky-inner { flex-wrap: wrap; }
+    .ecf-sticky-summary { order: 1; width: 100%; margin-bottom: 6px; }
+    .ecf-sticky-total { order: 2; }
+    #btn-confirm-pay-sticky { order: 3; }
+}
+
 /* 按钮大小扩展 */
 .btn-lg {
     padding: 12px 24px;
