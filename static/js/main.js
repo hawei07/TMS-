@@ -7017,8 +7017,21 @@ async function goEnroll(studentId) {
         const res = await fetch(API_BASE + 'get_student&id=' + studentId);
         const data = await res.json();
         if (data.error) { showToast(data.error, 'error'); return; }
-        document.getElementById('enroll-info-name').textContent = data.student.name || '-';
-        document.getElementById('enroll-info-phone').textContent = data.student.phone || '-';
+        var st = data.student || {};
+        document.getElementById('enroll-info-name').textContent = st.name || '-';
+        document.getElementById('enroll-info-phone').textContent = st.phone || '-';
+        document.getElementById('enroll-info-no').textContent = st.student_no || '-';
+        document.getElementById('enroll-banner-avatar').textContent = (st.name || '?').charAt(0);
+        // determine primary campus from SST records
+        var sstRecords = data.sst_records || [];
+        var primaryCampus = '';
+        if (sstRecords.length > 0) { primaryCampus = sstRecords[0].campus_name || ''; }
+        document.getElementById('enroll-info-campus').textContent = primaryCampus || '未设置';
+        // compute remaining hours
+        var summary = data.summary || {};
+        var remaining = Math.max(0, (parseInt(summary.total_lessons) || 0) - (parseInt(summary.consumed_lessons) || 0));
+        var hoursEl = document.getElementById('esb-hours').querySelector('.esb-chip-val');
+        if (hoursEl) hoursEl.textContent = remaining;
     } catch (e) { showToast('加载学员信息失败', 'error'); return; }
 
     // Load account balance
@@ -7028,10 +7041,12 @@ async function goEnroll(studentId) {
         const bal = parseFloat(acctData.balance) || 0;
         document.getElementById('enroll-balance-avail').textContent = '(¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2}) + ')';
         document.getElementById('enroll-payment-balance').max = bal;
-        document.getElementById('enroll-info-balance').textContent = '账户余额：¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        var balVal = document.getElementById('esb-balance').querySelector('.esb-chip-val');
+        if (balVal) balVal.textContent = '¥' + bal.toLocaleString('zh-CN', {minimumFractionDigits: 2});
+        if (bal <= 0) { document.getElementById('esb-balance').classList.add('zero'); }
+        else { document.getElementById('esb-balance').classList.remove('zero'); }
     } catch (e) {
         console.error('加载账户余额失败:', e);
-        document.getElementById('enroll-info-balance').textContent = '账户余额：加载失败';
     }
 
     // Reset payment inputs
@@ -7042,8 +7057,17 @@ async function goEnroll(studentId) {
     // Reset course picker
     loadEnrollCoursePicker(null);
 
-    // Load campus list
+    // Load campus list + pre-select student's campus
     await loadCampusOptions('enroll-campus-select');
+    if (primaryCampus) {
+        var sel = document.getElementById('enroll-campus-select');
+        for (var i = 0; i < sel.options.length; i++) {
+            if (sel.options[i].text === primaryCampus) { sel.selectedIndex = i; break; }
+        }
+        // auto-trigger campus change if campus was pre-selected
+        if (sel.selectedIndex > 0) { currentEnrollCampusName = sel.value ? sel.options[sel.selectedIndex].text : ''; }
+        else { currentEnrollCampusName = ''; }
+    }
 
     // Hide type cards and both flows
     document.getElementById('enroll-type-select').style.display = 'none';
@@ -7057,7 +7081,6 @@ async function goEnroll(studentId) {
     // Reset type
     currentEnrollType = null;
 
-    setEnrollProgress(1);
     activatePanel('panel-enroll');
     highlightLeafByPanel('panel-enroll');
 
@@ -7107,7 +7130,6 @@ async function goEnrollFromResource(resourceId) {
     // Reset type
     currentEnrollType = null;
 
-    setEnrollProgress(1);
     activatePanel('panel-enroll');
     highlightLeafByPanel('panel-enroll');
 
@@ -7137,11 +7159,8 @@ document.addEventListener('DOMContentLoaded', function() {
             if (!campusId) {
                 document.getElementById('enroll-type-select').style.display = 'none';
                 loadEnrollCoursePicker(null);
-                setEnrollProgress(1);
                 return;
             }
-            // 显示进度条（校区步骤）
-            setEnrollProgress(1);
             // 显示类型选择卡片
             document.getElementById('enroll-type-select').style.display = '';
             // 预加载课程数据

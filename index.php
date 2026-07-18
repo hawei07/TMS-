@@ -7391,35 +7391,42 @@ if (intval($countBt) === 0) {
                     <button class="btn btn-outline" id="btn-enroll-back">返回</button>
                 </div>
 
-                <!-- 学员信息卡片 -->
-                <div class="enroll-student-info" id="enroll-student-info">
-                    <div class="enroll-student-avatar">
-                        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-7 8-7s8 3 8 7"/></svg>
+                <!-- 学员信息卡片（重设计） -->
+                <div class="enroll-student-banner" id="enroll-student-banner">
+                    <div class="esb-avatar" id="enroll-banner-avatar">-</div>
+                    <div class="esb-info">
+                        <div class="esb-row1">
+                            <span class="esb-name" id="enroll-info-name">-</span>
+                            <span class="esb-tag">在读学员</span>
+                        </div>
+                        <div class="esb-row2">
+                            <span>学号 <b id="enroll-info-no">-</b></span>
+                            <span class="esb-sep">·</span>
+                            <span>电话 <b id="enroll-info-phone">-</b></span>
+                            <span class="esb-sep">·</span>
+                            <span>就读校区 <b id="enroll-info-campus">未设置</b></span>
+                        </div>
                     </div>
-                    <div class="enroll-student-details">
-                        <div class="enroll-student-name" id="enroll-info-name">-</div>
-                        <div class="enroll-student-phone" id="enroll-info-phone">-</div>
-                        <div class="enroll-student-balance" id="enroll-info-balance" style="font-size:13px;color:#16a34a;margin-top:2px;">账户余额：-</div>
+                    <div class="esb-chips">
+                        <div class="esb-chip" id="esb-balance"><span class="esb-chip-val">¥0.00</span><span class="esb-chip-lbl">账户余额</span></div>
+                        <div class="esb-chip" id="esb-hours"><span class="esb-chip-val">0</span><span class="esb-chip-lbl">剩余课时</span></div>
                     </div>
                 </div>
 
-                <!-- 表单区域 -->
-                <div class="enroll-form">
-                    <!-- 公用：选择校区 -->
-                    <div class="enroll-form-row" id="enroll-common-campus" style="flex-direction: column; gap: 16px;">
-                        <div class="form-group" style="margin-bottom: 0;">
-                            <label>校区 <span class="required">*</span></label>
-                            <select id="enroll-campus-select"><option value="">请选择校区</option></select>
+                <!-- 校区 + 报名类型 actionbar（无步骤条） -->
+                <div class="enroll-action-bar" id="enroll-action-bar">
+                    <div class="eab-campus">
+                        <div class="eab-label">选择校区</div>
+                        <select id="enroll-campus-select" class="eab-select"><option value="">请选择校区</option></select>
+                    </div>
+                    <div class="eab-type">
+                        <div class="eab-label">报名类型</div>
+                        <div class="enroll-type-btn-row eab-toggler" id="enroll-type-select" style="display:none;">
+                            <button class="enroll-type-btn active" id="enroll-type-course" onclick="selectEnrollType('course')">📚 课程报名</button>
+                            <button class="enroll-type-btn" id="enroll-type-activity" onclick="selectEnrollType('activity')">🎯 活动报名</button>
                         </div>
                     </div>
-
-                    <!-- 选择课程/活动（校区选定后显示） -->
-                    <div class="enroll-type-select" id="enroll-type-select" style="display:none;">
-                        <div class="enroll-type-btn-row">
-                            <button class="enroll-type-btn active" id="enroll-type-course" onclick="selectEnrollType('course')">课程报名</button>
-                            <button class="enroll-type-btn" id="enroll-type-activity" onclick="selectEnrollType('activity')">活动报名</button>
-                        </div>
-                    </div>
+                </div>
 
                     <!-- 课程报名流程容器（默认隐藏） -->
                     <div class="enroll-course-flow" id="enroll-course-flow" style="display:none;">
@@ -7772,8 +7779,6 @@ if (intval($countBt) === 0) {
                         </div>
 
                     </div><!-- /enroll-activity-flow -->
-
-                </div>
             </section>
 
             <!-- 面板：交易订单 -->

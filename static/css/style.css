@@ -12641,3 +12641,32 @@ tbody td {
 .enroll-activity-total-bar .ta small { font-size: 13px; font-weight: 600; color: var(--color-text-muted); margin-right: 2px; }
 /* 单页确认按钮栏 */
 .enroll-activity-confirm-bar { display: flex; align-items: center; gap: 10px; padding: 14px 28px; background: var(--color-bg); border-top: 1px solid var(--color-border-light); }
+
+/* ==================== 报名详情上半区重设计 ==================== */
+.enroll-student-banner { display: grid; grid-template-columns: auto 1fr auto; gap: 16px; align-items: center; padding: 16px 28px; background: linear-gradient(120deg, var(--color-primary-bg) 0%, var(--color-primary-hover) 55%, #fce7f3 100%); border-bottom: 1px solid var(--color-border-light); position: relative; overflow: hidden; }
+.enroll-student-banner::after { content: ""; position: absolute; right: -50px; top: -50px; width: 200px; height: 200px; background: radial-gradient(circle, rgba(255,255,255,.4), transparent 70%); border-radius: 50%; pointer-events: none; }
+.esb-avatar { width: 50px; height: 50px; border-radius: 14px; background: linear-gradient(135deg, var(--color-primary), var(--color-primary-light)); display: flex; align-items: center; justify-content: center; color: #fff; font-size: 18px; font-weight: 700; flex-shrink: 0; box-shadow: 0 4px 12px rgba(124,58,237,.25); }
+.esb-info { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.esb-row1 { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.esb-name { font-size: 18px; font-weight: 700; color: var(--color-text); letter-spacing: .2px; }
+.esb-tag { font-size: 10px; font-weight: 600; padding: 2px 7px; border-radius: 999px; background: rgba(124,58,237,.12); color: var(--color-primary); }
+.esb-row2 { font-size: 12.5px; color: var(--color-text-secondary); display: flex; gap: 12px; flex-wrap: wrap; }
+.esb-row2 span b { font-weight: 600; color: var(--color-text); }
+.esb-sep { color: var(--color-text-muted); opacity: .5; }
+.esb-chips { display: flex; gap: 10px; flex-shrink: 0; }
+.esb-chip { background: rgba(255,255,255,.65); border: 1px solid rgba(255,255,255,.85); backdrop-filter: blur(6px); padding: 7px 13px; border-radius: 10px; display: flex; flex-direction: column; align-items: center; min-width: 68px; box-shadow: 0 1px 3px rgba(30,27,46,.04); }
+.esb-chip-val { font-size: 15px; font-weight: 700; color: var(--color-text); line-height: 1.1; }
+.esb-chip-lbl { font-size: 11px; color: var(--color-text-muted); margin-top: 2px; }
+#esb-balance.zero .esb-chip-val { color: var(--color-danger); }
+.enroll-action-bar { display: flex; align-items: flex-end; gap: 12px; padding: 14px 28px; background: var(--color-surface); border-bottom: 1px solid var(--color-border-light); }
+.eab-campus { flex: 0 0 220px; }
+.eab-type { flex: 1; }
+.eab-label { font-size: 11px; font-weight: 600; color: var(--color-text-secondary); margin-bottom: 4px; display: flex; align-items: center; gap: 5px; letter-spacing: .2px; }
+.eab-label::before { content: ""; display: inline-block; width: 3px; height: 9px; background: var(--color-primary); border-radius: 2px; flex-shrink: 0; }
+.eab-select { width: 100%; height: 40px; padding: 0 12px; border: 1px solid var(--color-border); border-radius: var(--radius-sm); background: var(--color-bg); font-size: 13px; color: var(--color-text-secondary); font-weight: 600; cursor: pointer; transition: all var(--transition-fast); }
+.eab-select:focus { outline: none; border-color: var(--color-primary-light); box-shadow: 0 0 0 3px var(--color-primary-bg); }
+.eab-select:hover { border-color: var(--color-primary-light); }
+.eab-toggler { display: inline-flex !important; background: var(--color-bg); border: 1px solid var(--color-border); border-radius: var(--radius-sm); padding: 2px; gap: 2px; }
+.eab-toggler .enroll-type-btn { border: 0 !important; background: transparent !important; padding: 8px 14px !important; border-radius: 6px !important; font-size: 13px !important; height: auto !important; }
+.eab-toggler .enroll-type-btn.active { background: var(--color-surface) !important; color: var(--color-primary) !important; box-shadow: 0 1px 3px rgba(30,27,46,.08); }
+@media (max-width: 640px) { .enroll-student-banner { grid-template-columns: 1fr; gap: 10px; } .esb-chips { width: 100%; } .enroll-action-bar { flex-direction: column; align-items: stretch; } .eab-campus { flex: none; } }
