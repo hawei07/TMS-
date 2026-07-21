@@ -233,6 +233,44 @@ function computeSessions($schedule) {
     return $sessions;
 }
 
+function findSchoolTransferAttendanceBlock(PDO $db, array $entries = [], int $fallbackOrderId = 0): ?array {
+    $orderIds = [];
+    $courseTransferIds = [];
+
+    foreach ($entries as $entry) {
+        $oid = intval($entry['order_id'] ?? 0);
+        $tid = intval($entry['transfer_record_id'] ?? 0);
+        if ($oid > 0) $orderIds[$oid] = true;
+        if ($tid > 0) $courseTransferIds[$tid] = true;
+    }
+    if ($fallbackOrderId > 0) $orderIds[$fallbackOrderId] = true;
+
+    if (!empty($orderIds)) {
+        $idList = implode(',', array_map('intval', array_keys($orderIds)));
+        $row = $db->query("SELECT order_id AS source_id, status FROM transfer_records WHERE order_id IN ($idList) AND status IN ('待审批', '已通过') ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return ['type' => 'order', 'source_id' => intval($row['source_id'] ?? 0), 'status' => $row['status'] ?? '待审批'];
+        }
+    }
+
+    if (!empty($courseTransferIds)) {
+        $idList = implode(',', array_map('intval', array_keys($courseTransferIds)));
+        $row = $db->query("SELECT source_course_transfer_id AS source_id, status FROM transfer_records WHERE source_course_transfer_id IN ($idList) AND status IN ('待审批', '已通过') ORDER BY id DESC LIMIT 1")->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return ['type' => 'course_transfer', 'source_id' => intval($row['source_id'] ?? 0), 'status' => $row['status'] ?? '待审批'];
+        }
+    }
+
+    return null;
+}
+
+function formatSchoolTransferAttendanceBlockMessage(array $block): string {
+    $status = $block['status'] ?? '待审批';
+    $stateText = $status === '已通过' ? '已转校' : '转校审批中';
+    $sourceText = ($block['type'] ?? '') === 'course_transfer' ? '转课课包' : '课包';
+    return "该{$sourceText}{$stateText}，不可修改考勤";
+}
+
 function handleApi() {
     global $db;
     $action = $_GET['action'];
@@ -2482,6 +2520,19 @@ $stmt->execute();
             $pendingRefundIds = [];
             $refStmt = $db->query("SELECT DISTINCT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')");
             while ($refR = $refStmt->fetch(PDO::FETCH_ASSOC)) $pendingRefundIds[$refR['order_id']] = true;
+            // 查询所有转校记录，构建 order_id/transfer_id → 审批状态映射（用于源课包显示转校状态）
+            $schoolTransferMap = [];
+            $trMapStmt = $db->query("SELECT order_id, source_transfer_id, status FROM transfer_records WHERE student_id = $sid");
+            while ($trMap = $trMapStmt->fetch(PDO::FETCH_ASSOC)) {
+                $oid = intval($trMap['order_id'] ?? 0);
+                if ($oid > 0) {
+                    $schoolTransferMap['order_' . $oid] = $trMap['status'];
+                }
+                $stid = intval($trMap['source_transfer_id'] ?? 0);
+                if ($stid > 0) {
+                    $schoolTransferMap['transfer_' . $stid] = $trMap['status'];
+                }
+            }
             $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_name, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons, o.transferred_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.created_at DESC");
             $orderRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
@@ -2574,6 +2625,7 @@ $stmt->execute();
                 $r['actual_price'] = round($ap - $taPrice + $pcAmount, 2);
                 $r['teaching_aid_paid'] = max(0, round($taPrice - $pcAmount, 2));
                 $r['transferred_out'] = intval($r['transferred_lessons'] ?? 0);
+                $r['school_transfer_status'] = $schoolTransferMap['order_' . $r['order_id']] ?? '';
                 $rows[] = $r;
 
                 // --- 赠课虚拟记录 ---
@@ -2620,7 +2672,7 @@ $stmt->execute();
                 }
             }
             // ===== 转校课包：从 transfer_records 中读取已通过的转校记录 =====
-            $trStmt = $db->query("SELECT tr.*, c.name AS course_name, c.subject_level1 AS course_sl1, c.subject_level2 AS course_sl2 FROM transfer_records tr LEFT JOIN courses c ON tr.course_id = c.id WHERE tr.student_id = $sid AND tr.status = '已通过' ORDER BY tr.id DESC");
+            $trStmt = $db->query("SELECT tr.*, c.name AS course_name, c.subject_level1 AS course_sl1, c.subject_level2 AS course_sl2 FROM transfer_records tr LEFT JOIN courses c ON tr.course_id = c.id WHERE tr.student_id = $sid AND tr.status = '已通过' ORDER BY tr.created_at DESC");
             while ($tr = $trStmt->fetch(PDO::FETCH_ASSOC)) {
                 $transferLessons = intval($tr['transfer_lessons'] ?? 0);
                 $transferAmount = floatval($tr['transfer_amount'] ?? 0);
@@ -2646,8 +2698,8 @@ $stmt->execute();
                     'status' => '已报名',
                     'order_id' => 0,
                     'order_no' => $tr['order_no'] ?? '',
-                    'created_at' => $tr['updated_at'] ?? $tr['created_at'] ?? '',
-                    'consumed_lessons' => $totalTransferred,
+                    'created_at' => $tr['created_at'] ?? '',
+                    'consumed_lessons' => 0,
                     'campus' => $tr['to_campus'] ?? '',
                     'is_voided' => '否',
                     'refund_status' => $refundStatus,
@@ -2658,11 +2710,19 @@ $stmt->execute();
                     'transferred_lessons' => $totalTransferred,
                     'gifted_lessons' => 0,
                     'transfer_id' => intval($tr['id']),
+                    'course_id' => intval($tr['course_id'] ?? 0),
+                    'school_transfer_status' => $schoolTransferMap['transfer_' . $tr['id']] ?? '',
                 ];
                 $rows[] = $row;
             }
             // ===== 转课课包：从 course_transfer_records 中读取正常的转课记录，生成虚拟课程序行 =====
-            $ctrStmt = $db->query("SELECT ctr.* FROM course_transfer_records ctr WHERE ctr.student_id = $sid AND ctr.status = '正常' ORDER BY ctr.id ASC");
+            $courseTransferSchoolStatus = [];
+            $schoolStatusStmt = $db->query("SELECT source_course_transfer_id, status FROM transfer_records
+                WHERE student_id = $sid AND source_course_transfer_id > 0 ORDER BY id ASC");
+            while ($schoolStatusRow = $schoolStatusStmt->fetch(PDO::FETCH_ASSOC)) {
+                $courseTransferSchoolStatus[(int)$schoolStatusRow['source_course_transfer_id']] = $schoolStatusRow['status'];
+            }
+            $ctrStmt = $db->query("SELECT ctr.* FROM course_transfer_records ctr WHERE ctr.student_id = $sid AND ctr.status IN ('正常', '退费申请中', '已退费') ORDER BY ctr.created_at DESC");
             while ($ctrRow = $ctrStmt->fetch(PDO::FETCH_ASSOC)) {
                 $tCourse = $db->query("SELECT id, name, subject_level1, subject_level2 FROM courses WHERE id = {$ctrRow['target_course_id']}")->fetch(PDO::FETCH_ASSOC);
                 $rows[] = [
@@ -2675,16 +2735,18 @@ $stmt->execute();
                     'lesson_count' => (int)$ctrRow['target_lessons'],
                     'actual_price' => (float)$ctrRow['target_value'],
                     'order_no' => $ctrRow['order_no'],
+                    'created_at' => $ctrRow['created_at'] ?? '',
                     'campus' => $ctrRow['campus'],
                     'consumed_lessons' => (int)$ctrRow['consumed_lessons'],
                     'transferred_lessons' => 0,
                     '_ctr_target_cid' => (int)$ctrRow['target_course_id'],
                     'gifted_lessons' => 0,
                     'is_voided' => '否',
-                    'refund_status' => '正常',
+                    'refund_status' => $ctrRow['status'] === '已撤销' ? '正常' : $ctrRow['status'],
                     'order_type' => '转课',
                     'is_transfer_course' => true,
                     'transfer_record_id' => (int)$ctrRow['id'],
+                    'school_transfer_status' => $courseTransferSchoolStatus[(int)$ctrRow['id']] ?? '',
                     'order_id' => 0,
                     'source_order_id' => (int)$ctrRow['source_order_id'],
                     'discount_plan_amount' => 0,
@@ -2871,6 +2933,8 @@ $stmt->execute();
             $orderId = intval($input['order_id'] ?? 0);
             if ($sid <= 0 || $cid <= 0) { json(['error' => '学员和课程不能为空']); break; }
             if (!in_array($status, ['出勤', '请假', '缺勤'])) { json(['error' => '状态无效']); break; }
+            $transferBlock = findSchoolTransferAttendanceBlock($db, [], $orderId);
+            if ($transferBlock) { json(['error' => formatSchoolTransferAttendanceBlockMessage($transferBlock)]); break; }
             $n = now();
             // 计算课耗金额-税后
             $postTaxAmount = null;
@@ -2929,6 +2993,11 @@ $stmt->execute();
             if ($id <= 0) { json(['error' => '参数错误']); break; }
             $existing = $db->query("SELECT * FROM attendance_records WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
             if (!$existing) { json(['error' => '记录不存在']); break; }
+            $transferBlock = findSchoolTransferAttendanceBlock($db, [], intval($existing['order_id'] ?? 0));
+            if (!$transferBlock && isset($input['order_id'])) {
+                $transferBlock = findSchoolTransferAttendanceBlock($db, [], intval($input['order_id']));
+            }
+            if ($transferBlock) { json(['error' => formatSchoolTransferAttendanceBlockMessage($transferBlock)]); break; }
             $fields = [];
             if (isset($input['course_id'])) $fields[] = "course_id=" . intval($input['course_id']);
             if (isset($input['lesson_date'])) $fields[] = "lesson_date='" . $db->quote(trim($input['lesson_date'])) . "'";
@@ -2997,6 +3066,10 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $id = intval($input['id'] ?? 0);
             if ($id <= 0) { json(['error' => '参数错误']); break; }
+            $existing = $db->query("SELECT * FROM attendance_records WHERE id=$id")->fetch(PDO::FETCH_ASSOC);
+            if (!$existing) { json(['error' => '记录不存在']); break; }
+            $transferBlock = findSchoolTransferAttendanceBlock($db, [], intval($existing['order_id'] ?? 0));
+            if ($transferBlock) { json(['error' => formatSchoolTransferAttendanceBlockMessage($transferBlock)]); break; }
             $db->exec("DELETE FROM absence_records WHERE attendance_id=$id");
             $db->exec("DELETE FROM attendance_records WHERE id=$id");
             json(['message' => '考勤记录删除成功']);
@@ -3040,6 +3113,7 @@ $stmt->execute();
                 // === 课程退费（原有逻辑，增加 project/content 字段） ===
                 $orderId = intval($input['order_id'] ?? 0);
                 $transferId = intval($input['transfer_id'] ?? 0);
+                $courseTransferRecordId = intval($input['course_transfer_record_id'] ?? 0);
 
                 if ($transferId > 0) {
                     // 转校课包退费
@@ -3067,7 +3141,7 @@ $stmt->execute();
 
                     $db->exec("INSERT INTO refund_records (project, content, subject_level1, refund_method, order_id, transfer_record_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, return_teaching_aid, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
                         $db->quote('课程') . ", " .
-                        $db->quote($courseName . '（转校课包）') . ", " .
+                        $db->quote($courseName) . ", " .
                         $db->quote($tr['subject_level1'] ?? '') . ", " .
                         $db->quote($refundMethod) . ", " .
                         "0, " .
@@ -3090,6 +3164,60 @@ $stmt->execute();
                         $db->quote($refundReason) . ", " .
                         "'待审批', '一级审批', '$n', '$n')");
                     $db->exec("UPDATE transfer_records SET refund_status='退费申请中' WHERE id=$transferId");
+                    $newId = $db->query("SELECT LAST_INSERT_ID()")->fetchColumn();
+                    json(['message' => '退费申请提交成功', 'id' => intval($newId)]);
+                    break;
+                }
+
+                if ($courseTransferRecordId > 0) {
+                    // 转课课包退费
+                    $ctr = $db->query("SELECT * FROM course_transfer_records WHERE id=$courseTransferRecordId AND status='正常'")->fetch(PDO::FETCH_ASSOC);
+                    if (!$ctr) { json(['error' => '转课记录不存在或已撤销']); break; }
+
+                    $lessonCount = intval($ctr['target_lessons'] ?? 0);
+                    $transferAmount = floatval($ctr['target_value'] ?? 0);
+                    $courseName = $ctr['target_course_name'] ?? '';
+                    $campus = $ctr['campus'] ?? '';
+                    $ctrSubject = $ctr['target_subject_level1'] ?? '';
+
+                    $customDeduction = floatval($input['custom_deduction'] ?? 0);
+                    if ($customDeduction < 0) { json(['error' => '扣减金额不能为负']); break; }
+                    $actualRefund = round($transferAmount - $customDeduction, 2);
+                    if ($actualRefund < 0) $actualRefund = 0;
+
+                    $bankName = trim($input['bank_name'] ?? '');
+                    $bankAccount = trim($input['bank_account'] ?? '');
+                    $accountHolder = trim($input['account_holder'] ?? '');
+                    $refundReason = trim($input['refund_reason'] ?? '');
+                    $refundTo = trim($input['refund_to'] ?? 'cash');
+                    $refundMethod = (in_array($refundTo, ['balance', 'account'])) ? '账户' : '转账';
+                    $n = now();
+
+                    $db->exec("INSERT INTO refund_records (project, content, subject_level1, refund_method, order_id, course_transfer_record_id, student_id, campus, course_name, total_lessons, total_amount, consumed_lessons, consumed_amount, remaining_lessons, remaining_amount, return_teaching_aid, custom_deduction, actual_refund, bank_name, bank_account, account_holder, refund_reason, status, approval_stage, created_at, updated_at) VALUES (" .
+                        $db->quote('课程') . ", " .
+                        $db->quote($courseName) . ", " .
+                        $db->quote($ctrSubject) . ", " .
+                        $db->quote($refundMethod) . ", " .
+                        intval($ctr['source_order_id'] ?? 0) . ", " .
+                        "$courseTransferRecordId, " .
+                        intval($ctr['student_id']) . ", " .
+                        $db->quote($campus) . ", " .
+                        $db->quote($courseName) . ", " .
+                        "$lessonCount, " .
+                        "$transferAmount, " .
+                        "0, " .
+                        "0, " .
+                        "$lessonCount, " .
+                        "$actualRefund, " .
+                        "0, " .
+                        "$customDeduction, " .
+                        "$actualRefund, " .
+                        $db->quote($bankName) . ", " .
+                        $db->quote($bankAccount) . ", " .
+                        $db->quote($accountHolder) . ", " .
+                        $db->quote($refundReason) . ", " .
+                        "'待审批', '一级审批', '$n', '$n')");
+                    $db->exec("UPDATE course_transfer_records SET status='退费申请中' WHERE id=$courseTransferRecordId");
                     $newId = $db->query("SELECT LAST_INSERT_ID()")->fetchColumn();
                     json(['message' => '退费申请提交成功', 'id' => intval($newId)]);
                     break;
@@ -3472,9 +3600,17 @@ $stmt->execute();
                     break;
                 }
             } else {
-                // 恢复订单退费状态
+                // 恢复订单/转校/转课课包退费状态
                 $orderId = intval($rr['order_id']);
-                $db->exec("UPDATE orders SET refund_status='正常' WHERE id=$orderId");
+                $transferRecordId = intval($rr['transfer_record_id'] ?? 0);
+                $courseTransferRecordId = intval($rr['course_transfer_record_id'] ?? 0);
+                if ($courseTransferRecordId > 0) {
+                    $db->exec("UPDATE course_transfer_records SET status='正常' WHERE id=$courseTransferRecordId");
+                } elseif ($transferRecordId > 0) {
+                    $db->exec("UPDATE transfer_records SET refund_status='正常' WHERE id=$transferRecordId");
+                } else {
+                    $db->exec("UPDATE orders SET refund_status='正常' WHERE id=$orderId");
+                }
             }
             // 删除退费记录
             $db->exec("DELETE FROM refund_records WHERE id=$id");
@@ -3486,11 +3622,12 @@ $stmt->execute();
             if ($method !== 'POST') json(['error' => 'Method not allowed']);
             $orderId = intval($input['order_id'] ?? 0);
             $transferId = intval($input['transfer_id'] ?? 0);
+            $courseTransferRecordId = intval($input['course_transfer_record_id'] ?? 0);
             $toCampusId = intval($input['to_campus_id'] ?? 0);
             $transferLessons = intval($input['transfer_lessons'] ?? 0);
             $applicant = trim($input['applicant'] ?? '');
 
-            if (($orderId <= 0 && $transferId <= 0) || $transferLessons <= 0 || $toCampusId <= 0) {
+            if (($orderId <= 0 && $transferId <= 0 && $courseTransferRecordId <= 0) || $transferLessons <= 0 || $toCampusId <= 0) {
                 json(['error' => '参数不完整']);
                 break;
             }
@@ -3571,6 +3708,75 @@ $stmt->execute();
                     break;
                 }
 
+                if ($courseTransferRecordId > 0) {
+                    // 转课生成的课包转校
+                    $stmt = $db->prepare("SELECT ctr.*, s.name AS student_name,
+                            c.name AS course_name, c.subject_level1, c.subject_level2
+                        FROM course_transfer_records ctr
+                        LEFT JOIN students s ON s.id = ctr.student_id
+                        LEFT JOIN courses c ON c.id = ctr.target_course_id
+                        WHERE ctr.id = :id AND ctr.status = '正常'
+                        FOR UPDATE");
+                    $stmt->execute([':id' => $courseTransferRecordId]);
+                    $ctr = $stmt->fetch(PDO::FETCH_ASSOC);
+                    if (!$ctr) {
+                        $db->rollBack();
+                        json(['error' => '转课记录不存在或已撤销']);
+                        break;
+                    }
+                    if (($ctr['campus'] ?? '') === $toCampus) {
+                        $db->rollBack();
+                        json(['error' => '目标校区不能与当前校区相同']);
+                        break;
+                    }
+                    $available = max(0, intval($ctr['target_lessons']) - intval($ctr['consumed_lessons'] ?? 0));
+                    if ($transferLessons > $available) {
+                        $db->rollBack();
+                        json(['error' => "可转移课时不足，剩余可用 {$available} 课时"]);
+                        break;
+                    }
+                    $pendingStmt = $db->prepare("SELECT COUNT(*) FROM transfer_records WHERE source_course_transfer_id = :id AND status = '待审批'");
+                    $pendingStmt->execute([':id' => $courseTransferRecordId]);
+                    if ((int)$pendingStmt->fetchColumn() > 0) {
+                        $db->rollBack();
+                        json(['error' => '该课包已有待审批的转校申请']);
+                        break;
+                    }
+
+                    $targetLessons = intval($ctr['target_lessons']);
+                    $unitPrice = $targetLessons > 0 ? floatval($ctr['target_value']) / $targetLessons : 0;
+                    $transferAmount = round($unitPrice * $transferLessons, 2);
+                    $n = now();
+                    $stmt = $db->prepare("INSERT INTO transfer_records
+                        (order_id, source_course_transfer_id, student_id, student_name, order_no, course_id, course_name,
+                         subject_level1, subject_level2, plan_name, item_name, from_campus, to_campus,
+                         transfer_lessons, transfer_amount, original_remaining_lessons, status, applicant, created_at)
+                        VALUES
+                        (0, :ctrid, :sid, :sname, :ono, :cid, :cname, :sl1, :sl2, '转课', '转课课程', :fc, :tc,
+                         :tl, :ta, :orl, '待审批', :app, :ct)");
+                    $stmt->execute([
+                        ':ctrid' => $courseTransferRecordId,
+                        ':sid' => intval($ctr['student_id']),
+                        ':sname' => $ctr['student_name'] ?? '',
+                        ':ono' => $ctr['order_no'] ?? '',
+                        ':cid' => intval($ctr['target_course_id']),
+                        ':cname' => $ctr['course_name'] ?? $ctr['target_course_name'] ?? '',
+                        ':sl1' => $ctr['subject_level1'] ?? '',
+                        ':sl2' => $ctr['subject_level2'] ?? '',
+                        ':fc' => $ctr['campus'] ?? '',
+                        ':tc' => $toCampus,
+                        ':tl' => $transferLessons,
+                        ':ta' => $transferAmount,
+                        ':orl' => $available,
+                        ':app' => $applicant,
+                        ':ct' => $n,
+                    ]);
+
+                    $db->commit();
+                    json(['message' => '转校申请已提交']);
+                    break;
+                }
+
                 $order = $db->query("SELECT o.*, s.name AS student_name, c.name AS course_name, c.subject_level1 AS course_sl1, c.subject_level2 AS course_sl2 FROM orders o LEFT JOIN students s ON o.student_id=s.id LEFT JOIN courses c ON o.course_id=c.id WHERE o.id=$orderId FOR UPDATE")->fetch(PDO::FETCH_ASSOC);
                 if (!$order) {
                     $db->rollBack();
@@ -3592,7 +3798,9 @@ $stmt->execute();
                     break;
                 }
 
-                $ap = floatval($order['actual_price'] ?? 0);
+                // 转校实际价值 = (actual_price + teaching_aid_price - discount_plan_amount - coupon_amount) / lesson_count * transfer_lessons
+                $ap = max(0, floatval($order['actual_price'] ?? 0) + floatval($order['teaching_aid_price'] ?? 0)
+                    - floatval($order['discount_plan_amount'] ?? 0) - floatval($order['coupon_amount'] ?? 0));
                 $unitPrice = $lc > 0 ? $ap / $lc : 0;
                 $transferAmount = round($unitPrice * $transferLessons, 2);
 
@@ -3682,6 +3890,7 @@ $stmt->execute();
                 // 审批通过
                 $orderId = intval($tr['order_id']);
                 $sourceTransferId = intval($tr['source_transfer_id'] ?? 0);
+                $sourceCourseTransferId = intval($tr['source_course_transfer_id'] ?? 0);
                 $transferLessons = intval($tr['transfer_lessons']);
                 $transferAmount = floatval($tr['transfer_amount']);
                 $toCampus = $tr['to_campus'];
@@ -3689,6 +3898,27 @@ $stmt->execute();
                 if ($sourceTransferId > 0) {
                     // 转校课包来源：更新源转校记录的 total_transferred
                     $db->exec("UPDATE transfer_records SET total_transferred = total_transferred + $transferLessons WHERE id=$sourceTransferId");
+                } elseif ($sourceCourseTransferId > 0) {
+                    // 转课课包来源：审批时扣除转出的课时和对应价值
+                    $sourceStmt = $db->prepare("SELECT target_lessons, consumed_lessons, target_value
+                        FROM course_transfer_records WHERE id = :id AND status = '正常' FOR UPDATE");
+                    $sourceStmt->execute([':id' => $sourceCourseTransferId]);
+                    $source = $sourceStmt->fetch(PDO::FETCH_ASSOC);
+                    $available = $source ? intval($source['target_lessons']) - intval($source['consumed_lessons'] ?? 0) : 0;
+                    if (!$source || $transferLessons > $available) {
+                        $db->rollBack();
+                        json(['error' => "源转课课包可用课时不足，当前剩余 {$available} 课时"]);
+                        break;
+                    }
+                    $remainingValue = max(0, round(floatval($source['target_value']) - $transferAmount, 2));
+                    $sourceStmt = $db->prepare("UPDATE course_transfer_records
+                        SET target_lessons = target_lessons - :lessons, target_value = :value
+                        WHERE id = :id");
+                    $sourceStmt->execute([
+                        ':lessons' => $transferLessons,
+                        ':value' => $remainingValue,
+                        ':id' => $sourceCourseTransferId,
+                    ]);
                 } elseif ($orderId > 0) {
                     // 普通订单来源：更新原订单 transferred_lessons
                     $db->exec("UPDATE orders SET transferred_lessons = transferred_lessons + $transferLessons WHERE id=$orderId");
@@ -4530,7 +4760,7 @@ $stmt->execute();
                 $sumRow = $db->query("SELECT SUM(o.lesson_count + COALESCE(o.gifted_lessons, 0) - o.consumed_lessons) AS total_remaining FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons AND (o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.is_voided='否' AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))")->fetch(PDO::FETCH_ASSOC);
                 $orderRemaining = intval($sumRow['total_remaining'] ?? 0);
                 // 转课记录剩余课时
-                $transferRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS total_transfer FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常'")->fetch(PDO::FETCH_ASSOC);
+                $transferRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS total_transfer FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常' AND NOT EXISTS (SELECT 1 FROM transfer_records tr WHERE tr.source_course_transfer_id = ctr.id AND tr.status IN ('待审批', '已通过'))")->fetch(PDO::FETCH_ASSOC);
                 $transferRemaining = intval($transferRow['total_transfer'] ?? 0);
                 $totalRemaining = $orderRemaining + $transferRemaining;
                 if ($totalRemaining <= 0) {
@@ -4750,7 +4980,7 @@ $stmt->execute();
                     $mdRow = $db->query("SELECT SUM(o.lesson_count + COALESCE(o.gifted_lessons, 0) - o.consumed_lessons) AS total FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = {$stu['id']} AND o.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectRaw AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons AND (o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.is_voided='否' AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))")->fetch(PDO::FETCH_ASSOC);
                     $orderRemaining = max(0, intval($mdRow['total'] ?? 0));
                     // 转课记录剩余课时
-                    $trRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS tr_remaining FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = {$stu['id']} AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectRaw AND ctr.status = '正常'")->fetch(PDO::FETCH_ASSOC);
+                    $trRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS tr_remaining FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = {$stu['id']} AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectRaw AND ctr.status = '正常' AND NOT EXISTS (SELECT 1 FROM transfer_records tr WHERE tr.source_course_transfer_id = ctr.id AND tr.status IN ('待审批', '已通过'))")->fetch(PDO::FETCH_ASSOC);
                     $transferRemaining = max(0, intval($trRow['tr_remaining'] ?? 0));
                     $totalRemaining = $orderRemaining + $transferRemaining;
                 }
@@ -4867,6 +5097,15 @@ $stmt->execute();
                             }
                         }
                     }
+                    $transferBlock = (is_array($oldEntries2) && !empty($oldEntries2)) ? findSchoolTransferAttendanceBlock($db, $oldEntries2) : null;
+                    if ($transferBlock) {
+                        $oldDl = intval($oldAtt['deducted_lessons'] ?? 0);
+                        if ($deductedLessons !== $oldDl || $status !== $oldAttStatusFromCA) {
+                            $sn = $db->query("SELECT name FROM students WHERE id=$studentId")->fetchColumn() ?: '学员';
+                            throw new Exception("学员「{$sn}」" . formatSchoolTransferAttendanceBlockMessage($transferBlock));
+                        }
+                        continue;
+                    }
                     // 每次保存都先退回旧扣课，再按最新优先级重算，避免旧扣课分布被保留。
                     if (true) {
                     if ($oldAtt && !empty($oldAtt['deduction_json'])) {
@@ -4898,7 +5137,7 @@ $stmt->execute();
                         $maxRow = $db->query("SELECT SUM(GREATEST(0, o.lesson_count - o.consumed_lessons) + GREATEST(0, COALESCE(o.gifted_lessons, 0) - GREATEST(0, o.consumed_lessons - o.lesson_count))) AS max_deductible FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons AND o.is_voided='否' AND (((o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))) OR o.id IN ($oldDeductedOrderIdList))")->fetch(PDO::FETCH_ASSOC);
                         $maxDeductible = intval($maxRow['max_deductible'] ?? 0);
                         // 加上转课记录剩余
-                        $trMaxRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS tr_remaining FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常'")->fetch(PDO::FETCH_ASSOC);
+                        $trMaxRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS tr_remaining FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常' AND NOT EXISTS (SELECT 1 FROM transfer_records tr WHERE tr.source_course_transfer_id = ctr.id AND tr.status IN ('待审批', '已通过'))")->fetch(PDO::FETCH_ASSOC);
                         $maxDeductible += intval($trMaxRow['tr_remaining'] ?? 0);
                         if ($deductedLessons > $maxDeductible) {
                             throw new Exception("学员「{$studentNameForMsg}」剩余课时不足：最多可扣 $maxDeductible 课时，当前请求扣 $deductedLessons 课时");
@@ -5069,7 +5308,7 @@ $stmt->execute();
                         }
                         // 转课记录扣课时（兜底）：当学员的订单课时耗尽后，从转课记录中扣除
                         if ($remainingToDeduct > 0) {
-                            $tRes = $db->query("SELECT ctr.id, ctr.target_lessons, ctr.consumed_lessons, ctr.target_course_id FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常' AND (ctr.target_lessons - ctr.consumed_lessons) > 0 ORDER BY ctr.id ASC");
+                            $tRes = $db->query("SELECT ctr.id, ctr.target_lessons, ctr.consumed_lessons, ctr.target_course_id FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常' AND NOT EXISTS (SELECT 1 FROM transfer_records tr WHERE tr.source_course_transfer_id = ctr.id AND tr.status IN ('待审批', '已通过')) AND (ctr.target_lessons - ctr.consumed_lessons) > 0 ORDER BY ctr.id ASC");
                             while ($tr = $tRes->fetch(PDO::FETCH_ASSOC)) {
                                 if ($remainingToDeduct <= 0) break;
                                 $toDeduct = min($remainingToDeduct, (int)$tr['target_lessons'] - (int)$tr['consumed_lessons']);
@@ -5278,7 +5517,7 @@ $stmt->execute();
                 $quotedSubjectLevel1 = $db->quote($subjectLevel1);
                 $sumRow = $db->query("SELECT SUM(o.lesson_count + COALESCE(o.gifted_lessons, 0) - o.consumed_lessons) AS total_remaining FROM orders o JOIN courses co ON o.course_id = co.id WHERE o.student_id = $studentId AND o.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND (o.lesson_count + COALESCE(o.gifted_lessons, 0)) > o.consumed_lessons AND (o.refund_status IS NULL OR o.refund_status = '' OR o.refund_status = '正常') AND o.is_voided='否' AND o.id NOT IN (SELECT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回'))")->fetch(PDO::FETCH_ASSOC);
                 $orderRemaining = intval($sumRow['total_remaining'] ?? 0);
-                $transferRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS total_transfer FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常'");
+                $transferRow = $db->query("SELECT SUM(ctr.target_lessons - ctr.consumed_lessons) AS total_transfer FROM course_transfer_records ctr JOIN courses co ON ctr.target_course_id = co.id WHERE ctr.student_id = $studentId AND ctr.campus = $quotedCampus AND co.subject_level1 = $quotedSubjectLevel1 AND ctr.status = '正常' AND NOT EXISTS (SELECT 1 FROM transfer_records tr WHERE tr.source_course_transfer_id = ctr.id AND tr.status IN ('待审批', '已通过'))");
                 $transferRow = $transferRow ? $transferRow->fetch(PDO::FETCH_ASSOC) : null;
                 $transferRemaining = intval($transferRow['total_transfer'] ?? 0);
                 $totalRemaining = $orderRemaining + $transferRemaining;

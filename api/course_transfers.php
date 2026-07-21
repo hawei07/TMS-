@@ -28,7 +28,10 @@ function createCourseTransfer(PDO $db, string $method, array $query, array $inpu
     $targetCourseId = (int)($input['target_course_id'] ?? 0);
     $transferLessons = (int)($input['transfer_lessons'] ?? 0);
     $transferRecordId = (int)($input['transfer_record_id'] ?? 0);
+    $schoolTransferId = (int)($input['transfer_id'] ?? 0);
     $isTransferSource = $transferRecordId > 0;
+    $isSchoolTransferSource = $schoolTransferId > 0;
+    $sourceType = $isTransferSource ? 'course_transfer' : ($isSchoolTransferSource ? 'transfer' : 'order');
 
     if ($targetCourseId <= 0) {
         json(['success' => false, 'message' => '参数错误：缺少目标课程']);
@@ -39,7 +42,7 @@ function createCourseTransfer(PDO $db, string $method, array $query, array $inpu
 
     $db->beginTransaction();
     try {
-        // === 源校验（分两路：转课源 vs 订单源）===
+        // === 源校验（分三路：转课源 vs 转校源 vs 订单源）===
         if ($isTransferSource) {
             $stmt = $db->prepare("SELECT * FROM course_transfer_records WHERE id = :id AND status = '正常' FOR UPDATE");
             $stmt->execute([':id' => $transferRecordId]);
@@ -55,14 +58,56 @@ function createCourseTransfer(PDO $db, string $method, array $query, array $inpu
             $inheritedOrderNo = $sourceTransfer['order_no'] ?? '';
             $sourceSubjectName = $sourceTransfer['target_subject_level1'] ?? ''; // will be filled from courses below
 
-            // 从底层订单获取价值参数
-            $ord = $db->query("SELECT actual_price, teaching_aid_price, product_coupon_amount, lesson_count, subject_level1 FROM orders WHERE id = $underlyingOid")->fetch(PDO::FETCH_ASSOC);
-            if (!$ord) { $db->rollBack(); json(['success' => false, 'message' => '底层订单不存在']); }
-            $actualPrice = (float)$ord['actual_price'];
-            $teachingAidPrice = (float)$ord['teaching_aid_price'];
-            $productCouponAmount = (float)$ord['product_coupon_amount'];
-            $lessonCount = (int)$ord['lesson_count'];
-            $sourceSubjectName = $ord['subject_level1'] ?? '';
+            // 从底层订单获取价值参数；若无底层订单（转课链 A→B→C），使用 course_transfer_records 自身数据
+            if ($underlyingOid > 0) {
+                $ord = $db->query("SELECT actual_price, teaching_aid_price, product_coupon_amount, lesson_count, subject_level1 FROM orders WHERE id = $underlyingOid")->fetch(PDO::FETCH_ASSOC);
+                if (!$ord) { $db->rollBack(); json(['success' => false, 'message' => '底层订单不存在']); }
+                $actualPrice = (float)$ord['actual_price'];
+                $teachingAidPrice = (float)$ord['teaching_aid_price'];
+                $productCouponAmount = (float)$ord['product_coupon_amount'];
+                $lessonCount = (int)$ord['lesson_count'];
+                $sourceSubjectName = $ord['subject_level1'] ?? '';
+            } else {
+                $actualPrice = (float)($sourceTransfer['target_value'] ?? 0);
+                $teachingAidPrice = 0;
+                $productCouponAmount = 0;
+                $lessonCount = (int)($sourceTransfer['target_lessons'] ?? 0);
+            }
+        } elseif ($isSchoolTransferSource) {
+            // 转校源：从 transfer_records 获取源数据
+            $stmt = $db->prepare("SELECT * FROM transfer_records WHERE id = :id AND status = '已通过' FOR UPDATE");
+            $stmt->execute([':id' => $schoolTransferId]);
+            $sourceSchoolTransfer = $stmt->fetch(PDO::FETCH_ASSOC);
+            if (!$sourceSchoolTransfer) { $db->rollBack(); json(['success' => false, 'message' => '转校记录不存在或未通过']); }
+
+            $schoolTransferLessons = (int)$sourceSchoolTransfer['transfer_lessons'];
+            $schoolTotalTransferred = (int)($sourceSchoolTransfer['total_transferred'] ?? 0);
+            $remainingLessons = max(0, $schoolTransferLessons - $schoolTotalTransferred);
+            if ($transferLessons > $remainingLessons) { $db->rollBack(); json(['success' => false, 'message' => "转出课时($transferLessons)超出剩余课时($remainingLessons)"]); }
+
+            $studentId    = (int)$sourceSchoolTransfer['student_id'];
+            $sourceCampus = $sourceSchoolTransfer['to_campus'] ?? '';
+            $sourceCourseId = (int)$sourceSchoolTransfer['course_id'];
+            $sourceCourseName = $sourceSchoolTransfer['course_name'] ?? '';
+            $underlyingOid  = (int)$sourceSchoolTransfer['order_id'];
+            $inheritedOrderNo = $sourceSchoolTransfer['order_no'] ?? '';
+            $sourceSubjectName = $sourceSchoolTransfer['subject_level1'] ?? '';
+
+            // 从底层订单获取价值参数；若无底层订单（转校链 A→B→C），使用 transfer_records 自身数据
+            if ($underlyingOid > 0) {
+                $ord = $db->query("SELECT actual_price, teaching_aid_price, product_coupon_amount, lesson_count, subject_level1 FROM orders WHERE id = $underlyingOid")->fetch(PDO::FETCH_ASSOC);
+                if (!$ord) { $db->rollBack(); json(['success' => false, 'message' => '底层订单不存在']); }
+                $actualPrice = (float)$ord['actual_price'];
+                $teachingAidPrice = (float)$ord['teaching_aid_price'];
+                $productCouponAmount = (float)$ord['product_coupon_amount'];
+                $lessonCount = (int)$ord['lesson_count'];
+                $sourceSubjectName = $ord['subject_level1'] ?? '';
+            } else {
+                $actualPrice = (float)$sourceSchoolTransfer['transfer_amount'];
+                $teachingAidPrice = 0;
+                $productCouponAmount = 0;
+                $lessonCount = $schoolTransferLessons;
+            }
         } else {
             if ($sourceOrderId <= 0) { json(['success' => false, 'message' => '参数错误：缺少源订单']); }
             $stmt = $db->prepare(
@@ -136,6 +181,10 @@ function createCourseTransfer(PDO $db, string $method, array $query, array $inpu
             // 减掉源转课记录的目标课时
             $stmt = $db->prepare('UPDATE course_transfer_records SET target_lessons = target_lessons - :d WHERE id = :id');
             $stmt->execute([':d' => $transferLessons, ':id' => $transferRecordId]);
+        } elseif ($isSchoolTransferSource) {
+            // 累计转校记录的转出课时
+            $stmt = $db->prepare('UPDATE transfer_records SET total_transferred = total_transferred + :a WHERE id = :id');
+            $stmt->execute([':a' => $transferLessons, ':id' => $schoolTransferId]);
         } else {
             // 累计源订单的转出课时
             $stmt = $db->prepare('UPDATE orders SET transferred_lessons = transferred_lessons + :a WHERE id = :id');
@@ -144,11 +193,12 @@ function createCourseTransfer(PDO $db, string $method, array $query, array $inpu
 
         // 写入新转课记录
         $stmt = $db->prepare(
-            "INSERT INTO course_transfer_records (source_order_id, source_course_id, source_course_name, target_order_id, target_course_id, target_course_name, student_id, campus, transfer_lessons, transfer_value, target_lessons, target_value, is_cross_subject, order_no, status, created_at)
-             VALUES (:s_oid, :s_cid, :s_cname, 0, :t_cid, :t_cname, :sid, :campus, :tl, :tv, :tgl, :tgv, :ics, :ono, '正常', NOW())"
+            "INSERT INTO course_transfer_records (source_order_id, source_type, source_course_id, source_course_name, target_order_id, target_course_id, target_course_name, student_id, campus, transfer_lessons, transfer_value, target_lessons, target_value, is_cross_subject, order_no, status, created_at)
+             VALUES (:s_oid, :source_type, :s_cid, :s_cname, 0, :t_cid, :t_cname, :sid, :campus, :tl, :tv, :tgl, :tgv, :ics, :ono, '正常', NOW())"
         );
         $stmt->execute([
-            ':s_oid'   => $isTransferSource ? $underlyingOid : $sourceOrderId,
+            ':s_oid'   => $isSchoolTransferSource ? $schoolTransferId : (($isTransferSource || $isSchoolTransferSource) ? $underlyingOid : $sourceOrderId),
+            ':source_type' => $sourceType,
             ':s_cid'   => $sourceCourseId,
             ':s_cname' => $sourceCourseName,
             ':t_cid'   => $targetCourseId,
@@ -284,6 +334,14 @@ function revokeCourseTransfer(PDO $db, string $method, array $query, array $inpu
             json(['success' => false, 'message' => '该转课记录已撤销，无法重复撤销']);
         }
 
+        $stmt = $db->prepare("SELECT COUNT(*) FROM transfer_records
+            WHERE source_course_transfer_id = :id AND status IN ('待审批', '已通过')");
+        $stmt->execute([':id' => $recordId]);
+        if ((int)$stmt->fetchColumn() > 0) {
+            $db->rollBack();
+            json(['success' => false, 'message' => '该课包已发起转校，无法撤销转课']);
+        }
+
         // 检查目标课程是否已发生二次转出（A→B, B→C 情况下，B→C后 A→B不可撤销）
         $stmt = $db->prepare(
             "SELECT COUNT(*) FROM course_transfer_records WHERE source_course_id = :cid AND student_id = :sid AND status = '正常'"
@@ -304,24 +362,38 @@ function revokeCourseTransfer(PDO $db, string $method, array $query, array $inpu
         $transferLessons = (int)$record['transfer_lessons'];
         $sourceCourseId = (int)$record['source_course_id'];
         $studentId = (int)$record['student_id'];
+        $sourceType = $record['source_type'] ?? 'order';
 
-        // 2. 判断撤销来源：是直接订单源还是转课链（A→B→C 中撤销 B→C，课时回 B 而非 A）
-        $stmt = $db->prepare(
-            "SELECT id, target_lessons FROM course_transfer_records
-             WHERE target_course_id = :cid AND student_id = :sid AND status = '正常' AND id != :rid
-             LIMIT 1"
-        );
-        $stmt->execute([':cid' => $sourceCourseId, ':sid' => $studentId, ':rid' => $recordId]);
-        $parentTransfer = $stmt->fetch(PDO::FETCH_ASSOC);
-
-        if ($parentTransfer) {
+        // 2. 根据 source_type 回退课时到正确的源表
+        if ($sourceType === 'course_transfer') {
             // 撤销的是链上转课（B→C）：课时归还到 B 的转课记录（A→B）
             $stmt = $db->prepare(
-                'UPDATE course_transfer_records SET target_lessons = target_lessons + :add WHERE id = :id'
+                "SELECT id, target_lessons FROM course_transfer_records
+                 WHERE target_course_id = :cid AND student_id = :sid AND status = '正常' AND id != :rid
+                 LIMIT 1"
             );
-            $stmt->execute([':add' => $transferLessons, ':id' => $parentTransfer['id']]);
+            $stmt->execute([':cid' => $sourceCourseId, ':sid' => $studentId, ':rid' => $recordId]);
+            $parentTransfer = $stmt->fetch(PDO::FETCH_ASSOC);
+            if ($parentTransfer) {
+                $stmt = $db->prepare(
+                    'UPDATE course_transfer_records SET target_lessons = target_lessons + :add WHERE id = :id'
+                );
+                $stmt->execute([':add' => $transferLessons, ':id' => $parentTransfer['id']]);
+            } else {
+                // 无父级转课记录，回退到源订单
+                $stmt = $db->prepare(
+                    'UPDATE orders SET transferred_lessons = GREATEST(0, transferred_lessons - :dec) WHERE id = :id'
+                );
+                $stmt->execute([':dec' => $transferLessons, ':id' => $sourceOrderId]);
+            }
+        } elseif ($sourceType === 'transfer') {
+            // 撤销的是转校源转课：课时归还到转校记录（source_order_id 存储的是 transfer_records.id）
+            $stmt = $db->prepare(
+                'UPDATE transfer_records SET total_transferred = GREATEST(0, total_transferred - :dec) WHERE id = :id'
+            );
+            $stmt->execute([':dec' => $transferLessons, ':id' => $sourceOrderId]);
         } else {
-            // 撤销的是首层转课（A→B）：课时归还到源订单
+            // source_type = 'order'：首层订单转课，课时归还到源订单
             $stmt = $db->prepare(
                 'UPDATE orders SET transferred_lessons = GREATEST(0, transferred_lessons - :dec) WHERE id = :id'
             );
