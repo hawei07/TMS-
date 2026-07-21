@@ -6135,6 +6135,15 @@ function collectSstItems() {
 // ==================== 学员详情 ====================
 let currentViewStudentId = null;
 
+// ==================== 转卖功能 全局状态 ====================
+let currentResaleOrderId = 0;
+let currentResaleBuyerType = 'student';
+let currentResaleSelectedBuyer = null;
+let currentResaleSourceType = 'order';     // 'order' | 'course_transfer' | 'school_transfer'
+let currentResaleTransferRecordId = 0;
+let currentResaleUnitValue = 0;
+let resaleBuyerAmountUserModified = false;
+
 async function viewStudent(sid) {
     currentViewStudentId = sid;
     loadCampusAndSubjects(); // 预加载校区+学科数据（充值弹窗用，不阻塞UI）
@@ -6386,6 +6395,15 @@ function renderStudentCoursesTable(rows) {
             const recordId = isCourseTransfer ? r.transfer_record_id : (r.transfer_id || 0);
             transferBtnHtml = `<button class="btn-transfer" onclick="showCourseTransferModal(0, ${recordId})" style="margin-right:4px;">转课</button>`;
         }
+        // 操作按钮 - 转卖按钮（普通订单 / 转课课包 / 转校课包 均支持）
+        let resaleBtnHtml = '';
+        if (remainingGt0 && !isGifted && refundStatus === '正常' && hasOrderId && schoolTransferStatus !== '待审批' && !isTransferCourse) {
+            resaleBtnHtml = `<button class="btn btn-sm" style="color:#e67e22;border:1px solid #e67e22;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:4px;" onclick="showResaleModal(${r.order_id})">转卖</button>`;
+        } else if (remainingGt0 && !isGifted && refundStatus === '正常' && isCourseTransfer && schoolTransferStatus !== '待审批') {
+            resaleBtnHtml = `<button class="btn btn-sm" style="color:#e67e22;border:1px solid #e67e22;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:4px;" onclick="showResaleModal(0, 'course_transfer', ${r.transfer_record_id || 0})">转卖</button>`;
+        } else if (remainingGt0 && !isGifted && refundStatus === '正常' && isTransferCourse && schoolTransferStatus !== '待审批') {
+            resaleBtnHtml = `<button class="btn btn-sm" style="color:#e67e22;border:1px solid #e67e22;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:4px;" onclick="showResaleModal(0, 'school_transfer', ${r.transfer_id || 0})">转卖</button>`;
+        }
         // 操作按钮
         let optHtml = '';
         if (isCourseTransfer) {
@@ -6402,12 +6420,12 @@ function renderStudentCoursesTable(rows) {
             } else if (schoolTransferStatus === '已通过' && !remainingGt0) {
                 optHtml = '';
             } else if (consumed === 0 && refundStatus === '正常') {
-                optHtml = transferBtnHtml + schoolTransferBtn + `<button class="btn btn-sm" style="color:#e74c3c;border:1px solid #e74c3c;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:4px;" onclick="revokeCourseTransfer(${r.transfer_record_id})">撤销转课</button>`;
+                optHtml = resaleBtnHtml + transferBtnHtml + schoolTransferBtn + `<button class="btn btn-sm" style="color:#e74c3c;border:1px solid #e74c3c;padding:2px 8px;border-radius:4px;cursor:pointer;margin-right:4px;" onclick="revokeCourseTransfer(${r.transfer_record_id})">撤销转课</button>`;
                 if (remainingGt0) {
                     optHtml += `<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(0, 0, ${r.transfer_record_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
                 }
             } else if (remainingGt0 && refundStatus === '正常') {
-                optHtml = `${transferBtnHtml}${schoolTransferBtn}<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(0, 0, ${r.transfer_record_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+                optHtml = `${resaleBtnHtml}${transferBtnHtml}${schoolTransferBtn}<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(0, 0, ${r.transfer_record_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
             } else {
                 optHtml = '';
             }
@@ -6417,23 +6435,23 @@ function renderStudentCoursesTable(rows) {
             } else if (refundStatus === '已退费') {
                 optHtml = '';
             } else if (remainingGt0 && !isGifted && schoolTransferStatus !== '待审批') {
-                optHtml = `${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(0, ${r.transfer_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
+                optHtml = `${resaleBtnHtml}${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(0, ${r.transfer_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
 <button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(0, ${r.transfer_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
             } else {
                 optHtml = '';
             }
         } else if (transferred > 0) {
             if (remainingGt0 && !isGifted && refundStatus === '正常' && schoolTransferStatus !== '待审批') {
-                optHtml = `${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
+                optHtml = `${resaleBtnHtml}${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
 <button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
             } else {
                 optHtml = '';
             }
         } else if (remainingGt0 && !isGifted && refundStatus === '正常' && hasOrderId && schoolTransferStatus !== '待审批') {
-            optHtml = `${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
+            optHtml = `${resaleBtnHtml}${transferBtnHtml}<button class="btn btn-primary btn-sm" onclick="showTransferModal(${r.order_id})" style="font-size:11px;padding:2px 8px;margin-right:4px;">转校</button>
 <button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
         } else if (hasRemaining && !isTransferCourse && schoolTransferStatus !== '待审批') {
-            optHtml = `${transferBtnHtml}<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
+            optHtml = `${resaleBtnHtml}${transferBtnHtml}<button class="btn btn-danger btn-sm" onclick="showRefundApplyModal(${r.order_id})" style="font-size:11px;padding:2px 8px;">退费</button>`;
         } else if (refundStatus === '退费申请中') {
             optHtml = '';
         } else if (refundStatus === '已退费') {
@@ -9879,6 +9897,9 @@ function initWorkRecordTabs() {
             } else if (targetId === 'tab-transfer-records') {
                 transferPage = 1;
                 loadTransferRecords();
+            } else if (targetId === 'tab-resale-records') {
+                initResaleCampusFilter();
+                loadResaleRecords(1);
             }
         });
     });
@@ -10236,6 +10257,427 @@ async function submitCourseTransfer() {
     } catch (e) {
         showToast('网络错误，请重试', 'error');
     }
+}
+
+// ==================== 转卖功能 ====================
+
+/**
+ * 显示转卖模态框
+ */
+function showResaleModal(orderId, sourceType, transferRecordId) {
+    currentResaleOrderId = orderId || 0;
+    currentResaleSourceType = sourceType || 'order';
+    currentResaleTransferRecordId = transferRecordId || 0;
+    currentResaleBuyerType = 'student';
+    currentResaleSelectedBuyer = null;
+
+    let r = null;
+    if (currentResaleSourceType === 'course_transfer') {
+        r = studentCoursesAllRows.find(row => row.is_transfer_course && row.transfer_record_id == currentResaleTransferRecordId);
+    } else if (currentResaleSourceType === 'school_transfer') {
+        r = studentCoursesAllRows.find(row => row.transfer_id == currentResaleTransferRecordId);
+    } else {
+        r = studentCoursesAllRows.find(row => row.order_id == currentResaleOrderId);
+    }
+    if (!r) {
+        showToast('未找到源课程数据', 'error');
+        return;
+    }
+
+    const lc = parseInt(r.lesson_count) || 0;
+    const cl = parseInt(r.consumed_lessons) || 0;
+    const transferred = parseInt(r.transferred_lessons) || 0;
+    const resaled = parseInt(r.resale_lessons) || 0;
+    const remaining = lc - cl - transferred - resaled;
+    const ap = parseFloat(r.actual_price) || 0;
+    const unitValue = lc > 0 ? (ap / lc) : 0;
+    const sellAmount = unitValue * remaining;
+
+    // 移除已有弹窗
+    const existing = document.querySelector('#modal-resale-overlay');
+    if (existing) existing.remove();
+
+    const overlay = document.createElement('div');
+    overlay.className = 'resale-modal-overlay';
+    overlay.id = 'modal-resale-overlay';
+    overlay.style.display = 'flex';
+    overlay.innerHTML = `
+        <div class="resale-modal">
+            <div class="resale-modal-header">
+                <h3>转卖 - ${esc(r.name || '')}</h3>
+                <button class="btn-close" onclick="document.getElementById('modal-resale-overlay').remove()">&times;</button>
+            </div>
+            <div class="resale-modal-body">
+                <div class="seller-info">
+                    <div><strong>卖方学员：</strong>${esc(r.student_name || '-')}</div>
+                    <div><strong>课程：</strong>${esc(r.name || '-')}</div>
+                    <div><strong>校区：</strong>${esc(r.campus || '-')}</div>
+                    <div><strong>报读课时：</strong>${lc} | <strong>已消耗：</strong>${cl} | <strong>已转出：</strong>${transferred} | <strong>已转卖：</strong>${resaled}</div>
+                    <div><strong>剩余课时：</strong>${remaining} | <strong>原价值：</strong>¥${Number(ap).toFixed(2)} | <strong>单课时价值：</strong>¥${unitValue.toFixed(2)}</div>
+                </div>
+
+                <label>买入方类型：</label>
+                <div class="buyer-type-toggle">
+                    <label><input type="radio" name="resale-buyer-type" value="student" checked onchange="onResaleBuyerTypeChange()"> 学员</label>
+                    <label><input type="radio" name="resale-buyer-type" value="resource" onchange="onResaleBuyerTypeChange()"> 资源</label>
+                </div>
+
+                <label>买入方搜索：</label>
+                <div class="buyer-search">
+                    <input type="text" id="resale-buyer-search" placeholder="搜索学员姓名/学号" oninput="onResaleBuyerSearch()" style="width:100%;">
+                    <div class="buyer-search-results" id="resale-buyer-results" style="display:none;"></div>
+                </div>
+                <div id="resale-buyer-selected" style="margin-top:8px;font-size:13px;color:#1976d2;display:none;"></div>
+
+                <div class="transfer-info">
+                    <label>转卖课时数：</label>
+                    <input type="number" id="resale-lessons" value="${remaining}" min="1" max="${remaining}" step="1" oninput="updateResalePreview()">
+                    <div style="margin-top:4px;font-size:13px;">卖出课时金额：<strong id="resale-sell-amount">¥${sellAmount.toFixed(2)}</strong></div>
+
+                    <label>买入金额：</label>
+                    <input type="number" id="resale-buyer-amount" value="${sellAmount.toFixed(2)}" min="0.01" max="${sellAmount.toFixed(2)}" step="100" oninput="resaleBuyerAmountUserModified=true;updateResalePreview()">
+                </div>
+
+                <div class="revenue-preview">
+                    <div>确认收入：<strong id="resale-revenue-preview">¥0.00</strong></div>
+                </div>
+            </div>
+            <div class="resale-modal-footer">
+                <button class="btn btn-secondary" onclick="document.getElementById('modal-resale-overlay').remove()">取消</button>
+                <button class="btn btn-primary" id="btn-submit-resale" onclick="confirmResale()">确认转卖</button>
+            </div>
+        </div>
+    `;
+    document.body.appendChild(overlay);
+
+    // 缓存 unitValue，初始化用户修改标记（必须在 updateResalePreview 之前）
+    currentResaleUnitValue = unitValue;
+    resaleBuyerAmountUserModified = false;
+
+    // 初始预览
+    updateResalePreview();
+
+    // 绑定 input 事件（与内联 oninput 互补，确保覆盖所有变化）
+    const lessonsInput = document.getElementById('resale-lessons');
+    const buyerInput = document.getElementById('resale-buyer-amount');
+    if (lessonsInput) lessonsInput.addEventListener('input', updateResalePreview);
+    if (buyerInput) buyerInput.addEventListener('input', function() {
+        resaleBuyerAmountUserModified = true;
+        updateResalePreview();
+    });
+
+    // 点击遮罩关闭
+    overlay.addEventListener('click', function(e) {
+        if (e.target === overlay) overlay.remove();
+    });
+}
+
+/**
+ * 买方类型切换
+ */
+function onResaleBuyerTypeChange() {
+    const val = document.querySelector('input[name="resale-buyer-type"]:checked')?.value || 'student';
+    currentResaleBuyerType = val;
+    currentResaleSelectedBuyer = null;
+    const searchInput = document.getElementById('resale-buyer-search');
+    if (searchInput) {
+        searchInput.value = '';
+        searchInput.placeholder = val === 'student' ? '搜索学员姓名/学号' : '搜索资源姓名/手机';
+    }
+    const results = document.getElementById('resale-buyer-results');
+    if (results) results.style.display = 'none';
+    const selected = document.getElementById('resale-buyer-selected');
+    if (selected) selected.style.display = 'none';
+}
+
+/**
+ * 买方搜索（防抖）
+ */
+let resaleSearchTimer = null;
+function onResaleBuyerSearch() {
+    clearTimeout(resaleSearchTimer);
+    resaleSearchTimer = setTimeout(async () => {
+        const keyword = document.getElementById('resale-buyer-search')?.value?.trim() || '';
+        if (keyword.length < 1) {
+            document.getElementById('resale-buyer-results').style.display = 'none';
+            return;
+        }
+        const type = currentResaleBuyerType;
+        if (type === 'student') {
+            await searchBuyerStudents(keyword);
+        } else {
+            await searchBuyerResources(keyword);
+        }
+    }, 300);
+}
+
+/**
+ * 搜索买方学员
+ */
+async function searchBuyerStudents(keyword) {
+    const container = document.getElementById('resale-buyer-results');
+    try {
+        const res = await fetch(API_BASE + 'search_students&keyword=' + encodeURIComponent(keyword));
+        const data = await res.json();
+        const obj = data.data || {};
+        const list = Object.values(obj);
+        if (list.length === 0) {
+            container.innerHTML = '<div class="buyer-search-result-item" style="color:#999;">无匹配学员</div>';
+            container.style.display = 'block';
+            return;
+        }
+        container.innerHTML = list.map(s => `<div class="buyer-search-result-item" onclick="selectResaleBuyer('student', ${s.id}, '${esc(s.name).replace(/'/g, "\\'")}', '${esc(s.student_no || '').replace(/'/g, "\\'")}', '${esc(s.phone || '').replace(/'/g, "\\'")}')">${esc(s.name)} - ${esc(s.student_no || '-')} (${esc(s.phone || '-')})</div>`).join('');
+        container.style.display = 'block';
+    } catch (e) {
+        container.innerHTML = '<div class="buyer-search-result-item" style="color:#e74c3c;">搜索失败</div>';
+        container.style.display = 'block';
+    }
+}
+
+/**
+ * 搜索买方资源
+ */
+async function searchBuyerResources(keyword) {
+    const container = document.getElementById('resale-buyer-results');
+    try {
+        const res = await fetch(API_BASE + 'get_resources&keyword=' + encodeURIComponent(keyword) + '&pool_type=');
+        const data = await res.json();
+        const list = data.data || [];
+        if (list.length === 0) {
+            container.innerHTML = '<div class="buyer-search-result-item" style="color:#999;">无匹配资源</div>';
+            container.style.display = 'block';
+            return;
+        }
+        container.innerHTML = list.map(r => `<div class="buyer-search-result-item" onclick="selectResaleBuyer('resource', ${r.id}, '${esc(r.name || '').replace(/'/g, "\\'")}', '', '${esc(r.phone || '').replace(/'/g, "\\'")}')">${esc(r.name || '')} (${esc(r.phone || '-')})</div>`).join('');
+        container.style.display = 'block';
+    } catch (e) {
+        container.innerHTML = '<div class="buyer-search-result-item" style="color:#e74c3c;">搜索失败</div>';
+        container.style.display = 'block';
+    }
+}
+
+/**
+ * 选中买方
+ */
+function selectResaleBuyer(type, id, name, no, phone) {
+    currentResaleSelectedBuyer = { type, id, name, no, phone };
+    const selected = document.getElementById('resale-buyer-selected');
+    if (selected) {
+        const label = type === 'student' ? `学员：${name} (${no || phone})` : `资源：${name} (${phone})`;
+        selected.textContent = '已选择：' + label;
+        selected.style.display = 'block';
+    }
+    const results = document.getElementById('resale-buyer-results');
+    if (results) results.style.display = 'none';
+    const searchInput = document.getElementById('resale-buyer-search');
+    if (searchInput) searchInput.value = name;
+}
+
+/**
+ * 更新转卖预览（确认收入实时计算）
+ */
+function updateResalePreview() {
+    const lessonsInput = document.getElementById('resale-lessons');
+    const buyerInput = document.getElementById('resale-buyer-amount');
+    if (!lessonsInput || !buyerInput) return;
+
+    const lessons = parseFloat(lessonsInput.value) || 0;
+    let buyerAmount = parseFloat(buyerInput.value) || 0;
+    const unitValue = currentResaleUnitValue || 0;
+    const sellAmount = Math.round(unitValue * lessons * 100) / 100;
+
+    // 更新卖出金额显示
+    const sellEl = document.getElementById('resale-sell-amount');
+    if (sellEl) sellEl.textContent = '¥' + sellAmount.toFixed(2);
+
+    // 更新买入金额 max
+    buyerInput.max = sellAmount.toFixed(2);
+
+    // 如果用户没手动改过买入金额，或当前值超出新 max，重置为 sellAmount
+    if (!resaleBuyerAmountUserModified || buyerAmount > sellAmount) {
+        buyerInput.value = sellAmount.toFixed(2);
+        buyerAmount = sellAmount;
+    }
+
+    // 确认收入 = 卖出金额 - 买入金额（不低于 0）
+    const revenue = Math.max(0, sellAmount - buyerAmount);
+    const revenueEl = document.getElementById('resale-revenue-preview');
+    if (revenueEl) {
+        revenueEl.textContent = '¥' + revenue.toFixed(2);
+        revenueEl.style.color = revenue >= 0 ? '#1976d2' : '#e74c3c';
+    }
+}
+
+/**
+ * 二次确认后提交转卖
+ */
+function confirmResale() {
+    let r = null;
+    if (currentResaleSourceType === 'course_transfer') {
+        r = studentCoursesAllRows.find(row => row.is_transfer_course && row.transfer_record_id == currentResaleTransferRecordId);
+    } else if (currentResaleSourceType === 'school_transfer') {
+        r = studentCoursesAllRows.find(row => row.transfer_id == currentResaleTransferRecordId);
+    } else {
+        r = studentCoursesAllRows.find(row => row.order_id == currentResaleOrderId);
+    }
+    if (!r) { showToast('未找到源课程数据', 'error'); return; }
+
+    const transferLessons = parseFloat(document.getElementById('resale-lessons')?.value) || 0;
+    const buyerAmount = parseFloat(document.getElementById('resale-buyer-amount')?.value) || 0;
+
+    if (transferLessons <= 0) { showToast('转卖课时数必须大于0', 'error'); return; }
+    if (buyerAmount <= 0) { showToast('买入金额必须大于0', 'error'); return; }
+
+    const lc = parseInt(r.lesson_count) || 1;
+    const ap = parseFloat(r.actual_price) || 0;
+    const unitValue = lc > 0 ? (ap / lc) : 0;
+    const sellAmount = unitValue * transferLessons;
+    const revenue = sellAmount - buyerAmount;
+
+    if (buyerAmount > sellAmount) { showToast('买入金额不能超过卖出金额', 'error'); return; }
+
+    if (!currentResaleSelectedBuyer) {
+        showToast('请选择买入方', 'error');
+        return;
+    }
+
+    const buyerLabel = currentResaleSelectedBuyer.type === 'student'
+        ? `学员：${currentResaleSelectedBuyer.name} (${currentResaleSelectedBuyer.no || currentResaleSelectedBuyer.phone})`
+        : `资源：${currentResaleSelectedBuyer.name} (${currentResaleSelectedBuyer.phone})`;
+
+    const msg = `确认转卖？\n\n卖方：${esc(r.student_name || '-')}\n买方：${buyerLabel}\n课程：${esc(r.name)}\n转卖课时：${transferLessons}\n买入金额：¥${buyerAmount.toFixed(2)}\n确认收入：¥${revenue.toFixed(2)}`;
+
+    if (!confirm(msg)) return;
+
+    submitResale();
+}
+
+/**
+ * 提交转卖
+ */
+async function submitResale() {
+    const transferLessons = parseFloat(document.getElementById('resale-lessons')?.value) || 0;
+    const buyerAmount = parseFloat(document.getElementById('resale-buyer-amount')?.value) || 0;
+
+    const body = {
+        seller_order_id: currentResaleOrderId,
+        buyer_type: currentResaleSelectedBuyer.type,
+        transfer_lessons: transferLessons,
+        buyer_amount: buyerAmount
+    };
+
+    // 转课课包/转校课包：传递来源类型和记录ID
+    if (currentResaleSourceType !== 'order') {
+        body.seller_source_type = currentResaleSourceType;
+        body.seller_transfer_record_id = currentResaleTransferRecordId;
+    }
+
+    if (currentResaleSelectedBuyer.type === 'student') {
+        body.buyer_student_id = currentResaleSelectedBuyer.id;
+    } else {
+        body.buyer_resource_id = currentResaleSelectedBuyer.id;
+    }
+
+    // 获取操作人
+    const operator = sessionStorage.getItem('operator_name') || '';
+    if (operator) body.created_by = operator;
+
+    try {
+        const res = await fetch(API_BASE + 'resale_create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('转卖成功');
+            const overlay = document.getElementById('modal-resale-overlay');
+            if (overlay) overlay.remove();
+            if (typeof currentViewStudentId !== 'undefined' && currentViewStudentId) {
+                loadStudentCourses(currentViewStudentId);
+            }
+        } else {
+            showToast(data.message || '转卖失败', 'error');
+        }
+    } catch (e) {
+        showToast('网络错误，请重试', 'error');
+    }
+}
+
+// ==================== 转卖记录（工作记录面板） ====================
+let resalePage = 1;
+let resalePageSize = 20;
+
+async function initResaleCampusFilter() {
+    const campusSel = document.getElementById('filter-resale-campus');
+    if (!campusSel) return;
+    if (campusSel.options.length > 1) return; // 已初始化
+    try {
+        const res = await fetch(API_BASE + 'list_organizations');
+        const data = await res.json();
+        const orgs = (data.data && data.data.flat) || [];
+        orgs.filter(o => o.type === '校区').forEach(c => {
+            const opt = document.createElement('option');
+            opt.value = c.name;
+            opt.textContent = c.name;
+            campusSel.appendChild(opt);
+        });
+    } catch (e) {
+        console.error('initResaleCampusFilter error:', e);
+    }
+}
+
+async function loadResaleRecords(page) {
+    if (page) resalePage = page;
+    const campus = document.getElementById('filter-resale-campus')?.value || '';
+    const keyword = document.getElementById('filter-resale-keyword')?.value || '';
+    const dateFrom = document.getElementById('filter-resale-date-from')?.value || '';
+    const dateTo = document.getElementById('filter-resale-date-to')?.value || '';
+
+    const params = { page: resalePage, page_size: resalePageSize };
+    if (campus) params.campus = campus;
+    if (keyword) params.keyword = keyword;
+    if (dateFrom) params.date_from = dateFrom;
+    if (dateTo) params.date_to = dateTo;
+
+    try {
+        const data = await api('resale_list', params, 'GET');
+        renderResaleRecordsTable(data.data || [], data.total || 0);
+    } catch (e) {
+        console.error('loadResaleRecords error:', e);
+    }
+}
+
+function renderResaleRecordsTable(rows, total) {
+    const tbody = document.querySelector('#table-resale-records tbody');
+    if (!tbody) return;
+    tbody.innerHTML = rows.map(r => {
+        const fullBadge = r.is_full_transfer == 1
+            ? '<span style="color:#e67e22;font-weight:600;">全部</span>'
+            : '部分';
+        const revColor = parseFloat(r.confirmed_revenue || 0) > 0 ? '#16a34a' : '#666';
+        const sellerNo = r.seller_no || '';
+        const buyerNo = r.buyer_no || '';
+        return `<tr>
+            <td>${esc(r.seller_name || '')}</td>
+            <td>${esc(sellerNo)}</td>
+            <td>${esc(r.course_name || '')}</td>
+            <td>${r.transfer_lessons}</td>
+            <td>${r.transfer_lessons}</td>
+            <td>¥${parseFloat(r.transfer_amount || 0).toFixed(2)}</td>
+            <td>¥${parseFloat(r.buyer_amount || 0).toFixed(2)}</td>
+            <td style="color:${revColor};font-weight:600;">¥${parseFloat(r.confirmed_revenue || 0).toFixed(2)}</td>
+            <td>${r.confirmed_revenue_after_tax != null ? '¥' + parseFloat(r.confirmed_revenue_after_tax).toFixed(2) : '-'}</td>
+            <td>${fullBadge}</td>
+            <td>${esc(r.campus_name || '')}</td>
+            <td>${esc(r.buyer_name || '')}</td>
+            <td>${esc(buyerNo)}</td>
+            <td>${esc(r.campus_name || '')}</td>
+            <td>${(r.created_at || '').substring(0, 16)}</td>
+        </tr>`;
+    }).join('');
+
+    renderPagination('pagination-resale', total, resalePage, resalePageSize, loadResaleRecords);
 }
 
 // ==================== 转校记录（工作记录面板） ====================

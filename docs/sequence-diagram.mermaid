@@ -1,90 +1,83 @@
 sequenceDiagram
-    actor User as 用户
-    participant JS as main.js
-    participant API as handleApi()
-    participant H as course_transfers.php
+    actor 教务 as 教务人员
+    participant FE as 前端 (main.js)
+    participant API as TMS API (router)
+    participant Resale as api/resale.php
     participant DB as MySQL
 
-    User->>JS: 点击"转课"按钮，填写弹窗，提交
-    JS->>API: POST ?action=create_course_transfer
-    Note over JS,API: body: {source_order_id, target_course_id, transfer_lessons, [target_lessons]}
-
-    API->>H: dispatchExtractedApi() → createCourseTransfer()
-    H->>DB: SELECT orders WHERE id=source_order_id FOR UPDATE
-    DB-->>H: source order row
-    H->>H: validate: !is_voided, order_type!='活动', refund_status!='已退费'
-    H->>H: remaining = lesson_count - consumed_lessons - transferred_lessons
-    H->>H: validate: 0 < transfer_lessons ≤ remaining
-
-    H->>DB: SELECT courses WHERE id=target_course_id
-    DB-->>H: target course row
-    H->>H: validate: same campus (FIND_IN_SET)
-    H->>H: validate: target_course_id ≠ source_course_id
-
-    H->>DB: SELECT subjects WHERE id IN (source.subject, target.subject)
-    DB-->>H: source/target subject rows
-    H->>H: is_cross = (source.parent_id ≠ target.parent_id)
-
-    H->>H: unit_value = (actual_price - teaching_aid_price + product_coupon_amount) / lesson_count
-    H->>H: transfer_value = unit_value × transfer_lessons
-    alt 同科
-        H->>H: target_lessons = transfer_lessons, target_value = transfer_value
-    else 跨科
-        H->>H: target_lessons = input, target_value = transfer_value
+    教务->>FE: 点击学员详情 → 报读课程 → [转卖]
+    FE->>FE: 校验：剩余课时>0 AND 状态正常 AND 无转校审批
+    FE-->>教务: 弹出转卖模态框（预填卖方信息）
+    
+    教务->>FE: 选择买入方类型（学员/资源）
+    alt 买入方 = 学员
+        教务->>FE: 搜索学员（姓名/学号）
+        FE->>API: GET ?action=get_students&keyword=XXX
+        API-->>FE: 返回学员列表
+    else 买入方 = 资源
+        教务->>FE: 搜索资源（姓名/手机）
+        FE->>API: GET ?action=get_resources&keyword=XXX
+        API-->>FE: 返回资源列表
     end
-
-    H->>DB: BEGIN TRANSACTION
-    H->>DB: UPDATE orders SET transferred_lessons += transfer_lessons WHERE id=source_order_id
-    H->>DB: INSERT INTO orders (student_id, course_id, lesson_count, actual_price, order_type='转课', ...)
-    DB-->>H: new_order_id
-    H->>DB: INSERT INTO course_transfer_records (...)
-    H->>DB: COMMIT
-    H-->>API: json({success:true, record:{...}})
-    JS-->>User: 刷新课程列表
+    教务->>FE: 选择买入方，调整课时数/买入金额
+    教务->>FE: 点击「确认转卖」
+    
+    FE-->>教务: 二次确认弹窗（展示摘要）
+    教务->>FE: 确认
+    
+    FE->>API: POST ?action=resale_create
+    Note over API: handleApi() → dispatchExtractedApi()
+    API->>Resale: resale_create($db, method, query, input)
+    
+    Resale->>DB: BEGIN TRANSACTION
+    Resale->>DB: SELECT * FROM orders WHERE id=seller_order_id FOR UPDATE
+    Note over DB: 行锁防并发
+    
+    Resale->>Resale: 校验：剩余课时 >= transfer_lessons
+    Resale->>Resale: 校验：buyer_amount <= transfer_amount
+    Resale->>Resale: 校验：买方 != 卖方
+    
+    alt 买方 = 资源且未关联学员
+        Resale->>DB: INSERT INTO students (name, phone, resource_id)
+        Note over DB: 自动创建学员档案
+        Resale->>Resale: buyer_student_id = new student.id
+    end
+    
+    Resale->>Resale: 查询 tax_rates.course_tax_rate（按校区）
+    Resale->>Resale: 计算 confirmed_revenue = transfer_amount - buyer_amount
+    Resale->>Resale: 计算 confirmed_revenue_after_tax = confirmed_revenue × (1 - tax_rate)
+    
+    Resale->>DB: INSERT INTO resale_records (...)
+    Resale->>DB: UPDATE orders SET resale_lessons = resale_lessons + transfer_lessons WHERE id=seller_order_id
+    
+    alt 全部转卖（剩余课时 == transfer_lessons）
+        Resale->>DB: UPDATE orders SET status='已结课' WHERE id=seller_order_id
+    end
+    
+    Resale->>DB: INSERT INTO orders (student_id=buyer, course_id, lesson_count=transfer_lessons, actual_price=buyer_amount, campus, is_resale_received='是', ...)
+    Note over DB: 为买方创建新报读课程
+    
+    Resale->>DB: UPDATE resale_records SET buyer_order_id=NEW_ORDER_ID WHERE id=RESALE_ID
+    Resale->>DB: COMMIT
+    
+    Resale-->>FE: {success: true, resale_id, buyer_order_id}
+    FE-->>教务: Toast "转卖成功" + 刷新课程列表
 
 ---
 
 sequenceDiagram
-    actor User as 用户
-    participant JS as main.js
-    participant API as handleApi()
-    participant H as course_transfers.php
+    actor 教务 as 教务人员
+    participant FE as 前端 (main.js)
+    participant API as TMS API
+    participant Resale as api/resale.php
     participant DB as MySQL
 
-    User->>JS: 切换到"转课记录"标签页
-    JS->>API: GET ?action=list_course_transfer_records&campus=...&student_id=...&status=...&page=1
-    API->>H: dispatchExtractedApi() → listCourseTransferRecords()
-    H->>DB: SELECT COUNT(*) FROM course_transfer_records WHERE ...
-    H->>DB: SELECT * FROM course_transfer_records WHERE ... ORDER BY id DESC LIMIT ... OFFSET ...
-    DB-->>H: rows
-    H-->>API: json({data:[...], total:N, page:P, page_size:PS})
-    JS-->>User: 渲染表格
-
----
-
-sequenceDiagram
-    actor User as 用户
-    participant JS as main.js
-    participant API as handleApi()
-    participant H as course_transfers.php
-    participant DB as MySQL
-
-    User->>JS: 点击"撤销"按钮
-    JS->>API: POST ?action=revoke_course_transfer {record_id}
-    API->>H: dispatchExtractedApi() → revokeCourseTransfer()
-
-    H->>DB: SELECT * FROM course_transfer_records WHERE id=record_id FOR UPDATE
-    DB-->>H: record row (status='正常')
-    H->>H: validate: record exists & status='正常'
-
-    H->>DB: SELECT consumed_lessons FROM orders WHERE id=target_order_id FOR UPDATE
-    DB-->>H: target order
-    H->>H: validate: consumed_lessons == 0 (无消耗才可撤销)
-
-    H->>DB: BEGIN TRANSACTION
-    H->>DB: UPDATE orders SET transferred_lessons = transferred_lessons - transfer_lessons WHERE id=source_order_id
-    H->>DB: UPDATE orders SET is_voided='是' WHERE id=target_order_id
-    H->>DB: UPDATE course_transfer_records SET status='已撤销', revoked_at=NOW() WHERE id=record_id
-    H->>DB: COMMIT
-    H-->>API: json({success:true})
-    JS-->>User: 刷新转课记录列表 + 课程列表
+    教务->>FE: 打开工作记录 → 转卖记录 Tab
+    FE->>API: GET ?action=resale_list&campus=XXX&keyword=XXX&page=1
+    API->>Resale: resale_list($db, 'GET', query, [])
+    
+    Resale->>DB: SELECT rr.*, s1.name AS seller_name, s1.student_no AS seller_no, s2.name AS buyer_name, s2.student_no AS buyer_no, c.name AS course_name FROM resale_records rr LEFT JOIN students s1 ON rr.seller_student_id=s1.id LEFT JOIN students s2 ON rr.buyer_student_id=s2.id LEFT JOIN courses c ON rr.course_id=c.id WHERE ... ORDER BY rr.id DESC LIMIT 20
+    
+    Resale-->>FE: {data: [...], total, page, page_size}
+    FE->>FE: renderResaleRecordsTable(rows)
+    FE-->>教务: 展示转卖记录列表（14列）

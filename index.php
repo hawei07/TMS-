@@ -2533,7 +2533,7 @@ $stmt->execute();
                     $schoolTransferMap['transfer_' . $stid] = $trMap['status'];
                 }
             }
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_name, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons, o.transferred_lessons FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.created_at DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_name, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons, o.transferred_lessons, o.resale_lessons, o.is_resale_received FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.created_at DESC");
             $orderRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
             // 批量查询考勤记录获取真实消耗课时。班级考勤以 deduction_json 的跨订单分摊为准。
@@ -2610,10 +2610,11 @@ $stmt->execute();
                     $r['refunded_lessons'] = 0;
                     $r['consumed_amount'] = $lc > 0 ? round((($ap - $taPrice + $pcAmount) / $lc) * $paidConsumed, 2) : 0;
                     $transferred = intval($r['transferred_lessons'] ?? 0);
-                    $rl = $lc - $paidConsumed - $transferred;
+                    $resaled = intval($r['resale_lessons'] ?? 0);
+                    $rl = $lc - $paidConsumed - $transferred - $resaled;
                     $r['remaining_lessons'] = $rl > 0 ? $rl : 0;
                     $r['remaining_amount'] = $lc > 0 ? round((($ap - $taPrice + $pcAmount) / $lc) * $r['remaining_lessons'], 2) : 0;
-                    $r['transferred_lessons'] = $transferred;
+                    $r['transferred_lessons'] = $transferred + $resaled;
                 } else {
                     $r['consumed_lessons'] = $paidConsumed;
                     $r['refunded_lessons'] = 0;
@@ -2677,8 +2678,9 @@ $stmt->execute();
                 $transferLessons = intval($tr['transfer_lessons'] ?? 0);
                 $transferAmount = floatval($tr['transfer_amount'] ?? 0);
                 $totalTransferred = intval($tr['total_transferred'] ?? 0);
+                $resaleLessons = intval($tr['resale_lessons'] ?? 0);
                 $refundStatus = $tr['refund_status'] ?? '正常';
-                $remainingLessons = max(0, $transferLessons - $totalTransferred);
+                $remainingLessons = max(0, $transferLessons - $totalTransferred - $resaleLessons);
                 $remainingAmount = $transferLessons > 0 ? round($transferAmount * $remainingLessons / $transferLessons, 2) : 0;
                 $row = [
                     'id' => 0,
@@ -2707,11 +2709,12 @@ $stmt->execute();
                     'refunded_lessons' => 0,
                     'remaining_lessons' => $remainingLessons,
                     'remaining_amount' => $remainingAmount,
-                    'transferred_lessons' => $totalTransferred,
+                    'transferred_lessons' => $totalTransferred + $resaleLessons,
                     'gifted_lessons' => 0,
                     'transfer_id' => intval($tr['id']),
                     'course_id' => intval($tr['course_id'] ?? 0),
                     'school_transfer_status' => $schoolTransferMap['transfer_' . $tr['id']] ?? '',
+                    'resale_lessons' => $resaleLessons,
                 ];
                 $rows[] = $row;
             }
@@ -2738,7 +2741,7 @@ $stmt->execute();
                     'created_at' => $ctrRow['created_at'] ?? '',
                     'campus' => $ctrRow['campus'],
                     'consumed_lessons' => (int)$ctrRow['consumed_lessons'],
-                    'transferred_lessons' => 0,
+                    'transferred_lessons' => (int)($ctrRow['resale_lessons'] ?? 0),
                     '_ctr_target_cid' => (int)$ctrRow['target_course_id'],
                     'gifted_lessons' => 0,
                     'is_voided' => '否',
@@ -2747,6 +2750,7 @@ $stmt->execute();
                     'is_transfer_course' => true,
                     'transfer_record_id' => (int)$ctrRow['id'],
                     'school_transfer_status' => $courseTransferSchoolStatus[(int)$ctrRow['id']] ?? '',
+                    'resale_lessons' => (int)($ctrRow['resale_lessons'] ?? 0),
                     'order_id' => 0,
                     'source_order_id' => (int)$ctrRow['source_order_id'],
                     'discount_plan_amount' => 0,
@@ -2759,8 +2763,8 @@ $stmt->execute();
                     'created_at' => $ctrRow['created_at'] ?? '',
                     'consumed_amount' => round((float)$ctrRow['target_value'] * (int)$ctrRow['consumed_lessons'] / max(1, (int)$ctrRow['target_lessons']), 2),
                     'refunded_lessons' => 0,
-                    'remaining_lessons' => (int)$ctrRow['target_lessons'] - (int)$ctrRow['consumed_lessons'],
-                    'remaining_amount' => (float)$ctrRow['target_value'] * ((int)$ctrRow['target_lessons'] - (int)$ctrRow['consumed_lessons']) / max(1, (int)$ctrRow['target_lessons']),
+                    'remaining_lessons' => max(0, (int)$ctrRow['target_lessons'] - (int)$ctrRow['consumed_lessons'] - (int)($ctrRow['resale_lessons'] ?? 0)),
+                    'remaining_amount' => (float)$ctrRow['target_value'] * max(0, (int)$ctrRow['target_lessons'] - (int)$ctrRow['consumed_lessons'] - (int)($ctrRow['resale_lessons'] ?? 0)) / max(1, (int)$ctrRow['target_lessons']),
                     'transferred_out' => 0,
                 ];
             }
@@ -8265,6 +8269,7 @@ if (intval($countBt) === 0) {
                     <button class="sec-tab active" data-tab="tab-refund-records">退费记录</button>
                     <button class="sec-tab" data-tab="tab-course-transfer-records">转课记录</button>
                     <button class="sec-tab" data-tab="tab-transfer-records">转校记录</button>
+                    <button class="sec-tab" data-tab="tab-resale-records">转卖记录</button>
                 </div>
                 <div class="section-tab-content">
                     <!-- 退费记录 tab -->
@@ -8368,6 +8373,45 @@ if (intval($countBt) === 0) {
                             </table>
                         </div>
                         <div class="pagination" id="pagination-transfer"></div>
+                    </div>
+                    <!-- 转卖记录 tab -->
+                    <div class="sec-panel" id="tab-resale-records" style="display:none;">
+                        <div class="toolbar">
+                            <div class="toolbar-left">
+                                <select id="filter-resale-campus" style="width:150px;">
+                                    <option value="">全部校区</option>
+                                </select>
+                                <input type="text" id="filter-resale-keyword" placeholder="搜索卖方/课程..." style="width:180px;">
+                                <input type="date" id="filter-resale-date-from" style="width:140px;">
+                                <input type="date" id="filter-resale-date-to" style="width:140px;">
+                                <button class="btn btn-primary btn-sm" onclick="loadResaleRecords(1)">查询</button>
+                            </div>
+                        </div>
+                        <div class="table-wrap" style="overflow-x:auto;">
+                            <table id="table-resale-records" style="min-width:1400px;">
+                                <thead>
+                                    <tr>
+                                        <th>卖方姓名</th>
+                                        <th>卖主学号</th>
+                                        <th>课程名称</th>
+                                        <th>转出课时</th>
+                                        <th>转入课时</th>
+                                        <th>卖出金额</th>
+                                        <th>买入金额</th>
+                                        <th>确认收入</th>
+                                        <th>确认收入(税后)</th>
+                                        <th>是否全部转卖</th>
+                                        <th>经办校区</th>
+                                        <th>买方姓名</th>
+                                        <th>买主学号</th>
+                                        <th>上课校区</th>
+                                        <th>转卖时间</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                        <div class="pagination" id="pagination-resale"></div>
                     </div>
                 </div>
             </section>

@@ -1,76 +1,93 @@
 classDiagram
-    class CourseTransferHandler {
-        +createCourseTransfer(PDO $db, string $method, array $query, array $input) void
-        +listCourseTransferRecords(PDO $db, string $method, array $query, array $input) void
-        +revokeCourseTransfer(PDO $db, string $method, array $query, array $input) void
+    class resale_records {
+        +INT id
+        +INT seller_student_id
+        +INT seller_order_id
+        +INT buyer_student_id
+        +INT buyer_resource_id
+        +ENUM buyer_type
+        +INT course_id
+        +DECIMAL transfer_lessons
+        +TINYINT is_full_transfer
+        +DECIMAL transfer_amount
+        +DECIMAL buyer_amount
+        +DECIMAL confirmed_revenue
+        +DECIMAL confirmed_revenue_after_tax
+        +DECIMAL tax_rate
+        +INT campus_id
+        +VARCHAR campus_name
+        +INT buyer_order_id
+        +ENUM status
+        +VARCHAR created_by
+        +DATETIME created_at
+        +DATETIME updated_at
     }
 
-    class CourseTransferService {
-        +calculateUnitValue(float $actualPrice, float $teachingAidPrice, float $productCouponAmount, int $lessonCount) float
-        +isCrossSubject(PDO $db, int $sourceCourseId, int $targetCourseId) bool
-        +getTargetCourses(PDO $db, int $studentId, int $excludeCourseId, string $campus) array
-        +validateSourceOrder(PDO $db, int $orderId) array
-        +createTargetOrder(PDO $db, array $sourceOrder, array $targetCourse, int $targetLessons, float $targetValue) int
+    class orders {
+        +INT id
+        +INT student_id
+        +INT course_id
+        +INT lesson_count
+        +INT consumed_lessons
+        +INT transferred_lessons
+        +INT resale_lessons
+        +VARCHAR is_resale_received
+        +DECIMAL actual_price
+        +VARCHAR campus
+        +VARCHAR status
+        +VARCHAR refund_status
+        +VARCHAR order_no
+        +DATETIME created_at
     }
 
-    class CourseTransferRecord {
-        +int id
-        +int source_order_id
-        +int source_course_id
-        +string source_course_name
-        +int target_order_id
-        +int target_course_id
-        +string target_course_name
-        +int student_id
-        +string campus
-        +int transfer_lessons
-        +float transfer_value
-        +int target_lessons
-        +float target_value
-        +bool is_cross_subject
-        +string order_no
-        +string status
-        +DateTime? revoked_at
-        +DateTime created_at
+    class students {
+        +INT id
+        +VARCHAR name
+        +VARCHAR phone
+        +VARCHAR student_no
     }
 
-    class Order {
-        +int id
-        +int student_id
-        +int course_id
-        +int lesson_count
-        +float actual_price
-        +int consumed_lessons
-        +int transferred_lessons
-        +string campus
-        +string order_type
-        +string is_voided
-        +string refund_status
-        +float teaching_aid_price
-        +float product_coupon_amount
-        +string pay_status
-        +string order_no
+    class resources {
+        +INT id
+        +VARCHAR name
+        +VARCHAR phone
+        +VARCHAR converted
     }
 
-    class Course {
-        +int id
-        +string name
-        +string subject
-        +string campus_permission
+    class courses {
+        +INT id
+        +VARCHAR name
+        +VARCHAR subject_level1
+        +VARCHAR subject_level2
     }
 
-    class Subject {
-        +int id
-        +string name
-        +int parent_id
+    class tax_rates {
+        +INT id
+        +INT campus_id
+        +DECIMAL course_tax_rate
     }
 
-    CourseTransferHandler ..> CourseTransferService : uses
-    CourseTransferHandler ..> CourseTransferRecord : reads/writes
-    CourseTransferService ..> Order : reads/updates
-    CourseTransferService ..> Course : reads
-    CourseTransferService ..> Subject : reads
-    CourseTransferRecord --> Order : source_order_id
-    CourseTransferRecord --> Order : target_order_id
-    Order --> Course : course_id
-    Course --> Subject : subject
+    resale_records --> students : seller_student_id
+    resale_records --> students : buyer_student_id
+    resale_records --> resources : buyer_resource_id
+    resale_records --> courses : course_id
+    resale_records --> orders : seller_order_id
+    resale_records --> orders : buyer_order_id
+    orders --> students : student_id
+    orders --> courses : course_id
+    tax_rates --> organizations : campus_id
+
+    class ResaleAPI {
+        +resale_create(PDO, method, query, input)
+        +resale_list(PDO, method, query, input)
+        +resale_detail(PDO, method, query, input)
+    }
+
+    class FrontendResale {
+        +showResaleModal(orderId, courseData)
+        +submitResale()
+        +searchBuyerStudents(keyword)
+        +searchBuyerResources(keyword)
+        +loadResaleRecords(page)
+        +renderResaleRecordsTable(rows)
+    }

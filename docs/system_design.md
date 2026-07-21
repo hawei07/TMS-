@@ -1,536 +1,601 @@
-# 转课功能 — 系统设计文档
+# 课包转卖功能 — 系统架构设计
 
-## Part A: 系统设计
+> **版本**: v1.0 | **日期**: 2026-07-18 | **作者**: Architect (Bob)
+> **基于 PRD**: `.hermes/prd-course-resale.md` + 用户补充说明
 
 ---
 
+## Part A: 系统设计
+
 ### 1. 实现方案
 
-#### 核心技术难点
+#### 1.1 核心技术挑战
 
-| 难点 | 方案 |
-|------|------|
-| **单课时价值计算** | `unit_value = (actual_price - teaching_aid_price + product_coupon_amount) / lesson_count`，与现有 `get_student_courses` 算法一致 |
-| **跨学科判断** | 查询 `courses.subject` → `subjects.id` → `subjects.parent_id`，比较 `parent_id` 是否相同 |
-| **价值无损锚定** | 转出价值 = unit_value × transfer_lessons；跨学科时目标课时可编辑但目标价值=转出价值；同科时 1:1 |
-| **多次转出** | 复用 orders 表已有 `transferred_lessons` 字段，每次转出累加（转校/转课共享该字段） |
-| **撤销安全** | 仅当目标订单 `consumed_lessons = 0` 时可撤销，事务内恢复源订单+软删除目标订单 |
-| **赠课处理** | 赠课 `actual_price=0`，价值为 0，可转出但目标课包价值=0 |
+| 挑战 | 分析 | 解决方案 |
+|------|------|---------|
+| **并发转卖同一课包** | A 的同一订单可能被两个教务同时转卖 | 数据库事务 + `SELECT ... FOR UPDATE` 行锁 |
+| **买方为资源时自动转学员** | 资源无 orders 记录，需自动创建学员档案 | 事务内先 `INSERT INTO students`（若资源尚未关联），再基于新学员 ID 创建订单 |
+| **课时部分转卖** | 用户可改小课时数，剩余归卖方保留 | 新增 `resale_lessons` 字段跟踪已转卖课时；remaining = lesson_count - consumed - transferred - resale |
+| **买入金额 ≤ 卖出金额** | 前后端双重校验 | 前端 `max` 属性限制 + 后端 `if ($buyerAmount > $transferAmount)` 拒绝 |
+| **转卖记录展示** | 14 列宽表，买卖双方信息需 JOIN | LEFT JOIN students（卖方） + LEFT JOIN students（买方学员） + LEFT JOIN resources（买方资源） |
 
-#### 框架与库选型
+#### 1.2 框架与库选型
 
-- **后端**：沿用 PHP 8.4 + PDO + MySQL 8.4，无新增框架
-- **前端**：沿用 Vanilla JS + CSS3，无新增库
-- **API 模块化**：新建 `api/course_transfers.php`，注册到 `api/router.php` 的 `dispatchExtractedApi()` 路由
-- **数据库迁移**：新增 `migrations/versions/20260718_001_course_transfer_records.php`
+沿用现有技术栈，**零新增依赖**：
 
-#### 架构模式
+| 层级 | 技术 | 说明 |
+|------|------|------|
+| 后端 | PHP 8.4 + PDO (MySQL 8.4) | 沿用现有单文件架构 + 提取 API 模块模式 |
+| 前端 | Vanilla JS（ES2020+） | 沿用现有 `static/js/main.js` 模式，无框架 |
+| 样式 | 原生 CSS | 沿用现有 `static/css/style.css`（最新版本） |
+| 数据库迁移 | MigrationRunner | 沿用现有 `migrations/` 目录模式 |
 
-- 后端：Handler 函数模式（与现有 orders.php 一致）→ `handler(PDO $db, string $method, array $query, array $input): void`
-- 前端：全局函数 + DOM 操作（与现有 main.js 一致）
-- 路由：`api/router.php` → `dispatchExtractedApi()` 优先级高于 `index.php` switch
+#### 1.3 架构模式
+
+- **后端**: 提取式 API 模块（`api/resale.php`），遵循 `api/course_transfers.php` 的 `functionName → routeName` 模式
+- **前端**: 函数式组件（`showResaleModal()`, `submitResale()`, `loadResaleRecords()`）
+- **数据流**: 前端 → `?action=resale_create` → `handleApi()` → `dispatchExtractedApi()` → `api/resale.php`
 
 ---
 
 ### 2. 文件列表
 
-| 路径 | 操作 | 说明 |
-|------|------|------|
-| `migrations/versions/20260718_001_course_transfer_records.php` | **新建** | 创建 `course_transfer_records` 表 |
-| `api/course_transfers.php` | **新建** | 转课 API（3 个 handler） |
-| `api/router.php` | **修改** | 注册 course_transfer 路由 |
-| `index.php` | **修改** | ① `get_student_courses` 新增转课相关字段；② `panel-work-records` 新增转课记录标签页 |
-| `static/js/main.js` | **修改** | 转课弹窗、转课按钮逻辑、转课记录标签页 JS、撤销操作 |
-| `static/css/style.css` | **修改** | 转课弹窗样式、转课记录表格样式、转出课时高亮样式 |
+```
+market-system-php/
+├── migrations/
+│   └── versions/
+│       └── 20260718_001_resale_schema.php    # [新建] 数据库迁移：resale_records 表 + orders 表变更
+├── api/
+│   ├── resale.php                             # [新建] 转卖 API 模块（resale_create, resale_list, resale_detail）
+│   └── router.php                             # [修改] 注册 resaleApiRoutes
+├── static/
+│   ├── js/
+│   │   └── main.js                            # [修改] 转卖弹窗 + 提交 + 工作记录 Tab + 课程列表按钮
+│   └── css/
+│       └── style.css                          # [修改] 转卖弹窗样式 + 工作记录表格样式
+└── index.php                                  # [修改] 工作记录区新增「转卖记录」Tab HTML
+```
+
+**变更统计**：新建 2 文件，修改 4 文件。
 
 ---
 
 ### 3. 数据结构与接口
 
-#### 3.1 数据库表
+#### 3.1 DDL — 新表 `resale_records`
 
 ```sql
-CREATE TABLE course_transfer_records (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    source_order_id INT NOT NULL COMMENT '源订单ID',
-    source_course_id INT NOT NULL COMMENT '源课程ID',
-    source_course_name VARCHAR(200) NOT NULL DEFAULT '' COMMENT '源课程名称',
-    target_order_id INT NOT NULL DEFAULT 0 COMMENT '目标订单ID（生成的转课课包）',
-    target_course_id INT NOT NULL COMMENT '目标课程ID',
-    target_course_name VARCHAR(200) NOT NULL DEFAULT '' COMMENT '目标课程名称',
-    student_id INT NOT NULL COMMENT '学员ID',
-    campus VARCHAR(200) NOT NULL DEFAULT '' COMMENT '校区（同校区）',
-    transfer_lessons INT NOT NULL DEFAULT 0 COMMENT '转出课时数',
-    transfer_value DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '转出价值（源课程课时价值×转出课时）',
-    target_lessons INT NOT NULL DEFAULT 0 COMMENT '目标课时数（跨科可能不同）',
-    target_value DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '目标价值（=转出价值，价值锚定）',
-    is_cross_subject TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否跨学科',
-    order_no VARCHAR(20) NOT NULL DEFAULT '' COMMENT '转课流水号',
-    status VARCHAR(20) NOT NULL DEFAULT '正常' COMMENT '正常/已撤销',
-    revoked_at DATETIME DEFAULT NULL COMMENT '撤销时间',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    INDEX idx_student (student_id),
-    INDEX idx_source_order (source_order_id),
-    INDEX idx_target (target_order_id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='同校区课程间转课记录';
+CREATE TABLE resale_records (
+    id              INT AUTO_INCREMENT PRIMARY KEY,
+    
+    -- 卖方信息
+    seller_student_id   INT NOT NULL COMMENT '卖方学员ID → students.id',
+    seller_order_id     INT NOT NULL COMMENT '卖方原始报读订单ID → orders.id',
+    
+    -- 买方信息（二选一，应用层 CHECK）
+    buyer_student_id    INT DEFAULT NULL COMMENT '买方学员ID → students.id',
+    buyer_resource_id   INT DEFAULT NULL COMMENT '买方资源ID → resources.id（若买入方为资源）',
+    buyer_type          ENUM('student', 'resource') NOT NULL COMMENT '买入方类型',
+    
+    -- 课程信息
+    course_id           INT NOT NULL COMMENT '课程ID → courses.id',
+    
+    -- 课时信息
+    transfer_lessons    DECIMAL(8,2) NOT NULL COMMENT '转卖课时数',
+    is_full_transfer    TINYINT(1) NOT NULL DEFAULT 0 COMMENT '是否全部转卖（1=是, 0=否）',
+    
+    -- 金额信息
+    transfer_amount     DECIMAL(10,2) NOT NULL COMMENT '卖出课时金额（A端价值）',
+    buyer_amount        DECIMAL(10,2) NOT NULL COMMENT '买入课时金额（B端价值，≤transfer_amount）',
+    confirmed_revenue   DECIMAL(10,2) NOT NULL DEFAULT 0 COMMENT '确认收入 = transfer_amount - buyer_amount',
+    confirmed_revenue_after_tax DECIMAL(10,2) DEFAULT NULL COMMENT '确认收入（税后）',
+    tax_rate            DECIMAL(5,4) DEFAULT NULL COMMENT '适用税率（课耗税率）',
+    
+    -- 校区信息
+    campus_id           INT DEFAULT 0 COMMENT '经办校区ID（=卖方原校区）',
+    campus_name         VARCHAR(500) DEFAULT '' COMMENT '经办校区名称（冗余）',
+    
+    -- 买方订单（转卖后生成）
+    buyer_order_id      INT DEFAULT 0 COMMENT '买方新生成的订单ID → orders.id',
+    
+    -- 状态（无审批，直接 confirmed）
+    status              ENUM('confirmed', 'cancelled') NOT NULL DEFAULT 'confirmed' COMMENT '转卖状态',
+    
+    -- 审计字段
+    created_by          VARCHAR(200) DEFAULT '' COMMENT '操作人姓名',
+    created_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    updated_at          DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+    
+    -- 索引
+    INDEX idx_seller_student (seller_student_id),
+    INDEX idx_buyer_student (buyer_student_id),
+    INDEX idx_buyer_resource (buyer_resource_id),
+    INDEX idx_course (course_id),
+    INDEX idx_status (status),
+    INDEX idx_created_at (created_at),
+    INDEX idx_seller_order (seller_order_id)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='课包转卖记录表';
 ```
 
-#### 3.2 类图（Mermaid）
+#### 3.2 DDL — 修改现有表 `orders`
+
+```sql
+-- 卖方订单：跟踪已转卖的课时数
+ALTER TABLE orders ADD COLUMN resale_lessons INT DEFAULT 0 COMMENT '已转卖课时数';
+-- 买方订单：标记是否为转卖买入
+ALTER TABLE orders ADD COLUMN is_resale_received VARCHAR(5) DEFAULT '' COMMENT '是否转卖买入（是/空）';
+```
+
+#### 3.3 类图
 
 ```mermaid
 classDiagram
-    class CourseTransferHandler {
-        +createCourseTransfer(PDO $db, string $method, array $query, array $input) void
-        +listCourseTransferRecords(PDO $db, string $method, array $query, array $input) void
-        +revokeCourseTransfer(PDO $db, string $method, array $query, array $input) void
+    class resale_records {
+        +INT id
+        +INT seller_student_id
+        +INT seller_order_id
+        +INT buyer_student_id
+        +INT buyer_resource_id
+        +ENUM buyer_type
+        +INT course_id
+        +DECIMAL transfer_lessons
+        +TINYINT is_full_transfer
+        +DECIMAL transfer_amount
+        +DECIMAL buyer_amount
+        +DECIMAL confirmed_revenue
+        +DECIMAL confirmed_revenue_after_tax
+        +DECIMAL tax_rate
+        +INT campus_id
+        +VARCHAR campus_name
+        +INT buyer_order_id
+        +ENUM status
+        +VARCHAR created_by
+        +DATETIME created_at
+        +DATETIME updated_at
     }
 
-    class CourseTransferService {
-        +calculateUnitValue(float $actualPrice, float $teachingAidPrice, float $productCouponAmount, int $lessonCount) float
-        +isCrossSubject(PDO $db, int $sourceCourseId, int $targetCourseId) bool
-        +getTargetCourses(PDO $db, int $studentId, int $excludeCourseId, string $campus) array
-        +validateSourceOrder(PDO $db, int $orderId) array
-        +createTargetOrder(PDO $db, array $sourceOrder, array $targetCourse, int $targetLessons, float $targetValue) int
+    class orders {
+        +INT id
+        +INT student_id
+        +INT course_id
+        +INT lesson_count
+        +INT consumed_lessons
+        +INT transferred_lessons
+        +INT resale_lessons
+        +VARCHAR is_resale_received
+        +DECIMAL actual_price
+        +VARCHAR campus
+        +VARCHAR status
+        +VARCHAR refund_status
+        +VARCHAR order_no
+        +DATETIME created_at
     }
 
-    class CourseTransferRecord {
-        +int id
-        +int source_order_id
-        +int source_course_id
-        +string source_course_name
-        +int target_order_id
-        +int target_course_id
-        +string target_course_name
-        +int student_id
-        +string campus
-        +int transfer_lessons
-        +float transfer_value
-        +int target_lessons
-        +float target_value
-        +bool is_cross_subject
-        +string order_no
-        +string status
-        +DateTime revoked_at
-        +DateTime created_at
+    class students {
+        +INT id
+        +VARCHAR name
+        +VARCHAR phone
+        +VARCHAR student_no
     }
 
-    class Order {
-        +int id
-        +int student_id
-        +int course_id
-        +int lesson_count
-        +float actual_price
-        +int consumed_lessons
-        +int transferred_lessons
-        +string campus
-        +string order_type
-        +string is_voided
-        +string refund_status
+    class resources {
+        +INT id
+        +VARCHAR name
+        +VARCHAR phone
+        +VARCHAR converted
     }
 
-    class Course {
-        +int id
-        +string name
-        +string subject
-        +string campus_permission
+    class courses {
+        +INT id
+        +VARCHAR name
+        +VARCHAR subject_level1
+        +VARCHAR subject_level2
     }
 
-    class Subject {
-        +int id
-        +string name
-        +int parent_id
+    class tax_rates {
+        +INT id
+        +INT campus_id
+        +DECIMAL course_tax_rate
     }
 
-    CourseTransferHandler ..> CourseTransferService : uses
-    CourseTransferHandler ..> CourseTransferRecord : reads/writes
-    CourseTransferService ..> Order : reads/updates
-    CourseTransferService ..> Course : reads
-    CourseTransferService ..> Subject : reads
-    CourseTransferRecord --> Order : source_order_id
-    CourseTransferRecord --> Order : target_order_id
-    Order --> Course : course_id
-    Course --> Subject : subject
+    resale_records --> students : seller_student_id
+    resale_records --> students : buyer_student_id
+    resale_records --> resources : buyer_resource_id
+    resale_records --> courses : course_id
+    resale_records --> orders : seller_order_id
+    resale_records --> orders : buyer_order_id
+    orders --> students : student_id
+    orders --> courses : course_id
+    tax_rates --> organizations : campus_id
+
+    class ResaleAPI {
+        +resale_create(PDO, method, query, input)
+        +resale_list(PDO, method, query, input)
+        +resale_detail(PDO, method, query, input)
+    }
+
+    class FrontendResale {
+        +showResaleModal(orderId, courseData)
+        +submitResale()
+        +searchBuyerStudents(keyword)
+        +searchBuyerResources(keyword)
+        +loadResaleRecords(page)
+        +renderResaleRecordsTable(rows)
+    }
 ```
 
 ---
 
 ### 4. 程序调用流程
 
-#### 4.1 创建转课（create_course_transfer）
+#### 4.1 转卖创建（主流程）
 
 ```mermaid
 sequenceDiagram
-    actor User as 用户
-    participant JS as main.js
-    participant API as handleApi()
-    participant H as course_transfers.php
+    actor 教务 as 教务人员
+    participant FE as 前端 (main.js)
+    participant API as TMS API (router)
+    participant Resale as api/resale.php
     participant DB as MySQL
 
-    User->>JS: 点击"转课"按钮，填写弹窗，提交
-    JS->>API: POST ?action=create_course_transfer
-    Note over JS,API: body: {source_order_id, target_course_id, transfer_lessons, [target_lessons]}
-
-    API->>H: dispatchExtractedApi() → createCourseTransfer()
-    H->>DB: SELECT orders WHERE id=source_order_id FOR UPDATE
-    DB-->>H: source order row
-    H->>H: validate: !is_voided, order_type!='活动', refund_status!='已退费'
-    H->>H: remaining = lesson_count - consumed_lessons - transferred_lessons
-    H->>H: validate: 0 < transfer_lessons ≤ remaining
-
-    H->>DB: SELECT courses WHERE id=target_course_id
-    DB-->>H: target course row
-    H->>H: validate: same campus (FIND_IN_SET)
-    H->>H: validate: target_course_id ≠ source_course_id
-
-    H->>DB: SELECT subjects WHERE id IN (source.subject, target.subject)
-    DB-->>H: source/target subject rows
-    H->>H: is_cross = (source.parent_id ≠ target.parent_id)
-
-    H->>H: unit_value = (actual_price - teaching_aid_price + product_coupon_amount) / lesson_count
-    H->>H: transfer_value = unit_value × transfer_lessons
-    alt 同科
-        H->>H: target_lessons = transfer_lessons, target_value = transfer_value
-    else 跨科
-        H->>H: target_lessons = input, target_value = transfer_value
+    教务->>FE: 点击学员详情 → 报读课程 → [转卖]
+    FE->>FE: 校验：剩余课时>0 AND 状态正常 AND 无转校审批
+    FE-->>教务: 弹出转卖模态框（预填卖方信息）
+    
+    教务->>FE: 选择买入方类型（学员/资源）
+    alt 买入方 = 学员
+        教务->>FE: 搜索学员（姓名/学号）
+        FE->>API: GET ?action=get_students&keyword=XXX
+        API-->>FE: 返回学员列表
+    else 买入方 = 资源
+        教务->>FE: 搜索资源（姓名/手机）
+        FE->>API: GET ?action=get_resources&keyword=XXX
+        API-->>FE: 返回资源列表
     end
-
-    H->>DB: BEGIN TRANSACTION
-    H->>DB: UPDATE orders SET transferred_lessons += transfer_lessons WHERE id=source_order_id
-    H->>DB: INSERT INTO orders (student_id, course_id, lesson_count, actual_price, order_type='转课', ...)
-    DB-->>H: new_order_id
-    H->>DB: INSERT INTO course_transfer_records (...)
-    H->>DB: COMMIT
-    H-->>API: json({success:true, record:{...}})
-    JS-->>User: 刷新课程列表
+    教务->>FE: 选择买入方，调整课时数/买入金额
+    教务->>FE: 点击「确认转卖」
+    
+    FE-->>教务: 二次确认弹窗（展示摘要）
+    教务->>FE: 确认
+    
+    FE->>API: POST ?action=resale_create
+    Note over API: handleApi() → dispatchExtractedApi()
+    API->>Resale: resale_create($db, method, query, input)
+    
+    Resale->>DB: BEGIN TRANSACTION
+    Resale->>DB: SELECT * FROM orders WHERE id=seller_order_id FOR UPDATE
+    Note over DB: 行锁防并发
+    
+    Resale->>Resale: 校验：剩余课时 >= transfer_lessons
+    Resale->>Resale: 校验：buyer_amount <= transfer_amount
+    Resale->>Resale: 校验：买方 != 卖方
+    
+    alt 买方 = 资源且未关联学员
+        Resale->>DB: INSERT INTO students (name, phone, resource_id)
+        Note over DB: 自动创建学员档案
+        Resale->>Resale: buyer_student_id = new student.id
+    end
+    
+    Resale->>Resale: 查询 tax_rates.course_tax_rate（按校区）
+    Resale->>Resale: 计算 confirmed_revenue = transfer_amount - buyer_amount
+    Resale->>Resale: 计算 confirmed_revenue_after_tax = confirmed_revenue × (1 - tax_rate)
+    
+    Resale->>DB: INSERT INTO resale_records (...)
+    Resale->>DB: UPDATE orders SET resale_lessons = resale_lessons + transfer_lessons WHERE id=seller_order_id
+    
+    alt 全部转卖（剩余课时 == transfer_lessons）
+        Resale->>DB: UPDATE orders SET status='已结课' WHERE id=seller_order_id
+    end
+    
+    Resale->>DB: INSERT INTO orders (student_id=buyer, course_id, lesson_count=transfer_lessons, actual_price=buyer_amount, campus, is_resale_received='是', ...)
+    Note over DB: 为买方创建新报读课程
+    
+    Resale->>DB: UPDATE resale_records SET buyer_order_id=NEW_ORDER_ID WHERE id=RESALE_ID
+    Resale->>DB: COMMIT
+    
+    Resale-->>FE: {success: true, resale_id, buyer_order_id}
+    FE-->>教务: Toast "转卖成功" + 刷新课程列表
 ```
 
-#### 4.2 查询转课记录（list_course_transfer_records）
+#### 4.2 转卖记录列表查询
 
 ```mermaid
 sequenceDiagram
-    actor User as 用户
-    participant JS as main.js
-    participant API as handleApi()
-    participant H as course_transfers.php
+    actor 教务 as 教务人员
+    participant FE as 前端 (main.js)
+    participant API as TMS API
+    participant Resale as api/resale.php
     participant DB as MySQL
 
-    User->>JS: 切换到"转课记录"标签页
-    JS->>API: GET ?action=list_course_transfer_records&campus=...&student_id=...&status=...&page=1
-    API->>H: dispatchExtractedApi() → listCourseTransferRecords()
-    H->>DB: SELECT COUNT(*) FROM course_transfer_records WHERE ...
-    H->>DB: SELECT * FROM course_transfer_records WHERE ... ORDER BY id DESC LIMIT ... OFFSET ...
-    DB-->>H: rows
-    H-->>API: json({data:[...], total:N, page:P, page_size:PS})
-    JS-->>User: 渲染表格
+    教务->>FE: 打开工作记录 → 转卖记录 Tab
+    FE->>API: GET ?action=resale_list&campus=XXX&keyword=XXX&page=1
+    API->>Resale: resale_list($db, 'GET', query, [])
+    
+    Resale->>DB: SELECT rr.*, s1.name AS seller_name, s1.student_no AS seller_no, s2.name AS buyer_name, s2.student_no AS buyer_no, c.name AS course_name FROM resale_records rr LEFT JOIN students s1 ON rr.seller_student_id=s1.id LEFT JOIN students s2 ON rr.buyer_student_id=s2.id LEFT JOIN courses c ON rr.course_id=c.id WHERE ... ORDER BY rr.id DESC LIMIT 20
+    
+    Resale-->>FE: {data: [...], total, page, page_size}
+    FE->>FE: renderResaleRecordsTable(rows)
+    FE-->>教务: 展示转卖记录列表（14列）
 ```
 
-#### 4.3 撤销转课（revoke_course_transfer）
+#### 4.3 转卖影响 get_student_courses
 
 ```mermaid
 sequenceDiagram
-    actor User as 用户
-    participant JS as main.js
-    participant API as handleApi()
-    participant H as course_transfers.php
+    participant FE as 前端
+    participant API as index.php
     participant DB as MySQL
 
-    User->>JS: 点击"撤销"按钮
-    JS->>API: POST ?action=revoke_course_transfer {record_id}
-    API->>H: dispatchExtractedApi() → revokeCourseTransfer()
-
-    H->>DB: SELECT * FROM course_transfer_records WHERE id=record_id FOR UPDATE
-    DB-->>H: record row (status='正常')
-    H->>H: validate: record exists & status='正常'
-
-    H->>DB: SELECT consumed_lessons FROM orders WHERE id=target_order_id FOR UPDATE
-    DB-->>H: target order
-    H->>H: validate: consumed_lessons == 0 (无消耗才可撤销)
-
-    H->>DB: BEGIN TRANSACTION
-    H->>DB: UPDATE orders SET transferred_lessons = transferred_lessons - transfer_lessons WHERE id=source_order_id
-    H->>DB: UPDATE orders SET is_voided='是' WHERE id=target_order_id
-    H->>DB: UPDATE course_transfer_records SET status='已撤销', revoked_at=NOW() WHERE id=record_id
-    H->>DB: COMMIT
-    H-->>API: json({success:true})
-    JS-->>User: 刷新转课记录列表 + 课程列表
+    FE->>API: GET ?action=get_student_courses&student_id=SID
+    Note over API: 现有逻辑查询 orders 表
+    
+    API->>DB: SELECT ... FROM orders WHERE student_id=SID AND is_voided='否'
+    Note over DB: 计算 remaining = lesson_count - consumed - transferred - resale_lessons
+    
+    API-->>FE: 返回课程列表（含 resale_lessons 字段）
+    
+    Note over FE: 转卖按钮条件：
+    Note over FE: remaining > 0 AND refund_status='正常' AND 无转校审批 AND resale_lessons < remaining
 ```
 
 ---
 
-### 5. 待明确事项与假设
+### 5. 待明确事项
 
-| # | 事项 | 决定 |
-|---|------|------|
-| D1 | Q1 审批流 | **P0 提交即生效**，无需审批 |
-| D2 | Q2 剩余归零 | **标记不隐藏**：灰色背景 + 文字"已用完" |
-| D3 | Q3 多次转出 | **支持**，累计到 `transferred_lessons` |
-| D4 | Q4 目标 order_type | **`'转课'`** |
-| D5 | Q5 赠课可转 | **可转**，价值为 0 |
-| D6 | Q6 转课课包再转出 | **允许**，形成完整流转链路 |
-| D7 | 转出课时精度 | 整数课时，不支持小数 |
-| D8 | 跨科目标课时校验 | 目标课时必须 0 < target_lessons（由前端限制） |
-| D9 | order_no 格式 | 沿用 `generateOrderNo()` 生成（时间戳+随机数） |
-| D10 | 校区判断 | `FIND_IN_SET(campus, courses.campus_permission)` 匹配源订单校区 |
-| D11 | 目标课程下拉数据来源 | `get_student_courses` 已返回的**同校区其他课程**（不需要额外 API） |
+| # | 问题 | 当前假设 |
+|---|------|---------|
+| Q1 | **转卖记录是否可撤销？** | 假设 P0 暂不支持撤销（status 仅有 confirmed），P2 可加入 cancelled |
+| Q2 | **买方为资源时，资源已存在关联学员（converted=已转化）的情况如何处理？** | 使用已关联的学员 ID，不重复创建 |
+| Q3 | **转卖后卖方订单的 `transferred_lessons` 和 `resale_lessons` 如何共存？** | 两者独立：`transferred_lessons` 给转课/转校用，`resale_lessons` 给转卖用；remaining = lesson_count - consumed - transferred - resale |
+| Q4 | **确认收入是否计入营收统计？** | 根据用户补充：先计 `resale_records` 表记录，不归入营收科目（P2 再接入营收统计） |
+| Q5 | **买入金额的下调粒度？** | 假设支持任意金额输入（≥ 0.01），前端做 `≤ transfer_amount` 校验；步长 ¥100 |
 
 ---
 
 ## Part B: 任务分解
 
-### 6. 所需依赖包
+### 6. 依赖包列表
 
-无需新增第三方依赖。全部使用项目已有技术栈：
-```
-- PHP 8.4（已有 PDO/MySQL 扩展）
-- Vanilla JS（无额外库）
-- CSS3（无额外框架）
-```
+**零新增依赖**。所有功能基于现有技术栈实现：
+- PHP 8.4 + PDO（已安装）
+- MySQL 8.4（已安装）
+- Vanilla JS（浏览器原生）
+- 原生 CSS
 
 ---
 
-### 7. 任务列表（按依赖排序）
+### 7. 任务列表
 
-#### T01: 项目基础设施（P0）
+#### T01 — 数据库迁移 + 后端 API 层
 
-| 字段 | 内容 |
-|------|------|
+| 属性 | 值 |
+|------|-----|
 | **Task ID** | T01 |
-| **Task Name** | 数据库迁移 + API 模块骨架 + 路由注册 |
-| **Source Files** | `migrations/versions/20260718_001_course_transfer_records.php`（新建）、`api/course_transfers.php`（新建）、`api/router.php`（修改） |
+| **Task Name** | 数据库迁移与后端 API 实现 |
+| **Priority** | P0 |
 | **Dependencies** | 无 |
-| **Priority** | P0 |
+| **Source Files** | 3 |
 
-**工作内容**：
+**涉及文件**：
 
-1. **新建迁移文件** `migrations/versions/20260718_001_course_transfer_records.php`
-   - 创建 `course_transfer_records` 表（DDL 见 §3.1）
-   - 返回标准迁移数组 `['version' => '...', 'description' => '...', 'up' => fn(PDO $db)]`
+| 文件 | 操作 | 预估行数 |
+|------|------|---------|
+| `migrations/versions/20260718_001_resale_schema.php` | 新建 | ~80 行 |
+| `api/resale.php` | 新建 | ~250 行 |
+| `api/router.php` | 修改 | +5 行 |
 
-2. **新建 API 模块** `api/course_transfers.php`
-   - 创建 `courseTransferApiRoutes()` 函数，返回 `['create_course_transfer' => 'createCourseTransfer', 'list_course_transfer_records' => 'listCourseTransferRecords', 'revoke_course_transfer' => 'revokeCourseTransfer']`
-   - 声明三个 handler 函数签名（骨架，具体逻辑在 T02 实现）
+**详细内容**：
 
-3. **修改路由注册** `api/router.php`
-   - 在文件顶部 `require_once __DIR__ . '/course_transfers.php';`
-   - 在 `buildExtractedApiRoutes()` 的 `foreach` 数组中添加 `courseTransferApiRoutes()`
+1. **`migrations/versions/20260718_001_resale_schema.php`**（新建）
+   - `up` 回调：`CREATE TABLE resale_records`（完整 DDL 如 §3.1）
+   - `up` 回调：`ALTER TABLE orders ADD COLUMN resale_lessons INT DEFAULT 0`
+   - `up` 回调：`ALTER TABLE orders ADD COLUMN is_resale_received VARCHAR(5) DEFAULT ''`
+   - 索引创建（含 try-catch 兼容已有索引）
+
+2. **`api/resale.php`**（新建）
+   - `resaleApiRoutes()`: 返回路由映射数组
+   - `resale_create($db, $method, $query, $input)`: 转卖创建（POST）
+     - 参数校验（seller_order_id, buyer_type, buyer_id, transfer_lessons, buyer_amount）
+     - 事务：行锁 seller order → 校验课时/金额 → 买方为资源时创建学员 → 查税率 → INSERT resale_records → UPDATE orders.resale_lessons → INSERT buyer order → COMMIT
+   - `resale_list($db, $method, $query, $input)`: 转卖记录列表（GET）
+     - 筛选：campus, keyword（卖方姓名/学号/课程）, date_from, date_to, page, page_size
+     - 联表查询（卖方学生 + 买方学生 + 课程）
+   - `resale_detail($db, $method, $query, $input)`: 单条详情（GET，按 id）
+
+3. **`api/router.php`**（修改）
+   - `require_once __DIR__ . '/resale.php';`
+   - `buildExtractedApiRoutes()` 中加入 `resaleApiRoutes()`
 
 ---
 
-#### T02: 后端 API 全量实现 + 学员课程数据增强（P0）
+#### T02 — 前端：转卖弹窗 + 课程列表按钮
 
-| 字段 | 内容 |
-|------|------|
+| 属性 | 值 |
+|------|-----|
 | **Task ID** | T02 |
-| **Task Name** | API Handler 实现 + get_student_courses 增强 + 工作记录标签页 HTML |
-| **Source Files** | `api/course_transfers.php`（修改）、`index.php`（修改，2 处）、`static/js/main.js`（修改，API 调用路径准备） |
+| **Task Name** | 转卖模态框与课程列表入口 |
+| **Priority** | P0 |
 | **Dependencies** | T01 |
-| **Priority** | P0 |
+| **Source Files** | 3 |
 
-**工作内容**：
+**涉及文件**：
 
-1. **实现 `createCourseTransfer`** handler（`api/course_transfers.php`）
-   - 校验：`method === 'POST'`
-   - 提取参数：`source_order_id`, `target_course_id`, `transfer_lessons`, `target_lessons`（跨科时必填）
-   - 源订单校验（事务 + 行锁）：
-     - 订单存在、`is_voided='否'`、`order_type != '活动'`、`refund_status NOT IN ('已退费','退费申请中')`
-     - 计算 `remaining = lesson_count - consumed_lessons - transferred_lessons`，校验 `0 < transfer_lessons ≤ remaining`
-   - 目标课程校验：
-     - 课程存在、同校区（`FIND_IN_SET(campus, campus_permission)`）、不同于源课程
-   - 跨学科判断：
-     - 查 `subjects` 表比较 `parent_id`
-   - 价值计算：
-     - `unit_value = (actual_price - teaching_aid_price + product_coupon_amount) / lesson_count`
-     - `transfer_value = round(unit_value * transfer_lessons, 2)`
-     - 同科：`target_lessons = transfer_lessons, target_value = transfer_value`
-     - 跨科：`target_lessons = input['target_lessons'], target_value = transfer_value`
-   - 事务内操作：
-     1. `UPDATE orders SET transferred_lessons = transferred_lessons + transfer_lessons WHERE id = source_order_id`
-     2. 生成目标订单（INSERT INTO orders）：
-        - `student_id`, `course_id=target_course_id`, `lesson_count=target_lessons`, `actual_price=target_value`
-        - `order_type='转课'`, `campus=source.campus`, `order_no=generateOrderNo($db)`
-        - `status='已报名'`, `is_voided='否'`, `pay_status='已支付'`
-        - `subject_level1/subject_level2` 从目标课程/subjects 获取
-     3. `INSERT INTO course_transfer_records` 写入完整记录
-     4. COMMIT
-   - 返回 `json(['success' => true, 'record' => [...], 'target_order_id' => $newOrderId])`
+| 文件 | 操作 | 预估行数 |
+|------|------|---------|
+| `static/js/main.js` | 修改 | +350 行 |
+| `static/css/style.css` | 修改 | +80 行 |
+| `index.php` | 修改 | +30 行 |
 
-2. **实现 `listCourseTransferRecords`** handler（`api/course_transfers.php`）
-   - 支持筛选：`campus`, `student_id`, `date_from`, `date_to`, `status`, `keyword`（搜索学员名/课程名）
-   - 分页：`page`, `page_size`（默认 20，最大 50）
-   - 返回 `json(['data' => [...], 'total' => N, 'page' => P, 'page_size' => PS])`
+**详细内容**：
 
-3. **实现 `revokeCourseTransfer`** handler（`api/course_transfers.php`）
-   - 校验：`method === 'POST'`，提取 `record_id`
-   - 事务 + 行锁查记录（`status='正常'`）
-   - 查目标订单 `consumed_lessons`，必须为 0
-   - 事务内：
-     1. `UPDATE orders SET transferred_lessons = transferred_lessons - transfer_lessons WHERE id = source_order_id`
-     2. `UPDATE orders SET is_voided = '是' WHERE id = target_order_id`
-     3. `UPDATE course_transfer_records SET status = '已撤销', revoked_at = NOW() WHERE id = record_id`
-     4. COMMIT
-   - 返回 `json(['success' => true])`
+1. **`static/js/main.js`**（修改）
+   - **`showResaleModal(orderId)`**: 打开转卖模态框
+     - 从 `studentCoursesAllRows` 获取课程数据（课程名、剩余课时、校区、原价值）
+     - 构建模态框 HTML：卖方信息区 + 买方类型切换 + 买方搜索器 + 转卖信息区（课时输入、买入金额输入）+ 确认收入预览 + 二次确认
+   - **`submitResale()`**: 提交转卖
+     - 收集表单数据 → 二次确认 → `api('resale_create', {...}, 'POST')`
+     - 成功后 toast + 关闭弹窗 + 刷新课程列表
+   - **`searchBuyerStudents(keyword)`**: 搜索学员（防抖 300ms）
+     - 调用 `api('get_students', {keyword}, 'GET')` → 渲染下拉选择列表
+   - **`searchBuyerResources(keyword)`**: 搜索资源（防抖 300ms）
+     - 调用 `api('get_resources', {keyword, pool_type: ''}, 'GET')` → 渲染下拉选择列表
+   - **渲染买方选中项**: 选中后显示名称/学号/手机号摘要
+   - **课程列表按钮**: 在 `renderStudentCoursesTable()` 的操作列增加「转卖」按钮
+     - 条件：`remaining > 0 AND refundStatus === '正常' AND schoolTransferStatus !== '待审批' AND !isGifted AND !isTransferCourse`
+     - `onclick="showResaleModal(${r.order_id})"`
+   - **全局状态变量**: `currentResaleOrderId`, `currentResaleBuyerType`, `currentResaleSelectedBuyer`
 
-4. **修改 `get_student_courses`**（`index.php` 约行 2477-2618）
-   - 查询中已包含 `o.transferred_lessons`（无需改动 SQL）
-   - **新增**：在返回数据中额外传递 `transferred_out = transferred_lessons`（明确字段名）
-   - **新增**：返回 `transfer_source_order_id = o.id`（用于前端判断转课按钮条件）
-   - **新增**：在计算 `remaining_lessons` 时已扣除 `transferred_lessons`（现有逻辑已处理，确认不遗漏）
+2. **`static/css/style.css`**（修改）
+   - `.resale-modal-overlay`: 遮罩层样式
+   - `.resale-modal`: 弹窗主体（width: 560px, max-height: 80vh, overflow-y: auto）
+   - `.resale-modal .seller-info`: 卖方信息卡片（灰色背景圆角）
+   - `.resale-modal .buyer-type-toggle`: 学员/资源切换按钮组
+   - `.resale-modal .buyer-search`: 搜索输入框 + 下拉列表
+   - `.resale-modal .transfer-info`: 转卖信息区（课时输入框 + 金额输入框）
+   - `.resale-modal .revenue-preview`: 确认收入预览区（蓝色高亮）
+   - `.resale-modal .confirm-summary`: 二次确认弹窗样式
+   - `.btn-resale`: 转卖按钮颜色（橙色系，区别于现有按钮）
 
-5. **新增转课记录标签页 HTML**（`index.php`，插入到 `panel-work-records` 的 section-tabs 和 section-tab-content 中）
-   - 在"退费记录"和"转校记录"标签之间新增 `<button class="sec-tab" data-tab="tab-course-transfer-records">转课记录</button>`
-   - 新建 `<div class="sec-panel" id="tab-course-transfer-records">` 包含：
-     - 筛选栏：校区下拉、学员搜索、日期范围、状态（全部/正常/已撤销）
-     - 表格：`<table id="table-course-transfer-records">`，列：流水号、学员、源课程→目标课程、转出课时、目标课时、价值、跨科标记、申请人、时间、操作（撤销按钮）
-
-6. **main.js 占位函数**（`static/js/main.js`）
-   - 添加 `loadCourseTransferRecords()`、`renderCourseTransferRecordsTable()` 空函数骨架
-   - 添加标签页切换逻辑（`tab-course-transfer-records` → 调用 `loadCourseTransferRecords()`）
+3. **`index.php`**（修改）
+   - 在工作记录区 `<div class="section-tabs">` 中新增：
+     ```html
+     <button class="sec-tab" data-tab="tab-resale-records">转卖记录</button>
+     ```
+   - 在 `<div class="section-tab-content">` 末尾（`</div>` 之前）新增 resale tab 面板框架：
+     ```html
+     <div class="sec-panel" id="tab-resale-records">
+         <div class="toolbar">
+             <div class="toolbar-left">
+                 <select id="filter-resale-campus"><option value="">全部校区</option></select>
+                 <input type="text" id="filter-resale-keyword" placeholder="搜索卖方/课程...">
+                 <input type="date" id="filter-resale-date-from">
+                 <input type="date" id="filter-resale-date-to">
+                 <button class="btn btn-primary btn-sm" onclick="loadResaleRecords()">查询</button>
+             </div>
+         </div>
+         <div class="table-wrap">
+             <table id="table-resale-records"><thead>...</thead><tbody></tbody></table>
+         </div>
+         <div class="pagination" id="pagination-resale"></div>
+     </div>
+     ```
 
 ---
 
-#### T03: 前端交互 — 转课弹窗 + 操作按钮（P0）
+#### T03 — 前端：工作记录转卖 Tab + 集成打磨
 
-| 字段 | 内容 |
-|------|------|
+| 属性 | 值 |
+|------|-----|
 | **Task ID** | T03 |
-| **Task Name** | 转课弹窗、转课按钮条件判断、提交逻辑、转出课时列 |
-| **Source Files** | `static/js/main.js`（修改）、`static/css/style.css`（修改）、`index.php`（修改，操作列 HTML） |
-| **Dependencies** | T02 |
+| **Task Name** | 工作记录「转卖记录」Tab 与最终集成 |
 | **Priority** | P0 |
+| **Dependencies** | T02 |
+| **Source Files** | 3 |
 
-**工作内容**：
+**涉及文件**：
 
-1. **转课按钮条件判断**（修改 `renderStudentCoursesTable`，约行 6345-6437）
-   - 转课按钮显示条件（全部满足）：
-     - `order_type != '活动'`
-     - `refund_status IN ('正常', null, '')`（非退费中/已退费）
-     - `remaining_lessons > 0`（`lesson_count - consumed_lessons - transferred_lessons > 0`）
-     - `is_voided = '否'`
-     - 同校区有其他可选课程
-   - 按钮文字："转课"，CSS class `btn-transfer`
-   - 赠课行（`actual_price === 0 && item_name.includes('赠送')`）：如符合条件也显示转课按钮（价值为 0）
+| 文件 | 操作 | 预估行数 |
+|------|------|---------|
+| `static/js/main.js` | 修改 | +160 行 |
+| `static/css/style.css` | 修改 | +40 行 |
+| `index.php` | 修改 | +60 行 |
 
-2. **新增"转出课时"列**（修改 `renderStudentCoursesTable`）
-   - 在表头和表体中，"剩余课时"列之前新增"转出课时"列
-   - 值 = `transferred_lessons`（来自后端）
-   - `0` 显示 `-`（灰色），`>0` 显示数字（橙色高亮 `#e67e22`）
+**详细内容**：
 
-3. **转课弹窗实现**（新增函数 `showCourseTransferModal(orderId)`）
-   - 弹窗布局：
-     - 源课程信息（课程名、校区、剩余课时、单课时价值）
-     - 转出课时输入框（`<input type="number">`，范围 1 ~ remaining_lessons）
-     - 目标课程下拉框（`<select>`，动态填充同校区其他课程）
-     - 跨学科时显示目标课时输入框
-     - 价值预览区：实时计算转出价值
-   - 目标课程下拉数据来源：当前学员的 `studentCoursesAllRows`，筛选 `campus === source.campus && course_id !== source.course_id`
-   - 跨学科检测：前端根据 `subject_level1` 判断（与后端 `parent_id` 逻辑对齐，简化处理：`subject_level1` 不同即为跨学科）
-   - 目标课时：同科时自动 = 转出课时（只读）；跨科时可编辑
+1. **`static/js/main.js`**（修改）
+   - **`loadResaleRecords(page)`**: 查询转卖记录
+     - 收集筛选条件 → `api('resale_list', params, 'GET')` → 调用渲染函数
+   - **`renderResaleRecordsTable(rows)`**: 渲染 14 列表格
+     - 列：卖方姓名、卖方学号、课程名称、转出课时、转入课时、卖出课时金额、买入课时金额、确认收入、确认收入(税后)、是否全部转卖、经办校区、买方姓名、买方学号、上课校区、转卖时间
+   - **Tab 切换事件**: 在 `document.addEventListener('click')` 委托中增加：
+     - `if (target.dataset.tab === 'tab-resale-records') → loadResaleRecords()`
+     - 同步处理 `section-tabs` 内的 `sec-tab` 切换（工作记录区）
+   - **校区筛选下拉填充**: `loadResaleRecords()` 首次调用时填充校区下拉选项
+   - **分页渲染**: 复用现有分页模式
 
-4. **提交转课**（新增函数 `submitCourseTransfer()`）
-   - 验证输入有效性
-   - POST 到 `?action=create_course_transfer`
-   - 成功后刷新学员课程列表 + toast 提示
+2. **`static/css/style.css`**（修改）
+   - `#table-resale-records`: 表格样式（宽表，min-width: 1200px，水平滚动）
+   - `#table-resale-records th`: 表头固定样式
+   - `.col-revenue`: 确认收入列高亮（绿色/正值，灰色/零值）
+   - `.col-tax-revenue`: 税后确认收入列样式
+   - `.resale-badge-full`: "全部转卖" 徽章样式
 
-5. **剩余归零视觉标记**（修改 `renderStudentCoursesTable`）
-   - 当 `remaining_lessons === 0 && lesson_count > 0` 时，该行加 CSS class `row-depleted`（浅灰背景 `#f5f5f5`，文字颜色 `#999`）
-
-6. **CSS 样式**（`static/css/style.css`）
-   - `.row-depleted` 样式
-   - `.col-transferred` 转出课时列样式（橙色高亮）
-   - `.modal-course-transfer` 弹窗样式（表单布局、价值预览区）
-   - `.tag-cross-subject` 跨科标签样式
-
----
-
-#### T04: 前端交互 — 转课记录标签页 + 撤销功能 + 集成收尾（P1）
-
-| 字段 | 内容 |
-|------|------|
-| **Task ID** | T04 |
-| **Task Name** | 转课记录标签页完整实现 + 撤销操作 + 最终集成 |
-| **Source Files** | `static/js/main.js`（修改）、`static/css/style.css`（修改）、`index.php`（修改，void_order 兼容检查） |
-| **Dependencies** | T03 |
-| **Priority** | P1 |
-
-**工作内容**：
-
-1. **转课记录列表加载**（实现 `loadCourseTransferRecords`）
-   - 从筛选控件读取参数：校区、学员搜索、日期范围、状态
-   - GET 请求 `?action=list_course_transfer_records` + 参数
-   - 分页处理（复用现有 pagination 模式）
-
-2. **转课记录表格渲染**（实现 `renderCourseTransferRecordsTable`）
-   - 列：流水号（`order_no`）、学员（通过 `student_id` 查名称）、源课程→目标课程（箭头表示）、转出课时、目标课时、价值、跨科标记（`is_cross_subject ? '是' : '否'`）、时间（`created_at`）、操作
-   - 操作列：状态为"正常"时显示"撤销"按钮；"已撤销"时灰色显示"已撤销"
-   - 分页组件渲染
-
-3. **撤销转课**（新增函数 `revokeCourseTransfer(recordId)`）
-   - 二次确认弹窗：提示撤销后目标课包将作废，源课程课时恢复
-   - POST 到 `?action=revoke_course_transfer`，body `{record_id: recordId}`
-   - 成功：刷新转课记录列表 + toast 提示
-   - 失败：显示具体错误信息（如"目标课包已有消耗，无法撤销"）
-
-4. **void_order 兼容**（修改 `api/orders.php` 的 `voidOrder` 函数，约行 631-759）
-   - 在现有 `transferred_lessons > 0` 检查之后，新增对 `course_transfer_records` 的检查：
-     - 查询 `SELECT COUNT(*) FROM course_transfer_records WHERE source_order_id = :oid AND status = '正常'`
-     - 如存在记录，回滚并提示"该订单已发生转课，无法作废"
-   - 同时检查目标订单（`order_type='转课'`）：允许作废但需检查 `consumed_lessons = 0`
-
-5. **最终 CSS 收尾**
-   - 转课记录表格列样式
-   - 撤销按钮样式
-   - 二次确认弹窗样式（或复用现有确认模式）
+3. **`index.php`**（修改）
+   - 完善 `#tab-resale-records` 表格 thead（14 列完整 HTML）
+   - 完善筛选工具栏（占位符、onchange 事件绑定）
+   - 确保 `section-tabs` 中「转卖记录」按钮在「转校记录」之后
 
 ---
 
 ### 8. 共享知识
 
+跨文件开发约定，供 Engineer 参考：
+
+#### 8.1 数据格式约定
+
 ```
-===== 命名约定 =====
-- API action 名：snake_case，如 create_course_transfer, list_course_transfer_records, revoke_course_transfer
-- JS 函数名：camelCase，如 showCourseTransferModal, submitCourseTransfer, revokeCourseTransfer
-- JS 全局变量：camelCase 前缀，如 courseTransferTargetOrderId, courseTransferCurrentData
-- CSS class：kebab-case，如 .modal-course-transfer, .row-depleted, .col-transferred
-- 数据库表/列：snake_case，如 course_transfer_records, source_order_id
+- 所有 API 响应使用 {success: bool, data/message} 格式
+- 金额字段统一为 DECIMAL(10,2)，前端展示用 Number.toLocaleString('zh-CN', {minimumFractionDigits: 2})
+- 日期字段：数据库 DATETIME，前端展示截取前 16 字符（YYYY-MM-DD HH:mm）
+- 课时数字段：DECIMAL(8,2)，支持小数课时
+```
 
-===== 常量定义 =====
-- ORDER_TYPE_TRANSFER_COURSE = '转课'  （目标订单 order_type）
-- TRANSFER_STATUS_NORMAL = '正常'
-- TRANSFER_STATUS_REVOKED = '已撤销'
+#### 8.2 安全与边界校验
 
-===== 公共函数（复用现有） =====
-- generateOrderNo(PDO $db): string  -- app/order_helpers.php
-- json(mixed $data): never          -- app/helpers.php
-- h(mixed $value): string           -- app/helpers.php
-- now(): string                     -- app/helpers.php
+```
+- 转卖课时数：0 < transfer_lessons ≤ 剩余课时（后端 + 前端双重校验）
+- 买入金额：0.01 ≤ buyer_amount ≤ transfer_amount（后端 + 前端双重校验）
+- 买方 ≠ 卖方（后端校验 buyer_student_id != seller_student_id）
+- 同一订单不能并发转卖（SELECT ... FOR UPDATE 行锁）
+- 退费中/转校中的订单不显示转卖按钮
+- 赠课（actual_price=0 且 item_name 含"赠送"）不显示转卖按钮
+- 转课来源课包（is_transfer_course=true）不显示转卖按钮
+```
 
-===== API 响应格式 =====
-- 成功：{"success": true, ...具体数据}
-- 失败：{"error": "错误描述"} 或 {"success": false, "message": "错误描述"}
+#### 8.3 编码规范
 
-===== 事务规范 =====
-- 所有写操作必须 beginTransaction + try/catch + rollBack/commit
-- 查询源订单/目标订单必须 FOR UPDATE 行锁
-- 回滚时错误日志写入 error_log()
+```
+- API 模块遵循 api/course_transfers.php 的风格：函数名 + 路由注册函数
+- JS 函数使用 camelCase，全局变量使用 PascalCase 前缀或全小写
+- CSS 类名使用 BEM 风格：.resale-modal__header, .resale-modal__body
+- SQL 使用 PDO prepared statements，禁止字符串拼接
+- 事务操作：beginTransaction → try → commit → catch → rollBack → error_log
+```
 
-===== 安全规范 =====
-- 所有 SQL 参数使用 prepared statement（命名参数 :xxx）
-- JSON 输入通过 $input = json_decode(file_get_contents('php://input'), true) ?? []
-- 整数参数 intval() 强制转型
+#### 8.4 课耗税率查询
+
+```
+- 税率来源：tax_rates 表 JOIN organizations（type='校区'）
+- 查询方式：SELECT t.course_tax_rate FROM tax_rates t 
+            JOIN organizations o ON t.campus_id = o.id 
+            WHERE o.name = :campusName AND o.type = '校区'
+- 若对应校区无税率设置，默认 tax_rate = 0（不计算税后收入）
+- 与现有课耗计算使用同一税率（confirmed_revenue_after_tax = confirmed_revenue × (1 - tax_rate/100)）
+```
+
+#### 8.5 卖方课时计算
+
+```
+- get_student_courses API 中：
+  remaining = lesson_count - consumed_lessons - transferred_lessons - resale_lessons
+- 当 remaining <= 0 时：状态显示「已结课」
+- resale_lessons 独立于 transferred_lessons（转课/转校），互不干扰
 ```
 
 ---
 
-### 9. 任务依赖关系图
+### 9. 任务依赖图
 
 ```mermaid
-graph TD
-    T01["T01: 基础设施<br/>迁移+API骨架+路由"]
-    T02["T02: 后端API+数据增强<br/>Handler实现+get_student_courses"]
-    T03["T03: 前端交互核心<br/>转课弹窗+按钮+转出课时列"]
-    T04["T04: 前端交互收尾<br/>转课记录标签页+撤销+void兼容"]
+graph LR
+    T01["T01: 数据库迁移 + 后端 API"]
+    T02["T02: 转卖弹窗 + 课程列表按钮"]
+    T03["T03: 工作记录 Tab + 集成打磨"]
 
     T01 --> T02
     T02 --> T03
-    T03 --> T04
+
+    style T01 fill:#e1f5fe
+    style T02 fill:#fff3e0
+    style T03 fill:#e8f5e9
 ```

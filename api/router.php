@@ -9,6 +9,7 @@ require_once __DIR__ . '/teaching_aids.php';
 require_once __DIR__ . '/discounts.php';
 require_once __DIR__ . '/orders.php';
 require_once __DIR__ . '/course_transfers.php';
+require_once __DIR__ . '/resale.php';
 
 /**
  * @return array<string,callable(PDO,string,array,array):void>
@@ -17,7 +18,7 @@ function buildExtractedApiRoutes(): array
 {
     $routes = [];
 
-    foreach ([dictionaryApiRoutes(), settingsApiRoutes(), organizationApiRoutes(), teachingAidApiRoutes(), discountApiRoutes(), orderApiRoutes(), courseTransferApiRoutes()] as $routeGroup) {
+    foreach ([dictionaryApiRoutes(), settingsApiRoutes(), organizationApiRoutes(), teachingAidApiRoutes(), discountApiRoutes(), orderApiRoutes(), courseTransferApiRoutes(), resaleApiRoutes()] as $routeGroup) {
         $duplicates = array_intersect_key($routes, $routeGroup);
         if ($duplicates !== []) {
             throw new LogicException(
