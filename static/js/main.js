@@ -5870,7 +5870,7 @@ async function loadStudents() {
     const campus = document.getElementById('student-filter-campus')?.value || '';
     const subjectLevel1 = document.getElementById('student-filter-subject1')?.value || '';
     const studentFilter = document.getElementById('student-filter-type')?.value || '';
-    const params = new URLSearchParams({ page: studentPage, page_size: 15 });
+    const params = new URLSearchParams({ page: studentPage, page_size: 10 });
     if (keyword) params.set('keyword', keyword);
     if (campus) params.set('campus', campus);
     if (subjectLevel1) params.set('subject_level1', subjectLevel1);
@@ -5878,7 +5878,7 @@ async function loadStudents() {
     const res = await fetch(API_BASE + 'list_students&' + params);
     const data = await res.json();
     renderStudentTable(data.data);
-    renderPagination('pagination-student', data.total, studentPage, 15, (p) => { studentPage = p; loadStudents(); });
+    renderPagination('pagination-student', data.total, studentPage, 10, (p) => { studentPage = p; loadStudents(); });
     document.getElementById('stat-students-inline').textContent = data.total || 0;
 }
 
