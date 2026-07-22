@@ -10368,9 +10368,6 @@ function showResaleModal(orderId, sourceType, transferRecordId) {
                     <div><strong>卖方学员：</strong>${esc(r.student_name || '-')}</div>
                     <div><strong>课程：</strong>${esc(r.name || '-')}</div>
                     <div><strong>校区：</strong>${esc(r.campus || '-')}</div>
-                    ${(cl > 0 || transferred > 0 || resaled > 0)
-                        ? `<div><strong>报读课时：</strong>${lc} | <strong>已消耗：</strong>${cl} | <strong>已转出：</strong>${transferred} | <strong>已转卖：</strong>${resaled}</div>`
-                        : ''}
                     <div><strong>剩余课时：</strong>${remaining} | <strong>原价值：</strong>¥${Number(ap).toFixed(2)} | <strong>单课时价值：</strong>¥${unitValue.toFixed(2)}</div>
                 </div>
 
