@@ -1,8 +1,10 @@
 // ==================== 全局状态 ====================
 const API_BASE = '?action=';
 let myPage = 1, aptPage = 1, seaPage = 1, empPage = 1, coursePage = 1, studentPage = 1, orderPage = 1, refundPage = 1;
+let seaPageSize = 15, aptPageSize = 15, empPageSize = 15, coursePageSize = 15, studentPageSize = 10, orderPageSize = 15, refundPageSize = 15;
+let activityPage = 1, activityPageSize = 15, classPage = 1, classPageSize = 15;
+let taPage = 1, taPageSize = 20, taSalesPage = 1, taSalesPageSize = 20;
 let discountPlanPage = 1;
-let activityPage = 1;
 let myPageSize = 15;
 let myFilterTimer = null;
 let searchTimers = {};
@@ -2028,11 +2030,11 @@ async function saveInlineAppointment() {
 // ==================== 资源公海 ====================
 async function loadSeaPool() {
     const keyword = document.getElementById('search-sea').value;
-    const params = new URLSearchParams({ page: seaPage, page_size: 15, pool_type: '资源公海', keyword });
+    const params = new URLSearchParams({ page: seaPage, page_size: seaPageSize, pool_type: '资源公海', keyword });
     const res = await fetch(API_BASE + 'get_resources&' + params);
     const data = await res.json();
     renderSeaTable(data.data);
-    renderPagination('pagination-sea', data.total, seaPage, 15, (p) => { seaPage = p; loadSeaPool(); });
+    renderPagination('pagination-sea', data.total, seaPage, seaPageSize, (p, ps) => { seaPage = p; if (ps) seaPageSize = ps; loadSeaPool(); });
 }
 
 function renderSeaTable(rows) {
@@ -2242,7 +2244,13 @@ async function cancelTrial(aptId, classId, scheduleId, trialDate) {
 function renderPagination(containerId, total, page, pageSize, callback) {
     const totalPages = Math.ceil(total / pageSize);
     const container = document.getElementById(containerId);
-    let html = `<button ${page === 1 ? 'disabled' : ''} data-page="${page-1}">上一页</button>`;
+
+    // 每页条数选择器：将当前值存到全局桶，回调时一并传递
+    const pgSizes = [10, 20, 50, 100];
+    const sizeOpts = pgSizes.map(s => `<option value="${s}" ${s == pageSize ? 'selected' : ''}>${s} 条/页</option>`).join('');
+
+    let html = '<div class="pg-bar">';
+    html += `<button ${page === 1 ? 'disabled' : ''} data-page="${page-1}">上一页</button>`;
     const maxShow = 5;
     let start = Math.max(1, page - Math.floor(maxShow / 2));
     let end = Math.min(totalPages, start + maxShow - 1);
@@ -2253,10 +2261,18 @@ function renderPagination(containerId, total, page, pageSize, callback) {
     }
     if (end < totalPages) { if (end < totalPages - 1) html += '<span>...</span>'; html += `<button data-page="${totalPages}">${totalPages}</button>`; }
     html += `<button ${page === totalPages ? 'disabled' : ''} data-page="${page+1}">下一页</button>`;
-    html += `<span>共 ${total} 条</span>`;
+    html += `<span class="pg-total">共 ${total} 条</span>`;
+    html += `<select class="pg-sizer" data-pg="${containerId}">${sizeOpts}</select>`;
+    html += '</div>';
+
     container.innerHTML = html;
     container.querySelectorAll('button:not([disabled])').forEach(btn => {
-        btn.addEventListener('click', () => callback(parseInt(btn.dataset.page)));
+        btn.addEventListener('click', () => callback(parseInt(btn.dataset.page), pageSize));
+    });
+    // 每页条数切换：重置回第 1 页
+    container.querySelector('.pg-sizer').addEventListener('change', function() {
+        const newSize = parseInt(this.value);
+        callback(1, newSize);
     });
 }
 
@@ -5143,7 +5159,6 @@ async function deleteSubject(sid, name) {
 }
 
 // ==================== 班级管理 ====================
-let classPage = 1;
 
 async function loadClasses(page, prefix) {
     prefix = prefix || '';
@@ -15030,7 +15045,6 @@ ${itemList}
 }
 
 // ===== 销售记录 =====
-let taSalesPage = 1;
 
 async function loadTeachingAidSales(page = 1) {
     taSalesPage = page;
