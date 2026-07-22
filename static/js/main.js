@@ -5900,8 +5900,11 @@ async function loadStudents() {
 
 function renderStudentTable(rows) {
     const tbody = document.querySelector('#table-students tbody');
+    const activeTab = document.querySelector('#student-tabs .sec-tab.active');
+    const showType = !activeTab || activeTab.dataset.tab !== 'all';
+    const colSpan = showType ? 9 : 8;
     if (!rows || rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="8" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>';
+        tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>`;
         return;
     }
     tbody.innerHTML = rows.map(r => {
@@ -5910,7 +5913,7 @@ function renderStudentTable(rows) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td><a class="student-name-link" href="javascript:void(0)" onclick="viewStudent(${r.id})">${esc(r.name)}</a></td>
             <td>${esc(r.phone)}</td>
-            <td>${esc(r.student_type || '小课包')}</td>
+            ${showType ? `<td>${esc(r.student_type || '小课包')}</td>` : ''}
             <td>${esc(r.campus || '')}</td>
             <td>${renderClassTags(r.class_names)}</td>
             <td>${renderSubjectTags(r.subject_remaining)}</td>
@@ -6308,14 +6311,29 @@ function onStudentFilterChange() {
 
 function initStudentTabs() {
     const tabs = document.querySelectorAll('#student-tabs .sec-tab');
+    const subjectSel = document.getElementById('student-filter-subject1');
+    const thType = document.querySelector('#table-students th.col-student-type');
+
+    // 初始状态同步
+    updateStudentTabState(subjectSel, thType);
+
     tabs.forEach(tab => {
         tab.addEventListener('click', () => {
             tabs.forEach(t => t.classList.remove('active'));
             tab.classList.add('active');
             studentPage = 1;
+            updateStudentTabState(subjectSel, thType);
             loadStudents();
         });
     });
+}
+
+function updateStudentTabState(subjectSel, thType) {
+    const activeTab = document.querySelector('#student-tabs .sec-tab.active');
+    const isAll = activeTab && activeTab.dataset.tab === 'all';
+    // 全部学员：隐藏学员类型列，清空学科
+    if (thType) thType.style.display = isAll ? 'none' : '';
+    if (subjectSel) subjectSel.value = isAll ? '' : '绘画';
 }
 
 async function initStudentCampusFilter() {
