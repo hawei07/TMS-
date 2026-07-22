@@ -2087,6 +2087,7 @@ $stmt->execute();
             $campus = trim($_GET['campus'] ?? '');
             $subjectLevel1 = trim($_GET['subject_level1'] ?? '');
             $studentFilter = trim($_GET['student_filter'] ?? '');
+            $yearMonth = trim($_GET['year_month'] ?? '');
             $resourceId = intval($_GET['resource_id'] ?? 0);
             $offset = ($page - 1) * $pageSize;
             $conditions = [];
@@ -2164,8 +2165,73 @@ $stmt->execute();
                     $params[':subj1_active'] = $subjectLevel1;
                 }
             }
+            // 活跃学员筛选：在册（常规+剩余课时>0）+ 前3个月有过出勤（课耗或活动）
+            // 仅在 campus + subject 双选时生效；按月缓存，当月每小时刷新，往月冻结
+            if ($studentFilter === 'active_monthly') {
+                if (!$yearMonth) $yearMonth = date('Y-m');
+                // 前3个月日期范围：目标月的前3个整月
+                $targetDt = new DateTime($yearMonth . '-01');
+                $attEndDt = (clone $targetDt)->modify('-1 day');
+                $attStartDt = (clone $targetDt)->modify('-3 months')->modify('first day of this month');
+                $attStart = $attStartDt->format('Y-m-d');
+                $attEnd = $attEndDt->format('Y-m-d');
+                $isCurrentMonth = ($yearMonth === date('Y-m'));
+
+                if ($campus && $subjectLevel1) {
+                    $cacheWhere = "campus_name=" . $db->quote($campus) . " AND subject_name=" . $db->quote($subjectLevel1) . " AND `year_month`=" . $db->quote($yearMonth);
+                    // 缓存过期判断：当月 1小时；往月永久有效
+                    $lastUpdate = $db->query("SELECT MAX(updated_at) FROM active_student_cache WHERE $cacheWhere")->fetchColumn();
+                    $needsRefresh = !$lastUpdate || ($isCurrentMonth && strtotime($lastUpdate) < time() - 3600);
+                    if ($needsRefresh) {
+                        $db->exec("DELETE FROM active_student_cache WHERE $cacheWhere");
+                        $campusQ = $db->quote($campus);
+                        $subjQ = $db->quote($subjectLevel1);
+                        $ymQ = $db->quote($yearMonth);
+                        // 活跃学员 = 在册条件 + attendance_records 前3个月出勤
+                        $db->exec("INSERT INTO active_student_cache (student_id, campus_name, subject_name, `year_month`, updated_at)
+                            SELECT DISTINCT s.id, $campusQ, $subjQ, $ymQ, NOW()
+                            FROM students s
+                            WHERE s.student_type = '常规'
+                            AND EXISTS (
+                                SELECT 1 FROM orders o2
+                                JOIN courses c2 ON o2.course_id = c2.id
+                                LEFT JOIN (
+                                    SELECT order_id, COALESCE(SUM(deducted_lessons), 0) AS consumed
+                                    FROM attendance_records WHERE status='出勤'
+                                    GROUP BY order_id
+                                ) ar ON ar.order_id = o2.id
+                                WHERE o2.student_id = s.id
+                                    AND o2.is_voided = '否'
+                                    AND (o2.refund_status IS NULL OR o2.refund_status != '已退费')
+                                    AND c2.subject_level1 = $subjQ
+                                    AND o2.campus = $campusQ
+                                GROUP BY o2.student_id
+                                HAVING SUM(CASE WHEN o2.refund_status='退费申请中' THEN 0 ELSE o2.lesson_count - COALESCE(ar.consumed,0) END) > 0
+                                AND SUM(CASE WHEN o2.order_type IS NOT NULL AND o2.order_type != '' AND o2.order_type != '小课包' THEN 1 ELSE 0 END) > 0
+                            )
+                            AND EXISTS (
+                                SELECT 1 FROM attendance_records ar3
+                                WHERE ar3.student_id = s.id
+                                    AND ar3.status = '出勤'
+                                    AND ar3.campus = $campusQ
+                                    AND ar3.subject_level1 = $subjQ
+                                    AND ar3.attended_at >= '$attStart'
+                                    AND ar3.attended_at <= '$attEnd 23:59:59'
+                            )
+                        ");
+                    }
+                    // 已缓存的 campus 条件在 active_monthly 逻辑中由缓存表覆盖，去掉全局 campus filter 的冗余
+                    // 但 campus 全局 filter 在前面已添加，保留它不冲突
+                    $conditions[] = "s.id IN (SELECT student_id FROM active_student_cache WHERE $cacheWhere)";
+                } elseif ($campus || $subjectLevel1) {
+                    // 仅校区或仅学科：降级为在册条件（活跃学员需要 campus+subject 双选才有意义）
+                    $conditions[] = "s.student_type = '常规'";
+                } else {
+                    $conditions[] = "1=0"; // 无筛选条件不返回数据
+                }
+            }
             // 一级学科独立筛选（不配合学员筛选时）：筛选有该学科订单的学员
-            if ($subjectLevel1 && $studentFilter !== 'active') {
+            if ($subjectLevel1 && $studentFilter !== 'active' && $studentFilter !== 'active_monthly') {
                 $conditions[] = "EXISTS (
                     SELECT 1 FROM orders o3
                     JOIN courses c3 ON o3.course_id = c3.id
@@ -7531,6 +7597,7 @@ if (intval($countBt) === 0) {
                 <div class="section-tabs" id="student-tabs">
                     <button class="sec-tab active" data-tab="all">全部学员</button>
                     <button class="sec-tab" data-tab="active">在册学员</button>
+                    <button class="sec-tab" data-tab="active_monthly">活跃学员</button>
                 </div>
                 <div class="toolbar">
                     <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
@@ -7542,6 +7609,10 @@ if (intval($countBt) === 0) {
                         <select id="student-filter-subject1" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
                             <option value="">全部学科</option>
                         </select>
+                        <span id="student-month-selector" style="display:none;align-items:center;gap:4px;">
+                            <label style="font-size:13px;white-space:nowrap;margin-left:4px;">月份：</label>
+                            <input type="month" id="student-active-month" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
+                        </span>
                     </div>
                     <div class="toolbar-right" style="margin-left:auto;display:flex;align-items:center;gap:8px;">
                         <input type="text" id="search-student" placeholder="搜索姓名/手机号..." onkeyup="debounceSearch('student')">

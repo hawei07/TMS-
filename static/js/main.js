@@ -5883,14 +5883,24 @@ async function loadStudents() {
     const keyword = document.getElementById('search-student').value;
     const campus = document.getElementById('student-filter-campus')?.value || '';
     const subjectLevel1 = document.getElementById('student-filter-subject1')?.value || '';
-    // 从 tab 状态取出当前筛选模式（不再是旧 dropdown）
+    // 从 tab 状态取出当前筛选模式
     const activeTab = document.querySelector('#student-tabs .sec-tab.active');
-    const studentFilter = (activeTab && activeTab.dataset.tab === 'active') ? 'active' : '';
+    let studentFilter = '';
+    if (activeTab) {
+        if (activeTab.dataset.tab === 'active') studentFilter = 'active';
+        else if (activeTab.dataset.tab === 'active_monthly') studentFilter = 'active_monthly';
+    }
     const params = new URLSearchParams({ page: studentPage, page_size: studentPageSize });
     if (keyword) params.set('keyword', keyword);
     if (campus) params.set('campus', campus);
     if (subjectLevel1) params.set('subject_level1', subjectLevel1);
-    if (studentFilter) params.set('student_filter', studentFilter);
+    if (studentFilter) {
+        params.set('student_filter', studentFilter);
+        if (studentFilter === 'active_monthly') {
+            const ym = document.getElementById('student-active-month')?.value || '';
+            if (ym) params.set('year_month', ym);
+        }
+    }
     const res = await fetch(API_BASE + 'list_students&' + params);
     const data = await res.json();
     renderStudentTable(data.data);
@@ -5903,6 +5913,7 @@ function renderStudentTable(rows) {
     const activeTab = document.querySelector('#student-tabs .sec-tab.active');
     const showType = !activeTab || activeTab.dataset.tab !== 'all';
     const colSpan = showType ? 9 : 8;
+    const typeCellStyle = showType ? '' : ' style="display:none;"';
     if (!rows || rows.length === 0) {
         tbody.innerHTML = `<tr><td colspan="${colSpan}" style="text-align:center;color:#999;padding:30px;">暂无学员数据</td></tr>`;
         return;
@@ -5913,7 +5924,7 @@ function renderStudentTable(rows) {
             <td style="font-family:monospace;font-size:12px;">${esc(r.student_no || '')}</td>
             <td><a class="student-name-link" href="javascript:void(0)" onclick="viewStudent(${r.id})">${esc(r.name)}</a></td>
             <td>${esc(r.phone)}</td>
-            ${showType ? `<td>${esc(r.student_type || '小课包')}</td>` : ''}
+            <td class="col-student-type"${typeCellStyle}>${esc(r.student_type || '小课包')}</td>
             <td>${esc(r.campus || '')}</td>
             <td>${renderClassTags(r.class_names)}</td>
             <td>${renderSubjectTags(r.subject_remaining)}</td>
@@ -6331,9 +6342,23 @@ function initStudentTabs() {
 function updateStudentTabState(subjectSel, thType) {
     const activeTab = document.querySelector('#student-tabs .sec-tab.active');
     const isAll = activeTab && activeTab.dataset.tab === 'all';
+    const isActiveMonthly = activeTab && activeTab.dataset.tab === 'active_monthly';
     // 全部学员：隐藏学员类型列，清空学科
-    if (thType) thType.style.display = isAll ? 'none' : '';
+    document.querySelectorAll('#table-students .col-student-type').forEach(cell => {
+        cell.style.display = isAll ? 'none' : '';
+    });
     if (subjectSel) subjectSel.value = isAll ? '' : '绘画';
+    // 月份选择器：仅活跃学员 tab 可见
+    const monthSel = document.getElementById('student-month-selector');
+    if (monthSel) monthSel.style.display = isActiveMonthly ? 'flex' : 'none';
+    // 活跃学员 tab：默认当前月
+    if (isActiveMonthly) {
+        const monthInput = document.getElementById('student-active-month');
+        if (monthInput && !monthInput.value) {
+            const now = new Date();
+            monthInput.value = now.getFullYear() + '-' + String(now.getMonth() + 1).padStart(2, '0');
+        }
+    }
 }
 
 async function initStudentCampusFilter() {
