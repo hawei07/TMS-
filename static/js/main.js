@@ -6318,6 +6318,8 @@ async function initStudentSubjectFilter() {
         const flat = data.flat || [];
         // 只取一级学科（parent_id=0）
         const level1 = flat.filter(s => s.parent_id === 0);
+        // 关键：每次清空除第一个"全部学科"外的旧选项，避免和"学员详情-报读课程"共用同一 select 时叠加
+        while (sel.options.length > 1) sel.remove(1);
         level1.forEach(s => {
             const opt = document.createElement('option');
             opt.value = s.name;
