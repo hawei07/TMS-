@@ -2183,12 +2183,12 @@ async function addInlineCommunication() {
 async function loadAppointments() {
     const keyword = document.getElementById('search-apt').value;
     const status = document.getElementById('filter-status-apt').value;
-    const params = new URLSearchParams({ page: aptPage, page_size: 15, keyword, status });
+    const params = new URLSearchParams({ page: aptPage, page_size: aptPageSize, keyword, status });
     const res = await fetch(API_BASE + 'get_appointments&' + params);
     const data = await res.json();
     renderAptTable(data.data);
     renderAptStats(data.stats);
-    renderPagination('pagination-apt', data.total, aptPage, 15, (p) => { aptPage = p; loadAppointments(); });
+    renderPagination('pagination-apt', data.total, aptPage, aptPageSize, (p, ps) => { aptPage = p; if (ps) aptPageSize = ps; loadAppointments(); });
 }
 
 function renderAptStats(stats) {
@@ -2440,14 +2440,14 @@ async function loadEmployees() {
     const dept = document.getElementById('filter-emp-dept').value;
     const status = document.getElementById('filter-emp-status').value;
     const finalKeyword = keyword || nameFilter;
-    const params = new URLSearchParams({ page: empPage, page_size: 15 });
+    const params = new URLSearchParams({ page: empPage, page_size: empPageSize });
     if (finalKeyword) params.set('keyword', finalKeyword);
     if (dept) params.set('department', dept);
     if (status) params.set('status', status);
     const res = await fetch(API_BASE + 'get_employees&' + params);
     const data = await res.json();
     renderEmpTable(data.data);
-    renderPagination('pagination-emp', data.total, empPage, 15, (p) => { empPage = p; loadEmployees(); });
+    renderPagination('pagination-emp', data.total, empPage, empPageSize, (p, ps) => { empPage = p; if (ps) empPageSize = ps; loadEmployees(); });
     populateEmpDeptFilter(data.data);
 }
 
@@ -2788,7 +2788,7 @@ async function deletePosition(id) {
 // ==================== 课程管理 ====================
 async function loadCourses() {
     const keyword = document.getElementById('search-course')?.value || '';
-    const params = new URLSearchParams({ page: coursePage, page_size: 15, keyword });
+    const params = new URLSearchParams({ page: coursePage, page_size: coursePageSize, keyword });
     const subject1 = document.getElementById('filter-subject1')?.value || '';
     const subject2 = document.getElementById('filter-subject2')?.value || '';
     const smallPackage = getFilterChipValue('filter-chip-package');
@@ -2807,7 +2807,7 @@ async function loadCourses() {
         // 确保校区数据已加载，以便 getCampusDisplayText 将 ID 转为名称
         if (!campusCheckboxData.length) await loadCampusData();
         renderCourseTable(data.data || []);
-        renderPagination('pagination-course', data.total, coursePage, 15, (p) => { coursePage = p; loadCourses(); });
+        renderPagination('pagination-course', data.total, coursePage, coursePageSize, (p, ps) => { coursePage = p; if (ps) coursePageSize = ps; loadCourses(); });
         document.getElementById('stat-courses-inline').textContent = data.total;
     } catch (e) {
         showToast('加载课程失败: ' + e.message, 'error');
@@ -3305,11 +3305,11 @@ async function loadActivities() {
     const status = document.getElementById('filter-activity-status')?.value || '';
     try {
         const data = await api('list_activities', {
-            page: activityPage, page_size: 15, keyword, subject_level1: subject1, status: status || undefined
+            page: activityPage, page_size: activityPageSize, keyword, subject_level1: subject1, status: status || undefined
         }, 'GET');
         if (data && data.error) { showToast(data.error, 'error'); return; }
         renderActivityTable(data.data || []);
-        renderPagination('pagination-activity', data.total, activityPage, 15, (p) => { activityPage = p; loadActivities(); });
+        renderPagination('pagination-activity', data.total, activityPage, activityPageSize, (p, ps) => { activityPage = p; if (ps) activityPageSize = ps; loadActivities(); });
         const statEl = document.getElementById('stat-activities-inline');
         if (statEl) statEl.textContent = data.total || 0;
     } catch (e) {
@@ -5165,12 +5165,12 @@ async function loadClasses(page, prefix) {
     if (page) classPage = page;
     const searchId = prefix ? (prefix + 'search-class') : 'search-class';
     const keyword = document.getElementById(searchId) ? document.getElementById(searchId).value : '';
-    const params = new URLSearchParams({ page: classPage, page_size: 15 });
+    const params = new URLSearchParams({ page: classPage, page_size: classPageSize });
     if (keyword) params.set('keyword', keyword);
     const res = await fetch(API_BASE + 'list_classes&' + params);
     const data = await res.json();
     renderClassTable(data.data, prefix);
-    renderPagination(prefix + 'pagination-' + (prefix ? 'att-' : '') + 'class', data.total, classPage, 15, (p) => { classPage = p; loadClasses(null, prefix); });
+    renderPagination(prefix + 'pagination-' + (prefix ? 'att-' : '') + 'class', data.total, classPage, classPageSize, (p, ps) => { classPage = p; if (ps) classPageSize = ps; loadClasses(null, prefix); });
     var statEl = document.getElementById((prefix ? '' : 'stat-classes-inline'));
     if (statEl) statEl.textContent = data.total || 0;
 }
@@ -5884,7 +5884,7 @@ async function loadStudents() {
     const campus = document.getElementById('student-filter-campus')?.value || '';
     const subjectLevel1 = document.getElementById('student-filter-subject1')?.value || '';
     const studentFilter = document.getElementById('student-filter-type')?.value || '';
-    const params = new URLSearchParams({ page: studentPage, page_size: 10 });
+    const params = new URLSearchParams({ page: studentPage, page_size: studentPageSize });
     if (keyword) params.set('keyword', keyword);
     if (campus) params.set('campus', campus);
     if (subjectLevel1) params.set('subject_level1', subjectLevel1);
@@ -5892,7 +5892,7 @@ async function loadStudents() {
     const res = await fetch(API_BASE + 'list_students&' + params);
     const data = await res.json();
     renderStudentTable(data.data);
-    renderPagination('pagination-student', data.total, studentPage, 10, (p) => { studentPage = p; loadStudents(); });
+    renderPagination('pagination-student', data.total, studentPage, studentPageSize, (p, ps) => { studentPage = p; if (ps) studentPageSize = ps; loadStudents(); });
     document.getElementById('stat-students-inline').textContent = data.total || 0;
 }
 
@@ -8452,7 +8452,7 @@ async function loadOrders() {
             .join(',');
     }
 
-    const params = new URLSearchParams({ page: orderPage, page_size: 15 });
+    const params = new URLSearchParams({ page: orderPage, page_size: orderPageSize });
     if (keyword) params.set('keyword', keyword);
     if (payStatus) params.set('pay_status', payStatus);
     if (isVoided) params.set('is_voided', isVoided);
@@ -8462,7 +8462,7 @@ async function loadOrders() {
     const res = await fetch(API_BASE + 'list_orders&' + params);
     const data = await res.json();
     renderOrderTable(data.data);
-    renderPagination('pagination-order', data.total, orderPage, 15, (p) => { orderPage = p; loadOrders(); });
+    renderPagination('pagination-order', data.total, orderPage, orderPageSize, (p, ps) => { orderPage = p; if (ps) orderPageSize = ps; loadOrders(); });
     document.getElementById('stat-orders-inline').textContent = data.total || 0;
     renderPaymentSummary(data.payment_summary || []);
     initOrderTableScrollSync();
@@ -10704,8 +10704,9 @@ async function initResaleCampusFilter() {
     }
 }
 
-async function loadResaleRecords(page) {
+async function loadResaleRecords(page, pageSize) {
     if (page) resalePage = page;
+    if (pageSize) resalePageSize = pageSize;
     const campus = document.getElementById('filter-resale-campus')?.value || '';
     const keyword = document.getElementById('filter-resale-keyword')?.value || '';
     const dateFrom = document.getElementById('filter-resale-date-from')?.value || '';
@@ -11265,7 +11266,7 @@ async function loadRefundRecords() {
         const project = document.getElementById('filter-refund-project')?.value || '';
         const regionSel = document.getElementById('filter-refund-region');
         const campusSel = document.getElementById('filter-refund-campus');
-        const params = new URLSearchParams({ page: refundPage, page_size: 15, _: Date.now() });
+        const params = new URLSearchParams({ page: refundPage, page_size: refundPageSize, _: Date.now() });
         if (keyword) params.set('keyword', keyword);
         if (dateFrom) params.set('date_from', dateFrom);
         if (dateTo) params.set('date_to', dateTo);
@@ -11308,7 +11309,7 @@ async function loadRefundRecords() {
         const res = await fetch(API_BASE + 'list_refund_records&' + params);
         const data = await res.json();
         renderRefundRecordTable(data.data);
-        renderPagination('pagination-refund', data.total, refundPage, 15, (p) => { refundPage = p; loadRefundRecords(); });
+        renderPagination('pagination-refund', data.total, refundPage, refundPageSize, (p, ps) => { refundPage = p; if (ps) refundPageSize = ps; loadRefundRecords(); });
     } catch (e) {
         console.error('loadRefundRecords error:', e);
         const tbody = document.querySelector('#table-refund-records tbody');
@@ -14492,12 +14493,13 @@ let teachingAidPage = 1;
 let teachingAidEditingId = null;
 
 // ===== 列表加载 =====
-async function loadTeachingAids(page = 1) {
+async function loadTeachingAids(page = 1, ps = null) {
+    if (ps) taPageSize = ps;
     teachingAidPage = page;
     const keyword = document.getElementById('ta-search')?.value || '';
-    const data = await api('list_teaching_aids', { keyword, page, page_size: 20 }, 'GET');
+    const data = await api('list_teaching_aids', { keyword, page, page_size: taPageSize }, 'GET');
     renderTeachingAidTable(data.data);
-    renderPagination('pagination-teaching-aids', data.total, page, 20, 'loadTeachingAids');
+    renderPagination('pagination-teaching-aids', data.total, taPage, taPageSize, (p, ps) => { taPage = p; if (ps) taPageSize = ps; loadTeachingAids(p, ps || taPageSize); });
     document.getElementById('ta-total-count').textContent = `共 ${data.total} 条`;
 }
 
@@ -15046,7 +15048,8 @@ ${itemList}
 
 // ===== 销售记录 =====
 
-async function loadTeachingAidSales(page = 1) {
+async function loadTeachingAidSales(page = 1, ps = null) {
+    if (ps) taSalesPageSize = ps;
     taSalesPage = page;
     const studentName = document.getElementById('ta-sales-student')?.value || '';
     const taName = document.getElementById('ta-sales-aid')?.value || '';
@@ -15054,7 +15057,7 @@ async function loadTeachingAidSales(page = 1) {
     const dateTo = document.getElementById('ta-sales-date-to')?.value || '';
     
     const data = await api('list_teaching_aid_sales', {
-        page, page_size: 20,
+        page, page_size: taSalesPageSize,
         student_name: studentName,
         teaching_aid_name: taName,
         date_from: dateFrom,
@@ -15062,7 +15065,7 @@ async function loadTeachingAidSales(page = 1) {
     }, 'GET');
     
     renderTeachingAidSalesTable(data.data);
-    renderPagination('pagination-ta-sales', data.total, page, 20, 'loadTeachingAidSales');
+    renderPagination('pagination-ta-sales', data.total, taSalesPage, taSalesPageSize, (p, ps) => { taSalesPage = p; if (ps) taSalesPageSize = ps; loadTeachingAidSales(p, ps || taSalesPageSize); });
 }
 
 function renderTeachingAidSalesTable(rows) {
