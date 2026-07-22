@@ -2242,7 +2242,6 @@ async function cancelTrial(aptId, classId, scheduleId, trialDate) {
 function renderPagination(containerId, total, page, pageSize, callback) {
     const totalPages = Math.ceil(total / pageSize);
     const container = document.getElementById(containerId);
-    if (totalPages <= 1) { container.innerHTML = ''; return; }
     let html = `<button ${page === 1 ? 'disabled' : ''} data-page="${page-1}">上一页</button>`;
     const maxShow = 5;
     let start = Math.max(1, page - Math.floor(maxShow / 2));
