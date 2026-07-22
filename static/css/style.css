@@ -2466,6 +2466,33 @@ hr { border: none; border-top: 1px solid var(--color-border-light); margin: 18px
     display: none; text-align: center; padding: 16px; color: #9895A8; font-size: 13px;
 }
 
+/* --- 课程选择翻页器（Soft Industrial）--- */
+.ecf-pager {
+    display: flex; align-items: center; justify-content: flex-end;
+    gap: 16px; padding: 10px 4px 4px; margin-top: 6px;
+    border-top: 1px solid #f1eef7; font-size: 12px; color: #6b6580;
+    font-variant-numeric: tabular-nums;
+}
+.ecf-pager b { color: #2b2540; font-weight: 600; }
+.ecf-pager-info { display: inline-flex; align-items: center; gap: 4px; }
+.ecf-pager-btns { display: inline-flex; gap: 6px; margin-left: 4px; }
+.ecf-pager-btn {
+    padding: 4px 12px; min-width: 64px; font-size: 12px;
+    background: #fff; color: #5a4f80; border: 1px solid #d8d2e8; border-radius: 4px;
+    cursor: pointer; transition: all 150ms ease; font-family: inherit;
+}
+.ecf-pager-btn:hover:not(:disabled) {
+    background: #f5f3ff; border-color: #7C3AED; color: #7C3AED;
+    transform: translateY(-1px); box-shadow: 0 1px 3px rgba(124, 58, 237, 0.12);
+}
+.ecf-pager-btn:focus-visible {
+    outline: 2px solid #7C3AED; outline-offset: 2px;
+}
+.ecf-pager-btn:disabled {
+    opacity: 0.45; cursor: not-allowed; background: #fafafa;
+}
+.ecf-pager-btn:active:not(:disabled) { transform: translateY(0); }
+
 /* --- 通用表格 --- */
 .ecf-tbl {
     width: 100%; border-collapse: collapse; font-size: 13px;

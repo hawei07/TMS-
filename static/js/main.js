@@ -7922,13 +7922,16 @@ async function loadCourseOptionsByCampus(selectId, campusId) {
 // ==================== 课程搜索+筛选Picker ====================
 let enrollCoursePickerData = [];
 let enrollCoursePickerSelected = null;
-let pickerSearchEl, pickerChipsEl, pickerListEl, pickerHiddenEl;
+let enrollCoursePickerPage = 1;  // 课程列表分页：5 条/页
+const ENROLL_COURSE_PAGE_SIZE = 5;
+let pickerSearchEl, pickerChipsEl, pickerListEl, pickerHiddenEl, pickerPagerEl;
 
 function initEnrollCoursePickerRefs() {
     pickerSearchEl = document.getElementById('enroll-course-search');
     pickerChipsEl  = document.getElementById('enroll-course-chips');
     pickerListEl   = document.getElementById('enroll-course-list');
     pickerHiddenEl = document.getElementById('enroll-course-id');
+    pickerPagerEl  = document.getElementById('enroll-course-pager');
     if (pickerSearchEl) {
         pickerSearchEl.addEventListener('input', function() {
             clearTimeout(this._debounce);
@@ -7942,6 +7945,7 @@ async function loadEnrollCoursePicker(campusId) {
 
     enrollCoursePickerData = [];
     enrollCoursePickerSelected = null;
+    enrollCoursePickerPage = 1;
     pickerHiddenEl.value = '';
     pickerSearchEl.value = '';
     pickerChipsEl.innerHTML = '';
@@ -7951,6 +7955,7 @@ async function loadEnrollCoursePicker(campusId) {
         pickerSearchEl.placeholder = '请先选择校区';
         pickerListEl.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#9895A8;">请先选择校区</td></tr>';
         document.getElementById('ecf-course-empty').style.display = 'none';
+        if (pickerPagerEl) pickerPagerEl.style.display = 'none';
         return;
     }
 
@@ -7958,6 +7963,7 @@ async function loadEnrollCoursePicker(campusId) {
     pickerSearchEl.placeholder = '加载中...';
     pickerListEl.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#9895A8;">加载课程中...</td></tr>';
     document.getElementById('ecf-course-empty').style.display = 'none';
+    if (pickerPagerEl) pickerPagerEl.style.display = 'none';
 
     try {
         const res = await fetch(API_BASE + 'list_courses&page=1&page_size=200&campus_id=' + campusId);
@@ -7974,6 +7980,7 @@ async function loadEnrollCoursePicker(campusId) {
         pickerSearchEl.placeholder = '加载失败';
         pickerListEl.innerHTML = '<tr><td colspan="4" style="text-align:center;padding:16px;color:#E53E3E;">加载失败，请重试</td></tr>';
         document.getElementById('ecf-course-empty').style.display = 'none';
+        if (pickerPagerEl) pickerPagerEl.style.display = 'none';
     }
 }
 
@@ -8016,6 +8023,8 @@ function applyCoursePickerFilters() {
             (c.subject_level2 || '').toLowerCase().includes(keyword)
         );
     }
+    // 筛选变化时重置回第 1 页
+    enrollCoursePickerPage = 1;
     // 筛选变化时清空之前选中的课程和价格方案
     enrollCoursePickerSelected = null;
     currentEnrollCourseId = null;
@@ -8037,11 +8046,22 @@ function renderCoursePickerRows(courses) {
         pickerListEl.innerHTML = '';
         if (emptyEl) emptyEl.style.display = 'block';
         if (tblEl) tblEl.style.display = 'none';
+        if (pickerPagerEl) pickerPagerEl.style.display = 'none';
         return;
     }
     if (emptyEl) emptyEl.style.display = 'none';
     if (tblEl) tblEl.style.display = '';
-    pickerListEl.innerHTML = courses.map(function(c) {
+
+    // 分页：每页 5 条
+    const total = courses.length;
+    const totalPages = Math.max(1, Math.ceil(total / ENROLL_COURSE_PAGE_SIZE));
+    if (enrollCoursePickerPage < 1) enrollCoursePickerPage = 1;
+    if (enrollCoursePickerPage > totalPages) enrollCoursePickerPage = totalPages;
+    const startIdx = (enrollCoursePickerPage - 1) * ENROLL_COURSE_PAGE_SIZE;
+    const endIdx   = Math.min(startIdx + ENROLL_COURSE_PAGE_SIZE, total);
+    const pageItems = courses.slice(startIdx, endIdx);
+
+    pickerListEl.innerHTML = pageItems.map(function(c) {
         var selected = enrollCoursePickerSelected === c.id;
         var subjectText = [c.subject_level1, c.subject_level2].filter(Boolean).join(' / ') || '未分类';
         var badges = '';
@@ -8054,6 +8074,34 @@ function renderCoursePickerRows(courses) {
             '<td class="col-type" style="font-size:12px;color:#6b6580">' + (c.is_package ? '小课包' : '常规') + '</td>' +
         '</tr>';
     }).join('');
+
+    // 渲染分页器：单页时隐藏
+    if (pickerPagerEl) {
+        if (totalPages <= 1) {
+            pickerPagerEl.style.display = 'none';
+            pickerPagerEl.innerHTML = '';
+        } else {
+            pickerPagerEl.style.display = 'flex';
+            const prevDisabled = enrollCoursePickerPage <= 1;
+            const nextDisabled = enrollCoursePickerPage >= totalPages;
+            pickerPagerEl.innerHTML =
+                '<span class="ecf-pager-info">共 <b>' + total + '</b> 门课程</span>' +
+                '<span class="ecf-pager-info">第 <b>' + enrollCoursePickerPage + '</b> / ' + totalPages + ' 页</span>' +
+                '<span class="ecf-pager-btns">' +
+                    '<button type="button" class="ecf-pager-btn"' + (prevDisabled ? ' disabled' : '') + ' onclick="goEnrollCoursePage(' + (enrollCoursePickerPage - 1) + ')">上一页</button>' +
+                    '<button type="button" class="ecf-pager-btn"' + (nextDisabled ? ' disabled' : '') + ' onclick="goEnrollCoursePage(' + (enrollCoursePickerPage + 1) + ')">下一页</button>' +
+                '</span>';
+        }
+    }
+}
+
+function goEnrollCoursePage(page) {
+    enrollCoursePickerPage = page;
+    // 复用当前过滤条件重新渲染
+    applyCoursePickerFilters();
+    // 平滑滚动到表格顶部（用户体验细节）
+    const tbl = document.getElementById('ecf-course-table');
+    if (tbl && tbl.scrollIntoView) tbl.scrollIntoView({behavior: 'smooth', block: 'nearest'});
 }
 
 function selectEnrollCourse(courseId, courseName) {

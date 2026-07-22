@@ -7937,6 +7937,7 @@ if (intval($countBt) === 0) {
                             <tbody id="enroll-course-list"></tbody>
                         </table>
                         <div class="ecf-empty" id="ecf-course-empty" style="display:none;">未找到匹配的课程</div>
+                        <div class="ecf-pager" id="enroll-course-pager" style="display:none;"></div>
                         <input type="hidden" id="enroll-course-id" value="">
                     </div>
 
