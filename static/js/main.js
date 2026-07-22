@@ -6257,7 +6257,8 @@ function renderStudentCoursesFilters(rows) {
         <select id="student-filter-subject2" onchange="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
             ${renderSubject2Options('')}
         </select>
-        <input type="text" id="filter-course-name" placeholder="搜索课程名称" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:180px;" autocomplete="off">
+        <input type="text" id="filter-course-name" placeholder="搜索课程名称" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:140px;" autocomplete="off">
+        <input type="text" id="filter-course-orderno" placeholder="子订单号" oninput="filterStudentCourses()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;width:130px;font-family:monospace;" autocomplete="off">
         <label class="switch-label" title="切换课程展示范围" style="margin-left:4px;">
             <input type="checkbox" id="filter-show-all" onchange="filterStudentCourses()">
             <span class="switch-slider"></span>
@@ -6330,6 +6331,7 @@ function filterStudentCourses() {
     const subject1 = document.getElementById('student-filter-subject1')?.value || '';
     const subject2 = document.getElementById('student-filter-subject2')?.value || '';
     const nameKw = (document.getElementById('filter-course-name')?.value || '').trim().toLowerCase();
+    const orderNoKw = (document.getElementById('filter-course-orderno')?.value || '').trim();
     const showAll = document.getElementById('filter-show-all')?.checked ?? true;
     // 更新开关标签
     const labelEl = document.getElementById('filter-show-all-label');
@@ -6338,6 +6340,7 @@ function filterStudentCourses() {
     if (subject1) filtered = filtered.filter(r => r.subject_level1 === subject1);
     if (subject2) filtered = filtered.filter(r => r.subject_level2 === subject2);
     if (nameKw) filtered = filtered.filter(r => (r.name || '').toLowerCase().includes(nameKw));
+    if (orderNoKw) filtered = filtered.filter(r => (r.order_no || '').includes(orderNoKw));
     // 展示待消课程：只展示剩余课时>0或退费申请中的课程
     if (!showAll) {
         filtered = filtered.filter(r => {
@@ -6486,7 +6489,7 @@ function renderStudentCoursesTable(rows) {
         <td>${esc(r.item_name)}</td>
         <td>${r.lesson_count || ''}</td>
         <td>${r.actual_price != null ? '¥' + Number(r.actual_price).toFixed(2) : ''}</td>
-        <td>${r.consumed_lessons != null ? `<a href="javascript:void(0)" onclick="showConsumptionDetail(${r.order_id}, ${r.id}, '${esc(r.name).replace(/'/g, "\\'")}', ${isGifted}, ${paidLessonCount})" style="color:#1677ff;text-decoration:underline;cursor:pointer;">${r.consumed_lessons}</a>` : 0}</td>
+        <td>${r.consumed_lessons != null ? `<a href="javascript:void(0)" onclick="showConsumptionDetail(${r.order_id || 0}, ${r.id}, '${esc(r.name).replace(/'/g, "\\'")}', ${isGifted}, ${paidLessonCount}, ${r.transfer_record_id || 0})" style="color:#1677ff;text-decoration:underline;cursor:pointer;">${r.consumed_lessons}</a>` : 0}</td>
         <td>${r.consumed_amount != null ? '¥' + Number(r.consumed_amount).toFixed(2) : '¥0.00'}</td>
         <td>${r.refunded_lessons || 0}</td>
         <td>${transferredHtml}</td>
@@ -6510,7 +6513,7 @@ function statusMap(s) {
     return { cls: 'cst-dot-green', bg: 'cst-badge-green' };
 }
 
-async function showConsumptionDetail(orderId, courseId, courseName, isGifted = false, paidLessonCount = 0) {
+async function showConsumptionDetail(orderId, courseId, courseName, isGifted = false, paidLessonCount = 0, transferRecordId = 0) {
     const titleSuffix = isGifted ? '（赠送）' : '';
     document.getElementById('modal-consumption-title').textContent = '课耗明细 - ' + courseName + titleSuffix;
     const list = document.getElementById('consumption-detail-list');
@@ -6521,7 +6524,8 @@ async function showConsumptionDetail(orderId, courseId, courseName, isGifted = f
     try {
         const res = await fetch(API_BASE + 'list_attendance&student_id=' + currentViewStudentId);
         const data = await res.json();
-        let rows = (data.data || []).filter(r => r.order_id == orderId);
+        // 同时按 order_id 和 transfer_record_id 过滤（转课课包课耗的 deduction_json 用 ctr.id）
+        let rows = (data.data || []).filter(r => r.order_id == orderId || (transferRecordId && r.transfer_record_id == transferRecordId));
         if (rows.length === 0) {
             list.innerHTML = '<div class="consumption-empty">暂未产生课耗记录</div>';
             return;
@@ -10286,9 +10290,9 @@ function showResaleModal(orderId, sourceType, transferRecordId) {
 
     const lc = parseInt(r.lesson_count) || 0;
     const cl = parseInt(r.consumed_lessons) || 0;
-    const transferred = parseInt(r.transferred_lessons) || 0;
+    const transferred = parseInt(r.transferred_lessons) || 0; // 后端已包含转卖(已转出+已转卖)
     const resaled = parseInt(r.resale_lessons) || 0;
-    const remaining = lc - cl - transferred - resaled;
+    const remaining = lc - cl - transferred;                  // transferred 已含 resaled，不重复减
     const ap = parseFloat(r.actual_price) || 0;
     const unitValue = lc > 0 ? (ap / lc) : 0;
     const sellAmount = unitValue * remaining;
@@ -10440,7 +10444,8 @@ async function searchBuyerStudents(keyword) {
 async function searchBuyerResources(keyword) {
     const container = document.getElementById('resale-buyer-results');
     try {
-        const res = await fetch(API_BASE + 'get_resources&keyword=' + encodeURIComponent(keyword) + '&pool_type=');
+        // 不传 pool_type，让 API 走全池搜索（黄锦可能在"我的资源"或"资源公海"任意池中）
+        const res = await fetch(API_BASE + 'get_resources&keyword=' + encodeURIComponent(keyword));
         const data = await res.json();
         const list = data.data || [];
         if (list.length === 0) {
@@ -10448,7 +10453,12 @@ async function searchBuyerResources(keyword) {
             container.style.display = 'block';
             return;
         }
-        container.innerHTML = list.map(r => `<div class="buyer-search-result-item" onclick="selectResaleBuyer('resource', ${r.id}, '${esc(r.name || '').replace(/'/g, "\\'")}', '', '${esc(r.phone || '').replace(/'/g, "\\'")}')">${esc(r.name || '')} (${esc(r.phone || '-')})</div>`).join('');
+        // 显示前 20 条；标注资源所在池，便于确认
+        container.innerHTML = list.slice(0, 20).map(r => {
+            const pool = r.pool_type === '资源公海' ? '公海' : '我的';
+            const tag = `<span style="font-size:11px;color:#888;margin-left:6px;">[${esc(pool)}]</span>`;
+            return `<div class="buyer-search-result-item" onclick="selectResaleBuyer('resource', ${r.id}, '${esc(r.name || '').replace(/'/g, "\\'")}', '', '${esc(r.phone || '').replace(/'/g, "\\'")}')">${esc(r.name || '')} (${esc(r.phone || '-')})${tag}</div>`;
+        }).join('');
         container.style.display = 'block';
     } catch (e) {
         container.innerHTML = '<div class="buyer-search-result-item" style="color:#e74c3c;">搜索失败</div>';
@@ -10658,12 +10668,14 @@ function renderResaleRecordsTable(rows, total) {
         const revColor = parseFloat(r.confirmed_revenue || 0) > 0 ? '#16a34a' : '#666';
         const sellerNo = r.seller_no || '';
         const buyerNo = r.buyer_no || '';
+        // 课时统一显示为整数（API 返回 "2.00" 这种字符串，截断小数点）
+        const lessons = parseInt(r.transfer_lessons) || 0;
         return `<tr>
             <td>${esc(r.seller_name || '')}</td>
             <td>${esc(sellerNo)}</td>
             <td>${esc(r.course_name || '')}</td>
-            <td>${r.transfer_lessons}</td>
-            <td>${r.transfer_lessons}</td>
+            <td>${lessons}</td>
+            <td>${lessons}</td>
             <td>¥${parseFloat(r.transfer_amount || 0).toFixed(2)}</td>
             <td>¥${parseFloat(r.buyer_amount || 0).toFixed(2)}</td>
             <td style="color:${revColor};font-weight:600;">¥${parseFloat(r.confirmed_revenue || 0).toFixed(2)}</td>

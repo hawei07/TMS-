@@ -2050,4 +2050,19 @@ campus 筛选同步增加 `is_voided='否'` 和 `(refund_status IS NULL OR refun
 | feat | **录单自定义搜索下拉组件**：SearchableDropdown 类（模糊搜索、键盘导航 ↑↓Enter/Escape、外部点击关闭、本校区 badge + 分隔线、员工/学员双模式）；6 个下拉分区（课程顾问必填红色*标记）；~135 行 Soft Industrial 风格（box-shadow 面板、opacity+transform 动效、5 态完整、prefers-reduced-motion 兼容） | main.js style.css | - |
 | feat | **订单列表新增关联人员 6 列**：课程顾问/试听老师/扩科老师/续费老师/转介绍老师/转介绍学员（ref-col 半透明背景）；tfoot colspan 从 19→21 适配 | index.php main.js | - |
 
+### 2026-07-22 — 转卖功能 BugFix 全集（8 项）
+
+| 类型 | 变更说明 | 涉及文件 |
+|------|---------|---------|
+| fix | **卖方学员姓名未展示**：`get_student_courses` SQL 缺 JOIN `students`；加 `s.name AS student_name` 等字段；转校/转课/赠课虚拟行补 student info | index.php |
+| fix | **按资源买入搜不到"黄锦"**：`get_resources` 空 pool_type 过滤无匹配 + MySQL 8.4 ambiguous column（name/phone/source 未加 r. 前缀）；pool_type 为空时不过滤；全部 WHERE 列加 r. 限定 | index.php |
+| fix | **searchBuyerResources 全池搜索**：不传 pool_type 参数；结果附带 [我的]/[公海] 池标签 | main.js |
+| fix | **转卖记录页空白**：`tab-resale-records` 的 `style="display:none;"` 内联样式覆盖 CSS class `.active` | index.php |
+| fix | **转卖记录文案+格式**：表头 卖主学号→卖方学号、买主学号→买方学号、转出课时→卖出课时、转入课时→买入课时；课时显示整数（parseInt） | index.php main.js |
+| fix | **转卖课时未计入"转出课时"**：`transferOutMap` 覆盖了 ctr 已有的 `resale_lessons`（line 2809 `=` → `+=`）；前端 `remaining` 重复减 resale（`transferred_lessons` 已含 resale） | index.php main.js |
+| fix | **转课课包 transOutMap 误算全部课程转出**：`source_course_id` 分组把旧订单来源的 ctr 也计入新 ctr，新增 `source_type='course_transfer'` 过滤只计链式转出 | index.php |
+| fix | **转卖买方子订单号未与卖方一致**：`resale_create` 买方 order_no 从 `generateOrderNo()` 改为继承卖方源课包 order_no（按 source_type 分别取） | api/resale.php |
+| fix | **转课课包课耗明细弹窗空白**：`list_attendance` 只处理 deduction_json 的 `order_id`，忽略 `transfer_record_id`；新增 `resolveCtrToOrderId()` 按 source_type 链上溯；响应加 `transfer_record_id` 字段，前端 filter 双条件匹配 | index.php main.js |
+| feat | **报读课程筛选栏新增子订单号搜索**：input#filter-course-orderno 输入框 + filterStudentCourses 按 `order_no.includes()` 过滤 | main.js |
+
 *（内容由AI生成，仅供参考）*

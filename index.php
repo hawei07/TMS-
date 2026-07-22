@@ -271,6 +271,49 @@ function formatSchoolTransferAttendanceBlockMessage(array $block): string {
     return "该{$sourceText}{$stateText}，不可修改考勤";
 }
 
+/**
+ * 反查 ctr 课包对应的 order_id（按源类型链上溯）
+ * - source_type='order'：source_order_id 本身就是 orders.id
+ * - source_type='transfer'：source_order_id 是 transfer_records.id，需再查 transfer_records.order_id
+ * - source_type='course_transfer'：source_order_id 是另一个 ctr.id，递归
+ * - 若 ctr.target_order_id 已被设置，直接用
+ * 找不到返回 0
+ */
+function resolveCtrToOrderId(PDO $db, int $ctrId, int $studentId): int
+{
+    static $cache = [];
+    if (isset($cache[$ctrId])) return $cache[$ctrId];
+
+    $ctr = $db->query("SELECT id, target_order_id, source_order_id, source_type FROM course_transfer_records WHERE id = " . intval($ctrId) . " AND student_id = " . intval($studentId))->fetch(PDO::FETCH_ASSOC);
+    if (!$ctr) { $cache[$ctrId] = 0; return 0; }
+
+    if (intval($ctr['target_order_id']) > 0) {
+        $cache[$ctrId] = (int)$ctr['target_order_id'];
+        return $cache[$ctrId];
+    }
+
+    $sourceOrderId = intval($ctr['source_order_id']);
+    $sourceType = $ctr['source_type'] ?? '';
+
+    if ($sourceType === 'order' && $sourceOrderId > 0) {
+        $cache[$ctrId] = $sourceOrderId;
+        return $sourceOrderId;
+    }
+    if ($sourceType === 'transfer' && $sourceOrderId > 0) {
+        $tr = $db->query("SELECT order_id FROM transfer_records WHERE id = " . $sourceOrderId)->fetch(PDO::FETCH_ASSOC);
+        if ($tr && intval($tr['order_id']) > 0) {
+            $cache[$ctrId] = (int)$tr['order_id'];
+            return $cache[$ctrId];
+        }
+    }
+    if ($sourceType === 'course_transfer' && $sourceOrderId > 0) {
+        $cache[$ctrId] = resolveCtrToOrderId($db, $sourceOrderId, $studentId);
+        return $cache[$ctrId];
+    }
+    $cache[$ctrId] = 0;
+    return 0;
+}
+
 function handleApi() {
     global $db;
     $action = $_GET['action'];
@@ -299,29 +342,34 @@ function handleApi() {
             $createdStart = $_GET['created_start'] ?? '';
             $createdEnd = $_GET['created_end'] ?? '';
 
-            $where = ["pool_type = :pt"];
-            $params = [':pt' => $poolType];
+            // pool_type 为空时（例如转卖弹窗"按资源买入"全池搜索），不按池过滤
+            $where = [];
+            $params = [];
+            if ($poolType !== '') {
+                $where[] = "r.pool_type = :pt";
+                $params[':pt'] = $poolType;
+            }
             if ($keyword) {
-                $where[] = "(name LIKE :kw1 OR phone LIKE :kw2 OR source LIKE :kw3)";
+                $where[] = "(r.name LIKE :kw1 OR r.phone LIKE :kw2 OR r.source LIKE :kw3)";
                 $params[':kw1'] = "%$keyword%"; $params[':kw2'] = "%$keyword%"; $params[':kw3'] = "%$keyword%"; $params[':kw3'] = "%$keyword%"; $params[':kw3'] = "%$keyword%";
             }
-            if ($followStatus) { $where[] = "follow_status = :fs"; $params[':fs'] = $followStatus; }
-            if ($assignedTo) { $where[] = "assigned_to = :at"; $params[':at'] = $assignedTo; }
-            if ($assignedDept) { $where[] = "assigned_to IN (SELECT name FROM employees WHERE department = :ad)"; $params[':ad'] = $assignedDept; }
-            if ($name) { $where[] = "name LIKE :n"; $params[':n'] = "%$name%"; }
-            if ($phone) { $where[] = "phone LIKE :ph"; $params[':ph'] = "%$phone%"; }
-            if ($source) { $where[] = "source = :src"; $params[':src'] = $source; }
+            if ($followStatus) { $where[] = "r.follow_status = :fs"; $params[':fs'] = $followStatus; }
+            if ($assignedTo) { $where[] = "r.assigned_to = :at"; $params[':at'] = $assignedTo; }
+            if ($assignedDept) { $where[] = "r.assigned_to IN (SELECT name FROM employees WHERE department = :ad)"; $params[':ad'] = $assignedDept; }
+            if ($name) { $where[] = "r.name LIKE :n"; $params[':n'] = "%$name%"; }
+            if ($phone) { $where[] = "r.phone LIKE :ph"; $params[':ph'] = "%$phone%"; }
+            if ($source) { $where[] = "r.source = :src"; $params[':src'] = $source; }
             if ($resourceId) { $where[] = "r.id = :rid"; $params[':rid'] = intval($resourceId); }
-            if ($createdStart) { $where[] = "created_at >= :cs"; $params[':cs'] = $createdStart; }
-            if ($createdEnd) { $where[] = "created_at <= :ce"; $params[':ce'] = $createdEnd . ' 23:59:59'; }
-            $whereStr = implode(' AND ', $where);
+            if ($createdStart) { $where[] = "r.created_at >= :cs"; $params[':cs'] = $createdStart; }
+            if ($createdEnd) { $where[] = "r.created_at <= :ce"; $params[':ce'] = $createdEnd . ' 23:59:59'; }
+            $whereStr = $where !== [] ? 'WHERE ' . implode(' AND ', $where) : '';
 
-            $countStmt = $db->prepare("SELECT COUNT(*) FROM resources r WHERE $whereStr");
+            $countStmt = $db->prepare("SELECT COUNT(*) FROM resources r $whereStr");
             foreach ($params as $k => $v) $countStmt->bindValue($k, $v, $k === ':rid' ? PDO::PARAM_INT : PDO::PARAM_STR);
             $countStmt->execute(); $total = $countStmt->fetch(PDO::FETCH_NUM)[0];
             $total = $total ? intval($total) : 0;
             $offset = ($page - 1) * $pageSize;
-            $stmt = $db->prepare("SELECT r.*, e.department AS assigned_dept FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name WHERE $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
+            $stmt = $db->prepare("SELECT r.*, e.department AS assigned_dept FROM resources r LEFT JOIN employees e ON r.assigned_to = e.name $whereStr ORDER BY updated_at DESC LIMIT :lim OFFSET :off");
             foreach ($params as $k => $v) $stmt->bindValue($k, $v, $k === ':rid' ? PDO::PARAM_INT : PDO::PARAM_STR);
             $stmt->bindValue(':lim', $pageSize, PDO::PARAM_INT);
             $stmt->bindValue(':off', $offset, PDO::PARAM_INT);
@@ -2516,6 +2564,11 @@ $stmt->execute();
             $sid = intval($_GET['student_id'] ?? 0);
             if ($sid <= 0) { json(['error' => '参数错误']); break; }
             $rows = [];
+            // 预查询当前学员信息（供虚拟课包行复用，避免前端"卖方学员"显示为空）
+            $studentInfo = $db->query("SELECT id, name, student_no, phone FROM students WHERE id = $sid")->fetch(PDO::FETCH_ASSOC) ?: [];
+            $studentName  = $studentInfo['name'] ?? '';
+            $studentNo    = $studentInfo['student_no'] ?? '';
+            $studentPhone = $studentInfo['phone'] ?? '';
             // 收集所有退费申请中的订单（已退费/已驳回的不算），退费期间课时视为0
             $pendingRefundIds = [];
             $refStmt = $db->query("SELECT DISTINCT order_id FROM refund_records WHERE status NOT IN ('已退费', '审批驳回')");
@@ -2533,7 +2586,7 @@ $stmt->execute();
                     $schoolTransferMap['transfer_' . $stid] = $trMap['status'];
                 }
             }
-            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_name, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons, o.transferred_lessons, o.resale_lessons, o.is_resale_received FROM orders o JOIN courses c ON o.course_id = c.id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.created_at DESC");
+            $stmt = $db->query("SELECT DISTINCT c.id, c.name, c.subject_level1, c.subject_level2, o.plan_name, o.item_name, o.lesson_count, o.actual_price, o.discount_plan_amount, o.coupon_amount, o.teaching_aid_name, o.teaching_aid_price, o.product_coupon_amount, o.status, o.id AS order_id, o.order_no, o.created_at, o.consumed_lessons, o.campus, o.is_voided, o.refund_status, o.gifted_lessons, o.transferred_lessons, o.resale_lessons, o.is_resale_received, s.name AS student_name, s.student_no AS student_no, s.phone AS student_phone FROM orders o JOIN courses c ON o.course_id = c.id LEFT JOIN students s ON s.id = o.student_id WHERE o.student_id = $sid AND o.is_voided = '否' AND (o.order_type != '活动' OR o.order_type IS NULL OR o.order_type = '') ORDER BY o.created_at DESC");
             $orderRows = [];
             while ($r = $stmt->fetch(PDO::FETCH_ASSOC)) $orderRows[] = $r;
             // 批量查询考勤记录获取真实消耗课时。班级考勤以 deduction_json 的跨订单分摊为准。
@@ -2660,6 +2713,9 @@ $stmt->execute();
                         'remaining_amount' => 0,
                         'transferred_lessons' => 0,
                         'transferred_out' => 0,
+                        'student_name' => $r['student_name'] ?? $studentName,
+                        'student_no' => $r['student_no'] ?? $studentNo,
+                        'student_phone' => $r['student_phone'] ?? $studentPhone,
                     ];
                     // 退费/退费申请中：赠课一并标记
                     if ($refundStatus === '已退费') {
@@ -2715,6 +2771,9 @@ $stmt->execute();
                     'course_id' => intval($tr['course_id'] ?? 0),
                     'school_transfer_status' => $schoolTransferMap['transfer_' . $tr['id']] ?? '',
                     'resale_lessons' => $resaleLessons,
+                    'student_name' => $studentName,
+                    'student_no' => $studentNo,
+                    'student_phone' => $studentPhone,
                 ];
                 $rows[] = $row;
             }
@@ -2766,6 +2825,9 @@ $stmt->execute();
                     'remaining_lessons' => max(0, (int)$ctrRow['target_lessons'] - (int)$ctrRow['consumed_lessons'] - (int)($ctrRow['resale_lessons'] ?? 0)),
                     'remaining_amount' => (float)$ctrRow['target_value'] * max(0, (int)$ctrRow['target_lessons'] - (int)$ctrRow['consumed_lessons'] - (int)($ctrRow['resale_lessons'] ?? 0)) / max(1, (int)$ctrRow['target_lessons']),
                     'transferred_out' => 0,
+                    'student_name' => $studentName,
+                    'student_no' => $studentNo,
+                    'student_phone' => $studentPhone,
                 ];
             }
             // 汇总转课虚拟行的转出课时（B→C后 B 也要显示转出课时数）
@@ -2779,7 +2841,9 @@ $stmt->execute();
             }
             if (!empty($ctrCourseIds)) {
                 $cidList = implode(',', array_unique($ctrCourseIds));
-                $childStmt = $db->query("SELECT source_course_id, SUM(transfer_lessons) AS total_out FROM course_transfer_records WHERE source_course_id IN ($cidList) AND student_id = $sid AND status = '正常' GROUP BY source_course_id");
+                // 只统计"链式转课"（source_type='course_transfer'）——即上一个 ctr 课包又转给了别的课程
+                // 不计 source_type='order'/'transfer'（那些来自原始订单或转校记录，不是本 ctr 课包的"转出"）
+                $childStmt = $db->query("SELECT source_course_id, SUM(transfer_lessons) AS total_out FROM course_transfer_records WHERE source_course_id IN ($cidList) AND student_id = $sid AND status = '正常' AND source_type = 'course_transfer' GROUP BY source_course_id");
                 $transferOutMap = [];
                 while ($cr = $childStmt->fetch(PDO::FETCH_ASSOC)) {
                     $transferOutMap[(int)$cr['source_course_id']] = (int)$cr['total_out'];
@@ -2787,7 +2851,8 @@ $stmt->execute();
                 foreach ($rows as &$r2) {
                     if (!empty($r2['_ctr_target_cid'])) {
                         $cid = (int)$r2['_ctr_target_cid'];
-                        $r2['transferred_lessons'] = $transferOutMap[$cid] ?? 0;
+                        // 叠加转出卖出的课时（不能覆盖已有的 resale_lessons）
+                        $r2['transferred_lessons'] = ($r2['transferred_lessons'] ?? 0) + ($transferOutMap[$cid] ?? 0);
                         $r2['transferred_out'] = $r2['transferred_lessons'];
                         unset($r2['_ctr_target_cid']);
                     }
@@ -2846,7 +2911,13 @@ $stmt->execute();
                 foreach ($entries as $entry) {
                     $isActivity = intval($ca['activity_id'] ?? 0) > 0;
                     $orderId = intval($entry['order_id'] ?? 0);
+                    $transferRecordId = intval($entry['transfer_record_id'] ?? 0);
                     $amount = intval($entry['amount'] ?? 0);
+                    // 转课课包扣课时：deduction_json 用 transfer_record_id 存的是 ctr.id
+                    // 需要反查 ctr 找到对应的 order_id（通过 source 链：order/transfer/course_transfer）
+                    if ($orderId <= 0 && $transferRecordId > 0) {
+                        $orderId = resolveCtrToOrderId($db, $transferRecordId, $sid);
+                    }
                     if ($orderId <= 0 || $amount <= 0) continue;
                     $orderRow = $db->query("SELECT o.*, co.name AS course_name, co.subject_level1, co.subject_level2 FROM orders o LEFT JOIN courses co ON o.course_id = co.id WHERE o.id=$orderId AND o.student_id=$sid")->fetch(PDO::FETCH_ASSOC);
                     if (!$orderRow) continue;
@@ -2878,6 +2949,7 @@ $stmt->execute();
                         'student_id' => $sid,
                         'course_id' => intval($orderRow['course_id'] ?? 0),
                         'order_id' => $orderId,
+                        'transfer_record_id' => $transferRecordId,  // 关联 ctr.id（转课课包的来源），方便前端按 ctr 过滤
                         'class_id' => intval($ca['class_id'] ?? 0),
                         'schedule_id' => intval($ca['schedule_id'] ?? 0),
                         'class_name' => $isActivity ? $activityName : ($ca['class_name'] ?? ''),
@@ -8375,7 +8447,7 @@ if (intval($countBt) === 0) {
                         <div class="pagination" id="pagination-transfer"></div>
                     </div>
                     <!-- 转卖记录 tab -->
-                    <div class="sec-panel" id="tab-resale-records" style="display:none;">
+                    <div class="sec-panel" id="tab-resale-records">
                         <div class="toolbar">
                             <div class="toolbar-left">
                                 <select id="filter-resale-campus" style="width:150px;">
@@ -8392,10 +8464,10 @@ if (intval($countBt) === 0) {
                                 <thead>
                                     <tr>
                                         <th>卖方姓名</th>
-                                        <th>卖主学号</th>
+                                        <th>卖方学号</th>
                                         <th>课程名称</th>
-                                        <th>转出课时</th>
-                                        <th>转入课时</th>
+                                        <th>卖出课时</th>
+                                        <th>买入课时</th>
                                         <th>卖出金额</th>
                                         <th>买入金额</th>
                                         <th>确认收入</th>
@@ -8403,7 +8475,7 @@ if (intval($countBt) === 0) {
                                         <th>是否全部转卖</th>
                                         <th>经办校区</th>
                                         <th>买方姓名</th>
-                                        <th>买主学号</th>
+                                        <th>买方学号</th>
                                         <th>上课校区</th>
                                         <th>转卖时间</th>
                                     </tr>

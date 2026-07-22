@@ -267,7 +267,16 @@ function resaleCreate(PDO $db, string $method, array $query, array $input): void
         }
 
         // 8. CREATE buyer order（买方新报读订单）
-        $buyerOrderNo = generateOrderNo($db);
+        // 子订单号 = 卖方源课包继承的 order_no（让买卖双方可凭子订单号追溯同一批课时）
+        $sellerSourceOrderNo = '';
+        if ($sellerSourceType === 'course_transfer' && isset($ctr['order_no'])) {
+            $sellerSourceOrderNo = (string)$ctr['order_no'];
+        } elseif ($sellerSourceType === 'school_transfer' && isset($tr['order_no'])) {
+            $sellerSourceOrderNo = (string)$tr['order_no'];
+        } elseif (isset($sellerOrder['order_no'])) {
+            $sellerSourceOrderNo = (string)$sellerOrder['order_no'];
+        }
+        $buyerOrderNo = $sellerSourceOrderNo !== '' ? $sellerSourceOrderNo : generateOrderNo($db);
         $newItemName  = $itemName . '(转卖)';
         $stmt = $db->prepare(
             'INSERT INTO orders
