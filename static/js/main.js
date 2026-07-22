@@ -200,7 +200,7 @@ function refreshPanel(panelId) {
         case 'panel-subjects': loadSubjects(); break;
         case 'panel-classes': currentClassDetailId = null; loadClasses(); break;
         case 'panel-classrooms': loadClassrooms(); break;
-        case 'panel-students': initStudentCampusFilter(); loadStudents(); break;
+        case 'panel-students': initStudentTabs(); initStudentCampusFilter(); loadStudents(); break;
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-schedule-view'); break;
         case 'panel-work-records': initRefundCampusFilter(); initCourseTransferCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
@@ -5883,7 +5883,9 @@ async function loadStudents() {
     const keyword = document.getElementById('search-student').value;
     const campus = document.getElementById('student-filter-campus')?.value || '';
     const subjectLevel1 = document.getElementById('student-filter-subject1')?.value || '';
-    const studentFilter = document.getElementById('student-filter-type')?.value || '';
+    // 从 tab 状态取出当前筛选模式（不再是旧 dropdown）
+    const activeTab = document.querySelector('#student-tabs .sec-tab.active');
+    const studentFilter = (activeTab && activeTab.dataset.tab === 'active') ? 'active' : '';
     const params = new URLSearchParams({ page: studentPage, page_size: studentPageSize });
     if (keyword) params.set('keyword', keyword);
     if (campus) params.set('campus', campus);
@@ -6302,6 +6304,18 @@ function onStudentSubject1Change() {
 function onStudentFilterChange() {
     studentPage = 1;
     loadStudents();
+}
+
+function initStudentTabs() {
+    const tabs = document.querySelectorAll('#student-tabs .sec-tab');
+    tabs.forEach(tab => {
+        tab.addEventListener('click', () => {
+            tabs.forEach(t => t.classList.remove('active'));
+            tab.classList.add('active');
+            studentPage = 1;
+            loadStudents();
+        });
+    });
 }
 
 async function initStudentCampusFilter() {

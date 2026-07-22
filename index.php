@@ -7527,6 +7527,11 @@ if (intval($countBt) === 0) {
                         <span class="stat-badge">学员总数：<strong id="stat-students-inline">0</strong></span>
                     </div>
                 </div>
+                <!-- Tab 切换 -->
+                <div class="section-tabs" id="student-tabs">
+                    <button class="sec-tab active" data-tab="all">全部学员</button>
+                    <button class="sec-tab" data-tab="active">在册学员</button>
+                </div>
                 <div class="toolbar">
                     <div class="toolbar-left" style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
                         <label style="font-size:13px;white-space:nowrap;">校区：</label>
@@ -7536,14 +7541,6 @@ if (intval($countBt) === 0) {
                         <label style="font-size:13px;white-space:nowrap;margin-left:4px;">一级学科：</label>
                         <select id="student-filter-subject1" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
                             <option value="">全部学科</option>
-                        </select>
-                        <label style="font-size:13px;white-space:nowrap;margin-left:4px;">学员筛选：</label>
-                        <select id="student-filter-type" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
-                            <option value="">全部学员</option>
-                            <option value="active">在册学员</option>
-                            <option value="active_other" disabled>活跃学员（待开发）</option>
-                            <option value="sleeping" disabled>沉睡学员（待开发）</option>
-                            <option value="lost" disabled>流失学员（待开发）</option>
                         </select>
                     </div>
                     <div class="toolbar-right" style="margin-left:auto;display:flex;align-items:center;gap:8px;">
