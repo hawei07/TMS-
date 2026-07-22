@@ -2093,12 +2093,18 @@ $stmt->execute();
             $conditions = [];
             $params = [];
             if ($keyword) {
-                $conditions[] = "(s.name LIKE :kw OR s.phone LIKE :kw)";
+                $conditions[] = "(s.name LIKE :kw OR s.phone LIKE :kw OR s.student_no LIKE :kw)";
                 $params[':kw'] = "%$keyword%";
             }
             if ($resourceId > 0) {
                 $conditions[] = "s.resource_id = :resource_id";
                 $params[':resource_id'] = $resourceId;
+            }
+            // 授课老师筛选
+            $teacher = trim($_GET['teacher'] ?? '');
+            if ($teacher) {
+                $conditions[] = "EXISTS (SELECT 1 FROM student_subject_teacher sst JOIN employees e ON e.id = sst.teacher_id WHERE sst.student_id = s.id AND e.name = :teacher_name)";
+                $params[':teacher_name'] = $teacher;
             }
             if ($campus) {
                 $conditions[] = "EXISTS (SELECT 1 FROM orders o WHERE o.student_id = s.id AND o.campus = :campus AND o.is_voided = '否' AND (o.refund_status IS NULL OR o.refund_status != '已退费'))";
@@ -7613,9 +7619,13 @@ if (intval($countBt) === 0) {
                             <label style="font-size:13px;white-space:nowrap;margin-left:4px;">月份：</label>
                             <input type="month" id="student-active-month" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;">
                         </span>
+                        <label style="font-size:13px;white-space:nowrap;margin-left:4px;">授课老师：</label>
+                        <select id="student-filter-teacher" onchange="onStudentFilterChange()" style="padding:6px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;min-width:120px;">
+                            <option value="">全部老师</option>
+                        </select>
                     </div>
                     <div class="toolbar-right" style="margin-left:auto;display:flex;align-items:center;gap:8px;">
-                        <input type="text" id="search-student" placeholder="搜索姓名/手机号..." onkeyup="debounceSearch('student')">
+                        <input type="text" id="search-student" placeholder="搜索姓名/手机号/学号..." onkeyup="debounceSearch('student')">
                         <button class="btn btn-primary btn-sm" onclick="loadStudents()">搜索</button>
                     </div>
                 </div>

@@ -200,7 +200,7 @@ function refreshPanel(panelId) {
         case 'panel-subjects': loadSubjects(); break;
         case 'panel-classes': currentClassDetailId = null; loadClasses(); break;
         case 'panel-classrooms': loadClassrooms(); break;
-        case 'panel-students': initStudentTabs(); initStudentCampusFilter(); loadStudents(); break;
+        case 'panel-students': initStudentTabs(); initStudentCampusFilter(); initStudentTeacherFilter(); loadStudents(); break;
         case 'panel-orders': initOrderCampusFilter(); loadOrders(); break;
         case 'panel-attendance': switchAttendanceTab('tab-schedule-view'); break;
         case 'panel-work-records': initRefundCampusFilter(); initCourseTransferCampusFilter(); initWorkRecordTabs(); loadRefundRecords(); break;
@@ -5883,6 +5883,7 @@ async function loadStudents() {
     const keyword = document.getElementById('search-student').value;
     const campus = document.getElementById('student-filter-campus')?.value || '';
     const subjectLevel1 = document.getElementById('student-filter-subject1')?.value || '';
+    const teacher = document.getElementById('student-filter-teacher')?.value || '';
     // 从 tab 状态取出当前筛选模式
     const activeTab = document.querySelector('#student-tabs .sec-tab.active');
     let studentFilter = '';
@@ -5894,6 +5895,7 @@ async function loadStudents() {
     if (keyword) params.set('keyword', keyword);
     if (campus) params.set('campus', campus);
     if (subjectLevel1) params.set('subject_level1', subjectLevel1);
+    if (teacher) params.set('teacher', teacher);
     if (studentFilter) {
         params.set('student_filter', studentFilter);
         if (studentFilter === 'active_monthly') {
@@ -6395,6 +6397,25 @@ async function initStudentSubjectFilter() {
             const opt = document.createElement('option');
             opt.value = s.name;
             opt.textContent = s.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) { /* silently ignore */ }
+}
+
+async function initStudentTeacherFilter() {
+    const sel = document.getElementById('student-filter-teacher');
+    if (!sel) return;
+    try {
+        const res = await fetch(API_BASE + 'get_employees&page=1&page_size=200');
+        const data = await res.json();
+        const rows = data.data || [];
+        // 按姓名排序
+        rows.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh'));
+        while (sel.options.length > 1) sel.remove(1);
+        rows.forEach(e => {
+            const opt = document.createElement('option');
+            opt.value = e.name;
+            opt.textContent = e.name;
             sel.appendChild(opt);
         });
     } catch (e) { /* silently ignore */ }
