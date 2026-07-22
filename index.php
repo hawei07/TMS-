@@ -2169,10 +2169,10 @@ $stmt->execute();
             // 仅在 campus + subject 双选时生效；按月缓存，当月每小时刷新，往月冻结
             if ($studentFilter === 'active_monthly') {
                 if (!$yearMonth) $yearMonth = date('Y-m');
-                // 前3个月日期范围：目标月的前3个整月
+                // 前3个月日期范围：含当月的最近3个整月（如7月→5/6/7月）
                 $targetDt = new DateTime($yearMonth . '-01');
-                $attEndDt = (clone $targetDt)->modify('-1 day');
-                $attStartDt = (clone $targetDt)->modify('-3 months')->modify('first day of this month');
+                $attEndDt = (clone $targetDt)->modify('last day of this month');
+                $attStartDt = (clone $targetDt)->modify('-2 months')->modify('first day of this month');
                 $attStart = $attStartDt->format('Y-m-d');
                 $attEnd = $attEndDt->format('Y-m-d');
                 $isCurrentMonth = ($yearMonth === date('Y-m'));
