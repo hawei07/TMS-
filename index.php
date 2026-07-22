@@ -2103,11 +2103,11 @@ $stmt->execute();
                 $conditions[] = "EXISTS (SELECT 1 FROM orders o WHERE o.student_id = s.id AND o.campus = :campus AND o.is_voided = '否' AND (o.refund_status IS NULL OR o.refund_status != '已退费'))";
                 $params[':campus'] = $campus;
             }
-            // 在册学员筛选：student_type=常规 + 指定校区下剩余课时>0（有学科则限定学科）
+            // 在册学员筛选：在指定校区+学科下，学员类型为常规，且剩余课时>0
+            // 如果指定了学科，则按校区+学科判断类型（不再是全局 student_type）
             if ($studentFilter === 'active') {
-                $conditions[] = "s.student_type = '常规'";
-                if ($campus) {
-                    $subj1Cond = $subjectLevel1 ? "AND c2.subject_level1 = :subj1_active" : "";
+                if ($campus && $subjectLevel1) {
+                    // 校区+学科双过滤：按该组合下的订单类型 + 剩余课时判断
                     $conditions[] = "EXISTS (
                         SELECT 1 FROM orders o2
                         JOIN courses c2 ON o2.course_id = c2.id
@@ -2120,7 +2120,31 @@ $stmt->execute();
                         WHERE o2.student_id = s.id
                             AND o2.is_voided = '否'
                             AND (o2.refund_status IS NULL OR o2.refund_status != '已退费')
-                            $subj1Cond
+                            AND c2.subject_level1 = :subj1_active
+                            AND o2.campus = :campus_active
+                        GROUP BY o2.student_id
+                        HAVING SUM(
+                            CASE WHEN o2.refund_status = '退费申请中' THEN 0
+                            ELSE o2.lesson_count - COALESCE(ar.consumed, 0)
+                            END
+                        ) > 0
+                        AND SUM(CASE WHEN o2.order_type IS NOT NULL AND o2.order_type != '' AND o2.order_type != '小课包' THEN 1 ELSE 0 END) > 0
+                    )";
+                } elseif ($campus) {
+                    // 仅校区过滤：全局常规 + 校区下剩余>0
+                    $conditions[] = "s.student_type = '常规'";
+                    $conditions[] = "EXISTS (
+                        SELECT 1 FROM orders o2
+                        JOIN courses c2 ON o2.course_id = c2.id
+                        LEFT JOIN (
+                            SELECT order_id, COALESCE(SUM(deducted_lessons), 0) AS consumed
+                            FROM attendance_records
+                            WHERE status = '出勤'
+                            GROUP BY order_id
+                        ) ar ON ar.order_id = o2.id
+                        WHERE o2.student_id = s.id
+                            AND o2.is_voided = '否'
+                            AND (o2.refund_status IS NULL OR o2.refund_status != '已退费')
                             AND o2.campus = :campus_active
                         GROUP BY o2.student_id
                         HAVING SUM(
@@ -2129,10 +2153,15 @@ $stmt->execute();
                             END
                         ) > 0
                     )";
+                } else {
+                    // 无校区无学科：全局常规
+                    $conditions[] = "s.student_type = '常规'";
+                }
+                if ($campus) {
                     $params[':campus_active'] = $campus;
-                    if ($subjectLevel1) {
-                        $params[':subj1_active'] = $subjectLevel1;
-                    }
+                }
+                if ($subjectLevel1) {
+                    $params[':subj1_active'] = $subjectLevel1;
                 }
             }
             // 一级学科独立筛选（不配合学员筛选时）：筛选有该学科订单的学员
