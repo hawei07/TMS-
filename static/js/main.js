@@ -7935,6 +7935,8 @@ function initEnrollCoursePickerRefs() {
     if (pickerSearchEl) {
         pickerSearchEl.addEventListener('input', function() {
             clearTimeout(this._debounce);
+            // 搜索时重置翻页到第 1 页（避免过滤后停在空页）
+            enrollCoursePickerPage = 1;
             this._debounce = setTimeout(applyCoursePickerFilters, 300);
         });
     }
@@ -8002,6 +8004,8 @@ function renderCoursePickerChips(courses) {
         chip.addEventListener('click', () => {
             pickerChipsEl.querySelectorAll('.ecf-chip').forEach(c => c.classList.remove('on'));
             chip.classList.add('on');
+            // 切换学科分类时重置翻页到第 1 页
+            enrollCoursePickerPage = 1;
             applyCoursePickerFilters();
         });
     });
@@ -8023,8 +8027,8 @@ function applyCoursePickerFilters() {
             (c.subject_level2 || '').toLowerCase().includes(keyword)
         );
     }
-    // 筛选变化时重置回第 1 页
-    enrollCoursePickerPage = 1;
+    // 注意：此处不要重置 enrollCoursePickerPage，否则翻页会立刻被弹回第 1 页
+    // 翻页重置由 chip 点击和搜索输入的 oninput 各自处理
     // 筛选变化时清空之前选中的课程和价格方案
     enrollCoursePickerSelected = null;
     currentEnrollCourseId = null;
