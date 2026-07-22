@@ -2166,41 +2166,44 @@ $stmt->execute();
             $stmt->execute();
             while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) $rows[] = $row;
 
-            // 计算各学科剩余课时
-            if (!empty($rows)) {
-                $studentIds = array_column($rows, 'id');
-                $idsStr = implode(',', array_map('intval', $studentIds));
-                // 批量查询每个学员在各一级学科下的剩余课时
-                // 真实消耗 = attendance_records 中 status='出勤' 的 SUM(deducted_lessons)
-                // 剩余 = lesson_count - 真实消耗；退费申请中视为 0；已退费/已作废不统计
-                $campusSubFilter = $campus ? "AND o.campus = " . $db->quote($campus) : "";
-                $subSql = "SELECT t.student_id,
-                    GROUP_CONCAT(CONCAT(t.subject_level1, ':', t.remaining) SEPARATOR ', ') AS subject_remaining
-                    FROM (
-                        SELECT o.student_id, c.subject_level1,
-                            SUM(
-                                CASE WHEN o.refund_status = '退费申请中' THEN 0
-                                ELSE o.lesson_count - COALESCE(ar_sum.consumed, 0)
-                                END
-                            ) AS remaining
-                        FROM orders o
-                        JOIN courses c ON o.course_id = c.id
-                        LEFT JOIN (
-                            SELECT order_id, SUM(deducted_lessons) AS consumed
-                            FROM attendance_records
-                            WHERE status = '出勤'
-                            GROUP BY order_id
-                        ) ar_sum ON ar_sum.order_id = o.id
-                        WHERE o.student_id IN ($idsStr)
-                            AND o.is_voided = '否'
-                            AND (o.refund_status IS NULL OR o.refund_status != '已退费')
-                            AND c.subject_level1 IS NOT NULL AND c.subject_level1 != ''
-                            $campusSubFilter
-                        GROUP BY o.student_id, c.subject_level1
-                        HAVING remaining > 0
-                    ) t
-                    GROUP BY t.student_id
-                    ORDER BY t.student_id";
+                // 计算各学科剩余课时
+                if (!empty($rows)) {
+                    $studentIds = array_column($rows, 'id');
+                    $idsStr = implode(',', array_map('intval', $studentIds));
+                    // 批量查询每个学员在各一级学科下的剩余课时
+                    // 真实消耗 = attendance_records 中 status='出勤' 的 SUM(deducted_lessons)
+                    // 剩余 = lesson_count - 真实消耗；退费申请中视为 0；已退费/已作废不统计
+                    $campusSubFilter = $campus ? "AND o.campus = " . $db->quote($campus) : "";
+                    // 学科筛选：按筛选条件只展示该学科的剩余课时，避免出现"绘画:10, 书法:20"等多余条目
+                    $subjectSubFilter = $subjectLevel1 ? "AND c.subject_level1 = " . $db->quote($subjectLevel1) : "";
+                    $subSql = "SELECT t.student_id,
+                        GROUP_CONCAT(CONCAT(t.subject_level1, ':', t.remaining) SEPARATOR ', ') AS subject_remaining
+                        FROM (
+                            SELECT o.student_id, c.subject_level1,
+                                SUM(
+                                    CASE WHEN o.refund_status = '退费申请中' THEN 0
+                                    ELSE o.lesson_count - COALESCE(ar_sum.consumed, 0)
+                                    END
+                                ) AS remaining
+                            FROM orders o
+                            JOIN courses c ON o.course_id = c.id
+                            LEFT JOIN (
+                                SELECT order_id, SUM(deducted_lessons) AS consumed
+                                FROM attendance_records
+                                WHERE status = '出勤'
+                                GROUP BY order_id
+                            ) ar_sum ON ar_sum.order_id = o.id
+                            WHERE o.student_id IN ($idsStr)
+                                AND o.is_voided = '否'
+                                AND (o.refund_status IS NULL OR o.refund_status != '已退费')
+                                AND c.subject_level1 IS NOT NULL AND c.subject_level1 != ''
+                                $campusSubFilter
+                                $subjectSubFilter
+                            GROUP BY o.student_id, c.subject_level1
+                            HAVING remaining > 0
+                        ) t
+                        GROUP BY t.student_id
+                        ORDER BY t.student_id";
                 $subRes = $db->query($subSql);
                 $subjectRemainingMap = [];
                 while ($sr = $subRes->fetch(PDO::FETCH_ASSOC)) {
