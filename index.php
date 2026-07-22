@@ -2243,6 +2243,35 @@ $stmt->execute();
                     $row['teacher_info'] = $teacherInfoMap[$sid] ?? '-';
                 }
                 unset($row);
+
+                // 学员类型按「校区 + 学科」重新判定（筛选条件下才生效）
+                // 规则：在指定校区+学科下，若所有订单都是小课包 → 小课包；有任一非小课包 → 常规
+                if ($campus && $subjectLevel1) {
+                    $typeSql = "
+                        SELECT o.student_id,
+                            CASE WHEN SUM(CASE WHEN o.order_type IS NOT NULL AND o.order_type != '' AND o.order_type != '小课包' THEN 1 ELSE 0 END) > 0
+                            THEN '常规' ELSE '小课包' END AS filter_type
+                        FROM orders o
+                        JOIN courses c ON o.course_id = c.id
+                        WHERE o.student_id IN ($idsStr)
+                          AND o.is_voided = '否'
+                          AND o.campus = " . $db->quote($campus) . "
+                          AND c.subject_level1 = " . $db->quote($subjectLevel1) . "
+                        GROUP BY o.student_id
+                    ";
+                    $typeRes = $db->query($typeSql);
+                    $typeMap = [];
+                    while ($tr = $typeRes->fetch(PDO::FETCH_ASSOC)) {
+                        $typeMap[$tr['student_id']] = $tr['filter_type'];
+                    }
+                    foreach ($rows as &$row) {
+                        $sid = $row['id'];
+                        if (isset($typeMap[$sid])) {
+                            $row['student_type'] = $typeMap[$sid];
+                        }
+                    }
+                    unset($row);
+                }
             }
 
             json(['data' => $rows, 'total' => $total, 'page' => $page, 'page_size' => $pageSize]);
